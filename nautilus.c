@@ -1,9 +1,15 @@
 #include <cga.h>
 
 
+/**
+ * This is the first C function executed
+ */
 
-void nautilus_main () {
-    /*__asm__ __volatile__("vmmcall");*/
+void nautilus_main(void);
+void nautilus_main (void) {
+    int i;
     term_init();
-    term_print("Hello World\n");
+    for (i = 0; i < 50; i++) {
+        term_print("Hello World...\n");
+    }
 }

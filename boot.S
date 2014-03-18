@@ -2,6 +2,9 @@
 .section .mbhdr
 .align 8
 
+/**
+ * This header makes us multi-boot compliant
+ */
 multiboot_hdr:
     .long 0xe85250d6
     .long 0
@@ -31,6 +34,11 @@ hdr_end:
 
 .section .boot
 .globl nautilus_entry
+
+/**
+ * our entry point into the kernel, this is where
+ * GRUB2 will drop us
+ */
 nautilus_entry:
     /* don't trust GRUB's protected-mode GDT */
     movl $gdtr32, %eax
