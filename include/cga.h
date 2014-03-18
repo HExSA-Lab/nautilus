@@ -1,7 +1,9 @@
 #ifndef __CGA_H__
 #define __CGA_H__
 
-#define CGA_ADDR 0xb8000
+#define CGA_BASE_ADDR 0xb8000
+#define VGA_WIDTH 80
+#define VGA_HEIGHT 24
 
 enum vga_color
 {

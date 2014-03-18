@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <cga.h>
 #include <string.h>
+#include <types.h>
  
  
 static uint8_t 
@@ -9,6 +10,7 @@ make_color (enum vga_color fg, enum vga_color bg)
 {
     return fg | bg << 4;
 }
+
  
 static uint16_t 
 make_vgaentry (char c, uint8_t color)
@@ -18,9 +20,6 @@ make_vgaentry (char c, uint8_t color)
     return c16 | color16 << 8;
 }
  
- 
-static const size_t VGA_WIDTH = 80;
-static const size_t VGA_HEIGHT = 24;
  
 static size_t term_row;
 static size_t term_col;
@@ -33,7 +32,7 @@ void term_init()
     term_row = 0;
     term_col = 0;
     term_color = make_color(COLOR_LIGHT_GREY, COLOR_BLACK);
-    term_buf = (uint16_t*) 0xB8000;
+    term_buf = (uint16_t*) CGA_BASE_ADDR;
     for ( size_t y = 0; y < VGA_HEIGHT; y++ )
     {
         for ( size_t x = 0; x < VGA_WIDTH; x++ )
@@ -53,7 +52,7 @@ term_setcolor (uint8_t color)
  
 
 static void 
-term_putentryat
+term_putc
 (char c, uint8_t color, size_t x, size_t y)
 {
     const size_t index = y * VGA_WIDTH + x;
@@ -62,14 +61,38 @@ term_putentryat
  
 
 static void 
+term_scrollup (void) 
+{
+    int i, j;
+    for (i = 1; i < VGA_HEIGHT; i--) {
+        size_t prev_row = VGA_WIDTH * (i-1);
+        size_t this_row = VGA_WIDTH * i;
+        memcpy(&term_buf[prev_row], &term_buf[this_row], VGA_WIDTH);
+    }
+
+    for (j = 0; j < VGA_WIDTH; j++) {
+        size_t index = (VGA_HEIGHT-1) * VGA_WIDTH;
+        term_buf[index] = make_vgaentry(' ', term_color);
+    }
+}
+
+
+static void 
 term_putchar (char c)
 {
-    term_putentryat(c, term_color, term_col, term_row);
+    if (c == '\n') {
+        term_col = 0;
+        term_row++;
+        return;
+    }
+
+    term_putc(c, term_color, term_col, term_row);
     if ( ++term_col == VGA_WIDTH )
     {
         term_col = 0;
         if ( ++term_row == VGA_HEIGHT )
         {
+            term_scrollup();
             term_row = 0;
         }
     }
