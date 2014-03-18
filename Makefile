@@ -5,6 +5,7 @@ CFLAGS=    -O2 \
 		   -Wall \
 		   -Wmissing-prototypes \
 		   -Wstrict-prototypes \
+		   -Wno-unused-function \
 		   -ffreestanding \
 		   -fno-exceptions \
 		   -mcmodel=large \
@@ -17,7 +18,7 @@ CFLAGS=    -O2 \
 LDFLAGS=-nostdlib -z max-page-size=0x1000
 LIBS=-lgcc
 INC=-Iinclude
-OBJS=boot.o cga.o nautilus.o
+OBJS=boot.o cga.o string.o nautilus.o
 TARGET=nautilus.bin
 LDSCRIPT=nautilus.ld
 
