@@ -77,8 +77,8 @@ term_scrollup (void)
 }
 
 
-static void 
-term_putchar (char c)
+void 
+putchar (char c)
 {
     if (c == '\n') {
         term_col = 0;
@@ -97,12 +97,45 @@ term_putchar (char c)
         }
     }
 }
+
+
+int puts
+(const char *s)
+{
+    while (*s)
+    {
+        putchar(*s);
+        s++;
+    }
+    putchar('\n');
+    return 0;
+}
  
+
+static void 
+get_cursor (unsigned row, unsigned col) 
+{
+    return;
+}
+
+static void
+show_cursor (void)
+{
+    /* not implemented */
+    return;
+}
+
+static void
+hide_cursor (void)
+{
+    /* not implemented */
+    return;
+}
 
 void 
 term_print (const char* data)
 {
     size_t datalen = strlen(data);
     for ( size_t i = 0; i < datalen; i++ )
-        term_putchar(data[i]);
+        putchar(data[i]);
 }

@@ -1,6 +1,8 @@
 #ifndef __STRING_H__
 #define __STRING_H__
 
+#include <stddef.h>
+#include <stdint.h>
 #define USE_NAUT_BUILTINS 1
 
 

@@ -26,6 +26,8 @@ enum vga_color
 };
 
 void term_init(void);
+void putchar(char c);
+int puts(const char * s);
 void term_print(const char * data);
 
 #endif
