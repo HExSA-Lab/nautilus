@@ -1,4 +1,4 @@
-CC=x86_64-elf-gcc
+CC=/home/kyle/opt/cross/bin/x86_64-elf-gcc
 ISO=nautilus.iso
 CFLAGS=    -O2 \
 		   -std=gnu99 \
