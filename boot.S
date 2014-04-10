@@ -40,10 +40,16 @@ hdr_end:
  * GRUB2 will drop us
  */
 nautilus_entry:
+
+    /* get GRUB multiboot info and stash it */
+    movl %ebx, %edi
+    movl %eax, %esi
+
     /* don't trust GRUB's protected-mode GDT */
     movl $gdtr32, %eax
     lgdt (%eax)
     ljmp $0x8, $.gdt1_is_go
+
 
 .gdt1_is_go:
     movl $0x10, %eax
@@ -74,7 +80,8 @@ nautilus_entry:
     movq $gdtr64high, %rax
     lgdt (%rax)
 
-    movq $nautilus_main, %rax
+    /* multiboot info is still in rdi and rsi */
+    movq $main, %rax
     callq *%rax
 
     /* shouldn't get here */
@@ -106,12 +113,12 @@ paging_longmode_setup:
 
     /* identity map the first 2 MB */
     movl $512, %ecx
-    movl $pt, %edi
+    movl $pt, %edx
     movl $0x3, %eax
 .write_pte:
-    movl %eax, (%edi)
+    movl %eax, (%edx)
     addl $0x1000, %eax
-    addl $0x8, %edi
+    addl $0x8, %edx
     loop .write_pte
 
     /* put pml4 address in cr3 */
@@ -162,4 +169,3 @@ gdtr64:
 gdtr64high:
     .word 23
     .quad gdt64 + 0xffffffff80000000
-
