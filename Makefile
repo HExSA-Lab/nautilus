@@ -18,7 +18,7 @@ CFLAGS=    -O2 \
 LDFLAGS=-nostdlib -z max-page-size=0x1000
 LIBS=-lgcc
 INC=-Iinclude
-OBJS=boot.o cga.o string.o doprnt.o printk.o nautilus.o
+OBJS=boot.o cga.o string.o doprnt.o paging.o printk.o nautilus.o 
 TARGET=nautilus.bin
 LDSCRIPT=nautilus.ld
 

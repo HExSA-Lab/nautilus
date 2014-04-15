@@ -1,6 +1,11 @@
 #include <cga.h>
 #include <printk.h>
 #include <multiboot2.h>
+#include <types.h>
+#include <stddef.h>
+#include <paging.h>
+
+unsigned long long phys_mem_avail;
 
 static void 
 parse_multiboot (unsigned long mbd, unsigned long magic)
@@ -30,10 +35,18 @@ parse_multiboot (unsigned long mbd, unsigned long magic)
             case MULTIBOOT_TAG_TYPE_BOOT_LOADER_NAME:
                 printk("Boot loader: %s\n", ((struct multiboot_tag_string*)tag)->string);
                 break;
-            case MULTIBOOT_TAG_TYPE_BASIC_MEMINFO:
-                printk("low memory available: %u KB\n", ((struct multiboot_tag_basic_meminfo *) tag)->mem_lower);
-                printk("high memory available: %u KB\n", ((struct multiboot_tag_basic_meminfo *) tag)->mem_upper);
+            case MULTIBOOT_TAG_TYPE_BASIC_MEMINFO: {
+                unsigned long long lo;
+                unsigned long long hi;
+
+                lo = ((struct multiboot_tag_basic_meminfo *) tag)->mem_lower;
+                hi = ((struct multiboot_tag_basic_meminfo *) tag)->mem_upper;
+
+                phys_mem_avail = (lo+hi)<<10;
+                printk("Total available physical memory: %u KB\n", phys_mem_avail>>10);
+                
                 break;
+            }
             case MULTIBOOT_TAG_TYPE_MMAP: {
                 multiboot_memory_map_t * mmap;
                 printk("Memory Map:\n");
@@ -41,13 +54,16 @@ parse_multiboot (unsigned long mbd, unsigned long magic)
                         (multiboot_uint8_t*)mmap < (multiboot_uint8_t*)tag + tag->size;
                         mmap = (multiboot_memory_map_t*)((unsigned long)mmap + 
                             ((struct multiboot_tag_mmap*)tag)->entry_size)) {
-                    printk(" base_addr = 0x%x%x,"
-                           " length = 0x%x%x, type = 0x%x\n", 
-                           (unsigned) (mmap->addr >> 32),
-                           (unsigned) (mmap->addr & 0xffffffff),
-                           (unsigned) (mmap->len >> 32),
-                           (unsigned) (mmap->len & 0xffffffff),
+
+                    addr_t base_addr = (mmap->addr >> 32) | (mmap->addr & 0xffffffff);
+                    addr_t len       = (mmap->len >> 32) | (mmap->len & 0xffffffff);
+
+                    printk(" base_addr = 0x%x,"
+                           " length = 0x%x, type = 0x%x\n", 
+                           base_addr,
+                           len,
                            (unsigned) mmap->type);
+
                 }
                 break;
                                           }
@@ -56,11 +72,11 @@ parse_multiboot (unsigned long mbd, unsigned long magic)
     }
 }
 
-
 void 
 main (unsigned long mbd, unsigned long magic)
 {
     term_init();
     parse_multiboot(mbd, magic);
+    init_page_alloc();
 }
 
