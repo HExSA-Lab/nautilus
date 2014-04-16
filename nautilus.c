@@ -1,7 +1,6 @@
 #include <cga.h>
 #include <printk.h>
 #include <types.h>
-#include <stddef.h>
 #include <paging.h>
 
 
@@ -12,6 +11,7 @@ main (unsigned long mbd, unsigned long magic)
 
     printk("Welcome to the Nautilus Kernel\n\n");
 
-    init_page_alloc(mbd);
+    init_page_frame_alloc(mbd);
+
 }
 

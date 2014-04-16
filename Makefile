@@ -48,4 +48,8 @@ distclean:
 test:
 	echo $(OBJS)
 
+transfer: $(ISO)
+	scp $(ISO) kch479@behemoth.cs.northwestern.edu:
+	
+
 .PHONY: clean

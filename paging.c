@@ -1,40 +1,46 @@
 #include <paging.h>
 #include <printk.h>
-#include <types.h>
 #include <mb_utils.h>
 
 extern addr_t _loadStart;
 extern addr_t _bssEnd;
 
 addr_t page_map_start, page_map_end;
+ullong_t phys_mem_avail, npages;
 uint8_t * page_map;
-unsigned long long phys_mem_avail;
-unsigned long long npages;
 
-
-// TODO: we should eventually copy the multiboot info somewhere into our kernel
 void
-init_page_alloc (unsigned long mbd)
+init_page_frame_alloc (ulong_t mbd)
 {
-    addr_t page_map_start; 
-    addr_t page_map_end;
+    addr_t page_map_start = 0;
+    addr_t page_map_end   = 0;
+    addr_t kernel_start   = (addr_t)&_loadStart;
+    addr_t kernel_end     = (addr_t)&_bssEnd;
 
-    phys_mem_avail = get_phys_mem(mbd);
+    phys_mem_avail = multiboot_get_phys_mem(mbd);
+
     printk("Total Memory Available: %u KB\n", phys_mem_avail>>10);
 
-    page_map_start = _bssEnd;
+    /* make sure not to overwrite multiboot header */
+    if (mbd > kernel_end) {
+        page_map_start = mbd + multiboot_get_size(mbd);
+    } else {
+        page_map_start = kernel_end;
+    }
+
     page_map       = (uint8_t*)page_map_start;
-    npages         = phys_mem_avail>>PAGE_SHIFT;
+    npages         = phys_mem_avail >> PAGE_SHIFT;
 
     // layout the bitmap 
-    page_map_end = page_map_start + (npages>>3);
-    printk("Setting up the bitmap, we need %u bytes\n", page_map_end-page_map_start);
+    page_map_end = page_map_start + (npages >> 3);
+
 
     // set kernel memory + page frame bitmap as reserved
-    //mark_range_reserved(page_map, _loadStart, page_map_end);
-
-    // set all regions not marked as available by the BIOS as reserved
-    //reserve_mem_regions(mbd);
+    printk("Reserving kernel memory\n");
+    mark_range_reserved(page_map, kernel_start, page_map_end-1);
+    
+    printk("Setting aside system reserved memory\n");
+    multiboot_rsv_mem_regions(mbd);
 
     // setup idt
 

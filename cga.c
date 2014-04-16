@@ -1,5 +1,3 @@
-#include <stddef.h>
-#include <stdint.h>
 #include <cga.h>
 #include <string.h>
 #include <types.h>
