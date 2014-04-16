@@ -4,5 +4,6 @@
 
 unsigned long long get_phys_mem(unsigned long mbd);
 void parse_multiboot(unsigned long mbd, unsigned long magic);
+void reserve_mem_regions(unsigned long mbd);
 
 #endif

@@ -11,6 +11,7 @@ main (unsigned long mbd, unsigned long magic)
     term_init();
 
     printk("Welcome to the Nautilus Kernel\n\n");
+
     init_page_alloc(mbd);
 }
 
