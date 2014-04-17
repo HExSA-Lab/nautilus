@@ -27,7 +27,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <types.h>
-#include "doprnt.h"
+#include <doprnt.h>
 
 /*
  *  Common code for printf et al.

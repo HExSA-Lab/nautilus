@@ -15,14 +15,25 @@ CFLAGS=    -O2 \
 		   -mno-sse2 \
 		   -mno-sse3 \
 		   -mno-3dnow 
-LDFLAGS=-nostdlib -z max-page-size=0x1000
-LIBS=-lgcc
-INC=-Iinclude
-OBJS=boot.o cga.o string.o doprnt.o mb_utils.o paging.o printk.o nautilus.o 
+LDFLAGS:=-nostdlib -z max-page-size=0x1000
+LIBS:=-lgcc
+INC:=-Iinclude
+SRCDIR:=src
+SRC:=$(wildcard $(SRCDIR)/*.c) $(wildcard $(SRCDIR)/*.S)
+SFILES:=$(filter %.S, $(SRC))
+CFILES:=$(filter %.c, $(SRC))
+SOBJS:=$(SFILES:.S=.o)
+COBJS:=$(CFILES:.c=.o)
+OBJS:=$(SOBJS) $(COBJS)
+DEPDIR:=.deps
+DEPS:=$(wildcard $(DEPDIR)/*.d)
 TARGET=nautilus.bin
 LDSCRIPT=nautilus.ld
 
 all: $(TARGET)
+
+test:
+	@echo $(OBJS)
 
 isoimage: $(ISO)
 
@@ -31,25 +42,25 @@ $(ISO): $(TARGET)
 	grub-mkrescue -o $@ iso
 
 $(TARGET): $(OBJS) $(LDSCRIPT)
-	$(CC) -T $(LDSCRIPT) $(OBJS) -o $@ $(LDFLAGS) $(CFLAGS) $(LIBS)
+	$(CC) -o $@ -T $(LDSCRIPT) $(OBJS) $(LDFLAGS) $(CFLAGS) $(LIBS)
 
-%.o: %.S
-	$(CC) $(CFLAGS) $(INC) -c $< -o $@ 
+$(SRCDIR)/%.o: $(SRC)/%.S
+	@if [ ! -d $(DEPDIR) ]; then mkdir $(DEPDIR); fi
+	$(CC) $(CFLAGS) -MMD -MP -MF $(DEPDIR)/$(@F).d $(INC) -c $< -o $@ 
 
-%.o: %.c
-	$(CC) $(CFLAGS) $(INC) -c $< -o $@ 
+$(SRCDIR)/%.o: $(SRCDIR)/%.c
+	@if [ ! -d $(DEPDIR) ]; then mkdir $(DEPDIR); fi
+	$(CC) $(CFLAGS) -MMD -MP -MF $(DEPDIR)/$(@F).d $(INC) -c $< -o $@ 
 
 clean:
-	rm -f $(OBJS) $(TARGET)
+	rm -f $(OBJS) $(DEPS) $(TARGET)
 
 distclean:
-	rm -f $(OBJS) $(TARGET) $(ISO) iso/boot/$(TARGET)
-
-test:
-	echo $(OBJS)
+	rm -f $(OBJS) $(DEPS) $(TARGET) $(ISO) iso/boot/$(TARGET)
 
 transfer: $(ISO)
 	scp $(ISO) kch479@behemoth.cs.northwestern.edu:
-	
 
-.PHONY: clean
+.PHONY: clean all
+
+-include $(OBJS:.o=.d)
