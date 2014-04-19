@@ -25,6 +25,7 @@ static uint8_t   term_color;
 static uint16_t* term_buf;
  
 
+// TODO: optimize this function, should just be a single for loop
 void term_init()
 {
     term_row = 0;
@@ -57,6 +58,14 @@ term_putc
     term_buf[index] = make_vgaentry(c, color);
 }
  
+static inline void
+term_clear (void) 
+{
+    size_t i;
+    for (i = 0; i < VGA_HEIGHT*VGA_WIDTH; i++) {
+        term_buf[i] = make_vgaentry(' ', term_color);
+    }
+}
 
 static void 
 term_scrollup (void) 
