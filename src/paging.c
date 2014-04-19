@@ -34,14 +34,28 @@ init_page_frame_alloc (ulong_t mbd)
     // layout the bitmap 
     page_map_end = page_map_start + (npages >> 3);
 
-
     // set kernel memory + page frame bitmap as reserved
     printk("Reserving kernel memory\n");
     mark_range_reserved(page_map, kernel_start, page_map_end-1);
     
     printk("Setting aside system reserved memory\n");
     multiboot_rsv_mem_regions(mbd);
+}
 
-    // setup idt
 
+inline void 
+rsv_page_frame (addr_t addr) 
+{
+    uint_t page_num   = ADDR_TO_PAGE_NUM(addr);
+    uint_t pm_idx     = PAGE_MAP_OFFSET(page_num);
+    page_map[pm_idx] |= (1<<PAGE_MAP_BIT_IDX(page_num));
+}
+
+
+inline void 
+free_page_frame (addr_t addr)
+{
+    uint_t page_num   = ADDR_TO_PAGE_NUM(addr);
+    uint_t pm_idx     = PAGE_MAP_OFFSET(page_num);
+    page_map[pm_idx] &= ~(1<<PAGE_MAP_BIT_IDX(page_num));
 }
