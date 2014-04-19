@@ -19,9 +19,9 @@ make_vgaentry (char c, uint8_t color)
 }
  
  
-static size_t term_row;
-static size_t term_col;
-static uint8_t term_color;
+static size_t    term_row;
+static size_t    term_col;
+static uint8_t   term_color;
 static uint16_t* term_buf;
  
 
@@ -61,15 +61,15 @@ term_putc
 static void 
 term_scrollup (void) 
 {
-    int i, j;
-    for (i = 1; i < VGA_HEIGHT; i--) {
+    int i;
+    for (i = 1; i < VGA_HEIGHT; i++) {
         size_t prev_row = VGA_WIDTH * (i-1);
         size_t this_row = VGA_WIDTH * i;
         memcpy(&term_buf[prev_row], &term_buf[this_row], VGA_WIDTH);
     }
 
-    for (j = 0; j < VGA_WIDTH; j++) {
-        size_t index = (VGA_HEIGHT-1) * VGA_WIDTH;
+    size_t index = (VGA_HEIGHT-1) * VGA_WIDTH;
+    for (i = 0; i < VGA_WIDTH; i++, index++) {
         term_buf[index] = make_vgaentry(' ', term_color);
     }
 }
@@ -80,18 +80,19 @@ putchar (char c)
 {
     if (c == '\n') {
         term_col = 0;
-        term_row++;
+        if (++term_row == VGA_HEIGHT) {
+            term_scrollup();
+            term_row--;
+        }
         return;
     }
 
     term_putc(c, term_color, term_col, term_row);
-    if ( ++term_col == VGA_WIDTH )
-    {
+    if (++term_col == VGA_WIDTH) {
         term_col = 0;
-        if ( ++term_row == VGA_HEIGHT )
-        {
+        if (++term_row == VGA_HEIGHT) {
             term_scrollup();
-            term_row = 0;
+            term_row--;
         }
     }
 }
@@ -134,6 +135,7 @@ void
 term_print (const char* data)
 {
     size_t datalen = strlen(data);
-    for ( size_t i = 0; i < datalen; i++ )
+    for (size_t i = 0; i < datalen; i++) {
         putchar(data[i]);
+    }
 }
