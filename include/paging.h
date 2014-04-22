@@ -18,6 +18,37 @@
 // given a page num, what's the bit number within the byte
 #define PAGE_MAP_BIT_IDX(n)  (n % 8)
 
+// find the first zero bit in a word
+static inline ulong_t
+ff_zero (ulong_t srch)
+{
+    asm volatile("rep; bsf %1, %0"
+            : "=r" (srch)
+            : "r" (~srch));
+
+    return srch;
+}
+
+static inline void
+set_bit (int idx, volatile ulong_t * addr)
+{
+    asm volatile("bts %1, %0":
+                 "=m" (*(volatile long *) (addr)) :
+                 "Ir" (idx) : 
+                 "memory");
+}
+
+
+static inline void
+unset_bit (int idx, volatile ulong_t * addr)
+{
+    asm volatile("btr %1, %0" : 
+                 "=m" (*(volatile long *) (addr)) :
+                 "Ir" (idx));
+}
+
+
+// TODO: optimize this with native instructions
 // s and e must be page-aligned
 static inline void
 mark_range_reserved (uchar_t * m, 
@@ -46,7 +77,7 @@ mark_range_reserved (uchar_t * m,
 
 
 void init_page_frame_alloc(ulong_t mbd);
-void rsv_page_frame(addr_t addr);
-void free_page_frame(addr_t addr);
+int rsv_page_frame(addr_t addr);
+int free_page_frame(addr_t addr);
 
 #endif

@@ -9,6 +9,17 @@ addr_t page_map_start, page_map_end;
 ullong_t phys_mem_avail, npages;
 uint8_t * page_map;
 
+void 
+reset_boot_pg_tables () {
+
+    // first 2MB are already mapped in. 
+    // Finish up with rest of physical memory
+    
+
+
+    return;
+}
+
 void
 init_page_frame_alloc (ulong_t mbd)
 {
@@ -33,6 +44,7 @@ init_page_frame_alloc (ulong_t mbd)
 
     // layout the bitmap 
     page_map_end = page_map_start + (npages >> 3);
+    memset(page_map_start, 0, page_map_end-1);
 
     // set kernel memory + page frame bitmap as reserved
     printk("Reserving kernel memory\n");
@@ -43,19 +55,30 @@ init_page_frame_alloc (ulong_t mbd)
 }
 
 
-inline void 
+addr_t 
+alloc_page (void) 
+{
+    // find a free page and give me its address
+
+}
+
+
+inline int
 rsv_page_frame (addr_t addr) 
 {
     uint_t page_num   = ADDR_TO_PAGE_NUM(addr);
     uint_t pm_idx     = PAGE_MAP_OFFSET(page_num);
+
+    // TODO: check if is set
     page_map[pm_idx] |= (1<<PAGE_MAP_BIT_IDX(page_num));
 }
 
 
-inline void 
+inline int
 free_page_frame (addr_t addr)
 {
     uint_t page_num   = ADDR_TO_PAGE_NUM(addr);
     uint_t pm_idx     = PAGE_MAP_OFFSET(page_num);
     page_map[pm_idx] &= ~(1<<PAGE_MAP_BIT_IDX(page_num));
+    return 0;
 }
