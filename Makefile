@@ -32,9 +32,6 @@ LDSCRIPT=nautilus.ld
 
 all: $(TARGET)
 
-test:
-	@echo $(OBJS)
-
 isoimage: $(ISO)
 
 $(ISO): $(TARGET)
