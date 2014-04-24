@@ -16,7 +16,6 @@ main (unsigned long mbd, unsigned long magic)
 
     setup_idt();
 
-    mmu_init();
     // test the new idt with a bad pointer...
     x = (int*)0xffffe000;
     *x = 10;

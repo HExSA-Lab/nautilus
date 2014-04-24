@@ -1,3 +1,4 @@
+
 .code32
 .section .mbhdr
 .align 8
@@ -96,14 +97,14 @@ paging_longmode_setup:
     orl $0x3, %eax       /* entry is present, rw */
     movl $pml4, %ebx
     movl %eax, (%ebx)
-    movl %eax, 0xff8(%ebx) /* higher half mapping */
+    movl %eax, 0xff8(%ebx) /* higher half mapping, we can probably get rid of this */
 
     /* PDPT[0] -> PDT */
     movl $pd, %eax
     orl $0x3, %eax
     movl $pdpt, %ebx
     movl %eax, (%ebx)
-    movl %eax, 0xff0(%ebx)  /* higher half mapping */
+    movl %eax, 0xff0(%ebx)  /* higher half mapping, we can probably get rid of this */
 
     /* PDT[0] -> PT */
     movl $pt, %eax
@@ -169,3 +170,5 @@ gdtr64:
 gdtr64high:
     .word 23
     .quad gdt64 + 0xffffffff80000000
+
+
