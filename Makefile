@@ -1,6 +1,6 @@
-CC=/home/kyle/opt/cross/bin/x86_64-elf-gcc
-ISO=nautilus.iso
-CFLAGS=    -O2 \
+CC:=/home/kyle/opt/cross/bin/x86_64-elf-gcc
+ISO:=nautilus.iso
+CFLAGS:=    -O2 \
 		   -std=gnu99 \
 		   -Wall \
 		   -Wmissing-prototypes \
@@ -27,8 +27,8 @@ COBJS:=$(CFILES:.c=.o)
 OBJS:=$(SOBJS) $(COBJS)
 DEPDIR:=.deps
 DEPS:=$(wildcard $(DEPDIR)/*.d)
-TARGET=nautilus.bin
-LDSCRIPT=nautilus.ld
+TARGET:=nautilus.bin
+LDSCRIPT:=nautilus.ld
 
 all: $(TARGET)
 
@@ -41,7 +41,7 @@ $(ISO): $(TARGET)
 $(TARGET): $(OBJS) $(LDSCRIPT)
 	$(CC) -o $@ -T $(LDSCRIPT) $(OBJS) $(LDFLAGS) $(CFLAGS) $(LIBS)
 
-$(SRCDIR)/%.o: $(SRC)/%.S
+$(SRCDIR)/%.o: $(SRCDIR)/%.S
 	@if [ ! -d $(DEPDIR) ]; then mkdir $(DEPDIR); fi
 	$(CC) $(CFLAGS) -MMD -MP -MF $(DEPDIR)/$(@F).d $(INC) -c $< -o $@ 
 
