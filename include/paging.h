@@ -11,6 +11,9 @@
 #define PAGE_SIZE_4KB  4096U
 #define PAGE_SIZE_2MB  2097152U
 
+#define PAGE_TO_PADDR(n) ((n)<<PAGE_SHIFT)
+#define PADDR_TO_PAGE(n) ((n)>>PAGE_SHIFT)
+
 
 #define PF_ERR_PROT(x)         ((x)&1)       /* fault caused by page-level prot. violation */
 #define PF_ERR_NOT_PRESENT(x)  (~(x)&1)      /* fault caused by not-present page */
@@ -24,8 +27,6 @@
 #define PF_ERR_IFETCH          ((x)&(1<<5))  /* fault caused by ifetch */
 
 #define __page_align __attribute__ ((aligned(PAGE_SIZE)))
-
-#define ADDR_TO_PAGE_NUM(x)  (x >> PAGE_SHIFT)
 
 // given a page num, what's it byte offset in the page map
 #define PAGE_MAP_OFFSET(n)   (n >> 3)
@@ -53,7 +54,7 @@ typedef struct pf_error pf_err_t;
 
 
 // find the first zero bit in a word
-static inline ulong_t
+static inline uint8_t
 ff_zero (ulong_t srch)
 {
     asm volatile("rep; bsf %1, %0"
@@ -111,8 +112,8 @@ mark_range_reserved (uchar_t * m,
 
 
 void init_page_frame_alloc(ulong_t mbd);
-int rsv_page_frame(addr_t addr);
-int free_page_frame(addr_t addr);
+addr_t alloc_page(void);
+void free_page(addr_t addr);
 int pf_handler(excp_entry_t * excp, excp_vec_t vector, addr_t fault_addr, addr_t jump_addr);
 
 #endif

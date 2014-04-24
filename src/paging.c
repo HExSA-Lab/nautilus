@@ -12,19 +12,41 @@ ullong_t phys_mem_avail, npages;
 uint8_t * page_map;
 
 
-
-static void
-drill_page_tables (addr_t fault_addr) 
+void
+free_page (addr_t addr) 
 {
+    ulong_t * bm       = (ulong_t *)page_map;
+    uint_t pgnum       = PADDR_TO_PAGE(addr);
+    uint_t word_offset = pgnum % (sizeof(ulong_t)*8);
+    uint_t word_idx    = (pgnum/8)/sizeof(ulong_t);
 
+    unset_bit(word_offset, &bm[word_idx]);
 }
 
 
-static int
-handle_page_fault (addr_t fault_addr)
+addr_t 
+alloc_page (void) 
 {
-    return 0;
+    int i;
+    uint8_t idx  = 0;
+    ulong_t * bm = (ulong_t*)page_map;
 
+    for (i = 0; i < (npages/8)/sizeof(ulong_t); i++) {
+        // all pages in this word are reserved
+        if (~bm[i] == 0) {
+            continue;
+        } else {
+            idx = ff_zero(bm[i]);
+            uint_t pgnum = ((i*sizeof(ulong_t))*8) + idx;
+
+            // mark it as reserved 
+            set_bit(idx, &bm[i]);
+
+            return PAGE_TO_PADDR(pgnum);
+        }
+    }
+
+    return (addr_t)NULL;
 }
 
 
@@ -39,8 +61,13 @@ pf_handler (excp_entry_t * excp,
     printk("faulting addr: 0x%x\n", fault_addr);
     printk("jump addr: 0x%x\n", jump_addr);
 
-    panic("\terror code: %x, RIP: 0x%x\n, cs: 0x%x, rflags: 0x%x, rsp: 0x%x, ss: 0x%x\n",
+    printk("\terror code: %x, RIP: 0x%x\n, cs: 0x%x, rflags: 0x%x, rsp: 0x%x, ss: 0x%x\n",
             excp->error_code, excp->rip, excp->cs, excp->rflags, excp->rsp, excp->ss);
+
+    addr_t new = alloc_page();
+    printk("allocated a new page at 0x%x\n", new);
+    panic("done\n");
+
 
     return 0;
 }
@@ -82,23 +109,3 @@ init_page_frame_alloc (ulong_t mbd)
 
 
 
-inline int
-rsv_page_frame (addr_t addr) 
-{
-    uint_t page_num   = ADDR_TO_PAGE_NUM(addr);
-    uint_t pm_idx     = PAGE_MAP_OFFSET(page_num);
-
-    // TODO: check if it'sset
-    page_map[pm_idx] |= (1<<PAGE_MAP_BIT_IDX(page_num));
-    return 0;
-}
-
-
-inline int
-free_page_frame (addr_t addr)
-{
-    uint_t page_num   = ADDR_TO_PAGE_NUM(addr);
-    uint_t pm_idx     = PAGE_MAP_OFFSET(page_num);
-    page_map[pm_idx] &= ~(1<<PAGE_MAP_BIT_IDX(page_num));
-    return 0;
-}
