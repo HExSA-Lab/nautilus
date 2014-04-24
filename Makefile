@@ -19,7 +19,8 @@ LDFLAGS:=-nostdlib -z max-page-size=0x1000
 LIBS:=-lgcc
 INC:=-Iinclude
 SRCDIR:=src
-SRC:=$(wildcard $(SRCDIR)/*.c) $(wildcard $(SRCDIR)/*.S)
+ASMDIR:=$(SRCDIR)/asm
+SRC:=$(wildcard $(SRCDIR)/*.c) $(wildcard $(ASMDIR)/*.S)
 SFILES:=$(filter %.S, $(SRC))
 CFILES:=$(filter %.c, $(SRC))
 SOBJS:=$(SFILES:.S=.o)
@@ -41,7 +42,7 @@ $(ISO): $(TARGET)
 $(TARGET): $(OBJS) $(LDSCRIPT)
 	$(CC) -o $@ -T $(LDSCRIPT) $(OBJS) $(LDFLAGS) $(CFLAGS) $(LIBS)
 
-$(SRCDIR)/%.o: $(SRCDIR)/%.S
+$(ASMDIR)/%.o: $(ASMDIR)/%.S
 	@if [ ! -d $(DEPDIR) ]; then mkdir $(DEPDIR); fi
 	$(CC) $(CFLAGS) -MMD -MP -MF $(DEPDIR)/$(@F).d $(INC) -c $< -o $@ 
 
