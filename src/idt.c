@@ -28,16 +28,14 @@ setup_idt (void)
 {
     uint_t i;
 
-    printk("setting up idt\n");
     // clear the IDT out
     memset(&idt64, 0, sizeof(struct gate_desc64) * NUM_IDT_ENTRIES);
 
     for (i = 0; i < NUM_EXCEPTIONS; i++) {
             set_intr_gate(idt64, i, &early_excp_handlers[i]);
-            printk("setting handler: 0x%x\n", &early_excp_handlers[i]);
     }
 
-    excp_handler_table[14] = (ulong_t)pf_handler;
+    excp_handler_table[PF_EXCP] = (ulong_t)pf_handler;
 
     lidt(&idt_descriptor);
 
