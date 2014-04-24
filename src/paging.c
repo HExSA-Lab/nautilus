@@ -100,11 +100,17 @@ init_page_frame_alloc (ulong_t mbd)
     memset((void*)page_map_start, 0, (npages >> 3));
 
     // set kernel memory + page frame bitmap as reserved
-    printk("Reserving kernel memory\n");
+    printk("Reserving kernel memory (page num %d to %d)\n", PADDR_TO_PAGE(kernel_start), PADDR_TO_PAGE(page_map_end-1));
     mark_range_reserved(page_map, kernel_start, page_map_end-1);
     
     printk("Setting aside system reserved memory\n");
     multiboot_rsv_mem_regions(mbd);
+
+    printk("Reserving BDA and Real Mode IVT\n");
+    mark_range_reserved(page_map, 0x0, 0x4ff);
+
+    printk("Reserving Video Memory\n");
+    mark_range_reserved(page_map, 0xa0000, 0xfffff);
 }
 
 
