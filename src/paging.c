@@ -53,8 +53,7 @@ alloc_page (void)
 int
 pf_handler (excp_entry_t * excp,
                  excp_vec_t     vector,
-                 addr_t         fault_addr,
-                 addr_t         jump_addr)
+                 addr_t         fault_addr)
 {
     printk("PAGE FAULT!\n");
     printk("vector: %d\n", (int)vector);
@@ -64,8 +63,11 @@ pf_handler (excp_entry_t * excp,
     printk("\terror code: %x, RIP: 0x%x\n, cs: 0x%x, rflags: 0x%x, rsp: 0x%x, ss: 0x%x\n",
             excp->error_code, excp->rip, excp->cs, excp->rflags, excp->rsp, excp->ss);
 
+
     addr_t new = alloc_page();
     printk("allocated a new page at 0x%x\n", new);
+
+
     panic("done\n");
 
 

@@ -114,6 +114,6 @@ mark_range_reserved (uchar_t * m,
 void init_page_frame_alloc(ulong_t mbd);
 addr_t alloc_page(void);
 void free_page(addr_t addr);
-int pf_handler(excp_entry_t * excp, excp_vec_t vector, addr_t fault_addr, addr_t jump_addr);
+int pf_handler(excp_entry_t * excp, excp_vec_t vector, addr_t fault_addr);
 
 #endif
