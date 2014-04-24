@@ -56,7 +56,7 @@ distclean:
 	rm -f $(OBJS) $(DEPS) $(TARGET) $(ISO) iso/boot/$(TARGET)
 
 transfer: $(ISO)
-	scp $(ISO) kch479@behemoth.cs.northwestern.edu:
+	scp $(ISO) kyle@v-test-r415-8:
 
 .PHONY: clean all
 
