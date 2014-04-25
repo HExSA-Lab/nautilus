@@ -3,7 +3,7 @@
 #include <printk.h>
 #include <paging.h>
 
-extern uint8_t * page_map;
+extern struct mem_info mem;
 
 
 uint_t 
@@ -72,7 +72,7 @@ multiboot_rsv_mem_regions(ulong_t mbd)
         if (mmap->type != MULTIBOOT_MEMORY_AVAILABLE) {
             printk("reserving pages %d to %d (0x%x - 0x%x)\n", PADDR_TO_PAGE(base_addr), PADDR_TO_PAGE(base_addr+len-1),
                     base_addr, base_addr+len-1);
-            mark_range_reserved(page_map, base_addr, base_addr + len-1);
+            mark_range_reserved(mem.page_map, base_addr, base_addr + len-1);
         }
     }
 }

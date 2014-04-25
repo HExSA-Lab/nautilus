@@ -4,16 +4,12 @@
 #include <mb_utils.h>
 #include <idt.h>
 
-// TODO: clean up this crap 
 
 extern addr_t _loadStart;
 extern addr_t _bssEnd;
 extern ulong_t pml4;
 
-addr_t page_map_start, page_map_end;
-ullong_t phys_mem_avail, npages;
-uint8_t * page_map;
-
+struct mem_info mem;
 
 static int 
 drill_pt (pte_t * pt, addr_t addr) 
@@ -129,7 +125,7 @@ drill_page_tables (addr_t addr)
 void
 free_page (addr_t addr) 
 {
-    ulong_t * bm       = (ulong_t *)page_map;
+    ulong_t * bm       = (ulong_t *)mem.page_map;
     uint_t pgnum       = PADDR_TO_PAGE(addr);
     uint_t word_offset = pgnum % (sizeof(ulong_t)*8);
     uint_t word_idx    = (pgnum/8)/sizeof(ulong_t);
@@ -167,9 +163,9 @@ alloc_page (void)
 {
     int i;
     uint8_t idx  = 0;
-    ulong_t * bm = (ulong_t*)page_map;
+    ulong_t * bm = (ulong_t*)mem.page_map;
 
-    for (i = 0; i < (npages/8)/sizeof(ulong_t); i++) {
+    for (i = 0; i < (mem.npages/8)/sizeof(ulong_t); i++) {
         // all pages in this word are reserved
         if (~bm[i] == 0) {
             continue;
@@ -207,41 +203,39 @@ pf_handler (excp_entry_t * excp,
 void
 init_page_frame_alloc (ulong_t mbd)
 {
-    addr_t page_map_start = 0;
-    addr_t page_map_end   = 0;
     addr_t kernel_start   = (addr_t)&_loadStart;
     addr_t kernel_end     = (addr_t)&_bssEnd;
 
-    phys_mem_avail = multiboot_get_phys_mem(mbd);
+    mem.phys_mem_avail = multiboot_get_phys_mem(mbd);
 
-    printk("Total Memory Available: %u KB\n", phys_mem_avail>>10);
+    printk("Total Memory Available: %u KB\n", mem.phys_mem_avail>>10);
 
     /* make sure not to overwrite multiboot header */
     if (mbd > kernel_end) {
-        page_map_start = mbd + multiboot_get_size(mbd);
+        mem.pm_start = mbd + multiboot_get_size(mbd);
     } else {
-        page_map_start = kernel_end;
+        mem.pm_start = kernel_end;
     }
 
-    page_map       = (uint8_t*)page_map_start;
-    npages         = phys_mem_avail >> PAGE_SHIFT;
+    mem.page_map       = (uint8_t*)mem.pm_start;
+    mem.npages         = mem.phys_mem_avail >> PAGE_SHIFT;
 
     // layout the bitmap 
-    page_map_end = page_map_start + (npages >> 3);
-    memset((void*)page_map_start, 0, (npages >> 3));
+    mem.pm_end = mem.pm_start + (mem.npages >> 3);
+    memset((void*)mem.pm_start, 0, (mem.npages >> 3));
 
     // set kernel memory + page frame bitmap as reserved
-    printk("Reserving kernel memory (page num %d to %d)\n", PADDR_TO_PAGE(kernel_start), PADDR_TO_PAGE(page_map_end-1));
-    mark_range_reserved(page_map, kernel_start, page_map_end-1);
+    printk("Reserving kernel memory (page num %d to %d)\n", PADDR_TO_PAGE(kernel_start), PADDR_TO_PAGE(mem.pm_end-1));
+    mark_range_reserved(mem.page_map, kernel_start, mem.pm_end-1);
     
     printk("Setting aside system reserved memory\n");
     multiboot_rsv_mem_regions(mbd);
 
     printk("Reserving BDA and Real Mode IVT\n");
-    mark_range_reserved(page_map, 0x0, 0x4ff);
+    mark_range_reserved(mem.page_map, 0x0, 0x4ff);
 
     printk("Reserving Video Memory\n");
-    mark_range_reserved(page_map, 0xa0000, 0xfffff);
+    mark_range_reserved(mem.page_map, 0xa0000, 0xfffff);
 }
 
 

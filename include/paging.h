@@ -110,6 +110,14 @@ struct pf_error {
 
 typedef struct pf_error pf_err_t;
 
+struct mem_info {
+    uint8_t * page_map;
+    addr_t    pm_start;
+    addr_t    pm_end;
+    ulong_t   phys_mem_avail;
+    ulong_t   npages;
+};
+
 
 
 // find the first zero bit in a word
