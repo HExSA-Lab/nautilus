@@ -4,14 +4,16 @@
 #include <mb_utils.h>
 #include <idt.h>
 
+// TODO: clean up this crap 
+
 extern addr_t _loadStart;
 extern addr_t _bssEnd;
+extern ulong_t pml4;
 
 addr_t page_map_start, page_map_end;
 ullong_t phys_mem_avail, npages;
 uint8_t * page_map;
 
-extern ulong_t pml4;
 
 static int 
 drill_pt (pte_t * pt, addr_t addr) 
@@ -191,24 +193,7 @@ pf_handler (excp_entry_t * excp,
             excp_vec_t     vector,
             addr_t         fault_addr)
 {
-    pf_err_t * err = (pf_err_t*)&excp->error_code;
-
-    printk("PAGE FAULT!\n");
-    printk("vector: %d\n", (int)vector);
-    printk("faulting addr: 0x%x\n", fault_addr);
-
-    printk("\terror code: %x, RIP: 0x%x\n, cs: 0x%x, rflags: 0x%x, rsp: 0x%x, ss: 0x%x\n",
-            excp->error_code, excp->rip, excp->cs, excp->rflags, excp->rsp, excp->ss);
-
-
-    addr_t new = alloc_page();
-    
-    printk("allocated a new page at 0x%x\n", new);
-
-    if (PF_ERR_NOT_PRESENT(err->val)) {
-        printk("page not present\n");
-    }
-    printk("err code: 0x%x\n", err->val);
+    printk("Page Fault. Fault addr: 0x%x\n", fault_addr);
 
     if (drill_page_tables(fault_addr) < 0) {
         printk("ERROR handling page fault\n");
