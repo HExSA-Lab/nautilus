@@ -11,6 +11,118 @@ addr_t page_map_start, page_map_end;
 ullong_t phys_mem_avail, npages;
 uint8_t * page_map;
 
+extern ulong_t pml4;
+
+static int 
+drill_pt (pte_t * pt, addr_t addr) 
+{
+    uint_t pt_idx = PADDR_TO_PT_IDX(addr);
+    printk("drilling pt, pt idx: 0x%x\n", pt_idx);
+    addr_t page = 0;
+
+    if (PTE_PRESENT(pt[pt_idx])) {
+        printk("pt entry is present\n");
+        page = (addr_t)(pt[pt_idx] & PTE_ADDR_MASK);
+    } else {
+        printk("pt entry not there, creating a new one\n");
+        page = alloc_page();
+
+        if (!page) {
+            printk("out of memory in %s\n", __FUNCTION__);
+            return -1;
+        }
+
+        // for now, we'll zero out the page
+        memset((void*)page, 0, PAGE_SIZE);
+
+        pt[pt_idx] = page | PTE_PRESENT_BIT | PTE_WRITABLE_BIT;
+    }
+
+    return 0;
+}
+
+
+static int 
+drill_pd (pde_t * pd, addr_t addr) 
+{
+    uint_t pd_idx = PADDR_TO_PD_IDX(addr);
+    printk("drilling pd, pd idx: 0x%x\n", pd_idx);
+    pte_t * pt = 0;
+
+    if (PDE_PRESENT(pd[pd_idx])) {
+        printk("pd entry is present\n");
+        pt = (pte_t*)(pd[pd_idx] & PTE_ADDR_MASK);
+    } else {
+        printk("pd entry not there, creating a new one\n");
+        pt = (pte_t*)alloc_page();
+
+        if (!pt) {
+            panic("out of memory in %s\n", __FUNCTION__);
+        }
+
+        memset((void*)pt, 0, NUM_PT_ENTRIES*sizeof(pte_t));
+
+        pd[pd_idx] = (ulong_t)pt | PTE_PRESENT_BIT | PTE_WRITABLE_BIT;
+    }
+
+    return drill_pt(pt, addr);
+}
+
+
+static int 
+drill_pdpt (pdpte_t * pdpt, addr_t addr) 
+{
+    uint_t pdpt_idx = PADDR_TO_PDPT_IDX(addr);
+    printk("drilling pdpt, pdpt idx: 0x%x\n", pdpt_idx);
+    pde_t * pd = 0;
+
+    if (PDPTE_PRESENT(pdpt[pdpt_idx])) {
+        printk("pdpt entry is present\n");
+        pd = (pde_t*)(pdpt[pdpt_idx] & PTE_ADDR_MASK);
+    } else {
+        printk("pdpt entry not there, creating a new one\n");
+        pd = (pde_t*)alloc_page();
+
+        if (!pd) {
+            printk("out of memory in %s\n", __FUNCTION__);
+            return -1;
+        }
+
+        memset((void*)pd, 0, NUM_PD_ENTRIES*sizeof(pde_t));
+
+        pdpt[pdpt_idx] = (ulong_t)pd | PTE_PRESENT_BIT | PTE_WRITABLE_BIT;
+    }
+
+    return drill_pd(pd, addr);
+}
+
+
+// TODO: use cr3 for this...
+static int 
+drill_page_tables (addr_t addr)
+{
+    pml4e_t * _pml4 = (pml4e_t*)&pml4;
+    uint_t pml4_idx = PADDR_TO_PML4_IDX(addr);
+    pdpte_t * pdpt  = 0;
+    
+    if (PML4E_PRESENT(_pml4[pml4_idx])) {
+        printk("pml4 entry is present\n");
+        pdpt = (pdpte_t*)(_pml4[pml4_idx] & PTE_ADDR_MASK);
+    } else {
+        printk("pml4 entry not there, creating a new one\n");
+        pdpt = (pdpte_t*)alloc_page();
+        if (!pdpt) {
+            printk("out of memory in %s\n", __FUNCTION__);
+            return -1;
+        }
+        memset((void*)pdpt, 0, NUM_PDPT_ENTRIES*sizeof(pdpte_t));
+        _pml4[pml4_idx] = (ulong_t)pdpt | PTE_PRESENT_BIT | PTE_WRITABLE_BIT;
+    }
+
+    printk("the entry (addr: 0x%x): 0x%x\n", &_pml4[pml4_idx], _pml4[pml4_idx]);
+    return drill_pdpt(pdpt, addr);
+}
+
 
 void
 free_page (addr_t addr) 
@@ -52,23 +164,34 @@ alloc_page (void)
 
 int
 pf_handler (excp_entry_t * excp,
-                 excp_vec_t     vector,
-                 addr_t         fault_addr)
+            excp_vec_t     vector,
+            addr_t         fault_addr)
 {
+    pf_err_t * err = (pf_err_t*)&excp->error_code;
+
     printk("PAGE FAULT!\n");
     printk("vector: %d\n", (int)vector);
     printk("faulting addr: 0x%x\n", fault_addr);
-    printk("jump addr: 0x%x\n", jump_addr);
 
     printk("\terror code: %x, RIP: 0x%x\n, cs: 0x%x, rflags: 0x%x, rsp: 0x%x, ss: 0x%x\n",
             excp->error_code, excp->rip, excp->cs, excp->rflags, excp->rsp, excp->ss);
 
 
     addr_t new = alloc_page();
+    
     printk("allocated a new page at 0x%x\n", new);
 
+    if (PF_ERR_NOT_PRESENT(err->val)) {
+        printk("page not present\n");
+    }
+    printk("err code: 0x%x\n", err->val);
 
-    panic("done\n");
+    if (drill_page_tables(fault_addr) < 0) {
+        printk("ERROR handling page fault\n");
+        return -1;
+    }
+
+    //panic("done\n");
 
 
     return 0;
