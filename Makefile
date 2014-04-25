@@ -1,6 +1,6 @@
 CC:=/home/kyle/opt/cross/bin/x86_64-elf-gcc
 ISO:=nautilus.iso
-CFLAGS:=    -O2 \
+CFLAGS:=   -O2 \
 		   -std=gnu99 \
 		   -Wall \
 		   -Wmissing-prototypes \
@@ -15,14 +15,20 @@ CFLAGS:=    -O2 \
 		   -mno-sse2 \
 		   -mno-sse3 \
 		   -mno-3dnow 
+
 LDFLAGS:=-nostdlib -z max-page-size=0x1000
 LIBS:=-lgcc
 INC:=-Iinclude
 SRCDIR:=src
+LIBDIR:=lib
 ASMDIR:=$(SRCDIR)/asm
-SRC:=$(wildcard $(SRCDIR)/*.c) $(wildcard $(ASMDIR)/*.S)
+SRC:=$(wildcard $(SRCDIR)/*.c) \
+	 $(wildcard $(ASMDIR)/*.S) \
+     $(wildcard $(LIBDIR)/*.c)
+
 SFILES:=$(filter %.S, $(SRC))
 CFILES:=$(filter %.c, $(SRC))
+
 SOBJS:=$(SFILES:.S=.o)
 COBJS:=$(CFILES:.c=.o)
 OBJS:=$(SOBJS) $(COBJS)
@@ -47,6 +53,10 @@ $(ASMDIR)/%.o: $(ASMDIR)/%.S
 	$(CC) $(CFLAGS) -MMD -MP -MF $(DEPDIR)/$(@F).d $(INC) -c $< -o $@ 
 
 $(SRCDIR)/%.o: $(SRCDIR)/%.c
+	@if [ ! -d $(DEPDIR) ]; then mkdir $(DEPDIR); fi
+	$(CC) $(CFLAGS) -MMD -MP -MF $(DEPDIR)/$(@F).d $(INC) -c $< -o $@ 
+
+$(LIBDIR)/%.o: $(LIBDIR)/%.c
 	@if [ ! -d $(DEPDIR) ]; then mkdir $(DEPDIR); fi
 	$(CC) $(CFLAGS) -MMD -MP -MF $(DEPDIR)/$(@F).d $(INC) -c $< -o $@ 
 

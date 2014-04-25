@@ -3,6 +3,9 @@
 #include <string.h>
 #include <mb_utils.h>
 #include <idt.h>
+#include <lib/bitmap.h>
+
+/* KCH TODO: clean this up by getting rid of old bitmap stuff */
 
 
 extern addr_t _loadStart;
@@ -29,6 +32,7 @@ drill_pt (pte_t * pt, addr_t addr)
             printk("out of memory in %s\n", __FUNCTION__);
             return -1;
         }
+        printk("allocated new page at 0x%x\n", page);
 
         // for now, we'll zero out the page
         memset((void*)page, 0, PAGE_SIZE);
@@ -122,23 +126,26 @@ drill_page_tables (addr_t addr)
 }
 
 
-void
+int
 free_page (addr_t addr) 
 {
-    ulong_t * bm       = (ulong_t *)mem.page_map;
+    //ulong_t * bm       = (ulong_t *)mem.page_map;
     uint_t pgnum       = PADDR_TO_PAGE(addr);
-    uint_t word_offset = pgnum % (sizeof(ulong_t)*8);
-    uint_t word_idx    = (pgnum/8)/sizeof(ulong_t);
+    //uint_t word_offset = pgnum % (sizeof(ulong_t)*8);
+    //uint_t word_idx    = (pgnum/8)/sizeof(ulong_t);
 
-    unset_bit(word_offset, &bm[word_idx]);
+    //unset_bit(word_offset, &bm[word_idx]);
+    bitmap_clear(mem.page_map, pgnum, 1);
+    return 0;
 }
 
 
-/* this will be our hook for the malloc library */
-// TODO: optimize this with native instrs
+/* num must be power of 2 */
 int 
 free_pages (void * addr, int num)
 {
+    uint_t pgnum       = PADDR_TO_PAGE((addr_t)addr);
+    /*
     int i;
 
     for (i = 0; i < num; i++) {
@@ -146,21 +153,24 @@ free_pages (void * addr, int num)
     }
 
     return 0;
+    */
+    bitmap_release_region(mem.page_map, pgnum, num);
+    return 0;
 }
 
 
-void * 
+/* num must be power of 2 */
+addr_t 
 alloc_pages (int num)
 {
-    
-    
-    return NULL;
+    return PAGE_TO_PADDR(bitmap_find_free_region(mem.page_map, mem.npages, num));
 }
 
 
 addr_t 
 alloc_page (void) 
 {
+    /*
     int i;
     uint8_t idx  = 0;
     ulong_t * bm = (ulong_t*)mem.page_map;
@@ -180,7 +190,11 @@ alloc_page (void)
         }
     }
 
+
     return (addr_t)NULL;
+    */
+
+    return PAGE_TO_PADDR(bitmap_find_free_region(mem.page_map, mem.npages, 1));
 }
 
 
@@ -217,25 +231,27 @@ init_page_frame_alloc (ulong_t mbd)
         mem.pm_start = kernel_end;
     }
 
-    mem.page_map       = (uint8_t*)mem.pm_start;
+    mem.page_map       = (ulong_t*)mem.pm_start;
     mem.npages         = mem.phys_mem_avail >> PAGE_SHIFT;
 
     // layout the bitmap 
-    mem.pm_end = mem.pm_start + (mem.npages >> 3);
-    memset((void*)mem.pm_start, 0, (mem.npages >> 3));
+    //mem.pm_end = mem.pm_start + (mem.npages >> 3);
+    // we just always include the extra long word
+    mem.pm_end = mem.pm_start + (((mem.npages / BITS_PER_LONG))*sizeof(ulong_t));
+    memset((void*)mem.pm_start, 0, mem.pm_end - mem.pm_start);
 
     // set kernel memory + page frame bitmap as reserved
     printk("Reserving kernel memory (page num %d to %d)\n", PADDR_TO_PAGE(kernel_start), PADDR_TO_PAGE(mem.pm_end-1));
-    mark_range_reserved(mem.page_map, kernel_start, mem.pm_end-1);
+    mark_range_reserved((uint8_t*)mem.page_map, kernel_start, mem.pm_end-1);
     
     printk("Setting aside system reserved memory\n");
     multiboot_rsv_mem_regions(mbd);
 
     printk("Reserving BDA and Real Mode IVT\n");
-    mark_range_reserved(mem.page_map, 0x0, 0x4ff);
+    mark_range_reserved((uint8_t*)mem.page_map, 0x0, 0x4ff);
 
     printk("Reserving Video Memory\n");
-    mark_range_reserved(mem.page_map, 0xa0000, 0xfffff);
+    mark_range_reserved((uint8_t*)mem.page_map, 0xa0000, 0xfffff);
 }
 
 

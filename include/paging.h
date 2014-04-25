@@ -111,7 +111,7 @@ struct pf_error {
 typedef struct pf_error pf_err_t;
 
 struct mem_info {
-    uint8_t * page_map;
+    ulong_t * page_map;
     addr_t    pm_start;
     addr_t    pm_end;
     ulong_t   phys_mem_avail;
@@ -121,6 +121,7 @@ struct mem_info {
 
 
 // find the first zero bit in a word
+/*
 static inline uint8_t
 ff_zero (ulong_t srch)
 {
@@ -148,6 +149,7 @@ unset_bit (int idx, volatile ulong_t * addr)
                  "=m" (*(volatile long *) (addr)) :
                  "Ir" (idx));
 }
+*/
 
 
 // TODO: optimize this with native instructions
@@ -180,11 +182,11 @@ mark_range_reserved (uchar_t * m,
 
 void init_page_frame_alloc(ulong_t mbd);
 addr_t alloc_page(void);
-void free_page(addr_t addr);
+int free_page(addr_t addr);
 
 /* hooks */
 int free_pages(void * addr, int num);
-void * alloc_pages(int num);
+addr_t alloc_pages(int num);
 
 int pf_handler(excp_entry_t * excp, excp_vec_t vector, addr_t fault_addr);
 
