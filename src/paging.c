@@ -136,6 +136,30 @@ free_page (addr_t addr)
 }
 
 
+/* this will be our hook for the malloc library */
+// TODO: optimize this with native instrs
+int 
+free_pages (void * addr, int num)
+{
+    int i;
+
+    for (i = 0; i < num; i++) {
+        free_page((addr_t)(addr+(i*PAGE_SIZE)));
+    }
+
+    return 0;
+}
+
+
+void * 
+alloc_pages (int num)
+{
+    
+    
+    return NULL;
+}
+
+
 addr_t 
 alloc_page (void) 
 {
@@ -190,9 +214,6 @@ pf_handler (excp_entry_t * excp,
         printk("ERROR handling page fault\n");
         return -1;
     }
-
-    //panic("done\n");
-
 
     return 0;
 }
