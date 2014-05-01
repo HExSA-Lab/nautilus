@@ -1,0 +1,21 @@
+mainmenu "Nautilus Kernel Configuration"
+
+
+config DEBUG_PRINTS
+	bool "Compile with Debugging turned on"
+	default n
+	help
+	  Compiles the Nautilus kernel with debugging prints
+
+
+config MAX_CPUS
+	int "Maximum number of cpus"
+	range 1 255
+	default "16"
+	help 
+	  Specifies the maximum number of hardware CPUs supported by Nautilus 
+	  For uniprocessor environments, set this to 1
+
+
+#source "src/Kconfig"
+
