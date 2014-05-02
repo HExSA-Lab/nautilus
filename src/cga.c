@@ -1,6 +1,6 @@
+#include <nautilus.h>
 #include <cga.h>
 #include <string.h>
-#include <types.h>
  
  
 static uint8_t 
