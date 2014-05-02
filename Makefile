@@ -520,7 +520,7 @@ nautilus-dirs	:= $(patsubst %/,%,$(filter %/,  \
 
 
 nautilus-cleandirs := $(sort $(nautilus-dirs) $(patsubst %/,%,$(filter %/, \
-		     	$(core-n) $(core-) $(libs-y) $(libs-))))
+		     	$(core-n) $(core-) $(libs-n) $(libs-))))
 
 core-y		:= $(patsubst %/, %/built-in.o, $(core-y))
 libs-y		:= $(patsubst %/, %/built-in.o, $(libs-y))
@@ -668,7 +668,7 @@ depend dep:
 
 # Directories & files removed with 'make clean'
 CLEAN_DIRS  += $(MODVERDIR)
-CLEAN_FILES +=	 nautilus.asm nautilus.iso nautilus.bin \
+CLEAN_FILES +=	 nautilus.asm $(ISO_NAME) $(BIN_NAME) \
                  .tmp_version .tmp_nautilus*
 
 # Directories & files removed with 'make mrproper'
