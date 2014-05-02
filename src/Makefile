@@ -6,6 +6,7 @@ obj-y += \
 	mb_utils.o \
 	paging.o \
 	string.o \
+	msr.o \
 	nautilus.o \
 	asm/
 	
