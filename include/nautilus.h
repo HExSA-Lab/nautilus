@@ -4,4 +4,6 @@
 #include <printk.h>
 #include <types.h>
 
+#define DEBUG_PRINT(fmt, args...)   printk("DEBUG: " fmt, ##args)
+
 #endif

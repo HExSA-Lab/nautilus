@@ -7,6 +7,10 @@
 
 /* KCH TODO: clean this up by getting rid of old bitmap stuff */
 
+#ifndef NAUT_CONFIG_DEBUG_PAGING
+#undef DEBUG_PRINT
+#define DEBUG_PRINT(fmt, args...)
+#endif
 
 extern addr_t _loadStart;
 extern addr_t _bssEnd;
@@ -18,7 +22,7 @@ static int
 drill_pt (pte_t * pt, addr_t addr) 
 {
     uint_t pt_idx = PADDR_TO_PT_IDX(addr);
-    printk("drilling pt, pt idx: 0x%x\n", pt_idx);
+    DEBUG_PRINT("drilling pt, pt idx: 0x%x\n", pt_idx);
     addr_t page = 0;
 
     if (PTE_PRESENT(pt[pt_idx])) {
