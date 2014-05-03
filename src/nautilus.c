@@ -4,6 +4,7 @@
 #include <idt.h>
 #include <spinlock.h>
 #include <cpu.h>
+#include <cpuid.h>
 
 #include <lib/liballoc_hooks.h>
 #include <lib/liballoc.h>
@@ -15,6 +16,8 @@ main (unsigned long mbd, unsigned long magic)
     term_init();
 
     printk("Welcome to the Nautilus Kernel\n\n");
+
+    detect_cpu();
 
     init_page_frame_alloc(mbd);
 
@@ -32,8 +35,9 @@ main (unsigned long mbd, unsigned long magic)
 
     printk("testing memory allocator\n");
     init_liballoc_hooks();
-    void * y = malloc(10);
+    void * y = malloc(100*PAGE_SIZE);
     printk("memory allocator works: %p\n", y);
+    
 
 
 }

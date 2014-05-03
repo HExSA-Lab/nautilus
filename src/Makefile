@@ -7,6 +7,7 @@ obj-y += \
 	paging.o \
 	string.o \
 	msr.o \
+	cpuid.o \
 	nautilus.o \
 	asm/
 	

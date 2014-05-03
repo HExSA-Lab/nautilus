@@ -3,36 +3,6 @@
 
 #include <types.h>
 
-typedef struct cpuid_ret {
-    uint32_t a;
-    uint32_t b;
-    uint32_t c;
-    uint32_t d;
-} cpuid_ret_t; 
-
-
-static inline cpuid_ret_t 
-cpuid (uint32_t func)
-{
-    cpuid_ret_t ret;
-
-    asm volatile ("cpuid" : 
-                  "=a"(ret.a), "=b"(ret.b), "=c"(ret.c), "=d"(ret.d) : 
-                  "0"(func));
-    return ret;
-}
-
-
-static inline cpuid_ret_t
-cpuid_sub (uint32_t func, uint32_t sub_func)
-{
-    cpuid_ret_t ret;
-    asm volatile ("cpuid" : 
-                  "=a"(ret.a), "=b"(ret.b), "=c"(ret.c), "=d"(ret.d) : 
-                  "0"(func), "2"(sub_func));
-    return ret;
-}
-
 
 static inline ulong_t 
 read_cr0 (void)
