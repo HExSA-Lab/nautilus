@@ -9,5 +9,6 @@ obj-y += \
 	msr.o \
 	cpuid.o \
 	nautilus.o \
-	asm/
+	asm/ \
+	dev/
 	
