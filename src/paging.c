@@ -26,17 +26,17 @@ drill_pt (pte_t * pt, addr_t addr)
     addr_t page = 0;
 
     if (PTE_PRESENT(pt[pt_idx])) {
-        printk("pt entry is present\n");
+        DEBUG_PRINT("pt entry is present\n");
         page = (addr_t)(pt[pt_idx] & PTE_ADDR_MASK);
     } else {
-        printk("pt entry not there, creating a new one\n");
+        DEBUG_PRINT("pt entry not there, creating a new one\n");
         page = alloc_page();
 
         if (!page) {
-            printk("out of memory in %s\n", __FUNCTION__);
+            DEBUG_PRINT("out of memory in %s\n", __FUNCTION__);
             return -1;
         }
-        printk("allocated new page at 0x%x\n", page);
+        DEBUG_PRINT("allocated new page at 0x%x\n", page);
 
         // for now, we'll zero out the page
         memset((void*)page, 0, PAGE_SIZE);
@@ -52,14 +52,14 @@ static int
 drill_pd (pde_t * pd, addr_t addr) 
 {
     uint_t pd_idx = PADDR_TO_PD_IDX(addr);
-    printk("drilling pd, pd idx: 0x%x\n", pd_idx);
+    DEBUG_PRINT("drilling pd, pd idx: 0x%x\n", pd_idx);
     pte_t * pt = 0;
 
     if (PDE_PRESENT(pd[pd_idx])) {
-        printk("pd entry is present\n");
+        DEBUG_PRINT("pd entry is present\n");
         pt = (pte_t*)(pd[pd_idx] & PTE_ADDR_MASK);
     } else {
-        printk("pd entry not there, creating a new one\n");
+        DEBUG_PRINT("pd entry not there, creating a new one\n");
         pt = (pte_t*)alloc_page();
 
         if (!pt) {
@@ -79,18 +79,18 @@ static int
 drill_pdpt (pdpte_t * pdpt, addr_t addr) 
 {
     uint_t pdpt_idx = PADDR_TO_PDPT_IDX(addr);
-    printk("drilling pdpt, pdpt idx: 0x%x\n", pdpt_idx);
+    DEBUG_PRINT("drilling pdpt, pdpt idx: 0x%x\n", pdpt_idx);
     pde_t * pd = 0;
 
     if (PDPTE_PRESENT(pdpt[pdpt_idx])) {
-        printk("pdpt entry is present\n");
+        DEBUG_PRINT("pdpt entry is present\n");
         pd = (pde_t*)(pdpt[pdpt_idx] & PTE_ADDR_MASK);
     } else {
-        printk("pdpt entry not there, creating a new one\n");
+        DEBUG_PRINT("pdpt entry not there, creating a new one\n");
         pd = (pde_t*)alloc_page();
 
         if (!pd) {
-            printk("out of memory in %s\n", __FUNCTION__);
+            ERROR_PRINT("out of memory in %s\n", __FUNCTION__);
             return -1;
         }
 
@@ -112,20 +112,20 @@ drill_page_tables (addr_t addr)
     pdpte_t * pdpt  = 0;
     
     if (PML4E_PRESENT(_pml4[pml4_idx])) {
-        printk("pml4 entry is present\n");
+        DEBUG_PRINT("pml4 entry is present\n");
         pdpt = (pdpte_t*)(_pml4[pml4_idx] & PTE_ADDR_MASK);
     } else {
-        printk("pml4 entry not there, creating a new one\n");
+        DEBUG_PRINT("pml4 entry not there, creating a new one\n");
         pdpt = (pdpte_t*)alloc_page();
         if (!pdpt) {
-            printk("out of memory in %s\n", __FUNCTION__);
+            ERROR_PRINT("out of memory in %s\n", __FUNCTION__);
             return -1;
         }
         memset((void*)pdpt, 0, NUM_PDPT_ENTRIES*sizeof(pdpte_t));
         _pml4[pml4_idx] = (ulong_t)pdpt | PTE_PRESENT_BIT | PTE_WRITABLE_BIT;
     }
 
-    printk("the entry (addr: 0x%x): 0x%x\n", &_pml4[pml4_idx], _pml4[pml4_idx]);
+    DEBUG_PRINT("the entry (addr: 0x%x): 0x%x\n", &_pml4[pml4_idx], _pml4[pml4_idx]);
     return drill_pdpt(pdpt, addr);
 }
 
@@ -207,10 +207,10 @@ pf_handler (excp_entry_t * excp,
             excp_vec_t     vector,
             addr_t         fault_addr)
 {
-    printk("Page Fault. Fault addr: 0x%x\n", fault_addr);
+    DEBUG_PRINT("Page Fault. Fault addr: 0x%x\n", fault_addr);
 
     if (drill_page_tables(fault_addr) < 0) {
-        printk("ERROR handling page fault\n");
+        ERROR_PRINT("ERROR handling page fault\n");
         return -1;
     }
 
