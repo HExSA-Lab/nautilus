@@ -15,6 +15,7 @@ void
 main (unsigned long mbd, unsigned long magic)
 {
     int *x;
+    struct apic_dev * apic;
     term_init();
 
     printk("Welcome to the Nautilus Kernel\n\n");
@@ -35,17 +36,16 @@ main (unsigned long mbd, unsigned long magic)
     *x = 30;
     spin_unlock(&lock);
 
-    printk("testing memory allocator\n");
     init_liballoc_hooks();
-    void * y = malloc(100*PAGE_SIZE);
-    printk("memory allocator works: %p\n", y);
-    
-    printk("looking for APIC\n");
-    if (check_apic_avail()) {
-        printk("found it!\n");
-    } else {
-        printk("APIC not found\n");
-    }
 
+    apic = (struct apic_dev*)malloc(sizeof(struct apic_dev));
+    if (!apic) {
+        ERROR_PRINT("could not allocate apic struct\n");
+    }
+    memset(apic, 0, sizeof(struct apic_dev));
+
+    apic_init(apic);
+
+    
 }
 

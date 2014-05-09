@@ -9,8 +9,13 @@
 
 #define APIC_BASE_ADDR_MASK 0xfffff000
 
-#define APIC_GLOBAL_ENABLE    (1 << 11)
-#define APIC_ICR_LEVEL_ASSERT (1 << 14)
+#define APIC_IPI_SELF          0x40000
+#define APIC_IPI_ALL           0x80000
+#define APIC_IPI_OTHERS        0xC0000
+#define APIC_ICR_TYPE_FIXED    0x00000
+#define APIC_ICR_LEVEL_ASSERT  (1 << 14)
+#define APIC_GLOBAL_ENABLE     (1 << 11)
+#define APIC_SPIV_SW_ENABLE   (1 << 8)
 
 #define APIC_ID_SHIFT 24
 #define APIC_ICR2_DST_SHIFT 24
@@ -30,6 +35,7 @@
 #define APIC_REG_TMR      0x180
 #define APIC_REG_IRR      0x200
 #define APIC_REG_ESR      0x280
+#define APIC_REG_LVT_CMCI 0x2f0
 #define APIC_REG_ICR      0x300
 #define APIC_REG_ICR2     0x310
 #define APIC_REG_LVTT     0x320
@@ -45,6 +51,8 @@
 
 struct apic_dev {
     ulong_t base_addr;
+    uint_t  version;
+    uint_t  id;
 };
 
 
@@ -67,8 +75,8 @@ apic_read (struct apic_dev * apic, uint_t reg)
 
 
 void apic_do_eoi(struct apic_dev * apic);
-uint32_t apic_get_id(struct apic_dev * apic);
 void apic_ipi(struct apic_dev * apic, uint_t remote_id, uint_t vector);
+void apic_self_ipi (struct apic_dev * apic, uint_t vector);
 void apic_init(struct apic_dev * apic);
 
 
