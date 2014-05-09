@@ -6,6 +6,8 @@
 #include <cpu.h>
 #include <cpuid.h>
 
+#include <dev/apic.h>
+
 #include <lib/liballoc_hooks.h>
 #include <lib/liballoc.h>
 
@@ -38,7 +40,12 @@ main (unsigned long mbd, unsigned long magic)
     void * y = malloc(100*PAGE_SIZE);
     printk("memory allocator works: %p\n", y);
     
-
+    printk("looking for APIC\n");
+    if (check_apic_avail()) {
+        printk("found it!\n");
+    } else {
+        printk("APIC not found\n");
+    }
 
 }
 
