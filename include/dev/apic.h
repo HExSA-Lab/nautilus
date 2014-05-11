@@ -8,6 +8,8 @@
 #define IA32_APIC_BASE_MSR_ENABLE 0x800
 
 #define APIC_BASE_ADDR_MASK 0xfffff000
+#define APIC_IS_BSP(x)      ((x) & (1 << 8))
+#define APIC_VERSION(x)     ((x) & 0xffu)
 
 #define APIC_IPI_SELF          0x40000
 #define APIC_IPI_ALL           0x80000
@@ -16,6 +18,7 @@
 #define APIC_ICR_LEVEL_ASSERT  (1 << 14)
 #define APIC_GLOBAL_ENABLE     (1 << 11)
 #define APIC_SPIV_SW_ENABLE   (1 << 8)
+
 
 #define APIC_ID_SHIFT 24
 #define APIC_ICR2_DST_SHIFT 24
@@ -49,9 +52,10 @@
 #define APIC_REG_TMDCR    0x3e0
 #define APIC_REG_SELF_IPI 0x3f0
 
+
 struct apic_dev {
     ulong_t base_addr;
-    uint_t  version;
+    uint8_t  version;
     uint_t  id;
 };
 
@@ -63,14 +67,14 @@ apic_write (struct apic_dev * apic,
             uint_t reg, 
             uint32_t val)
 {
-    *(uint32_t*)(apic->base_addr + reg) = val;
+    *((volatile uint32_t *)(apic->base_addr + reg)) = val;
 }
 
 
 static inline uint32_t
 apic_read (struct apic_dev * apic, uint_t reg)
 {
-    return *(uint32_t*)(apic->base_addr + reg);
+    return *((volatile uint32_t *)(apic->base_addr + reg));
 }
 
 

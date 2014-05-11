@@ -1,7 +1,14 @@
 #include <dev/apic.h>
 #include <cpuid.h>
 #include <msr.h>
+#include <paging.h>
 #include <nautilus.h>
+
+
+#ifndef NAUT_CONFIG_DEBUG_APIC
+#undef DEBUG_PRINT
+#define DEBUG_PRINT(fmt, args...)
+#endif
 
 
 int 
@@ -10,21 +17,34 @@ check_apic_avail (void)
     cpuid_ret_t cp;
     struct cpuid_feature_flags * flags;
 
-    cp = cpuid(CPUID_FEATURE_INFO);
+    cp    = cpuid(CPUID_FEATURE_INFO);
     flags = (struct cpuid_feature_flags *)&cp.c;
+
     return flags->edx.apic;
 }
+
+
+static int 
+apic_is_bsp (struct apic_dev * apic)
+{
+    uint64_t data;
+    data = msr_read(IA32_APIC_BASE_MSR);
+    return APIC_IS_BSP(data);
+}
+
 
 static int
 apic_sw_enable (struct apic_dev * apic)
 {
     uint32_t val;
+    // KCH: TODO fix this
     //apic_write(APIC_REG_LVT0, 0);
     
     val = apic_read(apic, APIC_REG_SPIV);
     apic_write(apic, APIC_REG_SPIV, val | APIC_SPIV_SW_ENABLE);
     return 0;
 }
+
 
 static int
 apic_sw_disable (struct apic_dev * apic)
@@ -46,7 +66,7 @@ apic_enable (struct apic_dev * apic)
 }
 
 
-static addr_t 
+static ulong_t 
 apic_get_base_addr (void) 
 {
     uint64_t data;
@@ -81,6 +101,13 @@ apic_get_id (struct apic_dev * apic)
 }
 
 
+static inline uint8_t 
+apic_get_version (struct apic_dev * apic)
+{
+    return APIC_VERSION(apic_read(apic, APIC_REG_LVR));
+}
+
+
 void 
 apic_ipi (struct apic_dev * apic, 
           uint_t remote_id,
@@ -101,16 +128,32 @@ apic_self_ipi (struct apic_dev * apic, uint_t vector)
 void
 apic_init (struct apic_dev * apic)
 {
+
     if (!check_apic_avail()) {
-        panic("APIC not found, dying\n");
+        panic("no APIC found, dying\n");
     } 
 
     apic->base_addr = apic_get_base_addr();
-    apic->version = apic_read(apic, APIC_REG_LVR);
-    apic->id = apic_get_id(apic);
+    DEBUG_PRINT("apic base addr: %p\n", apic->base_addr);
+
+    DEBUG_PRINT("Reserving APIC region\n");
+
+    if (reserve_page(apic->base_addr) < 0) {
+        panic("Couldn't reserve LAPIC mem region\n");
+    }
     
+    /* map in the lapic as uncacheable */
+    create_page_mapping(apic->base_addr, 
+                        apic->base_addr, 
+                        PTE_PRESENT_BIT|PTE_WRITABLE_BIT|PTE_CACHE_DISABLE_BIT);
+
+    apic->version   = apic_get_version(apic);
+    apic->id        = apic_get_id(apic);
+
+    DEBUG_PRINT("Found LAPIC (version=0x%x, id=0x%x)\n", apic->version, apic->id);
+
     if (apic->version < 0x10 || apic->version > 0x15) {
-        printk("Unsupported APIC version (0x%x)\n", apic->version);
+        panic("Unsupported APIC version (0x%1x)\n", (unsigned)apic->version);
     }
 
     apic_enable(apic);

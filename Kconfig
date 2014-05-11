@@ -1,6 +1,12 @@
 mainmenu "Nautilus Kernel Configuration"
 
 
+config DEBUG_INFO
+    bool "Compile with debug symbols"
+    default n
+    help
+      Compiles Nautilus with GCC debugging information
+
 config DEBUG_PRINTS
 	bool "Enable debugging prints"
 	default n
@@ -18,12 +24,19 @@ config MAX_CPUS
 
 menu Debugging
     config DEBUG_PAGING
-        bool "Debug paging"
-        depends on DEBUG_PRINTS
-        default n
-        help
-            Turn on debug prints for paging subsystem
+      bool "Debug paging"
+      depends on DEBUG_PRINTS
+      default n
+      help
+        Turn on debug prints for paging subsystem
 
+    config DEBUG_APIC
+      bool "Debug APIC"
+      depends on DEBUG_PRINTS
+      default n
+      help
+        Turn on debug prints for the LAPIC driver
+    
 endmenu
 
 #source "src/Kconfig"
