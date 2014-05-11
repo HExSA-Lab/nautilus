@@ -6,6 +6,7 @@
 #include <lib/bitmap.h>
 
 /* KCH TODO: clean this up by getting rid of old bitmap stuff */
+/* - clean up parameter passing in pt traversal */
 
 #ifndef NAUT_CONFIG_DEBUG_PAGING
 #undef DEBUG_PRINT
@@ -19,29 +20,42 @@ extern ulong_t pml4;
 struct mem_info mem;
 
 static int 
-drill_pt (pte_t * pt, addr_t addr) 
+drill_pt (pte_t * pt, addr_t addr, addr_t map_addr, uint_t flags)
 {
     uint_t pt_idx = PADDR_TO_PT_IDX(addr);
-    DEBUG_PRINT("drilling pt, pt idx: 0x%x\n", pt_idx);
     addr_t page = 0;
 
+    DEBUG_PRINT("drilling pt, pt idx: 0x%x\n", pt_idx);
+
     if (PTE_PRESENT(pt[pt_idx])) {
+
         DEBUG_PRINT("pt entry is present\n");
         page = (addr_t)(pt[pt_idx] & PTE_ADDR_MASK);
+
     } else {
+
         DEBUG_PRINT("pt entry not there, creating a new one\n");
-        page = alloc_page();
 
-        if (!page) {
-            DEBUG_PRINT("out of memory in %s\n", __FUNCTION__);
-            return -1;
+        /* TODO: somehow got carried away and strayed from identity map! */
+        if (map_addr) {
+
+            DEBUG_PRINT("creating manual mapping to paddr: %p\n", map_addr);
+            page = map_addr;
+            pt[pt_idx] = page | flags;
+
+        } else {
+            page = alloc_page();
+
+            if (!page) {
+                ERROR_PRINT("out of memory in %s\n", __FUNCTION__);
+                return -1;
+            }
+
+            DEBUG_PRINT("allocated new page at 0x%x\n", page);
+
+            pt[pt_idx] = page | PTE_PRESENT_BIT | PTE_WRITABLE_BIT;
         }
-        DEBUG_PRINT("allocated new page at 0x%x\n", page);
 
-        // for now, we'll zero out the page
-        memset((void*)page, 0, PAGE_SIZE);
-
-        pt[pt_idx] = page | PTE_PRESENT_BIT | PTE_WRITABLE_BIT;
     }
 
     return 0;
@@ -49,21 +63,26 @@ drill_pt (pte_t * pt, addr_t addr)
 
 
 static int 
-drill_pd (pde_t * pd, addr_t addr) 
+drill_pd (pde_t * pd, addr_t addr, addr_t map_addr, uint_t flags)
 {
     uint_t pd_idx = PADDR_TO_PD_IDX(addr);
-    DEBUG_PRINT("drilling pd, pd idx: 0x%x\n", pd_idx);
     pte_t * pt = 0;
 
+    DEBUG_PRINT("drilling pd, pd idx: 0x%x\n", pd_idx);
+
     if (PDE_PRESENT(pd[pd_idx])) {
+
         DEBUG_PRINT("pd entry is present\n");
         pt = (pte_t*)(pd[pd_idx] & PTE_ADDR_MASK);
+
     } else {
+
         DEBUG_PRINT("pd entry not there, creating a new one\n");
         pt = (pte_t*)alloc_page();
 
         if (!pt) {
-            panic("out of memory in %s\n", __FUNCTION__);
+            ERROR_PRINT("out of memory in %s\n", __FUNCTION__);
+            return -1;
         }
 
         memset((void*)pt, 0, NUM_PT_ENTRIES*sizeof(pte_t));
@@ -71,21 +90,25 @@ drill_pd (pde_t * pd, addr_t addr)
         pd[pd_idx] = (ulong_t)pt | PTE_PRESENT_BIT | PTE_WRITABLE_BIT;
     }
 
-    return drill_pt(pt, addr);
+    return drill_pt(pt, addr, map_addr, flags);
 }
 
 
 static int 
-drill_pdpt (pdpte_t * pdpt, addr_t addr) 
+drill_pdpt (pdpte_t * pdpt, addr_t addr, addr_t map_addr, uint_t flags)
 {
     uint_t pdpt_idx = PADDR_TO_PDPT_IDX(addr);
-    DEBUG_PRINT("drilling pdpt, pdpt idx: 0x%x\n", pdpt_idx);
     pde_t * pd = 0;
 
+    DEBUG_PRINT("drilling pdpt, pdpt idx: 0x%x\n", pdpt_idx);
+
     if (PDPTE_PRESENT(pdpt[pdpt_idx])) {
+
         DEBUG_PRINT("pdpt entry is present\n");
         pd = (pde_t*)(pdpt[pdpt_idx] & PTE_ADDR_MASK);
+
     } else {
+
         DEBUG_PRINT("pdpt entry not there, creating a new one\n");
         pd = (pde_t*)alloc_page();
 
@@ -97,36 +120,51 @@ drill_pdpt (pdpte_t * pdpt, addr_t addr)
         memset((void*)pd, 0, NUM_PD_ENTRIES*sizeof(pde_t));
 
         pdpt[pdpt_idx] = (ulong_t)pd | PTE_PRESENT_BIT | PTE_WRITABLE_BIT;
+
     }
 
-    return drill_pd(pd, addr);
+    return drill_pd(pd, addr, map_addr, flags);
 }
 
 
 // TODO: use cr3 for this...
 static int 
-drill_page_tables (addr_t addr)
+drill_page_tables (addr_t addr, addr_t map_addr, uint_t flags)
 {
     pml4e_t * _pml4 = (pml4e_t*)&pml4;
     uint_t pml4_idx = PADDR_TO_PML4_IDX(addr);
     pdpte_t * pdpt  = 0;
     
     if (PML4E_PRESENT(_pml4[pml4_idx])) {
+
         DEBUG_PRINT("pml4 entry is present\n");
         pdpt = (pdpte_t*)(_pml4[pml4_idx] & PTE_ADDR_MASK);
+
     } else {
+
         DEBUG_PRINT("pml4 entry not there, creating a new one\n");
+
         pdpt = (pdpte_t*)alloc_page();
+
         if (!pdpt) {
             ERROR_PRINT("out of memory in %s\n", __FUNCTION__);
             return -1;
         }
+
         memset((void*)pdpt, 0, NUM_PDPT_ENTRIES*sizeof(pdpte_t));
         _pml4[pml4_idx] = (ulong_t)pdpt | PTE_PRESENT_BIT | PTE_WRITABLE_BIT;
     }
 
     DEBUG_PRINT("the entry (addr: 0x%x): 0x%x\n", &_pml4[pml4_idx], _pml4[pml4_idx]);
-    return drill_pdpt(pdpt, addr);
+    return drill_pdpt(pdpt, addr, map_addr, flags);
+}
+
+
+int 
+create_page_mapping (addr_t vaddr, addr_t paddr, uint_t flags)
+{
+    drill_page_tables(vaddr, paddr, flags);
+    return 0;
 }
 
 
@@ -209,11 +247,32 @@ pf_handler (excp_entry_t * excp,
 {
     DEBUG_PRINT("Page Fault. Fault addr: 0x%x\n", fault_addr);
 
-    if (drill_page_tables(fault_addr) < 0) {
+    if (drill_page_tables(fault_addr, 0, 0) < 0) {
         ERROR_PRINT("ERROR handling page fault\n");
         return -1;
     }
 
+    return 0;
+}
+
+
+int 
+reserve_pages (addr_t paddr, int n)
+{
+    bitmap_set(mem.page_map, PADDR_TO_PAGE(paddr), n);
+    return 0;
+}
+
+
+int
+reserve_page (addr_t paddr)
+{
+    if (test_bit(PADDR_TO_PAGE(paddr), mem.page_map)) {
+        ERROR_PRINT("Page is already allocated\n");
+        return -1;
+    }
+
+    bitmap_set(mem.page_map, PADDR_TO_PAGE(paddr), 1);
     return 0;
 }
 
@@ -256,6 +315,7 @@ init_page_frame_alloc (ulong_t mbd)
 
     printk("Reserving Video Memory\n");
     mark_range_reserved((uint8_t*)mem.page_map, 0xa0000, 0xfffff);
+
 }
 
 

@@ -45,6 +45,7 @@
 #define PTE_WRITABLE_BIT 2UL
 #define PTE_KERNEL_ONLY_BIT (1UL<<3)
 #define PTE_WRITE_THROUGH_BIT (1UL<<4)
+#define PTE_CACHE_DISABLE_BIT (1UL<<5)
 
 #define PML4E_PRESENT(x) ((x) & 1)
 #define PML4E_WRITABLE(x) ((x) & 2)
@@ -65,6 +66,10 @@
 #define PTE_WRITABLE(x) ((x) & 2)
 #define PTE_KERNEL_ONLY(x) ((x) & (1<<3))
 #define PTE_WRITE_THROUGH(x) ((x) & (1<<4))
+#define PTE_CACHE_DISABLED(x) ((x) & (1<<5))
+
+
+
 
 #define PF_ERR_PROT(x)         ((x)&1)       /* fault caused by page-level prot. violation */
 #define PF_ERR_NOT_PRESENT(x)  (~(x)&1)      /* fault caused by not-present page */
@@ -180,9 +185,12 @@ mark_range_reserved (uchar_t * m,
 }
 
 
+int create_page_mapping (addr_t vaddr, addr_t paddr, uint_t flags);
 void init_page_frame_alloc(ulong_t mbd);
 addr_t alloc_page(void);
 int free_page(addr_t addr);
+int reserve_pages(addr_t paddr, int n);
+int reserve_page(addr_t paddr);
 
 /* hooks */
 int free_pages(void * addr, int num);
