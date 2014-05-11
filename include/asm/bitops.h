@@ -64,6 +64,11 @@ static inline void clear_bit(int nr, volatile unsigned long *addr)
 	asm volatile("btr %1,%0" : ADDR : "Ir" (nr));
 }
 
+static inline int test_bit(unsigned int nr, const volatile unsigned long *addr)
+{
+    return ((1UL << (nr % BITS_PER_LONG)) &
+        (addr[nr / BITS_PER_LONG])) != 0;
+}
 
 /**
  * __change_bit - Toggle a bit in memory
