@@ -66,14 +66,18 @@ term_clear (void)
     }
 }
 
+
 static void 
 term_scrollup (void) 
 {
     int i;
-    for (i = 1; i < VGA_HEIGHT; i++) {
-        size_t prev_row = VGA_WIDTH * (i-1);
-        size_t this_row = VGA_WIDTH * i;
-        memcpy(&term_buf[prev_row], &term_buf[this_row], VGA_WIDTH*sizeof(uint16_t));
+    int n = (((VGA_HEIGHT-1)*VGA_WIDTH*2)/sizeof(long));
+    int lpl = (VGA_WIDTH*2)/sizeof(long);
+    long * pos = (long*)term_buf;
+    
+    for (i = 0; i < n; i++) {
+        *pos = *(pos + lpl);
+        ++pos;
     }
 
     size_t index = (VGA_HEIGHT-1) * VGA_WIDTH;
