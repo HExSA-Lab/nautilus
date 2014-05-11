@@ -25,13 +25,12 @@ static uint8_t   term_color;
 static uint16_t* term_buf;
  
 
-// TODO: optimize this function, should just be a single for loop
 void term_init()
 {
     term_row = 0;
     term_col = 0;
     term_color = make_color(COLOR_LIGHT_GREY, COLOR_BLACK);
-    term_buf = (uint16_t*) CGA_BASE_ADDR;
+    term_buf = (uint16_t*) VGA_BASE_ADDR;
     for ( size_t y = 0; y < VGA_HEIGHT; y++ )
     {
         for ( size_t x = 0; x < VGA_WIDTH; x++ )
@@ -74,12 +73,12 @@ term_scrollup (void)
     for (i = 1; i < VGA_HEIGHT; i++) {
         size_t prev_row = VGA_WIDTH * (i-1);
         size_t this_row = VGA_WIDTH * i;
-        memcpy(&term_buf[prev_row], &term_buf[this_row], VGA_WIDTH);
+        memcpy(&term_buf[prev_row], &term_buf[this_row], VGA_WIDTH*sizeof(uint16_t));
     }
 
     size_t index = (VGA_HEIGHT-1) * VGA_WIDTH;
-    for (i = 0; i < VGA_WIDTH; i++, index++) {
-        term_buf[index] = make_vgaentry(' ', term_color);
+    for (i = 0; i < VGA_WIDTH; i++) {
+        term_buf[index++] = make_vgaentry(' ', term_color);
     }
 }
 
@@ -97,6 +96,7 @@ putchar (char c)
     }
 
     term_putc(c, term_color, term_col, term_row);
+
     if (++term_col == VGA_WIDTH) {
         term_col = 0;
         if (++term_row == VGA_HEIGHT) {
