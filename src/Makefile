@@ -8,6 +8,7 @@ obj-y += \
 	string.o \
 	msr.o \
 	cpuid.o \
+	smp.o \
 	nautilus.o \
 	asm/ \
 	dev/

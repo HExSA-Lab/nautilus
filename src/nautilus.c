@@ -5,6 +5,7 @@
 #include <spinlock.h>
 #include <cpu.h>
 #include <cpuid.h>
+#include <smp.h>
 
 #include <dev/apic.h>
 
@@ -14,7 +15,6 @@
 void 
 main (unsigned long mbd, unsigned long magic)
 {
-    int *x;
     struct apic_dev * apic;
     term_init();
 
@@ -26,17 +26,9 @@ main (unsigned long mbd, unsigned long magic)
 
     setup_idt();
 
-    // test the new idt with a bad pointer...
-    x = (int*)0xffffe000;
-    *x = 10;
-
-    spinlock_t lock;
-    spinlock_init(&lock);
-    spin_lock(&lock);
-    *x = 30;
-    spin_unlock(&lock);
-
     init_liballoc_hooks();
+
+    smp_init();
 
     apic = (struct apic_dev*)malloc(sizeof(struct apic_dev));
     if (!apic) {
@@ -46,6 +38,5 @@ main (unsigned long mbd, unsigned long magic)
 
     apic_init(apic);
 
-    
 }
 

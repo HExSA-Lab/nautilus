@@ -36,6 +36,13 @@ menu Debugging
       default n
       help
         Turn on debug prints for the LAPIC driver
+
+    config DEBUG_SMP
+      bool "Debug SMP"
+      depends on DEBUG_PRINTS
+      default n
+      help
+        Turn on debug prints for SMP code
     
 endmenu
 
