@@ -5,8 +5,7 @@
 #include <idt.h>
 #include <lib/bitmap.h>
 
-/* KCH TODO: clean this up by getting rid of old bitmap stuff */
-/* - clean up parameter passing in pt traversal */
+/* - TODO: clean up parameter passing in pt traversal */
 
 #ifndef NAUT_CONFIG_DEBUG_PAGING
 #undef DEBUG_PRINT
@@ -171,12 +170,7 @@ create_page_mapping (addr_t vaddr, addr_t paddr, uint_t flags)
 int
 free_page (addr_t addr) 
 {
-    //ulong_t * bm       = (ulong_t *)mem.page_map;
-    uint_t pgnum       = PADDR_TO_PAGE(addr);
-    //uint_t word_offset = pgnum % (sizeof(ulong_t)*8);
-    //uint_t word_idx    = (pgnum/8)/sizeof(ulong_t);
-
-    //unset_bit(word_offset, &bm[word_idx]);
+    uint_t pgnum = PADDR_TO_PAGE(addr);
     bitmap_clear(mem.page_map, pgnum, 1);
     return 0;
 }
@@ -187,15 +181,6 @@ int
 free_pages (void * addr, int num)
 {
     uint_t pgnum       = PADDR_TO_PAGE((addr_t)addr);
-    /*
-    int i;
-
-    for (i = 0; i < num; i++) {
-        free_page((addr_t)(addr+(i*PAGE_SIZE)));
-    }
-
-    return 0;
-    */
     bitmap_release_region(mem.page_map, pgnum, num);
     return 0;
 }
@@ -212,30 +197,6 @@ alloc_pages (int num)
 addr_t 
 alloc_page (void) 
 {
-    /*
-    int i;
-    uint8_t idx  = 0;
-    ulong_t * bm = (ulong_t*)mem.page_map;
-
-    for (i = 0; i < (mem.npages/8)/sizeof(ulong_t); i++) {
-        // all pages in this word are reserved
-        if (~bm[i] == 0) {
-            continue;
-        } else {
-            idx = ff_zero(bm[i]);
-            uint_t pgnum = ((i*sizeof(ulong_t))*8) + idx;
-
-            // mark it as reserved 
-            set_bit(idx, &bm[i]);
-
-            return PAGE_TO_PADDR(pgnum);
-        }
-    }
-
-
-    return (addr_t)NULL;
-    */
-
     return PAGE_TO_PADDR(bitmap_find_free_region(mem.page_map, mem.npages, 1));
 }
 
@@ -298,7 +259,6 @@ init_page_frame_alloc (ulong_t mbd)
     mem.npages         = mem.phys_mem_avail >> PAGE_SHIFT;
 
     // layout the bitmap 
-    //mem.pm_end = mem.pm_start + (mem.npages >> 3);
     // we just always include the extra long word
     mem.pm_end = mem.pm_start + (((mem.npages / BITS_PER_LONG))*sizeof(ulong_t));
     memset((void*)mem.pm_start, 0, mem.pm_end - mem.pm_start);
@@ -315,7 +275,6 @@ init_page_frame_alloc (ulong_t mbd)
 
     printk("Reserving Video Memory\n");
     mark_range_reserved((uint8_t*)mem.page_map, 0xa0000, 0xfffff);
-
 }
 
 
