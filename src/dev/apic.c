@@ -37,6 +37,7 @@ static int
 apic_sw_enable (struct apic_dev * apic)
 {
     uint32_t val;
+
     // KCH: TODO fix this
     //apic_write(APIC_REG_LVT0, 0);
     
@@ -139,7 +140,7 @@ apic_init (struct apic_dev * apic)
     DEBUG_PRINT("Reserving APIC region\n");
 
     if (reserve_page(apic->base_addr) < 0) {
-        panic("Couldn't reserve LAPIC mem region\n");
+        DEBUG_PRINT("LAPIC mem region already reserved\n");
     }
     
     /* map in the lapic as uncacheable */

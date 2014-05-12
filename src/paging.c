@@ -229,7 +229,7 @@ int
 reserve_page (addr_t paddr)
 {
     if (test_bit(PADDR_TO_PAGE(paddr), mem.page_map)) {
-        ERROR_PRINT("Page is already allocated\n");
+        DEBUG_PRINT("Page is already allocated\n");
         return -1;
     }
 
