@@ -1085,7 +1085,7 @@ int main(int ac, char **av)
 		}
 		printf(_("\n\n"
 			"*** End of Nautilus Kernel configuration.\n"
-			"*** Execute 'make' to build the VMM library and host embedding."
+			"*** Execute 'make' to build the the kernel."
 			"\n\n"));
 	} else {
 		fprintf(stderr, _("\n\n"
