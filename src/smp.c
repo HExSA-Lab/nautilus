@@ -2,6 +2,8 @@
 #include <smp.h>
 #include <paging.h>
 #include <acpi.h>
+#include <irq.h>
+#include <dev/ioapic.h>
 
 #ifndef NAUT_CONFIG_DEBUG_SMP
 #undef DEBUG_PRINT
@@ -18,36 +20,35 @@ static uint8_t mp_entry_lengths[5] = {
 };
 
 
-/* TODO: dynamically allocate these */
-static struct cpu cpus[MAX_CPUS];
-static uint32_t num_cpus = 0;
-
-
 static void
-parse_mptable_cpu (struct mp_table_entry_cpu * cpu)
+parse_mptable_cpu (struct sys_info * sys, struct mp_table_entry_cpu * cpu)
 {
 
-    cpus[num_cpus].id = num_cpus;
-    cpus[num_cpus].lapic_id = cpu->lapic_id;
-    cpus[num_cpus].enabled = cpu->enabled;
-    cpus[num_cpus].is_bsp = cpu->is_bsp;
-    cpus[num_cpus].cpu_sig = cpu->sig;
-    cpus[num_cpus].feat_flags = cpu->feat_flags;
-
-    num_cpus++;
+    sys->cpus[sys->num_cpus].id = sys->num_cpus;
+    sys->cpus[sys->num_cpus].lapic_id = cpu->lapic_id;
+    sys->cpus[sys->num_cpus].enabled = cpu->enabled;
+    sys->cpus[sys->num_cpus].is_bsp = cpu->is_bsp;
+    sys->cpus[sys->num_cpus].cpu_sig = cpu->sig;
+    sys->cpus[sys->num_cpus].feat_flags = cpu->feat_flags;
+    sys->num_cpus++;
 }
 
 
 static void
-parse_mptable_ioapic (struct mp_table_entry_ioapic * ioapic)
+parse_mptable_ioapic (struct sys_info * sys, struct mp_table_entry_ioapic * ioapic)
 {
-    /* TODO: fill in */
-    return;
+    printk("found IOAPIC %d\n", sys->num_ioapics);
+
+    sys->ioapics[sys->num_ioapics].id      = ioapic->id;
+    sys->ioapics[sys->num_ioapics].version = ioapic->version;
+    sys->ioapics[sys->num_ioapics].usable  = ioapic->enabled;
+    sys->ioapics[sys->num_ioapics].base    = (addr_t)ioapic->addr;
+    sys->num_ioapics++; 
 }
 
 
 static int
-parse_mp_table (struct mp_table * mp)
+parse_mp_table (struct sys_info * sys, struct mp_table * mp)
 {
     int count = mp->entry_cnt;
     uint8_t * mp_entry;
@@ -66,10 +67,10 @@ parse_mp_table (struct mp_table * mp)
 
         switch (type) {
             case MP_TAB_TYPE_CPU:
-                parse_mptable_cpu((struct mp_table_entry_cpu*)mp_entry);
+                parse_mptable_cpu(sys, (struct mp_table_entry_cpu*)mp_entry);
                 break;
             case MP_TAB_TYPE_IOAPIC:
-                parse_mptable_ioapic((struct mp_table_entry_ioapic*)mp_entry);
+                parse_mptable_ioapic(sys, (struct mp_table_entry_ioapic*)mp_entry);
                 break;
             case MP_TAB_TYPE_IO_INT:
             case MP_TAB_TYPE_BUS:
@@ -122,7 +123,7 @@ find_mp_pointer (void)
 
 
 int
-smp_init (void)
+smp_init (struct naut_info * naut)
 {
     struct mp_float_ptr_struct * mp_ptr;
 
@@ -133,9 +134,11 @@ smp_init (void)
         return -1;
     }
 
-    parse_mp_table((struct mp_table*)(uint64_t)mp_ptr->mp_cfg_ptr);
+    naut->sys->pic_mode_enabled = mp_ptr->mp_feat2 & PIC_MODE_ON;
 
-    printk("SMP: Detected %d CPUs\n", num_cpus);
+    parse_mp_table(naut->sys, (struct mp_table*)(uint64_t)mp_ptr->mp_cfg_ptr);
+
+    printk("SMP: Detected %d CPUs\n", naut->sys->num_cpus);
 
     return 0;
 }

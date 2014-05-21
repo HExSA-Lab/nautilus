@@ -1,6 +1,5 @@
 mainmenu "Nautilus Kernel Configuration"
 
-
 config DEBUG_INFO
     bool "Compile with debug symbols"
     default n
@@ -23,6 +22,14 @@ config MAX_CPUS
 	  For uniprocessor environments, set this to 1
 
 menu Debugging
+
+    config SERIAL_REDIRECT
+      bool "Serial Debugging"
+      depends on DEBUG_PRINTS
+      default n
+      help
+        Redirect all printing to serial device
+
     config DEBUG_PAGING
       bool "Debug paging"
       depends on DEBUG_PRINTS
@@ -36,6 +43,13 @@ menu Debugging
       default n
       help
         Turn on debug prints for the LAPIC driver
+
+    config DEBUG_IOAPIC
+      bool "DEBUG IOAPIC"
+      depends on DEBUG_PRINTS
+      default n
+      help 
+        Turn on debug prints for the IOAPIC driver
 
     config DEBUG_SMP
       bool "Debug SMP"

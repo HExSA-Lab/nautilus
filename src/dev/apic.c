@@ -10,6 +10,9 @@
 #define DEBUG_PRINT(fmt, args...)
 #endif
 
+// TODO: FIX THIS
+static struct apic_dev * hack = NULL;
+
 
 int 
 check_apic_avail (void)
@@ -38,9 +41,8 @@ apic_sw_enable (struct apic_dev * apic)
 {
     uint32_t val;
 
-    // KCH: TODO fix this
-    //apic_write(APIC_REG_LVT0, 0);
-    
+    /* TODO: KCH: should we clear the LVT0 reg? */
+    //apic_write(apic, APIC_REG_LVT0, 0); 
     val = apic_read(apic, APIC_REG_SPIV);
     apic_write(apic, APIC_REG_SPIV, val | APIC_SPIV_SW_ENABLE);
     return 0;
@@ -57,6 +59,14 @@ apic_sw_disable (struct apic_dev * apic)
 }
 
 
+static void
+assign_spiv (uint8_t spiv_vec)
+{
+    /* TODO: fill in */
+
+}
+
+
 static void 
 apic_enable (struct apic_dev * apic) 
 {
@@ -65,6 +75,17 @@ apic_enable (struct apic_dev * apic)
     msr_write(IA32_APIC_BASE_MSR, data | APIC_GLOBAL_ENABLE);
     apic_sw_enable(apic);
 }
+
+
+/*
+int 
+apic_int_cmd (struct apic_dev * apic, 
+              uint8_t vec,
+              uint8_t dst)
+{
+    return 0;
+}
+*/
 
 
 static ulong_t 
@@ -89,9 +110,10 @@ apic_set_base_addr (struct apic_dev * apic, addr_t addr)
 
 
 void 
-apic_do_eoi (struct apic_dev * apic)
+apic_do_eoi (void)
 {
-    apic_write(apic, APIC_REG_EOR, 0);
+    //apic_write(apic, APIC_REG_EOR, 0);
+    apic_write(hack, APIC_REG_EOR, 0);
 }
 
 
@@ -157,6 +179,19 @@ apic_init (struct apic_dev * apic)
         panic("Unsupported APIC version (0x%1x)\n", (unsigned)apic->version);
     }
 
+    /* TODO: these shouldn't be hard-coded! */
+    apic_write(apic, APIC_REG_TPR, 0x20); // inhibit softint delivery
+    apic_write(apic, APIC_REG_LVTT, 0x10000); // disable timer interrupts
+    apic_write(apic, APIC_REG_LVTPC, 0x10000); // disable perf cntr interrupts
+    apic_write(apic, APIC_REG_LVT0, 0x08700); // enable normal external interrupts
+    apic_write(apic, APIC_REG_LVT1, 0x00400); // enable normal NMI processing
+    apic_write(apic, APIC_REG_LVTERR, 0x10000); // disable error interrupts
+    apic_write(apic, APIC_REG_SPIV, 0x010f); // may not need this (apic sets spur vector num to 15)
+
     apic_enable(apic);
+
+    apic_write(apic, APIC_REG_LVT0, 0x08700);  // BAM BAM BAM
+    apic_write(apic, APIC_REG_SPIV, 0x010f); 
+    hack = apic;
 }
 

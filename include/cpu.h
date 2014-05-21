@@ -3,6 +3,20 @@
 
 #include <types.h>
 
+#define RFLAGS_CF   (1 << 0)
+#define RFLAGS_PF   (1 << 2)
+#define RFLAGS_AF   (1 << 4)
+#define RFLAGS_ZF   (1 << 6)
+#define RFLAGS_SF   (1 << 7)
+#define RFLAGS_TF   (1 << 8)
+#define RFLAGS_IF   (1 << 9)
+#define RFLAGS_DF   (1 << 10)
+#define RFLAGS_OF   (1 << 11)
+#define RFLAGS_IOPL (3 << 12)
+#define RFLAGS_VM   ((1 << 17) | RFLAGS_IOPL)
+#define RFLAGS_VIF  (1 << 19)
+#define RFLAGS_VIP  (1 << 20)
+
 
 static inline ulong_t 
 read_cr0 (void)
@@ -153,6 +167,22 @@ rdtsc (void)
     asm ("rdtsc" : "=a"(lo), "=d"(hi));
     return lo | ((uint64_t)(hi) << 32);
 }
+
+
+static inline uint64_t 
+read_rflags (void)
+{
+    uint64_t ret;
+    asm volatile ("pushfq; popq %0" : "=a"(ret));
+    return ret;
+}
+
+static inline void
+halt (void) 
+{
+    asm volatile ("hlt");
+}
+    
 
 
 #endif

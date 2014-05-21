@@ -9,7 +9,9 @@
 #define BIOS_ROM_BASE      0xf0000
 #define BIOS_ROM_END       0xfffff
 
-int smp_init(void);
+struct naut_info;
+
+int smp_init(struct naut_info * naut);
 
 struct cpu {
     uint32_t id;
@@ -23,6 +25,8 @@ struct cpu {
 
     struct apic_dev * apic;
 };
+
+
 
 
 #endif

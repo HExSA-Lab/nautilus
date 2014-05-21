@@ -1,6 +1,6 @@
 #include <multiboot2.h>
 #include <mb_utils.h>
-#include <printk.h>
+#include <nautilus.h>
 #include <paging.h>
 
 extern struct mem_info mem;

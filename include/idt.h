@@ -31,7 +31,7 @@
 /* 0s for exceptions that push an error code on the stack */
 #define ERR_CODE_EXCP_MASK   ~0x00027d00
 
-#define MAKE_IDT_HANDLER(x)       \
+#define MAKE_EXCP_HANDLER(x)      \
 .align 2;                         \
 early_excp_handler_##x:;          \
 .if (ERR_CODE_EXCP_MASK >> x) & 1;\
@@ -42,7 +42,6 @@ early_excp_handler_##x:;          \
 pushq $##x;                       \
 jmp early_excp_common;
 
-
 #ifndef __ASSEMBLER__
 
 #include <types.h>
@@ -52,6 +51,7 @@ jmp early_excp_common;
 
 
 extern const uint8_t early_excp_handlers[NUM_EXCEPTIONS][10];
+extern const uint8_t early_irq_handlers[NUM_IDT_ENTRIES-NUM_EXCEPTIONS][16];
 
 #define ADDR_LO(x) ((ulong_t)(x) & 0xFFFF)
 #define ADDR_MI(x) (((ulong_t)(x) >> 16) & 0xFFFF)
@@ -107,7 +107,9 @@ struct idt_desc {
 
 
 int setup_idt(void);
-int null_excp_handler(void);
+int idt_assign_entry(ulong_t entry, ulong_t handler_addr);
+int null_excp_handler(excp_entry_t * excp, excp_vec_t vec, addr_t fault_addr);
+int null_irq_handler(excp_entry_t * excp, excp_vec_t vector);
 
 static inline void
 write_gate_desc (struct   gate_desc64 * idt,

@@ -1,0 +1,21 @@
+#include <nautilus.h>
+#include <irq.h>
+#include <dev/kbd.h>
+
+static int 
+kbd_handler (excp_entry_t * excp, excp_vec_t vec)
+{
+    printk("Keyboard interrupt!\n");
+    
+    IRQ_HANDLER_END();
+    
+    return 0;
+}
+
+int
+kbd_init (struct naut_info * naut)
+{
+    register_irq_handler(1, kbd_handler);
+    return 0;
+}
+

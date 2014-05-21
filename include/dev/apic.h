@@ -78,7 +78,7 @@ apic_read (struct apic_dev * apic, uint_t reg)
 }
 
 
-void apic_do_eoi(struct apic_dev * apic);
+void apic_do_eoi(void);
 void apic_ipi(struct apic_dev * apic, uint_t remote_id, uint_t vector);
 void apic_self_ipi (struct apic_dev * apic, uint_t vector);
 void apic_init(struct apic_dev * apic);
