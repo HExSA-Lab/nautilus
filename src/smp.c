@@ -10,6 +10,7 @@
 #define DEBUG_PRINT(fmt, args...)
 #endif
 
+/* TODO: compute checksum on MPTable */
 
 static uint8_t mp_entry_lengths[5] = {
     MP_TAB_CPU_LEN,
@@ -121,11 +122,15 @@ find_mp_pointer (void)
     return 0;
 }
 
+extern addr_t init_smp_boot;
 
 int
 smp_init (struct naut_info * naut)
 {
     struct mp_float_ptr_struct * mp_ptr;
+    addr_t boot_target = (addr_t)&init_smp_boot;
+    uint8_t target_vec = PADDR_TO_PAGE(boot_target);
+    struct apic_dev * apic = naut->sys->cpus[0].apic;
 
     mp_ptr = find_mp_pointer();
 
@@ -139,6 +144,28 @@ smp_init (struct naut_info * naut)
     parse_mp_table(naut->sys, (struct mp_table*)(uint64_t)mp_ptr->mp_cfg_ptr);
 
     printk("SMP: Detected %d CPUs\n", naut->sys->num_cpus);
+
+    DEBUG_PRINT("passing target page num %x to SIPI\n", target_vec);
+
+
+    /* broadcast Init IPI */
+    apic_bcast_iipi(apic);
+
+    /* 10 ms */
+    /* TODO */
+
+    /* broadcast SIPI IPI (use vector here) */
+    apic_bcast_sipi(apic, target_vec);
+
+    /* 200 us */
+    /* TODO */
+
+    /* repeat last one */
+    apic_bcast_sipi(apic, target_vec);
+
+    /* 200 us */
+    /* TODO */
+
 
     return 0;
 }

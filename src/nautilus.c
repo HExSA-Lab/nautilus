@@ -23,7 +23,6 @@ struct naut_info nautilus_info;
 void 
 main (unsigned long mbd, unsigned long magic)
 {
-    struct apic_dev * apic;
     struct naut_info * naut = &nautilus_info;
 
     term_init();
@@ -57,13 +56,7 @@ main (unsigned long mbd, unsigned long magic)
 
     ioapic_init(naut->sys);
 
-    apic = (struct apic_dev*)malloc(sizeof(struct apic_dev));
-    if (!apic) {
-        ERROR_PRINT("could not allocate apic struct\n");
-    }
-    memset(apic, 0, sizeof(struct apic_dev));
-
-    apic_init(apic);
+    apic_init(naut);
 
     timer_init(naut);
     kbd_init(naut);

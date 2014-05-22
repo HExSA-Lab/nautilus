@@ -33,6 +33,8 @@ struct sys_info {
     uint32_t num_cpus;
     uint32_t num_ioapics;
 
+    uint32_t bsp_id;
+
     uint8_t pic_mode_enabled;
 };
 

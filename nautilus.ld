@@ -1,9 +1,15 @@
 ENTRY(nautilus_entry)
 
-VIRT_BASE = 0Xffffffff80000000;
+VIRT_BASE = 0xffffffff80000000;
 
 SECTIONS
 {
+    . = 0x8000;
+    .smp_boot :
+    {   
+        *(.smp_boot)
+    }
+
     . = 0x100000;
 
     .boot :

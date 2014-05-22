@@ -14,10 +14,20 @@
 #define APIC_IPI_SELF          0x40000
 #define APIC_IPI_ALL           0x80000
 #define APIC_IPI_OTHERS        0xC0000
-#define APIC_ICR_TYPE_FIXED    0x00000
-#define APIC_ICR_LEVEL_ASSERT  (1 << 14)
 #define APIC_GLOBAL_ENABLE     (1 << 11)
 #define APIC_SPIV_SW_ENABLE   (1 << 8)
+
+#define ICR_DEL_MODE_LOWEST  (1 << 8)
+#define ICR_DEL_MODE_SMI     (2 << 8)
+#define ICR_DEL_MODE_NMI     (4 << 8)
+#define ICR_DEL_MODE_INIT    (5 << 8)
+#define ICR_DEL_MODE_STARTUP (6 << 8)
+
+#define ICR_DST_MODE_LOG      (1 << 11)
+
+#define ICR_LEVEL_ASSERT      (1 << 14)
+
+#define ICR_TRIG_MODE_LEVEL   (1 << 15)
 
 
 #define APIC_ID_SHIFT 24
@@ -78,10 +88,14 @@ apic_read (struct apic_dev * apic, uint_t reg)
 }
 
 
+struct naut_info;
+
 void apic_do_eoi(void);
 void apic_ipi(struct apic_dev * apic, uint_t remote_id, uint_t vector);
 void apic_self_ipi (struct apic_dev * apic, uint_t vector);
-void apic_init(struct apic_dev * apic);
+void apic_bcast_iipi(struct apic_dev * apic);
+void apic_bcast_sipi(struct apic_dev * apic, uint8_t target);
+void apic_init(struct naut_info * naut);
 
 
 

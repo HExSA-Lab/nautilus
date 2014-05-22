@@ -4,6 +4,7 @@
 #include <paging.h>
 #include <nautilus.h>
 
+#include <lib/liballoc.h>
 
 #ifndef NAUT_CONFIG_DEBUG_APIC
 #undef DEBUG_PRINT
@@ -137,20 +138,39 @@ apic_ipi (struct apic_dev * apic,
           uint_t vector)
 {
     apic_write(apic, APIC_REG_ICR2, remote_id << APIC_ICR2_DST_SHIFT);
-    apic_write(apic, APIC_REG_ICR, vector | APIC_ICR_LEVEL_ASSERT);
+    apic_write(apic, APIC_REG_ICR, vector | ICR_LEVEL_ASSERT);
 }
 
 
 void
 apic_self_ipi (struct apic_dev * apic, uint_t vector)
 {
-    apic_write(apic, APIC_IPI_SELF | APIC_ICR_TYPE_FIXED, vector);
+    apic_write(apic, APIC_IPI_SELF, vector);
+}
+
+void
+apic_bcast_iipi (struct apic_dev * apic) 
+{
+    apic_write(apic, APIC_REG_ICR, APIC_IPI_OTHERS | ICR_LEVEL_ASSERT | ICR_DEL_MODE_INIT);
+}
+
+void
+apic_bcast_sipi (struct apic_dev * apic, uint8_t target)
+{
+    apic_write(apic, APIC_REG_ICR, APIC_IPI_OTHERS | ICR_LEVEL_ASSERT | ICR_DEL_MODE_STARTUP | target);
 }
 
 
 void
-apic_init (struct apic_dev * apic)
+apic_init (struct naut_info * naut)
 {
+    struct apic_dev * apic;
+
+    apic = (struct apic_dev*)malloc(sizeof(struct apic_dev));
+    if (!apic) {
+        ERROR_PRINT("could not allocate apic struct\n");
+    }
+    memset(apic, 0, sizeof(struct apic_dev));
 
     if (!check_apic_avail()) {
         panic("no APIC found, dying\n");
@@ -180,18 +200,20 @@ apic_init (struct apic_dev * apic)
     }
 
     /* TODO: these shouldn't be hard-coded! */
-    apic_write(apic, APIC_REG_TPR, 0x20); // inhibit softint delivery
-    apic_write(apic, APIC_REG_LVTT, 0x10000); // disable timer interrupts
-    apic_write(apic, APIC_REG_LVTPC, 0x10000); // disable perf cntr interrupts
-    apic_write(apic, APIC_REG_LVT0, 0x08700); // enable normal external interrupts
-    apic_write(apic, APIC_REG_LVT1, 0x00400); // enable normal NMI processing
+    apic_write(apic, APIC_REG_TPR, 0x20);       // inhibit softint delivery
+    apic_write(apic, APIC_REG_LVTT, 0x10000);   // disable timer interrupts
+    apic_write(apic, APIC_REG_LVTPC, 0x10000);  // disable perf cntr interrupts
+    apic_write(apic, APIC_REG_LVT0, 0x08700);   // enable normal external interrupts
+    apic_write(apic, APIC_REG_LVT1, 0x00400);   // enable normal NMI processing
     apic_write(apic, APIC_REG_LVTERR, 0x10000); // disable error interrupts
-    apic_write(apic, APIC_REG_SPIV, 0x010f); // may not need this (apic sets spur vector num to 15)
+    apic_write(apic, APIC_REG_SPIV, 0x010f);    // may not need this (apic sets spur vector num to 15)
 
     apic_enable(apic);
 
     apic_write(apic, APIC_REG_LVT0, 0x08700);  // BAM BAM BAM
     apic_write(apic, APIC_REG_SPIV, 0x010f); 
+
+    naut->sys->cpus[0].apic = apic;
     hack = apic;
 }
 
