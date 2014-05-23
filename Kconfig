@@ -60,5 +60,5 @@ menu Debugging
     
 endmenu
 
-#source "src/Kconfig"
+source "src/dev/Kconfig"
 

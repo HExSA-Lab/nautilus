@@ -1,0 +1,12 @@
+menu "Device options"
+
+
+config Hz
+    int "Timer interrupt frequency"
+    range 100 10000
+    default "100"
+    help
+        Specifies the 8254 PIT default timer
+        interrupt frequency
+
+endmenu
