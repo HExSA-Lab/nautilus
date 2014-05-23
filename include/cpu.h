@@ -164,7 +164,16 @@ static inline uint64_t
 rdtsc (void)
 {
     uint32_t lo, hi;
-    asm ("rdtsc" : "=a"(lo), "=d"(hi));
+    asm volatile("rdtscll" : "=a"(lo), "=d"(hi));
+    return lo | ((uint64_t)(hi) << 32);
+}
+
+
+static inline uint64_t
+rdtscp (void)
+{
+    uint32_t lo, hi;
+    asm volatile("rdtscp" : "=a"(lo), "=d"(hi));
     return lo | ((uint64_t)(hi) << 32);
 }
 
