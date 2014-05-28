@@ -1,9 +1,10 @@
 #include <nautilus.h>
 #include <irq.h>
+#include <cpu.h>
+
 #include <dev/timer.h>
 
-
-#define HZ 100
+// NAUT_CONFIG_HZ
 
 static int
 timer_handler (excp_entry_t * excp, excp_vec_t vec)
@@ -17,7 +18,8 @@ timer_handler (excp_entry_t * excp, excp_vec_t vec)
 int 
 timer_init (struct naut_info * naut)
 {
-    uint16_t foo = 1193182L / HZ;
+    uint16_t foo = 1193182L / NAUT_CONFIG_HZ;
+
     printk("Initializing 8254 PIT\n");
 
     outb(0x36, 0x43);         // channel 0, LSB/MSB, mode 3, binary

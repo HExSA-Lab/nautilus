@@ -1,7 +1,7 @@
 menu "Device options"
 
 
-config Hz
+config HZ
     int "Timer interrupt frequency"
     range 100 10000
     default "100"
