@@ -71,7 +71,9 @@ atomic_end_irq (uint8_t iflag)
 uint8_t irq_to_vec (uint8_t irq);
 void disable_8259pic(void);
 void imcr_begin_sym_io(void);
+/* TODO: make this take private data */
 int register_irq_handler (uint16_t irq, 
-                          int (*handler)(excp_entry_t *, excp_vec_t));
+                          int (*handler)(excp_entry_t *, excp_vec_t),
+                          void * priv_data);
 
 #endif

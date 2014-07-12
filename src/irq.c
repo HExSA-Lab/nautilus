@@ -7,7 +7,7 @@
 static uint8_t irq_to_vec_map[NUM_EXT_IRQS] = {
     0xec,  // IRQ 0 (timer)
     0xe4,  // IRQ 1
-    0x00,  // disabled
+    0xec,  // disabled
     0x94,  // IRQ 3
     0x8c,  // IRQ 4 (COM1)
     0x84,  // IRQ 5
@@ -40,7 +40,8 @@ irq_to_vec (uint8_t irq)
 
 int 
 register_irq_handler (uint16_t irq, 
-                      int (*handler)(excp_entry_t *, excp_vec_t))
+                      int (*handler)(excp_entry_t *, excp_vec_t),
+                      void * priv_data)
 {
     uint8_t int_vector;
 
