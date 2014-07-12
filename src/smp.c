@@ -24,7 +24,6 @@ static uint8_t mp_entry_lengths[5] = {
     MP_TAB_LINT_LEN,
 };
 
-    
 
 
 static void
@@ -155,19 +154,19 @@ smp_early_init (struct naut_info * naut)
 static void 
 init_ap_area (struct ap_init_area * ap_area)
 {
-    ap_area->stack  = 0;
-    ap_area->rsvd   = 0;
-    ap_area->id     = 0;
-    ap_area->gdt[0] = 0;
-    ap_area->gdt[1] = 0;
-    ap_area->gdt[2] = 0x0000ffff;
-    ap_area->gdt[3] = 0x00cf9a00;
-    ap_area->gdt[4] = 0x0000ffff;
-    ap_area->gdt[5] = 0x00cf9200;
-    ap_area->rsvd1  = 0;
-    ap_area->gdt64[0] = 0x0000000000000000;
-    ap_area->gdt64[1] = 0x00a09a0000000000;
-    ap_area->gdt64[2] = 0x00a0920000000000;
+    ap_area->stack       = 0;
+    ap_area->rsvd        = 0;
+    ap_area->id          = 0;
+    ap_area->gdt[0]      = 0;
+    ap_area->gdt[1]      = 0;
+    ap_area->gdt[2]      = 0x0000ffff;
+    ap_area->gdt[3]      = 0x00cf9a00;
+    ap_area->gdt[4]      = 0x0000ffff;
+    ap_area->gdt[5]      = 0x00cf9200;
+    ap_area->rsvd1       = 0;
+    ap_area->gdt64[0]    = 0x0000000000000000;
+    ap_area->gdt64[1]    = 0x00a09a0000000000;
+    ap_area->gdt64[2]    = 0x00a0920000000000;
     ap_area->gdt64_limit = 0;
     ap_area->gdt64_base  = 0;
     ap_area->cr3         = read_cr3();
@@ -181,9 +180,9 @@ smp_bringup_aps (struct naut_info * naut)
     addr_t ap_trampoline   = AP_TRAMPOLINE_ADDR;
     uint8_t target_vec     = PADDR_TO_PAGE(ap_trampoline);
     struct apic_dev * apic = naut->sys->cpus[0].apic;
+    struct ap_init_area * ap_area;
     int status = 0; 
     int err = 0;
-    struct ap_init_area * ap_area;
     int i, j, maxlvt;
 
     maxlvt = apic_get_maxlvt(apic);
@@ -211,10 +210,11 @@ smp_bringup_aps (struct naut_info * naut)
         return -1;
     }
 
+    /* initialize AP info area (stack pointer, GDT info, etc) */
     ap_area = (struct ap_init_area*)(AP_INFO_AREA);
     init_ap_area(ap_area);
 
-    /* START BOOTING THEM */
+    /* START BOOTING AP CORES */
     
     /* we, of course, skip the BSP (NOTE: assuming its 0...) */
     for (i = 1; i < naut->sys->num_cpus; i++) {
@@ -230,18 +230,16 @@ smp_bringup_aps (struct naut_info * naut)
         }
         ap_area->stack = boot_stack_ptr;
 
-        /* the CPU id */
+        /* the CPU number */
         ap_area->id = i;
 
-        /* OK, we're ready to fire it up */
-
         /* Send the INIT sequence */
-        printk("sending init\n");
-        apic_send_iipi(apic, i);
+        DEBUG_PRINT("sending INIT to remote APIC\n");
+        apic_send_iipi(apic, naut->sys->cpus[i].lapic_id);
 
         /* wait for status to update */
         status = apic_wait_for_send(apic);
-        printk("init sent\n");
+        DEBUG_PRINT("INIT send complete\n");
 
         mbarrier();
 
@@ -249,7 +247,7 @@ smp_bringup_aps (struct naut_info * naut)
         udelay(10000);
 
         /* deassert INIT IPI (level-triggered) */
-        apic_deinit_iipi(apic, i);
+        apic_deinit_iipi(apic, naut->sys->cpus[i].lapic_id);
 
         for (j = 1; j <= 2; j++) {
             if (maxlvt > 3) {
@@ -260,7 +258,7 @@ smp_bringup_aps (struct naut_info * naut)
             DEBUG_PRINT("sending SIPI %u to core %u\n", j, i);
 
             /* send the startup signal */
-            apic_send_sipi(apic, i, target_vec);
+            apic_send_sipi(apic, naut->sys->cpus[i].lapic_id, target_vec);
 
             udelay(300);
 
@@ -287,8 +285,19 @@ smp_bringup_aps (struct naut_info * naut)
         DEBUG_PRINT("Bringup for core %u done.\n", i);
     }
 
+    /* TODO: check booted flags */
+
+    /* TODO: point GDT at existing one (we don't want the one in lowmem) */
+
     return (status|err);
 
 }
 
+
+/*
+ 
+void smp_ap_start (void); // first C code AP executes (flags its presence, calls other setup routines)
+void smp_ap_setup (void);  // sets up LAPIC, interrupts, etc
+
+*/
 
