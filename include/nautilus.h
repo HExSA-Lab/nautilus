@@ -18,6 +18,7 @@
 #endif
 
 #include <dev/ioapic.h>
+#include <dev/timer.h>
 #include <smp.h>
 
 struct naut_info {
@@ -36,6 +37,9 @@ struct sys_info {
     uint32_t bsp_id;
 
     uint8_t pic_mode_enabled;
+
+    uint_t num_tevents;
+    struct timer_event * time_events;
 };
 
 #endif

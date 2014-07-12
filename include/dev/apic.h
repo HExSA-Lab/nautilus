@@ -24,10 +24,10 @@
 #define ICR_DEL_MODE_STARTUP (6 << 8)
 
 #define ICR_DST_MODE_LOG      (1 << 11)
-
+#define ICR_SEND_PENDING      (1 << 12)
 #define ICR_LEVEL_ASSERT      (1 << 14)
-
 #define ICR_TRIG_MODE_LEVEL   (1 << 15)
+
 
 
 #define APIC_ID_SHIFT 24
@@ -93,9 +93,16 @@ struct naut_info;
 void apic_do_eoi(void);
 void apic_ipi(struct apic_dev * apic, uint_t remote_id, uint_t vector);
 void apic_self_ipi (struct apic_dev * apic, uint_t vector);
+void apic_send_iipi(struct apic_dev * apic, uint32_t remote_id);
+void apic_deinit_iipi(struct apic_dev * apic, uint32_t remote_id);
+void apic_send_sipi(struct apic_dev * apic, uint32_t remote_id, uint8_t target);
 void apic_bcast_iipi(struct apic_dev * apic);
+void apic_bcast_deinit_iipi(struct apic_dev * apic);
 void apic_bcast_sipi(struct apic_dev * apic, uint8_t target);
 void apic_init(struct naut_info * naut);
+
+int apic_get_maxlvt(struct apic_dev * apic);
+uint32_t apic_wait_for_send(struct apic_dev* apic);
 
 
 

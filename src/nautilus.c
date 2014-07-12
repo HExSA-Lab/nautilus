@@ -48,20 +48,22 @@ main (unsigned long mbd, unsigned long magic)
     }
     memset(naut->sys, 0, sizeof(struct sys_info));
 
-    smp_init(naut);
-
-
     printk("Disabling legacy 8259 PIC\n");
     disable_8259pic();
+
+    smp_early_init(naut);
 
     ioapic_init(naut->sys);
 
     apic_init(naut);
 
-    timer_init(naut);
     kbd_init(naut);
 
-    sti();
+    timer_init(naut);
+
+    //sti();
+
+    smp_bringup_aps(naut);
 
     while (1) { halt(); }
 }

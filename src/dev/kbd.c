@@ -5,8 +5,6 @@
 static int 
 kbd_handler (excp_entry_t * excp, excp_vec_t vec)
 {
-    printk("Keyboard interrupt!\n");
-    
     IRQ_HANDLER_END();
     
     return 0;
@@ -15,7 +13,7 @@ kbd_handler (excp_entry_t * excp, excp_vec_t vec)
 int
 kbd_init (struct naut_info * naut)
 {
-    register_irq_handler(1, kbd_handler);
+    register_irq_handler(1, kbd_handler, NULL);
     return 0;
 }
 

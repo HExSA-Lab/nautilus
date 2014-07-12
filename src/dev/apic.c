@@ -1,9 +1,9 @@
-#include <dev/apic.h>
+#include <cpu.h>
 #include <cpuid.h>
 #include <msr.h>
 #include <paging.h>
 #include <nautilus.h>
-
+#include <dev/apic.h>
 #include <lib/liballoc.h>
 
 #ifndef NAUT_CONFIG_DEBUG_APIC
@@ -78,15 +78,6 @@ apic_enable (struct apic_dev * apic)
 }
 
 
-/*
-int 
-apic_int_cmd (struct apic_dev * apic, 
-              uint8_t vec,
-              uint8_t dst)
-{
-    return 0;
-}
-*/
 
 
 static ulong_t 
@@ -132,32 +123,111 @@ apic_get_version (struct apic_dev * apic)
 }
 
 
+uint32_t 
+apic_wait_for_send(struct apic_dev * apic)
+{
+    uint32_t res;
+    int n = 0;
+
+    do {
+        if (!(res = apic_read(apic, APIC_REG_ICR) & ICR_SEND_PENDING)) {
+            break;
+        }
+        udelay(100);
+    } while (n++ < 1000);
+
+    return res;
+}
+
+
+int 
+apic_get_maxlvt (struct apic_dev * apic)
+{
+    uint_t v;
+
+    v = apic_read(apic, APIC_REG_LVR);
+    return ((v >> 16) & 0xffu);
+}
+
+
 void 
 apic_ipi (struct apic_dev * apic, 
           uint_t remote_id,
           uint_t vector)
 {
+    cli();
     apic_write(apic, APIC_REG_ICR2, remote_id << APIC_ICR2_DST_SHIFT);
     apic_write(apic, APIC_REG_ICR, vector | ICR_LEVEL_ASSERT);
+    sti();
 }
 
 
 void
 apic_self_ipi (struct apic_dev * apic, uint_t vector)
 {
+    cli();
     apic_write(apic, APIC_IPI_SELF, vector);
+    sti();
 }
+
+void 
+apic_send_iipi (struct apic_dev * apic, uint32_t remote_id) 
+{
+    cli();
+    //uint32_t lo,hi;
+    //hi = remote_id << APIC_ICR2_DST_SHIFT;
+    //lo = ICR_TRIG_MODE_LEVEL|ICR_LEVEL_ASSERT|ICR_DEL_MODE_INIT;
+    //printk("delivering IIPI (hi=%x) (lo=%x)\n", hi, lo);
+    apic_write(apic, APIC_REG_ICR2, remote_id << APIC_ICR2_DST_SHIFT);
+    apic_write(apic, APIC_REG_ICR, ICR_TRIG_MODE_LEVEL| ICR_LEVEL_ASSERT | ICR_DEL_MODE_INIT);
+    sti();
+}
+
+
+void
+apic_deinit_iipi (struct apic_dev * apic, uint32_t remote_id)
+{
+    cli();
+    apic_write(apic, APIC_REG_ICR2, remote_id << APIC_ICR2_DST_SHIFT);
+    apic_write(apic, APIC_REG_ICR, ICR_TRIG_MODE_LEVEL| ICR_DEL_MODE_INIT);
+    sti();
+}
+
+
+void
+apic_send_sipi (struct apic_dev * apic, uint32_t remote_id, uint8_t target)
+{
+    cli();
+    apic_write(apic, APIC_REG_ICR2, remote_id << APIC_ICR2_DST_SHIFT);
+    apic_write(apic, APIC_REG_ICR, ICR_DEL_MODE_STARTUP | target);
+    sti();
+}
+
 
 void
 apic_bcast_iipi (struct apic_dev * apic) 
 {
-    apic_write(apic, APIC_REG_ICR, APIC_IPI_OTHERS | ICR_LEVEL_ASSERT | ICR_DEL_MODE_INIT);
+    cli();
+    apic_write(apic, APIC_REG_ICR, APIC_IPI_OTHERS | ICR_LEVEL_ASSERT | ICR_TRIG_MODE_LEVEL | ICR_DEL_MODE_INIT);
+    sti();
 }
+
+
+void
+apic_bcast_deinit_iipi (struct apic_dev * apic)
+{
+    cli();
+    apic_write(apic, APIC_REG_ICR, APIC_IPI_OTHERS | ICR_TRIG_MODE_LEVEL | ICR_DEL_MODE_INIT);
+    sti();
+}
+
 
 void
 apic_bcast_sipi (struct apic_dev * apic, uint8_t target)
 {
-    apic_write(apic, APIC_REG_ICR, APIC_IPI_OTHERS | ICR_LEVEL_ASSERT | ICR_DEL_MODE_STARTUP | target);
+    cli();
+    apic_write(apic, APIC_REG_ICR, APIC_IPI_OTHERS | ICR_DEL_MODE_STARTUP | target);
+    sti();
 }
 
 

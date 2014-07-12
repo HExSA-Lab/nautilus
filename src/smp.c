@@ -3,12 +3,16 @@
 #include <paging.h>
 #include <acpi.h>
 #include <irq.h>
+#include <cpu.h>
 #include <dev/ioapic.h>
+#include <dev/timer.h>
 
 #ifndef NAUT_CONFIG_DEBUG_SMP
 #undef DEBUG_PRINT
 #define DEBUG_PRINT(fmt, args...)
 #endif
+
+extern addr_t init_smp_boot;
 
 /* TODO: compute checksum on MPTable */
 
@@ -20,16 +24,18 @@ static uint8_t mp_entry_lengths[5] = {
     MP_TAB_LINT_LEN,
 };
 
+    
+
 
 static void
 parse_mptable_cpu (struct sys_info * sys, struct mp_table_entry_cpu * cpu)
 {
 
-    sys->cpus[sys->num_cpus].id = sys->num_cpus;
-    sys->cpus[sys->num_cpus].lapic_id = cpu->lapic_id;
-    sys->cpus[sys->num_cpus].enabled = cpu->enabled;
-    sys->cpus[sys->num_cpus].is_bsp = cpu->is_bsp;
-    sys->cpus[sys->num_cpus].cpu_sig = cpu->sig;
+    sys->cpus[sys->num_cpus].id         = sys->num_cpus;
+    sys->cpus[sys->num_cpus].lapic_id   = cpu->lapic_id;
+    sys->cpus[sys->num_cpus].enabled    = cpu->enabled;
+    sys->cpus[sys->num_cpus].is_bsp     = cpu->is_bsp;
+    sys->cpus[sys->num_cpus].cpu_sig    = cpu->sig;
     sys->cpus[sys->num_cpus].feat_flags = cpu->feat_flags;
     sys->num_cpus++;
 }
@@ -38,7 +44,7 @@ parse_mptable_cpu (struct sys_info * sys, struct mp_table_entry_cpu * cpu)
 static void
 parse_mptable_ioapic (struct sys_info * sys, struct mp_table_entry_ioapic * ioapic)
 {
-    printk("found IOAPIC %d\n", sys->num_ioapics);
+    DEBUG_PRINT("MPTABLE_PARSE: found IOAPIC %d\n", sys->num_ioapics);
 
     sys->ioapics[sys->num_ioapics].id      = ioapic->id;
     sys->ioapics[sys->num_ioapics].version = ioapic->version;
@@ -61,6 +67,8 @@ parse_mp_table (struct sys_info * sys, struct mp_table * mp)
     }
 
     mp_entry = (uint8_t*)&mp->entries;
+    DEBUG_PRINT("MP table length: %d B\n", mp->len);
+    DEBUG_PRINT("MP table entry count: %d\n", mp->entry_cnt);
 
     while (count--) {
 
@@ -122,15 +130,11 @@ find_mp_pointer (void)
     return 0;
 }
 
-extern addr_t init_smp_boot;
 
 int
-smp_init (struct naut_info * naut)
+smp_early_init (struct naut_info * naut)
 {
     struct mp_float_ptr_struct * mp_ptr;
-    addr_t boot_target = (addr_t)&init_smp_boot;
-    uint8_t target_vec = PADDR_TO_PAGE(boot_target);
-    struct apic_dev * apic = naut->sys->cpus[0].apic;
 
     mp_ptr = find_mp_pointer();
 
@@ -144,30 +148,147 @@ smp_init (struct naut_info * naut)
     parse_mp_table(naut->sys, (struct mp_table*)(uint64_t)mp_ptr->mp_cfg_ptr);
 
     printk("SMP: Detected %d CPUs\n", naut->sys->num_cpus);
+    return 0;
+}
+
+
+static void 
+init_ap_area (struct ap_init_area * ap_area)
+{
+    ap_area->stack  = 0;
+    ap_area->rsvd   = 0;
+    ap_area->id     = 0;
+    ap_area->gdt[0] = 0;
+    ap_area->gdt[1] = 0;
+    ap_area->gdt[2] = 0x0000ffff;
+    ap_area->gdt[3] = 0x00cf9a00;
+    ap_area->gdt[4] = 0x0000ffff;
+    ap_area->gdt[5] = 0x00cf9200;
+    ap_area->rsvd1  = 0;
+    ap_area->gdt64[0] = 0x0000000000000000;
+    ap_area->gdt64[1] = 0x00a09a0000000000;
+    ap_area->gdt64[2] = 0x00a0920000000000;
+    ap_area->gdt64_limit = 0;
+    ap_area->gdt64_base  = 0;
+    ap_area->cr3         = read_cr3();
+}
+
+
+int
+smp_bringup_aps (struct naut_info * naut)
+{
+    addr_t boot_target     = (addr_t)&init_smp_boot;
+    addr_t ap_trampoline   = AP_TRAMPOLINE_ADDR;
+    uint8_t target_vec     = PADDR_TO_PAGE(ap_trampoline);
+    struct apic_dev * apic = naut->sys->cpus[0].apic;
+    int status = 0; 
+    int err = 0;
+    struct ap_init_area * ap_area;
+    int i, j, maxlvt;
+
+    maxlvt = apic_get_maxlvt(apic);
 
     DEBUG_PRINT("passing target page num %x to SIPI\n", target_vec);
 
+    /* clear APIC errors */
+    if (maxlvt > 3) {
+        apic_write(apic, APIC_REG_ESR, 0);
+    }
+    apic_read(apic, APIC_REG_ESR);
 
-    /* broadcast Init IPI */
-    apic_bcast_iipi(apic);
+    /* copy our SMP boot code (shouldn't really need to do this) */
+    DEBUG_PRINT("mapping in page for SMP boot code...\n");
+    if (create_page_mapping(ap_trampoline, ap_trampoline, PTE_PRESENT_BIT|PTE_WRITABLE_BIT) < 0) {
+        ERROR_PRINT("Couldn't create page mapping for SMP boot code\n");
+        return -1;
+    }
 
-    /* 10 ms */
-    /* TODO */
+    memcpy((void*)ap_trampoline, (void*)boot_target, PAGE_SIZE);
 
-    /* broadcast SIPI IPI (use vector here) */
-    apic_bcast_sipi(apic, target_vec);
+    /* create an info area for APs */
+    if (create_page_mapping((addr_t)AP_INFO_AREA, (addr_t)AP_INFO_AREA, PTE_PRESENT_BIT|PTE_WRITABLE_BIT) < 0) {
+        ERROR_PRINT("Couldn't create page mapping for SMP AP init area\n");
+        return -1;
+    }
 
-    /* 200 us */
-    /* TODO */
+    ap_area = (struct ap_init_area*)(AP_INFO_AREA);
+    init_ap_area(ap_area);
 
-    /* repeat last one */
-    apic_bcast_sipi(apic, target_vec);
+    /* START BOOTING THEM */
+    
+    /* we, of course, skip the BSP (NOTE: assuming its 0...) */
+    for (i = 1; i < naut->sys->num_cpus; i++) {
+        uint32_t boot_stack_ptr;
 
-    /* 200 us */
-    /* TODO */
+        printk("Booting secondary core %u\n", i);
 
+        /* setup pointer to this CPUs stack */
+        boot_stack_ptr = AP_BOOT_STACK_ADDR*i;
+        if (create_page_mapping((addr_t)boot_stack_ptr, (addr_t)boot_stack_ptr, PTE_PRESENT_BIT|PTE_WRITABLE_BIT) < 0) {
+            ERROR_PRINT("Couldn't create page mapping for core (%d) boot stack\n", i);
+            return -1;
+        }
+        ap_area->stack = boot_stack_ptr;
 
-    return 0;
+        /* the CPU id */
+        ap_area->id = i;
+
+        /* OK, we're ready to fire it up */
+
+        /* Send the INIT sequence */
+        printk("sending init\n");
+        apic_send_iipi(apic, i);
+
+        /* wait for status to update */
+        status = apic_wait_for_send(apic);
+        printk("init sent\n");
+
+        mbarrier();
+
+        /* 10ms delay */
+        udelay(10000);
+
+        /* deassert INIT IPI (level-triggered) */
+        apic_deinit_iipi(apic, i);
+
+        for (j = 1; j <= 2; j++) {
+            if (maxlvt > 3) {
+                apic_write(apic, APIC_REG_ESR, 0);
+            }
+            apic_read(apic, APIC_REG_ESR);
+
+            DEBUG_PRINT("sending SIPI %u to core %u\n", j, i);
+
+            /* send the startup signal */
+            apic_send_sipi(apic, i, target_vec);
+
+            udelay(300);
+
+            status = apic_wait_for_send(apic);
+
+            udelay(200);
+
+            err = apic_read(apic, APIC_REG_ESR) & 0xef;
+
+            if (status || err) {
+                break;
+            }
+
+        }
+
+        if (status) {
+            ERROR_PRINT("APIC wasn't delivered!\n");
+        }
+
+        if (err) {
+            ERROR_PRINT("ERROR while delivering SIPI\n");
+        }
+
+        DEBUG_PRINT("Bringup for core %u done.\n", i);
+    }
+
+    return (status|err);
+
 }
 
 

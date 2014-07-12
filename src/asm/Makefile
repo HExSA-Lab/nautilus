@@ -1,3 +1,3 @@
 obj-y += boot.o \
-		 smp_boot.o \
+		 smpboot.o \
 		 excp_early.o

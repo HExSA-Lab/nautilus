@@ -18,6 +18,9 @@
 #define RFLAGS_VIP  (1 << 20)
 
 
+#define mbarrier()    asm volatile("mfence":::"memory")
+
+
 static inline ulong_t 
 read_cr0 (void)
 {
@@ -190,6 +193,20 @@ static inline void
 halt (void) 
 {
     asm volatile ("hlt");
+}
+
+
+static inline void io_delay(void)
+{
+    const uint16_t DELAY_PORT = 0x80;
+    asm volatile("outb %%al,%0" : : "dN" (DELAY_PORT));
+}
+
+
+static void udelay(uint_t n) {
+    while (n--){
+        io_delay();
+    }
 }
     
 

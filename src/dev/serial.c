@@ -239,6 +239,6 @@ serial_init (void)
   serial_output_sink.Emit = &Serial_Emit;
   serial_output_sink.Finish = &Serial_Finish;
 
-  register_irq_handler(COM1_IRQ, serial_irq_handler);
+  register_irq_handler(COM1_IRQ, serial_irq_handler, NULL);
   serial_init_addr(DEFAULT_SERIAL_ADDR);
 }

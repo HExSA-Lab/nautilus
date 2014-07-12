@@ -4,11 +4,12 @@ VIRT_BASE = 0xffffffff80000000;
 
 SECTIONS
 {
-    . = 0x8000;
+    /*. = 0xf1000;
     .smp_boot :
     {   
         *(.smp_boot)
     }
+        */
 
     . = 0x100000;
 

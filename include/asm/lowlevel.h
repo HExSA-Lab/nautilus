@@ -12,4 +12,13 @@
 #define NOP_7BYTE 0x0f,0x1f,0x80,0,0,0,0
 #define NOP_8BYTE 0x0f,0x1f,0x84,0x00,0,0,0,0
 
+#define ENTRY(x)   \
+    .globl x;      \
+    .align 4, 0x90;\
+    x:
+
+#define GLOBAL(x)  \
+    .globl x;      \
+    x:
+
 #endif

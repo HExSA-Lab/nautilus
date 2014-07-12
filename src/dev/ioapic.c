@@ -60,13 +60,13 @@ ioapic_assign_irq (struct ioapic * ioapic,
                    uint8_t trigger_mode)
 {
     ioapic_write_irq_entry(ioapic, irq, 
-                           vector |
+                           vector                             |
                            (DELMODE_LOWEST << DEL_MODE_SHIFT) |
-                           (polarity << INTPOL_SHIFT) | 
+                           (polarity << INTPOL_SHIFT)         | 
                            (trigger_mode << TRIG_MODE_SHIFT));
 
 
-    printk("just wrote to IOAPIC reg %d (=0x%lx)\n", irq, ioapic_read_irq_entry(ioapic, irq));
+    DEBUG_PRINT("just wrote to IOAPIC reg %d (=0x%lx)\n", irq, ioapic_read_irq_entry(ioapic, irq));
 }
 
 
@@ -88,9 +88,9 @@ __ioapic_init (struct ioapic * ioapic)
 
     DEBUG_PRINT("Assigning IO vectors\n");
     for (i = 0; i < MAX_IRQ_NUM; i++) {
-        if (i == 2) {
-            continue;
-        }
+        //if (i == 2) {
+            //continue;
+        //}
 
         ioapic_assign_irq(ioapic, i, irq_to_vec(i), PIN_POLARITY_HI, TRIGGER_MODE_EDGE);  
     }
@@ -101,7 +101,7 @@ __ioapic_init (struct ioapic * ioapic)
     ioapic_mask_irq(ioapic, 19);
 
     /* disable IRQ 2 */
-    ioapic_mask_irq(ioapic, 2);
+    //ioapic_mask_irq(ioapic, 2);
 
     /* disable IRQ 20..23 */
     ioapic_mask_irq(ioapic, 20);
