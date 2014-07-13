@@ -14,10 +14,8 @@
 #ifndef __ASSEMBLER__ 
 
 #include <dev/apic.h>
-struct naut_info;
 
-int smp_early_init(struct naut_info * naut);
-int smp_bringup_aps(struct naut_info * naut);
+struct naut_info;
 
 struct cpu {
     uint32_t id;
@@ -32,7 +30,6 @@ struct cpu {
     struct apic_dev * apic;
 };
 
-
 struct ap_init_area {
     uint32_t stack;  // 0
     uint32_t rsvd; // to align the GDT on 8-byte boundary // 4
@@ -43,12 +40,17 @@ struct ap_init_area {
     uint64_t gdt64[3]; // 40
     uint16_t gdt64_limit; // 64
     uint64_t gdt64_base; // 66
-    uint64_t  cr3; // 74
-    uint32_t id; // 82
+    uint64_t cr3; // 74
+    struct cpu * cpu_ptr; // 82
+
+    void (*entry)(struct cpu * core); // 90
 
 } __packed;
 
 
+int smp_early_init(struct naut_info * naut);
+int smp_bringup_aps(struct naut_info * naut);
+void smp_ap_entry (struct cpu * core);
 
 #endif /* !__ASSEMBLER__ */
 #endif

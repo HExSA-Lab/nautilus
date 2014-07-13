@@ -151,25 +151,40 @@ smp_early_init (struct naut_info * naut)
 }
 
 
-static void 
-init_ap_area (struct ap_init_area * ap_area)
+static int
+init_ap_area (struct ap_init_area * ap_area, 
+              struct naut_info * naut,
+              int core_num)
 {
-    ap_area->stack       = 0;
-    ap_area->rsvd        = 0;
-    ap_area->id          = 0;
-    ap_area->gdt[0]      = 0;
-    ap_area->gdt[1]      = 0;
+    memset((void*)ap_area, 0, sizeof(struct ap_init_area));
+
+    /* setup pointer to this CPUs stack */
+    uint32_t boot_stack_ptr = AP_BOOT_STACK_ADDR * core_num;
+    if (create_page_mapping((addr_t)boot_stack_ptr, (addr_t)boot_stack_ptr, PTE_PRESENT_BIT|PTE_WRITABLE_BIT) < 0) {
+        ERROR_PRINT("Couldn't create page mapping for core (%d) boot stack\n", core_num);
+        return -1;
+    }
+
+    ap_area->stack   = boot_stack_ptr;
+    ap_area->cpu_ptr = &naut->sys->cpus[core_num];
+
+    /* protected mode temporary GDT */
     ap_area->gdt[2]      = 0x0000ffff;
     ap_area->gdt[3]      = 0x00cf9a00;
     ap_area->gdt[4]      = 0x0000ffff;
     ap_area->gdt[5]      = 0x00cf9200;
-    ap_area->rsvd1       = 0;
-    ap_area->gdt64[0]    = 0x0000000000000000;
+
+    /* long mode temporary GDT */
     ap_area->gdt64[1]    = 0x00a09a0000000000;
     ap_area->gdt64[2]    = 0x00a0920000000000;
-    ap_area->gdt64_limit = 0;
-    ap_area->gdt64_base  = 0;
+
+    /* pointer to BSP's PML4 */
     ap_area->cr3         = read_cr3();
+
+    /* pointer to our entry routine */
+    ap_area->entry       = smp_ap_entry;
+
+    return 0;
 }
 
 
@@ -212,26 +227,20 @@ smp_bringup_aps (struct naut_info * naut)
 
     /* initialize AP info area (stack pointer, GDT info, etc) */
     ap_area = (struct ap_init_area*)(AP_INFO_AREA);
-    init_ap_area(ap_area);
 
     /* START BOOTING AP CORES */
     
     /* we, of course, skip the BSP (NOTE: assuming its 0...) */
     for (i = 1; i < naut->sys->num_cpus; i++) {
-        uint32_t boot_stack_ptr;
+        int ret;
 
-        printk("Booting secondary core %u\n", i);
+        printk("Booting secondary CPU %u\n", i);
 
-        /* setup pointer to this CPUs stack */
-        boot_stack_ptr = AP_BOOT_STACK_ADDR*i;
-        if (create_page_mapping((addr_t)boot_stack_ptr, (addr_t)boot_stack_ptr, PTE_PRESENT_BIT|PTE_WRITABLE_BIT) < 0) {
-            ERROR_PRINT("Couldn't create page mapping for core (%d) boot stack\n", i);
+        ret = init_ap_area(ap_area, naut, i);
+        if (ret == -1) {
+            ERROR_PRINT("Error initializing ap area\n");
             return -1;
         }
-        ap_area->stack = boot_stack_ptr;
-
-        /* the CPU number */
-        ap_area->id = i;
 
         /* Send the INIT sequence */
         DEBUG_PRINT("sending INIT to remote APIC\n");
@@ -282,10 +291,13 @@ smp_bringup_aps (struct naut_info * naut)
             ERROR_PRINT("ERROR while delivering SIPI\n");
         }
 
+        /* wait for AP to set its boot flag */
+        while (naut->sys->cpus[i].booted != 1) {
+            asm volatile ("pause");
+        }
+
         DEBUG_PRINT("Bringup for core %u done.\n", i);
     }
-
-    /* TODO: check booted flags */
 
     /* TODO: point GDT at existing one (we don't want the one in lowmem) */
 
@@ -294,9 +306,17 @@ smp_bringup_aps (struct naut_info * naut)
 }
 
 
+void smp_ap_entry (struct cpu * core) { 
+    core->booted = 1;
+    printk("hello from core %u\n", core->id);
+
+    while (1) {
+        asm volatile("pause");
+    }
+}
+
 /*
  
-void smp_ap_start (void); // first C code AP executes (flags its presence, calls other setup routines)
 void smp_ap_setup (void);  // sets up LAPIC, interrupts, etc
 
 */

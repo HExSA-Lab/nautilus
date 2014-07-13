@@ -77,10 +77,15 @@ ENTRY(init_smp_boot)
     movw %ax, %es
     movw %ax, %ss
 
-    l1:
-        pause
-        jmp l1
+    movq $AP_INFO_AREA, %rdx
+    movq 82(%rdx), %rdi
+    movq 90(%rdx), %rsi
 
-    vmmcall
+    // goodbye!
+    callq *%rsi
+
+    l0:
+        pause
+        jmp l0
 
 
