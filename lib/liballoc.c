@@ -3,7 +3,9 @@
 
 /**  Durand's Ridiculously Amazing Super Duper Memory functions.  */
 
-//#define DEBUG	
+#ifdef NAUT_CONFIG_DEBUG_MALLOC
+#define DEBUG	
+#endif
 
 #define LIBALLOC_MAGIC	0xc001c0de
 #define MAXCOMPLETE		5
@@ -16,7 +18,9 @@
 #define MODE	MODE_BEST
 
 #ifdef DEBUG
-#include <stdio.h>
+//#include <stdio.h>
+#include <printk.h>
+#define printf(fmt, args...) printk(fmt, ##args)
 #endif
 
 
@@ -105,7 +109,7 @@ static void* 	liballoc_memcpy(void* s1, const void* s2, size_t n)
  
 
 #ifdef DEBUG
-static void dump_array()
+static void dump_array(void)
 {
 	int i = 0;
 	struct boundary_tag *tag = NULL;
@@ -132,7 +136,7 @@ static void dump_array()
 		}
 
 	printf("'*' denotes a split to the left/right of a tag\n");
-	fflush( stdout );
+	//fflush( stdout );
 }
 #endif
 

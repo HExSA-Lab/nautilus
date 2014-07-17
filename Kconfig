@@ -12,6 +12,12 @@ config DEBUG_PRINTS
 	help
 	  Compiles the Nautilus kernel with debugging prints
 
+config USE_NAUT_BUILTINS
+    bool "Use built-in utility functions
+    default n
+    help
+      Compiles the Nuatilus kernel with built-in functions
+      like strlen 
 
 config MAX_CPUS
 	int "Maximum number of cpus"
@@ -36,6 +42,14 @@ menu Debugging
       default n
       help
         Turn on debug prints for paging subsystem
+
+    config DEBUG_MALLOC
+      bool "Debug malloc"
+      depends on DEBUG_PRINTS
+      default n
+      help
+        Turn on debug prints for memory allocation library 
+        (currently liballoc)
 
     config DEBUG_APIC
       bool "Debug APIC"
