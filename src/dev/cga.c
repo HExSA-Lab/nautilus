@@ -1,6 +1,7 @@
 #include <nautilus.h>
 #include <cga.h>
 #include <string.h>
+#include <cpu.h>
  
  
 static uint8_t 
@@ -22,10 +23,12 @@ make_vgaentry (char c, uint8_t color)
 static size_t    term_row;
 static size_t    term_col;
 static uint8_t   term_color;
-static uint16_t* term_buf;
+
+static volatile uint16_t * term_buf;
  
 
-void term_init()
+void 
+term_init (void)
 {
     term_row = 0;
     term_col = 0;
@@ -49,9 +52,27 @@ term_setcolor (uint8_t color)
 }
  
 
-static void 
-term_putc
-(char c, uint8_t color, size_t x, size_t y)
+static inline void 
+debug_putc (char c)
+{ 
+    outb(c, 0xc0c0);
+    outb(c, 0x402);
+}
+
+
+void 
+debug_puts (const char * s) 
+{
+    while (*s) {
+        debug_putc(*s);
+        s++;
+    }
+    debug_putc('\n');
+}
+
+
+void 
+term_putc (char c, uint8_t color, size_t x, size_t y)
 {
     const size_t index = y * VGA_WIDTH + x;
     term_buf[index] = make_vgaentry(c, color);
@@ -147,8 +168,10 @@ hide_cursor (void)
 void 
 term_print (const char* data)
 {
+    int i;
     size_t datalen = strlen(data);
-    for (size_t i = 0; i < datalen; i++) {
+    for (i = 0; i < datalen; i++) {
         putchar(data[i]);
     }
+    
 }
