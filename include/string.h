@@ -1,11 +1,7 @@
 #ifndef __STRING_H__
 #define __STRING_H__
 
-//#include <stddef.h>
-//#include <stdint.h>
 #include <types.h>
-
-#define USE_NAUT_BUILTINS 1
 
 
 #define isspace(c)      (c == ' ' || c == '\f' || c == '\n' || c == '\r' || c == '\t' || c == '\v')
@@ -22,7 +18,7 @@
 #define toupper(c)  ((c) - 0x20 * (((c) >= 'a') && ((c) <= 'z')))
 #define tolower(c)  ((c) + 0x20 * (((c) >= 'A') && ((c) <= 'Z')))
 
-#ifdef USE_NAUT_BUILTINS
+#ifdef NAUT_CONFIG_USE_NAUT_BUILTINS
 void * memcpy (void * dst, const void * src, size_t n);
 int memcmp (const void * s1_, const void * s2_, size_t n);
 void * memset (void * dst, char c, size_t n);
@@ -45,6 +41,8 @@ size_t strcspn (const char * s, const char * reject);
 char * strstr (const char * haystack, const char * needle);
 
 #else
+
+#include <stddef.h>
 
 #define memcpy  __builtin_memcpy
 #define memset  __builtin_memset
