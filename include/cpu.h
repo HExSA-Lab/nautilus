@@ -196,6 +196,13 @@ halt (void)
 }
 
 
+static inline void 
+invlpg (unsigned long addr)
+{
+    asm volatile("invlpg (%0)" ::"r" (addr) : "memory");
+}
+
+
 static inline void io_delay(void)
 {
     const uint16_t DELAY_PORT = 0x80;
@@ -208,6 +215,7 @@ static void udelay(uint_t n) {
         io_delay();
     }
 }
+
     
 
 

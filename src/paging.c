@@ -3,9 +3,9 @@
 #include <string.h>
 #include <mb_utils.h>
 #include <idt.h>
+#include <cpu.h>
 #include <lib/bitmap.h>
 
-/* - TODO: clean up parameter passing in pt traversal */
 
 #ifndef NAUT_CONFIG_DEBUG_PAGING
 #undef DEBUG_PRINT
@@ -15,9 +15,11 @@
 extern addr_t _loadStart;
 extern addr_t _bssEnd;
 extern ulong_t pml4;
+extern ulong_t pdpt;
 
-struct mem_info mem;
+static struct mem_info * glob_mem;
 
+/*
 static int 
 drill_pt (pte_t * pt, addr_t addr, addr_t map_addr, uint_t flags)
 {
@@ -35,7 +37,6 @@ drill_pt (pte_t * pt, addr_t addr, addr_t map_addr, uint_t flags)
 
         DEBUG_PRINT("pt entry not there, creating a new one\n");
 
-        /* TODO: somehow got carried away and strayed from identity map! */
         if (map_addr) {
 
             DEBUG_PRINT("creating manual mapping to paddr: %p\n", map_addr);
@@ -59,6 +60,7 @@ drill_pt (pte_t * pt, addr_t addr, addr_t map_addr, uint_t flags)
 
     return 0;
 }
+*/
 
 
 static int 
@@ -66,30 +68,44 @@ drill_pd (pde_t * pd, addr_t addr, addr_t map_addr, uint_t flags)
 {
     uint_t pd_idx = PADDR_TO_PD_IDX(addr);
     pte_t * pt = 0;
+    addr_t page = 0;
 
     DEBUG_PRINT("drilling pd, pd idx: 0x%x\n", pd_idx);
 
     if (PDE_PRESENT(pd[pd_idx])) {
 
-        DEBUG_PRINT("pd entry is present\n");
-        pt = (pte_t*)(pd[pd_idx] & PTE_ADDR_MASK);
+        DEBUG_PRINT("pd entry is present, setting (addr=%p,flags=%x)\n", (void*)map_addr,flags);
+        pd[pd_idx] = map_addr | flags | (1<<7);
+        invlpg(map_addr);
 
     } else {
 
-        DEBUG_PRINT("pd entry not there, creating a new one\n");
-        pt = (pte_t*)alloc_page();
+        panic("pde not present!\n");
 
-        if (!pt) {
-            ERROR_PRINT("out of memory in %s\n", __FUNCTION__);
-            return -1;
+        if (map_addr) {
+            DEBUG_PRINT("creating manual mapping to paddr: %p\n", map_addr);
+            page = map_addr;
+            pd[pd_idx] = page | flags;
+        } else {
+            panic("trying to allocate page with no mapping provided!\n");
+
+
+            DEBUG_PRINT("pd entry not there, creating a new one\n");
+            pt = (pte_t*)alloc_page();
+
+            if (!pt) {
+                ERROR_PRINT("out of memory in %s\n", __FUNCTION__);
+                return -1;
+            }
+
+            memset((void*)pt, 0, NUM_PT_ENTRIES*sizeof(pte_t));
+
+            pd[pd_idx] = (ulong_t)pt | PTE_PRESENT_BIT | PTE_WRITABLE_BIT;
         }
-
-        memset((void*)pt, 0, NUM_PT_ENTRIES*sizeof(pte_t));
-
-        pd[pd_idx] = (ulong_t)pt | PTE_PRESENT_BIT | PTE_WRITABLE_BIT;
     }
 
-    return drill_pt(pt, addr, map_addr, flags);
+    return 0;
+    //return drill_pt(pt, addr, map_addr, flags);
 }
 
 
@@ -126,7 +142,6 @@ drill_pdpt (pdpte_t * pdpt, addr_t addr, addr_t map_addr, uint_t flags)
 }
 
 
-// TODO: use cr3 for this...
 static int 
 drill_page_tables (addr_t addr, addr_t map_addr, uint_t flags)
 {
@@ -140,6 +155,8 @@ drill_page_tables (addr_t addr, addr_t map_addr, uint_t flags)
         pdpt = (pdpte_t*)(_pml4[pml4_idx] & PTE_ADDR_MASK);
 
     } else {
+
+        panic("no PML4 entry!\n");
 
         DEBUG_PRINT("pml4 entry not there, creating a new one\n");
 
@@ -162,7 +179,17 @@ drill_page_tables (addr_t addr, addr_t map_addr, uint_t flags)
 int 
 create_page_mapping (addr_t vaddr, addr_t paddr, uint_t flags)
 {
-    drill_page_tables(vaddr, paddr, flags);
+    /* unused */
+    return 0;
+}
+
+int
+map_page_nocache (addr_t paddr, uint_t flags)
+{
+    if (drill_page_tables(paddr, paddr, flags|PTE_CACHE_DISABLE_BIT) != 0) {
+        ERROR_PRINT("error marking page range uncacheable\n");
+        return -1;
+    }
     return 0;
 }
 
@@ -171,7 +198,7 @@ int
 free_page (addr_t addr) 
 {
     uint_t pgnum = PADDR_TO_PAGE(addr);
-    bitmap_clear(mem.page_map, pgnum, 1);
+    bitmap_clear(glob_mem->page_map, pgnum, 1);
     return 0;
 }
 
@@ -181,7 +208,7 @@ int
 free_pages (void * addr, int num)
 {
     uint_t pgnum       = PADDR_TO_PAGE((addr_t)addr);
-    bitmap_release_region(mem.page_map, pgnum, num);
+    bitmap_release_region(glob_mem->page_map, pgnum, num);
     return 0;
 }
 
@@ -190,14 +217,26 @@ free_pages (void * addr, int num)
 addr_t 
 alloc_pages (int num)
 {
-    return PAGE_TO_PADDR(bitmap_find_free_region(mem.page_map, mem.npages, num));
+    int order = get_count_order(num);
+    int p = bitmap_find_free_region(glob_mem->page_map, glob_mem->npages, order);
+    if (p < 0) {
+        ERROR_PRINT("Could not allocate %u pages\n", num);
+        return (addr_t)NULL;
+    }
+    return PAGE_TO_PADDR(p);
 }
 
 
 addr_t 
 alloc_page (void) 
 {
-    return PAGE_TO_PADDR(bitmap_find_free_region(mem.page_map, mem.npages, 1));
+    int order = get_count_order(1);
+    int p = bitmap_find_free_region(glob_mem->page_map, glob_mem->npages, order);
+    if (p < 0) {
+        ERROR_PRINT("Could not allocate page\n");
+        return (addr_t)NULL;
+    }
+    return PAGE_TO_PADDR(p);
 }
 
 
@@ -206,12 +245,14 @@ pf_handler (excp_entry_t * excp,
             excp_vec_t     vector,
             addr_t         fault_addr)
 {
-    DEBUG_PRINT("Page Fault. Fault addr: 0x%x\n", fault_addr);
+    panic("Page Fault. Fault addr: 0x%x\n", fault_addr);
 
+    /*
     if (drill_page_tables(fault_addr, 0, 0) < 0) {
         ERROR_PRINT("ERROR handling page fault\n");
         return -1;
     }
+    */
 
     return 0;
 }
@@ -220,7 +261,7 @@ pf_handler (excp_entry_t * excp,
 int 
 reserve_pages (addr_t paddr, int n)
 {
-    bitmap_set(mem.page_map, PADDR_TO_PAGE(paddr), n);
+    bitmap_set(glob_mem->page_map, PADDR_TO_PAGE(paddr), n);
     return 0;
 }
 
@@ -228,53 +269,106 @@ reserve_pages (addr_t paddr, int n)
 int
 reserve_page (addr_t paddr)
 {
-    if (test_bit(PADDR_TO_PAGE(paddr), mem.page_map)) {
+    if (test_bit(PADDR_TO_PAGE(paddr), glob_mem->page_map)) {
         DEBUG_PRINT("Page is already allocated\n");
         return -1;
     }
 
-    bitmap_set(mem.page_map, PADDR_TO_PAGE(paddr), 1);
+    bitmap_set(glob_mem->page_map, PADDR_TO_PAGE(paddr), 1);
     return 0;
 }
 
 
-void
-init_page_frame_alloc (ulong_t mbd)
+static ulong_t
+finish_ident_map (struct mem_info * mem, ulong_t mbd)
 {
-    addr_t kernel_start   = (addr_t)&_loadStart;
     addr_t kernel_end     = (addr_t)&_bssEnd;
-
-    mem.phys_mem_avail = multiboot_get_phys_mem(mbd);
-
-    printk("Total Memory Available: %u KB\n", mem.phys_mem_avail>>10);
+    ulong_t * pdpt_start  = (ulong_t*)&pdpt;
+    ulong_t * pd_start    = 0;
+    ulong_t paddr_start   = (ulong_t)MEM_1GB;
+    uint_t num_pdes       = 0;
+    uint_t num_pds        = 0;
+    int i, j;
 
     /* make sure not to overwrite multiboot header */
     if (mbd > kernel_end) {
-        mem.pm_start = mbd + multiboot_get_size(mbd);
+        pd_start = (ulong_t*)(mbd + multiboot_get_size(mbd));
     } else {
-        mem.pm_start = kernel_end;
+        pd_start = (ulong_t*)kernel_end;
     }
 
-    mem.page_map       = (ulong_t*)mem.pm_start;
-    mem.npages         = mem.phys_mem_avail >> PAGE_SHIFT;
+    /* we've already mapped the first 1GB with 1 PD, 512 PDEs */
+    //num_pdes = (mem->phys_mem_avail >> PAGE_SHIFT) - NUM_PD_ENTRIES;
+    num_pdes = 3584;
+    num_pds = (num_pdes%NUM_PD_ENTRIES) ? (num_pdes/NUM_PD_ENTRIES) + 1 : (num_pdes/NUM_PD_ENTRIES);
+
+    DEBUG_PRINT("Adding %u page directories, %u new 2MB pages\n", num_pds, num_pdes);
+
+    for (i = 0; i < num_pds; i++, pd_start+=NUM_PD_ENTRIES) {
+
+        /* fill in the new page directory */
+        for (j = 0; (i*512 + j) < num_pdes; j++, paddr_start+=MEM_2MB) {
+            *(pd_start + j) = paddr_start | 0x83; // PS bit is 1
+        }
+
+        /* point pdpte to new page dir (start at second pdpte)*/
+        pdpt_start[i+1] = (ulong_t)pd_start |PTE_PRESENT_BIT|PTE_WRITABLE_BIT;
+    }
+
+    return (ulong_t)(pd_start+NUM_PD_ENTRIES);
+}
+
+
+void
+paging_init (struct mem_info * mem, ulong_t mbd)
+{
+    addr_t kernel_start   = (addr_t)&_loadStart;
+    ulong_t page_dir_end  = 0;
+
+    /* how much memory do we have in the machine? */
+    mem->phys_mem_avail = multiboot_get_phys_mem(mbd);
+
+    if (mem->phys_mem_avail < MEM_1GB) {
+        panic("Not enough memory to run Nautilus!\n");
+    } 
+
+    printk("Total Memory Available: %lu KB (%lu pages)\n", 
+            mem->phys_mem_avail>>10, mem->phys_mem_avail/PAGE_SIZE);
+
+    printk("PAGE SIZE: %lu, PAGE_SIFT: %lu\n", PAGE_SIZE, PAGE_SHIFT);
+
+    if (!(page_dir_end = finish_ident_map(mem, mbd))) {
+        panic("Unable to finish identity map\n");
+    }
+
+    mem->pm_start = (addr_t)page_dir_end;
+
+    mem->page_map       = (ulong_t*)mem->pm_start;
+    mem->npages         = mem->phys_mem_avail >> PAGE_SHIFT;
+    printk("Paging: NPAGES: %lld\n", mem->npages);
 
     // layout the bitmap 
     // we just always include the extra long word
-    mem.pm_end = mem.pm_start + (((mem.npages / BITS_PER_LONG))*sizeof(ulong_t));
-    memset((void*)mem.pm_start, 0, mem.pm_end - mem.pm_start);
+    mem->pm_end = mem->pm_start + (((mem->npages / BITS_PER_LONG))*sizeof(ulong_t));
+    memset((void*)mem->pm_start, 0, mem->pm_end - mem->pm_start);
 
-    // set kernel memory + page frame bitmap as reserved
-    printk("Reserving kernel memory (page num %d to %d)\n", PADDR_TO_PAGE(kernel_start), PADDR_TO_PAGE(mem.pm_end-1));
-    mark_range_reserved((uint8_t*)mem.page_map, kernel_start, mem.pm_end-1);
+    // set kernel memory + page directories + page frame bitmap as reserved
+    printk("Reserving kernel memory (page num %d to %d)\n", PADDR_TO_PAGE(kernel_start), PADDR_TO_PAGE(mem->pm_end-1));
+    mark_range_reserved((uint8_t*)mem->page_map, kernel_start, mem->pm_end-1);
     
     printk("Setting aside system reserved memory\n");
-    multiboot_rsv_mem_regions(mbd);
+    multiboot_rsv_mem_regions(mem, mbd);
 
     printk("Reserving BDA and Real Mode IVT\n");
-    mark_range_reserved((uint8_t*)mem.page_map, 0x0, 0x4ff);
+    mark_range_reserved((uint8_t*)mem->page_map, 0x0, 0x4ff);
 
     printk("Reserving Video Memory\n");
-    mark_range_reserved((uint8_t*)mem.page_map, 0xa0000, 0xfffff);
+    mark_range_reserved((uint8_t*)mem->page_map, 0xa0000, 0xfffff);
+
+    printk("Reserving APIC/IOAPIC\n");
+    mark_range_reserved((uint8_t*)mem->page_map, 0xfec00000, 0xfedfffff);
+
+    glob_mem = mem;
 }
 
 

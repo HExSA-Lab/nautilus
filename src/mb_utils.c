@@ -3,8 +3,6 @@
 #include <nautilus.h>
 #include <paging.h>
 
-extern struct mem_info mem;
-
 
 uint_t 
 multiboot_get_size (ulong_t mbd)
@@ -13,6 +11,7 @@ multiboot_get_size (ulong_t mbd)
 }
 
 
+// returns number of BYTES of physical memory
 addr_t
 multiboot_get_phys_mem (ulong_t mbd) 
 {
@@ -42,7 +41,7 @@ multiboot_get_phys_mem (ulong_t mbd)
 }
 
 void 
-multiboot_rsv_mem_regions(ulong_t mbd) 
+multiboot_rsv_mem_regions(struct mem_info * mem, ulong_t mbd) 
 {
     struct multiboot_tag * tag;
 
@@ -72,7 +71,7 @@ multiboot_rsv_mem_regions(ulong_t mbd)
         if (mmap->type != MULTIBOOT_MEMORY_AVAILABLE) {
             printk("reserving pages %d to %d (0x%x - 0x%x)\n", PADDR_TO_PAGE(base_addr), PADDR_TO_PAGE(base_addr+len-1),
                     base_addr, base_addr+len-1);
-            mark_range_reserved((uint8_t*)mem.page_map, base_addr, base_addr + len-1);
+            mark_range_reserved((uint8_t*)mem->page_map, base_addr, base_addr + len-1);
         }
     }
 }

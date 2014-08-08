@@ -17,43 +17,36 @@
 #include <lib/liballoc_hooks.h>
 #include <lib/liballoc.h>
 
-/* TODO: stuff devices etc into here */
-struct naut_info nautilus_info;
+static struct naut_info nautilus_info;
+
 
 void 
-main (unsigned long mbd, unsigned long magic)
+main (unsigned long mbd, unsigned long magic) 
 {
     struct naut_info * naut = &nautilus_info;
 
+    memset(naut, 0, sizeof(struct naut_info));
+
     term_init();
 
-    setup_idt();
-    serial_init();
+    printk("Welcome to the Nautilus Kernel\n");
 
-    printk("Welcome to the Nautilus Kernel\n\n");
+    setup_idt();
+
+    serial_init();
 
     detect_cpu();
 
-    /* TODO: fixup paging */
-
-    init_page_frame_alloc(mbd);
+    paging_init(&(naut->sys.mem), mbd);
 
     init_liballoc_hooks();
-
-    memset(naut, 0, sizeof(struct naut_info));
-
-    naut->sys = (struct sys_info *)malloc(sizeof(struct sys_info));
-    if (!naut->sys) {
-        ERROR_PRINT("could not allocate sysinfo\n");
-    }
-    memset(naut->sys, 0, sizeof(struct sys_info));
 
     printk("Disabling legacy 8259 PIC\n");
     disable_8259pic();
 
     smp_early_init(naut);
 
-    ioapic_init(naut->sys);
+    ioapic_init(&(naut->sys));
 
     apic_init(naut);
 
@@ -61,9 +54,15 @@ main (unsigned long mbd, unsigned long magic)
 
     timer_init(naut);
 
-    //sti();
+    sti();
+    while (1) { halt(); }
+
+
+    // TODO: setup MY (BSP) GS Base
 
     smp_bringup_aps(naut);
+
+    sti();
 
     while (1) { halt(); }
 }

@@ -316,6 +316,7 @@ CFLAGS:=   -O2 \
 		   -fno-stack-protector \
 		   -fno-common \
 		   -fno-exceptions \
+		   -fno-reorder-functions \
 		   -mcmodel=large \
 		   -mno-red-zone \
 		   -mno-mmx \

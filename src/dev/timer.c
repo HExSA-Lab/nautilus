@@ -56,9 +56,9 @@ timer_handler (excp_entry_t * excp, excp_vec_t vec)
 {
     int i;
     struct naut_info * naut = timer_naut;
-    struct timer_event * te = naut->sys->time_events;
+    struct timer_event * te = naut->sys.time_events;
 
-    for (i = 0; i < naut->sys->num_tevents; i++) {
+    for (i = 0; i < naut->sys.num_tevents; i++) {
         if (te[i].active && te[i].ticks > 0) {
             te[i].ticks--;
             if (te[i].ticks == 0) {
@@ -76,9 +76,9 @@ static struct timer_event *
 find_avail_timer_event (struct naut_info * naut)
 {
     int i;
-    for (i = 0; i < naut->sys->num_tevents; i++) {
-        if (!naut->sys->time_events[i].active) {
-            return &(naut->sys->time_events[i]);
+    for (i = 0; i < naut->sys.num_tevents; i++) {
+        if (!naut->sys.time_events[i].active) {
+            return &(naut->sys.time_events[i]);
         }
     }
 
@@ -105,13 +105,13 @@ timer_init (struct naut_info * naut)
 {
     uint16_t hz;
 
-    naut->sys->num_tevents = NUM_TIMERS;
-    naut->sys->time_events = malloc(NUM_TIMERS*sizeof(struct timer_event));
-    if (!naut->sys->time_events) {
+    naut->sys.num_tevents = NUM_TIMERS;
+    naut->sys.time_events = malloc(NUM_TIMERS*sizeof(struct timer_event));
+    if (!naut->sys.time_events) {
         ERROR_PRINT("Could not allocate timers\n");
         return -1;
     }
-    memset(naut->sys->time_events, 0, NUM_TIMERS*sizeof(struct timer_event));
+    memset(naut->sys.time_events, 0, NUM_TIMERS*sizeof(struct timer_event));
 
     hz = 1193182UL / NAUT_CONFIG_HZ;
 

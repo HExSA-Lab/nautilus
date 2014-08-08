@@ -174,10 +174,6 @@ void
 apic_send_iipi (struct apic_dev * apic, uint32_t remote_id) 
 {
     cli();
-    //uint32_t lo,hi;
-    //hi = remote_id << APIC_ICR2_DST_SHIFT;
-    //lo = ICR_TRIG_MODE_LEVEL|ICR_LEVEL_ASSERT|ICR_DEL_MODE_INIT;
-    //printk("delivering IIPI (hi=%x) (lo=%x)\n", hi, lo);
     apic_write(apic, APIC_REG_ICR2, remote_id << APIC_ICR2_DST_SHIFT);
     apic_write(apic, APIC_REG_ICR, ICR_TRIG_MODE_LEVEL| ICR_LEVEL_ASSERT | ICR_DEL_MODE_INIT);
     sti();
@@ -230,15 +226,16 @@ apic_bcast_sipi (struct apic_dev * apic, uint8_t target)
     sti();
 }
 
+/* TODO: add apic dump function */
 
 void
 apic_init (struct naut_info * naut)
 {
-    struct apic_dev * apic;
+    struct apic_dev * apic = NULL;
 
     apic = (struct apic_dev*)malloc(sizeof(struct apic_dev));
     if (!apic) {
-        ERROR_PRINT("could not allocate apic struct\n");
+        panic("could not allocate apic struct\n");
     }
     memset(apic, 0, sizeof(struct apic_dev));
 
@@ -249,16 +246,15 @@ apic_init (struct naut_info * naut)
     apic->base_addr = apic_get_base_addr();
     DEBUG_PRINT("apic base addr: %p\n", apic->base_addr);
 
-    DEBUG_PRINT("Reserving APIC region\n");
-
+    DEBUG_PRINT("Reserving APIC address space\n");
     if (reserve_page(apic->base_addr) < 0) {
         DEBUG_PRINT("LAPIC mem region already reserved\n");
     }
     
     /* map in the lapic as uncacheable */
-    create_page_mapping(apic->base_addr, 
-                        apic->base_addr, 
-                        PTE_PRESENT_BIT|PTE_WRITABLE_BIT|PTE_CACHE_DISABLE_BIT);
+    if (map_page_nocache(apic->base_addr, PTE_PRESENT_BIT|PTE_WRITABLE_BIT) == -1) {
+        panic("Could not map APIC\n");
+    }
 
     apic->version   = apic_get_version(apic);
     apic->id        = apic_get_id(apic);
@@ -283,7 +279,7 @@ apic_init (struct naut_info * naut)
     apic_write(apic, APIC_REG_LVT0, 0x08700);  // BAM BAM BAM
     apic_write(apic, APIC_REG_SPIV, 0x010f); 
 
-    naut->sys->cpus[0].apic = apic;
+    naut->sys.cpus[0]->apic = apic;
     hack = apic;
 }
 

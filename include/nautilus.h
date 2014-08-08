@@ -2,17 +2,18 @@
 #define __NAUTILUS_H__
 
 #include <printk.h>
+#include <serial.h>
 #include <types.h>
 
-#define panic(fmt, args...)         panic("PANIC at %s(%d): " fmt, __FILE__, __LINE__, ##args)
 
 #ifdef NAUT_CONFIG_SERIAL_REDIRECT
-
 #include <serial.h>
-#define printk(fmt, args...) serial_print(fmt, ##args)
-#define DEBUG_PRINT(fmt, args...)   serial_print("DEBUG: " fmt, ##args)
-#define ERROR_PRINT(fmt, args...)   serial_print("ERROR at %s(%d): " fmt, __FILE__, __LINE__, ##args)
+#define printk(fmt, args...)        serial_print_redirect(fmt, ##args)
+#define DEBUG_PRINT(fmt, args...)   serial_print_redirect("DEBUG: " fmt, ##args)
+#define ERROR_PRINT(fmt, args...)   serial_print_redirect("ERROR at %s(%d): " fmt, __FILE__, __LINE__, ##args)
+#define panic(fmt, args...)         panic_serial("PANIC at %s(%d): " fmt, __FILE__, __LINE__, ##args)
 #else
+#define panic(fmt, args...)         panic("PANIC at %s(%d): " fmt, __FILE__, __LINE__, ##args)
 #define DEBUG_PRINT(fmt, args...)   printk("DEBUG: " fmt, ##args)
 #define ERROR_PRINT(fmt, args...)   printk("ERROR at %s(%d): " fmt, __FILE__, __LINE__, ##args)
 #endif
@@ -20,19 +21,17 @@
 #include <dev/ioapic.h>
 #include <dev/timer.h>
 #include <smp.h>
-
-struct naut_info {
-    struct sys_info * sys;
-};
-
+#include <paging.h>
 
 struct sys_info {
 
-    struct cpu cpus[MAX_CPUS];
+    struct cpu * cpus[MAX_CPUS];
     struct ioapic ioapics[MAX_IOAPICS];
 
     uint32_t num_cpus;
     uint32_t num_ioapics;
+
+    struct mem_info mem;
 
     uint32_t bsp_id;
 
@@ -42,4 +41,9 @@ struct sys_info {
     struct timer_event * time_events;
 };
 
+struct naut_info {
+    struct sys_info sys;
+};
+
+void main (unsigned long mbd, unsigned long magic) __attribute__((section (".text")));
 #endif

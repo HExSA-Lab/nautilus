@@ -11,6 +11,9 @@
 #define BIOS_ROM_BASE      0xf0000
 #define BIOS_ROM_END       0xfffff
 
+#define MSR_FS_BASE 0xc0000100
+#define MSR_GS_BASE 0xc0000101
+
 #ifndef __ASSEMBLER__ 
 
 #include <dev/apic.h>
@@ -28,6 +31,8 @@ struct cpu {
     uint8_t booted;
 
     struct apic_dev * apic;
+
+    struct sys_info * system;
 };
 
 struct ap_init_area {
@@ -51,6 +56,15 @@ struct ap_init_area {
 int smp_early_init(struct naut_info * naut);
 int smp_bringup_aps(struct naut_info * naut);
 void smp_ap_entry (struct cpu * core);
+
+
+static inline struct cpu*
+get_cpu (void)
+{
+    struct cpu * ret;
+    asm volatile ("movq %%gs:0x0, %0" : "=r"(ret));
+    return ret;
+}
 
 #endif /* !__ASSEMBLER__ */
 #endif

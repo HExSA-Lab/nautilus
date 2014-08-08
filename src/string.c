@@ -9,7 +9,7 @@
 #include <string.h>
 #include <types.h>
 
-#ifdef USE_NAUT_BUILTINS
+#ifdef NAUT_CONFIG_USE_NAUT_BUILTINS
 size_t 
 strlen (const char * str)
 {

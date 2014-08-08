@@ -110,6 +110,15 @@ panic (const char * fmt, ...)
 }
 
 
+
+/* NOTE: this is only to be used by the serial_print_redirect function! */
+int
+early_printk (const char *fmt, va_list args)
+{
+    return vprintk(fmt, args);
+}
+
+
 int
 printk (const char *fmt, ...)
 {

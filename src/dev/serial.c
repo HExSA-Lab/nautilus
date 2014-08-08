@@ -5,6 +5,7 @@
 #include <irq.h>
 #include <cpu.h>
 
+static uint8_t serial_device_ready = 0;
 uint16_t serial_io_addr = 0;
 uint_t serial_print_level;
 
@@ -190,6 +191,41 @@ __serial_print (const char * format, va_list ap)
 }
 
 
+void
+serial_print_redirect (const char * format, ...) 
+{
+    va_list args;
+    uint8_t iflag = atomic_begin_irq();
+
+    va_start(args, format);
+    if (serial_device_ready) {
+        __serial_print(format, args);
+    } else {
+        early_printk(format, args);
+    }
+    va_end(args);
+
+    atomic_end_irq(iflag);
+}
+
+void 
+panic_serial (const char * fmt, ...)
+{
+    va_list args;
+
+    va_start(args, fmt);
+    if (serial_device_ready) {
+        __serial_print(fmt, args);
+    } else {
+        early_printk(fmt, args);
+    }
+    va_end(args);
+
+   __asm__ __volatile__ ("cli");
+   while(1);
+}
+
+
 void 
 serial_print (const char * format, ...)
 {
@@ -241,4 +277,6 @@ serial_init (void)
 
   register_irq_handler(COM1_IRQ, serial_irq_handler, NULL);
   serial_init_addr(DEFAULT_SERIAL_ADDR);
+
+  serial_device_ready = 1;
 }

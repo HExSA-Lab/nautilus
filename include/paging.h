@@ -4,12 +4,17 @@
 #include <types.h>
 #include <idt.h>
 
-#define PAGE_SHIFT     12U
-#define PAGE_SHIFT_4KB 12U
-#define PAGE_SHIFT_2MB 21U
-#define PAGE_SIZE      4096U
-#define PAGE_SIZE_4KB  4096U
-#define PAGE_SIZE_2MB  2097152U
+#define PAGE_SHIFT_4KB 12UL
+#define PAGE_SHIFT_2MB 21UL
+#define PAGE_SHIFT_1GB 30UL
+#define PAGE_SHIFT     PAGE_SHIFT_2MB
+#define PAGE_SIZE_4KB  4096UL
+#define PAGE_SIZE_2MB  2097152UL
+#define PAGE_SIZE_1GB  1073741824UL
+#define PAGE_SIZE      PAGE_SIZE_2MB
+
+#define MEM_1GB        (1024*1024*1024)
+#define MEM_2MB        (1024*1024*2)
 
 #define NUM_PT_ENTRIES    512
 #define NUM_PD_ENTRIES    512
@@ -186,7 +191,8 @@ mark_range_reserved (uchar_t * m,
 
 
 int create_page_mapping (addr_t vaddr, addr_t paddr, uint_t flags);
-void init_page_frame_alloc(ulong_t mbd);
+int map_page_nocache (addr_t paddr, uint_t flags);
+void paging_init(struct mem_info * mem, ulong_t mbd);
 addr_t alloc_page(void);
 int free_page(addr_t addr);
 int reserve_pages(addr_t paddr, int n);

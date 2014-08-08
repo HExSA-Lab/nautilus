@@ -70,28 +70,40 @@ ioapic_assign_irq (struct ioapic * ioapic,
 }
 
 
+static uint8_t 
+ioapic_get_id (struct ioapic * ioapic)
+{
+    uint32_t ret;
+    ret = ioapic_read_reg(ioapic, IOAPICID_REG);
+    return (ret >> 23) & 0xf;
+}
+
+static uint8_t 
+ioapic_get_version (struct ioapic * ioapic)
+{
+    uint32_t ret;
+    ret = ioapic_read_reg(ioapic, IOAPICVER_REG);
+    return ret & 0xff;
+}
+
+
 static int
 __ioapic_init (struct ioapic * ioapic)
 {
     int i;
 
-    DEBUG_PRINT("Initializing IOAPIC, id: %d\n", ioapic->id);
-    DEBUG_PRINT("version: %x\n", ioapic->version);
-    DEBUG_PRINT("Mapping IOAPIC at %p\n", (void*)ioapic->base);
-
-    if (create_page_mapping(ioapic->base,
-                            ioapic->base,
-                            PTE_PRESENT_BIT|PTE_WRITABLE_BIT|PTE_CACHE_DISABLE_BIT) < 0) {
-        ERROR_PRINT("Couldn't create page mapping for IOAPIC\n");
-        /* return -1; */
+    if (map_page_nocache(ioapic->base, PTE_PRESENT_BIT|PTE_WRITABLE_BIT) == -1) {
+        panic("Could not map IOAPIC\n");
+        return -1;
     }
 
-    DEBUG_PRINT("Assigning IO vectors\n");
-    for (i = 0; i < MAX_IRQ_NUM; i++) {
-        //if (i == 2) {
-            //continue;
-        //}
+    DEBUG_PRINT("Initializing IOAPIC, id: %d\n", ioapic_get_id(ioapic));
+    DEBUG_PRINT("version: %x\n", ioapic_get_version(ioapic));
+    DEBUG_PRINT("Mapping IOAPIC at %p\n", (void*)ioapic->base);
 
+    DEBUG_PRINT("Assigning IO vectors\n");
+
+    for (i = 0; i < MAX_IRQ_NUM; i++) {
         ioapic_assign_irq(ioapic, i, irq_to_vec(i), PIN_POLARITY_HI, TRIGGER_MODE_EDGE);  
     }
 

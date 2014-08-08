@@ -73,13 +73,16 @@ nautilus_entry:
     movw %ax, %es
     movw %ax, %ss
 
-    movq $boot_stack, %rcx
-    addq $0xffffffff80000000, %rcx
-    movq %rcx, %rsp
+    movq $boot_stack, %rsp
+    //addq $0xffffffff80000000, %rcx
+    //movq %rcx, %rsp
 
     /* this is for when we unmap the lower mappings */
+    /*
     movq $gdtr64high, %rax
     lgdt (%rax)
+    */
+
 
     /* multiboot info is still in rdi and rsi */
     movq $main, %rax
@@ -97,22 +100,31 @@ paging_longmode_setup:
     orl $0x3, %eax       /* entry is present, rw */
     movl $pml4, %ebx
     movl %eax, (%ebx)
-    movl %eax, 0xff8(%ebx) /* higher half mapping, we can probably get rid of this */
 
-    /* PDPT[0] -> PDT */
+    // PDPT[0] -> PDT 
     movl $pd, %eax
     orl $0x3, %eax
     movl $pdpt, %ebx
     movl %eax, (%ebx)
-    movl %eax, 0xff0(%ebx)  /* higher half mapping, we can probably get rid of this */
 
-    /* PDT[0] -> PT */
+    // Identity map the first GB
+    movl $512, %ecx
+    movl $pd, %edx
+    movl $0x83, %eax // set PS bit also (PDE -> 2MB page)
+.write_pde:
+    movl %eax, (%edx)
+    addl $0x200000, %eax
+    addl $0x8, %edx
+    loop .write_pde
+
+/*
+    // PDT[0] -> PT 
     movl $pt, %eax
     orl $0x3, %eax
     movl $pd, %ebx
     movl %eax, (%ebx)
 
-    /* identity map the first 2 MB */
+    // identity map the first 2 MB 
     movl $512, %ecx
     movl $pt, %edx
     movl $0x3, %eax
@@ -121,6 +133,8 @@ paging_longmode_setup:
     addl $0x1000, %eax
     addl $0x8, %edx
     loop .write_pte
+
+*/
 
     /* put pml4 address in cr3 */
     movl $pml4, %eax
@@ -166,9 +180,12 @@ gdtr64:
     .word 23
     .long gdt64
     .long 0
-
+/*
 gdtr64high:
     .word 23
     .quad gdt64 + 0xffffffff80000000
+    */
 
+teststr:
+    .asciz "This is a test"
 

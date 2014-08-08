@@ -3,9 +3,11 @@
 #include <paging.h>
 #include <acpi.h>
 #include <irq.h>
+#include <msr.h>
 #include <cpu.h>
 #include <dev/ioapic.h>
 #include <dev/timer.h>
+#include <lib/liballoc.h>
 
 #ifndef NAUT_CONFIG_DEBUG_SMP
 #undef DEBUG_PRINT
@@ -29,21 +31,42 @@ static uint8_t mp_entry_lengths[5] = {
 static void
 parse_mptable_cpu (struct sys_info * sys, struct mp_table_entry_cpu * cpu)
 {
+    struct cpu * new_cpu = NULL;
+    DEBUG_PRINT("parse_mptable_cpu found cpu\n");
 
-    sys->cpus[sys->num_cpus].id         = sys->num_cpus;
-    sys->cpus[sys->num_cpus].lapic_id   = cpu->lapic_id;
-    sys->cpus[sys->num_cpus].enabled    = cpu->enabled;
-    sys->cpus[sys->num_cpus].is_bsp     = cpu->is_bsp;
-    sys->cpus[sys->num_cpus].cpu_sig    = cpu->sig;
-    sys->cpus[sys->num_cpus].feat_flags = cpu->feat_flags;
+    if (sys->num_cpus == MAX_CPUS) {
+        panic("too many CPUs!\n");
+    }
+
+    if(!(new_cpu = malloc(sizeof(struct cpu)))) {
+        panic("Couldn't allocate CPU struct\n");
+    } 
+    DEBUG_PRINT("allocated new CPU struct at %p\n", (void*)new_cpu);
+    memset(new_cpu, 0, sizeof(struct cpu));
+
+    new_cpu->id         = sys->num_cpus;
+    new_cpu->lapic_id   = cpu->lapic_id;
+    new_cpu->enabled    = cpu->enabled;
+    new_cpu->is_bsp     = cpu->is_bsp;
+    new_cpu->cpu_sig    = cpu->sig;
+    new_cpu->feat_flags = cpu->feat_flags;
+    new_cpu->system     = sys;
+
+    sys->cpus[sys->num_cpus] = new_cpu;
+
     sys->num_cpus++;
+
+    DEBUG_PRINT("sanity check: apic id b4:%u, after %u (ptr=%p)\n", cpu->lapic_id, new_cpu->lapic_id, (void*)new_cpu);
 }
 
 
+/* TODO: change ioapics to pointers! */
 static void
 parse_mptable_ioapic (struct sys_info * sys, struct mp_table_entry_ioapic * ioapic)
 {
-    DEBUG_PRINT("MPTABLE_PARSE: found IOAPIC %d\n", sys->num_ioapics);
+    DEBUG_PRINT("MPTABLE_PARSE: found IOAPIC %d (located at %p)\n", sys->num_ioapics, (void*)&sys->ioapics[sys->num_ioapics]);
+    DEBUG_PRINT("IOAPIC INFO: id=%x, ver=%x, enabled=%x, addr=%lx\n", ioapic->id, ioapic->version, ioapic->enabled, ioapic->addr);
+
 
     sys->ioapics[sys->num_ioapics].id      = ioapic->id;
     sys->ioapics[sys->num_ioapics].version = ioapic->version;
@@ -66,7 +89,6 @@ parse_mp_table (struct sys_info * sys, struct mp_table * mp)
     }
 
     mp_entry = (uint8_t*)&mp->entries;
-    DEBUG_PRINT("MP table length: %d B\n", mp->len);
     DEBUG_PRINT("MP table entry count: %d\n", mp->entry_cnt);
 
     while (count--) {
@@ -142,11 +164,12 @@ smp_early_init (struct naut_info * naut)
         return -1;
     }
 
-    naut->sys->pic_mode_enabled = mp_ptr->mp_feat2 & PIC_MODE_ON;
+    naut->sys.pic_mode_enabled = mp_ptr->mp_feat2 & PIC_MODE_ON;
 
-    parse_mp_table(naut->sys, (struct mp_table*)(uint64_t)mp_ptr->mp_cfg_ptr);
+    DEBUG_PRINT("Parsing MP Table\n");
+    parse_mp_table(&(naut->sys), (struct mp_table*)(uint64_t)mp_ptr->mp_cfg_ptr);
 
-    printk("SMP: Detected %d CPUs\n", naut->sys->num_cpus);
+    printk("SMP: Detected %d CPUs\n", naut->sys.num_cpus);
     return 0;
 }
 
@@ -166,7 +189,7 @@ init_ap_area (struct ap_init_area * ap_area,
     }
 
     ap_area->stack   = boot_stack_ptr;
-    ap_area->cpu_ptr = &naut->sys->cpus[core_num];
+    ap_area->cpu_ptr = naut->sys.cpus[core_num];
 
     /* protected mode temporary GDT */
     ap_area->gdt[2]      = 0x0000ffff;
@@ -194,7 +217,7 @@ smp_bringup_aps (struct naut_info * naut)
     addr_t boot_target     = (addr_t)&init_smp_boot;
     addr_t ap_trampoline   = AP_TRAMPOLINE_ADDR;
     uint8_t target_vec     = PADDR_TO_PAGE(ap_trampoline);
-    struct apic_dev * apic = naut->sys->cpus[0].apic;
+    struct apic_dev * apic = naut->sys.cpus[0]->apic;
     struct ap_init_area * ap_area;
     int status = 0; 
     int err = 0;
@@ -231,7 +254,7 @@ smp_bringup_aps (struct naut_info * naut)
     /* START BOOTING AP CORES */
     
     /* we, of course, skip the BSP (NOTE: assuming its 0...) */
-    for (i = 1; i < naut->sys->num_cpus; i++) {
+    for (i = 1; i < naut->sys.num_cpus; i++) {
         int ret;
 
         printk("Booting secondary CPU %u\n", i);
@@ -244,7 +267,7 @@ smp_bringup_aps (struct naut_info * naut)
 
         /* Send the INIT sequence */
         DEBUG_PRINT("sending INIT to remote APIC\n");
-        apic_send_iipi(apic, naut->sys->cpus[i].lapic_id);
+        apic_send_iipi(apic, naut->sys.cpus[i]->lapic_id);
 
         /* wait for status to update */
         status = apic_wait_for_send(apic);
@@ -256,7 +279,7 @@ smp_bringup_aps (struct naut_info * naut)
         udelay(10000);
 
         /* deassert INIT IPI (level-triggered) */
-        apic_deinit_iipi(apic, naut->sys->cpus[i].lapic_id);
+        apic_deinit_iipi(apic, naut->sys.cpus[i]->lapic_id);
 
         for (j = 1; j <= 2; j++) {
             if (maxlvt > 3) {
@@ -267,7 +290,8 @@ smp_bringup_aps (struct naut_info * naut)
             DEBUG_PRINT("sending SIPI %u to core %u\n", j, i);
 
             /* send the startup signal */
-            apic_send_sipi(apic, naut->sys->cpus[i].lapic_id, target_vec);
+            DEBUG_PRINT("\tremote LAPIC id: %u\n", naut->sys.cpus[i]->lapic_id);
+            apic_send_sipi(apic, naut->sys.cpus[i]->lapic_id, target_vec);
 
             udelay(300);
 
@@ -292,32 +316,50 @@ smp_bringup_aps (struct naut_info * naut)
         }
 
         /* wait for AP to set its boot flag */
-        while (naut->sys->cpus[i].booted != 1) {
+        while (naut->sys.cpus[i]->booted != 1) {
             asm volatile ("pause");
         }
 
         DEBUG_PRINT("Bringup for core %u done.\n", i);
     }
 
-    /* TODO: point GDT at existing one (we don't want the one in lowmem) */
-
     return (status|err);
 
 }
 
 
-void smp_ap_entry (struct cpu * core) { 
+static int
+smp_ap_setup (struct cpu * core)
+{
+    uint64_t core_addr = (uint64_t) &(core->system->cpus[core->id]);
+    // set FS base
+    msr_write(MSR_GS_BASE, (uint64_t)core_addr);
+
+    struct cpu * core2 = get_cpu();
+    printk("core %u testing my coreid: %u\n", core->id, core2->id);
+
+    // setup IDT
+    // setup GDT
+    // per_processor GS/FS Base setup in GDT
+    
+    // init LAPIC
+
+    return 0;
+}
+
+
+void 
+smp_ap_entry (struct cpu * core) 
+{ 
     core->booted = 1;
     printk("hello from core %u\n", core->id);
 
-    while (1) {
-        asm volatile("pause");
+    if (smp_ap_setup(core) < 0) {
+        panic("Error setting up AP!\n");
     }
+
+    while (1) { halt(); }
+        
 }
 
-/*
- 
-void smp_ap_setup (void);  // sets up LAPIC, interrupts, etc
-
-*/
 
