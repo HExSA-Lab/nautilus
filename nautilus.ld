@@ -1,7 +1,5 @@
 ENTRY(nautilus_entry)
 
-/*VIRT_BASE = 0xffffffff80000000; */
-
 SECTIONS
 {
     . = 0x100000;
@@ -18,14 +16,13 @@ SECTIONS
         . += 0x1000;
         pd = .;
         . += 0x1000; 
-        /*pt = .;
-        . += 0x1000; */
+
+        /* stack */
         . += 0x4000;
         boot_stack = .;
         . += 0x1000; /* TODO: remove this, for now to be safe... */
     }
 
-    /*. += VIRT_BASE;*/
 
     .text ALIGN(0x1000) : 
     {
@@ -45,7 +42,7 @@ SECTIONS
         *(.gnu.linkonce.r*)
     }
     
-    _loadEnd = .; /*- VIRT_BASE; */
+    _loadEnd = .; 
     
     .bss ALIGN(0x1000) : AT(ADDR(.rodata)+SIZEOF(.rodata))
     {
@@ -54,7 +51,7 @@ SECTIONS
         *(.gnu.linkonce.b*)
     }
     
-    _bssEnd = .; /*- VIRT_BASE; */
+    _bssEnd = .; 
     
     /DISCARD/ :
     {

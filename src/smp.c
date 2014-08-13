@@ -15,6 +15,7 @@
 #endif
 
 extern addr_t init_smp_boot;
+extern addr_t end_smp_boot;
 
 /* TODO: compute checksum on MPTable */
 
@@ -52,11 +53,14 @@ parse_mptable_cpu (struct sys_info * sys, struct mp_table_entry_cpu * cpu)
     new_cpu->feat_flags = cpu->feat_flags;
     new_cpu->system     = sys;
 
+    spinlock_init(&new_cpu->lock);
+
     sys->cpus[sys->num_cpus] = new_cpu;
+
 
     sys->num_cpus++;
 
-    DEBUG_PRINT("sanity check: apic id b4:%u, after %u (ptr=%p)\n", cpu->lapic_id, new_cpu->lapic_id, (void*)new_cpu);
+    //DEBUG_PRINT("sanity check: apic id b4:%u, after %u (ptr=%p)\n", cpu->lapic_id, new_cpu->lapic_id, (void*)new_cpu);
 }
 
 
@@ -170,6 +174,7 @@ smp_early_init (struct naut_info * naut)
     parse_mp_table(&(naut->sys), (struct mp_table*)(uint64_t)mp_ptr->mp_cfg_ptr);
 
     printk("SMP: Detected %d CPUs\n", naut->sys.num_cpus);
+
     return 0;
 }
 
@@ -182,11 +187,7 @@ init_ap_area (struct ap_init_area * ap_area,
     memset((void*)ap_area, 0, sizeof(struct ap_init_area));
 
     /* setup pointer to this CPUs stack */
-    uint32_t boot_stack_ptr = AP_BOOT_STACK_ADDR * core_num;
-    if (create_page_mapping((addr_t)boot_stack_ptr, (addr_t)boot_stack_ptr, PTE_PRESENT_BIT|PTE_WRITABLE_BIT) < 0) {
-        ERROR_PRINT("Couldn't create page mapping for core (%d) boot stack\n", core_num);
-        return -1;
-    }
+    uint32_t boot_stack_ptr = AP_BOOT_STACK_ADDR;
 
     ap_area->stack   = boot_stack_ptr;
     ap_area->cpu_ptr = naut->sys.cpus[core_num];
@@ -214,11 +215,14 @@ init_ap_area (struct ap_init_area * ap_area,
 int
 smp_bringup_aps (struct naut_info * naut)
 {
-    addr_t boot_target     = (addr_t)&init_smp_boot;
-    addr_t ap_trampoline   = AP_TRAMPOLINE_ADDR;
-    uint8_t target_vec     = PADDR_TO_PAGE(ap_trampoline);
-    struct apic_dev * apic = naut->sys.cpus[0]->apic;
     struct ap_init_area * ap_area;
+
+    addr_t boot_target     = (addr_t)&init_smp_boot;
+    size_t smp_code_sz     = (addr_t)&end_smp_boot - boot_target;
+    addr_t ap_trampoline   = (addr_t)AP_TRAMPOLINE_ADDR;
+    uint8_t target_vec     = ap_trampoline >> 12U;
+    struct apic_dev * apic = naut->sys.cpus[0]->apic;
+
     int status = 0; 
     int err = 0;
     int i, j, maxlvt;
@@ -233,23 +237,14 @@ smp_bringup_aps (struct naut_info * naut)
     }
     apic_read(apic, APIC_REG_ESR);
 
-    /* copy our SMP boot code (shouldn't really need to do this) */
-    DEBUG_PRINT("mapping in page for SMP boot code...\n");
-    if (create_page_mapping(ap_trampoline, ap_trampoline, PTE_PRESENT_BIT|PTE_WRITABLE_BIT) < 0) {
-        ERROR_PRINT("Couldn't create page mapping for SMP boot code\n");
-        return -1;
-    }
-
-    memcpy((void*)ap_trampoline, (void*)boot_target, PAGE_SIZE);
+    DEBUG_PRINT("copying in page for SMP boot code at (%p)...\n", (void*)ap_trampoline);
+    memcpy((void*)ap_trampoline, (void*)boot_target, smp_code_sz);
 
     /* create an info area for APs */
-    if (create_page_mapping((addr_t)AP_INFO_AREA, (addr_t)AP_INFO_AREA, PTE_PRESENT_BIT|PTE_WRITABLE_BIT) < 0) {
-        ERROR_PRINT("Couldn't create page mapping for SMP AP init area\n");
-        return -1;
-    }
-
     /* initialize AP info area (stack pointer, GDT info, etc) */
-    ap_area = (struct ap_init_area*)(AP_INFO_AREA);
+    ap_area = (struct ap_init_area*)AP_INFO_AREA;
+
+    DEBUG_PRINT("passing ap area at %p\n", (void*)ap_area);
 
     /* START BOOTING AP CORES */
     
@@ -264,6 +259,7 @@ smp_bringup_aps (struct naut_info * naut)
             ERROR_PRINT("Error initializing ap area\n");
             return -1;
         }
+
 
         /* Send the INIT sequence */
         DEBUG_PRINT("sending INIT to remote APIC\n");
@@ -281,6 +277,7 @@ smp_bringup_aps (struct naut_info * naut)
         /* deassert INIT IPI (level-triggered) */
         apic_deinit_iipi(apic, naut->sys.cpus[i]->lapic_id);
 
+
         for (j = 1; j <= 2; j++) {
             if (maxlvt > 3) {
                 apic_write(apic, APIC_REG_ESR, 0);
@@ -290,7 +287,6 @@ smp_bringup_aps (struct naut_info * naut)
             DEBUG_PRINT("sending SIPI %u to core %u\n", j, i);
 
             /* send the startup signal */
-            DEBUG_PRINT("\tremote LAPIC id: %u\n", naut->sys.cpus[i]->lapic_id);
             apic_send_sipi(apic, naut->sys.cpus[i]->lapic_id, target_vec);
 
             udelay(300);
@@ -312,11 +308,17 @@ smp_bringup_aps (struct naut_info * naut)
         }
 
         if (err) {
-            ERROR_PRINT("ERROR while delivering SIPI\n");
+            ERROR_PRINT("ERROR delivering SIPI\n");
         }
 
         /* wait for AP to set its boot flag */
-        while (naut->sys.cpus[i]->booted != 1) {
+        while (1) {
+            spin_lock(&(naut->sys.cpus[i]->lock));
+            if (naut->sys.cpus[i]->booted) {
+                spin_unlock(&(naut->sys.cpus[i]->lock));
+                break;
+            }
+            spin_unlock(&(naut->sys.cpus[i]->lock));
             asm volatile ("pause");
         }
 
@@ -338,6 +340,8 @@ smp_ap_setup (struct cpu * core)
     struct cpu * core2 = get_cpu();
     printk("core %u testing my coreid: %u\n", core->id, core2->id);
 
+    // give myself a new stack
+    
     // setup IDT
     // setup GDT
     // per_processor GS/FS Base setup in GDT
@@ -351,15 +355,18 @@ smp_ap_setup (struct cpu * core)
 void 
 smp_ap_entry (struct cpu * core) 
 { 
+
+    spin_lock(&(core->lock));
     core->booted = 1;
-    printk("hello from core %u\n", core->id);
+    spin_unlock(&(core->lock));
+
+    DEBUG_PRINT("hello from core %u\n", core->id);
 
     if (smp_ap_setup(core) < 0) {
         panic("Error setting up AP!\n");
     }
 
     while (1) { halt(); }
-        
 }
 
 

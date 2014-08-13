@@ -3,9 +3,9 @@
 
 #define MAX_CPUS 128
 
-#define AP_TRAMPOLINE_ADDR 0xf000 // TODO: BIG NOTE this will limit us to 16 cpus for now
-#define AP_INFO_AREA       0xf1000
+#define AP_TRAMPOLINE_ADDR 0xf000 
 #define AP_BOOT_STACK_ADDR 0x1000
+#define AP_INFO_AREA       0x2000
 
 #define BASE_MEM_LAST_KILO 0x9fc00
 #define BIOS_ROM_BASE      0xf0000
@@ -17,7 +17,7 @@
 #ifndef __ASSEMBLER__ 
 
 #include <dev/apic.h>
-
+#include <spinlock.h>
 struct naut_info;
 
 struct cpu {
@@ -33,6 +33,9 @@ struct cpu {
     struct apic_dev * apic;
 
     struct sys_info * system;
+
+    spinlock_t lock;
+
 };
 
 struct ap_init_area {

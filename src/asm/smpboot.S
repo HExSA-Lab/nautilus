@@ -1,5 +1,6 @@
 #include <asm/lowlevel.h>
 #include <smp.h>
+#include <gdt.h>
 
 .section .text
 .code16
@@ -17,6 +18,7 @@ ENTRY(init_smp_boot)
     mov %ax, %ss
     add $0x1000, %bx // stack grows down
     mov %bx, %sp
+
 
     movw $0x17, 32(%edx)  // 16-bit limit
     leal 8(%edx), %eax    // 32-bit base
@@ -38,8 +40,9 @@ ENTRY(init_smp_boot)
     or $(1<<5), %eax
     mov %eax, %cr4
 
-    // TODO: replace this with KERNEL_CS
-    ljmp $0x8, $(AP_TRAMPOLINE_ADDR + .pmode_is_go - init_smp_boot)
+
+    ljmp $KERNEL_CS, $(AP_TRAMPOLINE_ADDR + .pmode_is_go - init_smp_boot)
+
 
 .code32
 .pmode_is_go:
@@ -47,6 +50,7 @@ ENTRY(init_smp_boot)
     movl $0x10, %eax
     movw %ax, %ds
     movw %ax, %ss
+
 
     // enable lme bit in MSR
     movl $0xc0000080, %ecx
@@ -66,16 +70,16 @@ ENTRY(init_smp_boot)
     leal 64(%edx), %eax
     lgdt (%eax)
 
-    ljmp $0x8, $(AP_TRAMPOLINE_ADDR + .lmode_is_go - init_smp_boot)
+    ljmp $KERNEL_CS, $(AP_TRAMPOLINE_ADDR + .lmode_is_go - init_smp_boot)
 
 .code64
 .lmode_is_go:
-
 
     movl $0x10, %eax
     movw %ax, %ds
     movw %ax, %es
     movw %ax, %ss
+
 
     movq $AP_INFO_AREA, %rdx
     movq 82(%rdx), %rdi
@@ -88,4 +92,7 @@ ENTRY(init_smp_boot)
         pause
         jmp l0
 
+
+.globl end_smp_boot
+end_smp_boot:
 

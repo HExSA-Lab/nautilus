@@ -54,16 +54,13 @@ main (unsigned long mbd, unsigned long magic)
 
     timer_init(naut);
 
-    sti();
-    while (1) { halt(); }
-
-
     // TODO: setup MY (BSP) GS Base
 
     smp_bringup_aps(naut);
 
-    sti();
-
     while (1) { halt(); }
+    //sti();
+
+
 }
 

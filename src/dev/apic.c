@@ -155,75 +155,75 @@ apic_ipi (struct apic_dev * apic,
           uint_t remote_id,
           uint_t vector)
 {
-    cli();
+    //cli();
     apic_write(apic, APIC_REG_ICR2, remote_id << APIC_ICR2_DST_SHIFT);
     apic_write(apic, APIC_REG_ICR, vector | ICR_LEVEL_ASSERT);
-    sti();
+    //sti();
 }
 
 
 void
 apic_self_ipi (struct apic_dev * apic, uint_t vector)
 {
-    cli();
+    //cli();
     apic_write(apic, APIC_IPI_SELF, vector);
-    sti();
+    //sti();
 }
 
 void 
 apic_send_iipi (struct apic_dev * apic, uint32_t remote_id) 
 {
-    cli();
+    //cli();
     apic_write(apic, APIC_REG_ICR2, remote_id << APIC_ICR2_DST_SHIFT);
     apic_write(apic, APIC_REG_ICR, ICR_TRIG_MODE_LEVEL| ICR_LEVEL_ASSERT | ICR_DEL_MODE_INIT);
-    sti();
+    //sti();
 }
 
 
 void
 apic_deinit_iipi (struct apic_dev * apic, uint32_t remote_id)
 {
-    cli();
+    //cli();
     apic_write(apic, APIC_REG_ICR2, remote_id << APIC_ICR2_DST_SHIFT);
     apic_write(apic, APIC_REG_ICR, ICR_TRIG_MODE_LEVEL| ICR_DEL_MODE_INIT);
-    sti();
+    //sti();
 }
 
 
 void
 apic_send_sipi (struct apic_dev * apic, uint32_t remote_id, uint8_t target)
 {
-    cli();
+    //cli();
     apic_write(apic, APIC_REG_ICR2, remote_id << APIC_ICR2_DST_SHIFT);
     apic_write(apic, APIC_REG_ICR, ICR_DEL_MODE_STARTUP | target);
-    sti();
+    //sti();
 }
 
 
 void
 apic_bcast_iipi (struct apic_dev * apic) 
 {
-    cli();
+    //cli();
     apic_write(apic, APIC_REG_ICR, APIC_IPI_OTHERS | ICR_LEVEL_ASSERT | ICR_TRIG_MODE_LEVEL | ICR_DEL_MODE_INIT);
-    sti();
+    //sti();
 }
 
 
 void
 apic_bcast_deinit_iipi (struct apic_dev * apic)
 {
-    cli();
+    //cli();
     apic_write(apic, APIC_REG_ICR, APIC_IPI_OTHERS | ICR_TRIG_MODE_LEVEL | ICR_DEL_MODE_INIT);
-    sti();
+    //sti();
 }
 
 
 void
 apic_bcast_sipi (struct apic_dev * apic, uint8_t target)
 {
-    cli();
+    //cli();
     apic_write(apic, APIC_REG_ICR, APIC_IPI_OTHERS | ICR_DEL_MODE_STARTUP | target);
-    sti();
+    //sti();
 }
 
 /* TODO: add apic dump function */
