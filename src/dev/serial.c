@@ -5,6 +5,7 @@
 #include <irq.h>
 #include <cpu.h>
 
+static spinlock_t serial_lock; /* for SMP */
 static uint8_t serial_device_ready = 0;
 uint16_t serial_io_addr = 0;
 uint_t serial_print_level;
@@ -187,7 +188,9 @@ Serial_Finish (struct Output_Sink * o) { return; }
 static inline void 
 __serial_print (const char * format, va_list ap) 
 {
+  spin_lock(&serial_lock);
   Format_Output(&serial_output_sink, format, ap);
+  spin_unlock(&serial_lock);
 }
 
 
@@ -232,7 +235,6 @@ serial_print (const char * format, ...)
   va_list args;
   uint8_t iflag = atomic_begin_irq();
 
-  va_start(args, format);
   __serial_print(format, args);
   va_end(args);
 
@@ -272,11 +274,14 @@ serial_init (void)
 
   printk("Initialzing serial device\n");
 
+  spinlock_init(&serial_lock);
+
   serial_output_sink.Emit = &Serial_Emit;
   serial_output_sink.Finish = &Serial_Finish;
 
   register_irq_handler(COM1_IRQ, serial_irq_handler, NULL);
   serial_init_addr(DEFAULT_SERIAL_ADDR);
+
 
   serial_device_ready = 1;
 }

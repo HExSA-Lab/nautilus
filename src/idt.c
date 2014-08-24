@@ -8,7 +8,7 @@ extern ulong_t handler_table[NUM_IDT_ENTRIES];
 
 struct gate_desc64 idt64[NUM_IDT_ENTRIES] __page_align;
 
-static struct idt_desc idt_descriptor =
+struct idt_desc idt_descriptor =
 {
     .base_addr = (uint64_t)&idt64,
     .size      = (NUM_IDT_ENTRIES<<4)-1,

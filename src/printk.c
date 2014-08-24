@@ -34,8 +34,10 @@
 #include <string.h>
 #include <doprnt.h>
 #include <cga.h>
+#include <spinlock.h>
 #include <printk.h>
 
+spinlock_t printk_lock;
 
 struct printk_state {
 	char buf[PRINTK_BUFMAX];
@@ -84,12 +86,15 @@ vprintk (const char * fmt, va_list args)
 {
 	struct printk_state state;
 
+    spin_lock(&printk_lock);
+
 	state.index = 0;
 	_doprnt(fmt, args, 0, printk_char, (char *) &state);
 
 	if (state.index != 0)
 	    flush(&state);
 
+    spin_unlock(&printk_lock);
 	/* _doprnt currently doesn't pass back error codes,
 	   so just assume nothing bad happened.  */
 	return 0;

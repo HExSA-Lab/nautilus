@@ -74,15 +74,6 @@ nautilus_entry:
     movw %ax, %ss
 
     movq $boot_stack, %rsp
-    //addq $0xffffffff80000000, %rcx
-    //movq %rcx, %rsp
-
-    /* this is for when we unmap the lower mappings */
-    /*
-    movq $gdtr64high, %rax
-    lgdt (%rax)
-    */
-
 
     /* multiboot info is still in rdi and rsi */
     movq $main, %rax
@@ -116,25 +107,6 @@ paging_longmode_setup:
     addl $0x200000, %eax
     addl $0x8, %edx
     loop .write_pde
-
-/*
-    // PDT[0] -> PT 
-    movl $pt, %eax
-    orl $0x3, %eax
-    movl $pd, %ebx
-    movl %eax, (%ebx)
-
-    // identity map the first 2 MB 
-    movl $512, %ecx
-    movl $pt, %edx
-    movl $0x3, %eax
-.write_pte:
-    movl %eax, (%edx)
-    addl $0x1000, %eax
-    addl $0x8, %edx
-    loop .write_pte
-
-*/
 
     /* put pml4 address in cr3 */
     movl $pml4, %eax
@@ -176,16 +148,9 @@ gdtr32:
     .word 23
     .long gdt32
 
+.globl gdtr64
 gdtr64:
     .word 23
     .long gdt64
     .long 0
-/*
-gdtr64high:
-    .word 23
-    .quad gdt64 + 0xffffffff80000000
-    */
-
-teststr:
-    .asciz "This is a test"
 

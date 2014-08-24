@@ -42,8 +42,6 @@ apic_sw_enable (struct apic_dev * apic)
 {
     uint32_t val;
 
-    /* TODO: KCH: should we clear the LVT0 reg? */
-    //apic_write(apic, APIC_REG_LVT0, 0); 
     val = apic_read(apic, APIC_REG_SPIV);
     apic_write(apic, APIC_REG_SPIV, val | APIC_SPIV_SW_ENABLE);
     return 0;
@@ -228,6 +226,59 @@ apic_bcast_sipi (struct apic_dev * apic, uint8_t target)
 
 /* TODO: add apic dump function */
 
+
+void
+ap_apic_setup (struct cpu * core)
+{
+    core->apic->base_addr = apic_get_base_addr();
+    core->apic->version   = apic_get_version(core->apic);
+    core->apic->id        = apic_get_id(core->apic);
+
+    if (core->apic->version < 0x10 || core->apic->version > 0x15) {
+        panic("Unsupported APIC version (0x%x) in core %u\n", core->apic->version, core->id);
+    }
+
+    DEBUG_PRINT("Configuring CPU %u LAPIC (id=0x%x)\n", core->id, core->apic->id);
+
+    /* set spurious interrupt vector to 0xff, disable CPU core focusing */
+    apic_write(core->apic, 
+               APIC_REG_SPIV,
+               ((apic_read(core->apic, APIC_REG_SPIV) & APIC_DISABLE_FOCUS) | 0xff));
+            
+    /* Setup TPR (Task-priority register) to disable softwareinterrupts */
+    apic_write(core->apic, APIC_REG_TPR, 0x20);
+
+    /* disable LAPIC timer interrupts */
+    apic_write(core->apic, APIC_REG_LVTT, (1<<16)); 
+
+    /* disable perf cntr interrupts */
+    apic_write(core->apic, APIC_REG_LVTPC, (1<<16));
+
+    /* disable thermal interrupts */
+    apic_write(core->apic, APIC_REG_LVTTHMR, (1<<16));
+
+    /* enable normal external interrupts */
+    apic_write(core->apic, APIC_REG_LVT0, 0x8700);
+
+    /* enable normal NMI processing */
+    apic_write(core->apic, APIC_REG_LVT1, 0x400);
+    
+    /* disable error interrupts */
+    apic_write(core->apic, APIC_REG_LVTERR, (1<<16));
+}
+
+
+void
+ap_apic_final_init(struct cpu * core)
+{
+    apic_enable(core->apic);
+
+    /* just to be safe */
+    apic_write(core->apic, APIC_REG_LVT0, 0x8700);
+    apic_write(core->apic, APIC_REG_SPIV, 0x3ff);
+}
+
+
 void
 apic_init (struct naut_info * naut)
 {
@@ -269,15 +320,16 @@ apic_init (struct naut_info * naut)
     apic_write(apic, APIC_REG_TPR, 0x20);       // inhibit softint delivery
     apic_write(apic, APIC_REG_LVTT, 0x10000);   // disable timer interrupts
     apic_write(apic, APIC_REG_LVTPC, 0x10000);  // disable perf cntr interrupts
+    apic_write(apic, APIC_REG_LVTTHMR, 0x10000); // disable thermal interrupts
     apic_write(apic, APIC_REG_LVT0, 0x08700);   // enable normal external interrupts
     apic_write(apic, APIC_REG_LVT1, 0x00400);   // enable normal NMI processing
     apic_write(apic, APIC_REG_LVTERR, 0x10000); // disable error interrupts
-    apic_write(apic, APIC_REG_SPIV, 0x010f);    // may not need this (apic sets spur vector num to 15)
+    apic_write(apic, APIC_REG_SPIV, 0x3ff);     // SPUR int is 0xff
 
-    apic_enable(apic);
+    apic_enable(apic); // This will also set S/W enable bit in SPIV
 
     apic_write(apic, APIC_REG_LVT0, 0x08700);  // BAM BAM BAM
-    apic_write(apic, APIC_REG_SPIV, 0x010f); 
+    apic_write(apic, APIC_REG_SPIV, 0x3ff); 
 
     naut->sys.cpus[0]->apic = apic;
     hack = apic;

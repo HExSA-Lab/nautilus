@@ -18,6 +18,7 @@
 #include <lib/liballoc.h>
 
 static struct naut_info nautilus_info;
+extern spinlock_t printk_lock;
 
 
 void 
@@ -28,6 +29,8 @@ main (unsigned long mbd, unsigned long magic)
     memset(naut, 0, sizeof(struct naut_info));
 
     term_init();
+
+    spinlock_init(&printk_lock);
 
     printk("Welcome to the Nautilus Kernel\n");
 
@@ -58,8 +61,9 @@ main (unsigned long mbd, unsigned long magic)
 
     smp_bringup_aps(naut);
 
+    sti();
+
     while (1) { halt(); }
-    //sti();
 
 
 }

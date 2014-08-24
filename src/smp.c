@@ -4,8 +4,10 @@
 #include <acpi.h>
 #include <irq.h>
 #include <msr.h>
+#include <gdt.h>
 #include <cpu.h>
 #include <dev/ioapic.h>
+#include <dev/apic.h>
 #include <dev/timer.h>
 #include <lib/liballoc.h>
 
@@ -13,6 +15,9 @@
 #undef DEBUG_PRINT
 #define DEBUG_PRINT(fmt, args...)
 #endif
+
+static uint8_t smp_all_cores_ready = 0;
+spinlock_t cores_ready_lock;
 
 extern addr_t init_smp_boot;
 extern addr_t end_smp_boot;
@@ -212,6 +217,21 @@ init_ap_area (struct ap_init_area * ap_area,
 }
 
 
+static inline void 
+smp_wait_for_ap (struct naut_info * naut, unsigned int core_num)
+{
+    while (1) {
+        spin_lock(&(naut->sys.cpus[core_num]->lock));
+        if (naut->sys.cpus[core_num]->booted) {
+            spin_unlock(&(naut->sys.cpus[core_num]->lock));
+            break;
+        }
+        spin_unlock(&(naut->sys.cpus[core_num]->lock));
+        asm volatile ("pause");
+    }
+}
+
+
 int
 smp_bringup_aps (struct naut_info * naut)
 {
@@ -226,6 +246,8 @@ smp_bringup_aps (struct naut_info * naut)
     int status = 0; 
     int err = 0;
     int i, j, maxlvt;
+
+    spinlock_init(&cores_ready_lock);
 
     maxlvt = apic_get_maxlvt(apic);
 
@@ -248,7 +270,7 @@ smp_bringup_aps (struct naut_info * naut)
 
     /* START BOOTING AP CORES */
     
-    /* we, of course, skip the BSP (NOTE: assuming its 0...) */
+    /* we, of course, skip the BSP (NOTE: assuming it's 0...) */
     for (i = 1; i < naut->sys.num_cpus; i++) {
         int ret;
 
@@ -262,7 +284,7 @@ smp_bringup_aps (struct naut_info * naut)
 
 
         /* Send the INIT sequence */
-        DEBUG_PRINT("sending INIT to remote APIC\n");
+        DEBUG_PRINT("sending INIT to remote APIC (%u)\n", naut->sys.cpus[i]->lapic_id);
         apic_send_iipi(apic, naut->sys.cpus[i]->lapic_id);
 
         /* wait for status to update */
@@ -312,6 +334,7 @@ smp_bringup_aps (struct naut_info * naut)
         }
 
         /* wait for AP to set its boot flag */
+        //smp_wait_for_ap(naut, i);
         while (1) {
             spin_lock(&(naut->sys.cpus[i]->lock));
             if (naut->sys.cpus[i]->booted) {
@@ -325,48 +348,80 @@ smp_bringup_aps (struct naut_info * naut)
         DEBUG_PRINT("Bringup for core %u done.\n", i);
     }
 
+    spin_lock(&cores_ready_lock);
+    smp_all_cores_ready = 1;
+    spin_unlock(&cores_ready_lock);
+
     return (status|err);
 
 }
 
 
+extern struct idt_desc idt_descriptor;
+extern struct gdt_desc64 gdtr64;
+
 static int
 smp_ap_setup (struct cpu * core)
 {
     uint64_t core_addr = (uint64_t) &(core->system->cpus[core->id]);
-    // set FS base
+
+    // set FS base (for per-cpu state)
     msr_write(MSR_GS_BASE, (uint64_t)core_addr);
 
-    struct cpu * core2 = get_cpu();
-    printk("core %u testing my coreid: %u\n", core->id, core2->id);
-
-    // give myself a new stack
-    
     // setup IDT
+    lidt(&idt_descriptor);
+
     // setup GDT
-    // per_processor GS/FS Base setup in GDT
+    lgdt64(&gdtr64);
     
-    // init LAPIC
+    // TODO: setup my stack 
+
+
+    ap_apic_setup(core);
 
     return 0;
+}
+
+
+static void
+smp_ap_finish (struct cpu * core)
+{
+    ap_apic_final_init(core);
+    printk("smp: core %u ready, enabling interrupts\n", core->id);
+    sti();
 }
 
 
 void 
 smp_ap_entry (struct cpu * core) 
 { 
+    printk("smp: core %u starting up\n", core->id);
+    if (smp_ap_setup(core) < 0) {
+        panic("Error setting up AP!\n");
+    }
+
+    printk("smp: core %u operational\n", core->id);
 
     spin_lock(&(core->lock));
     core->booted = 1;
     spin_unlock(&(core->lock));
 
-    DEBUG_PRINT("hello from core %u\n", core->id);
-
-    if (smp_ap_setup(core) < 0) {
-        panic("Error setting up AP!\n");
+    while (1) {
+        spin_lock(&cores_ready_lock);
+        if (smp_all_cores_ready) {
+            spin_unlock(&cores_ready_lock);
+            break;
+        }
+        spin_unlock(&cores_ready_lock);
+                
+        asm volatile ("pause");
     }
 
-    while (1) { halt(); }
+    smp_ap_finish(core);
+
+    while (1) {
+        halt(); 
+    }
 }
 
 

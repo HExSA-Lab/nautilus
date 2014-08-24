@@ -62,6 +62,8 @@
 #define APIC_REG_TMDCR    0x3e0
 #define APIC_REG_SELF_IPI 0x3f0
 
+#define APIC_DISABLE_FOCUS (~(1<<9))
+
 
 struct apic_dev {
     ulong_t base_addr;
@@ -100,6 +102,10 @@ void apic_bcast_iipi(struct apic_dev * apic);
 void apic_bcast_deinit_iipi(struct apic_dev * apic);
 void apic_bcast_sipi(struct apic_dev * apic, uint8_t target);
 void apic_init(struct naut_info * naut);
+
+struct cpu;
+void ap_apic_setup(struct cpu * cpu);
+void ap_apic_final_init(struct cpu * cpu);
 
 int apic_get_maxlvt(struct apic_dev * apic);
 uint32_t apic_wait_for_send(struct apic_dev* apic);
