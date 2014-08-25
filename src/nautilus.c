@@ -4,6 +4,7 @@
 #include <idt.h>
 #include <spinlock.h>
 #include <cpu.h>
+#include <msr.h>
 #include <cpuid.h>
 #include <serial.h>
 #include <smp.h>
@@ -32,7 +33,7 @@ main (unsigned long mbd, unsigned long magic)
 
     spinlock_init(&printk_lock);
 
-    printk("Welcome to the Nautilus Kernel\n");
+    printk(NAUT_WELCOME);
 
     setup_idt();
 
@@ -57,11 +58,14 @@ main (unsigned long mbd, unsigned long magic)
 
     timer_init(naut);
 
-    // TODO: setup MY (BSP) GS Base
+    // setup per-core area for BSP
+    msr_write(MSR_GS_BASE, (uint64_t)&(naut->sys.cpus[0]));
 
     smp_bringup_aps(naut);
 
     sti();
+
+    printk("idle...\n");
 
     while (1) { halt(); }
 

@@ -332,10 +332,9 @@ paging_init (struct mem_info * mem, ulong_t mbd)
         panic("Not enough memory to run Nautilus!\n");
     } 
 
-    printk("Total Memory Available: %lu KB (%lu pages)\n", 
-            mem->phys_mem_avail>>10, mem->phys_mem_avail/PAGE_SIZE);
+    printk("Total Memory Available: %lu KB\n", 
+            mem->phys_mem_avail>>10);
 
-    printk("PAGE SIZE: %lu, PAGE_SIFT: %lu\n", PAGE_SIZE, PAGE_SHIFT);
 
     if (!(page_dir_end = finish_ident_map(mem, mbd))) {
         panic("Unable to finish identity map\n");
@@ -345,7 +344,6 @@ paging_init (struct mem_info * mem, ulong_t mbd)
 
     mem->page_map       = (ulong_t*)mem->pm_start;
     mem->npages         = mem->phys_mem_avail >> PAGE_SHIFT;
-    printk("Paging: NPAGES: %lld\n", mem->npages);
 
     // layout the bitmap 
     // we just always include the extra long word
@@ -356,16 +354,16 @@ paging_init (struct mem_info * mem, ulong_t mbd)
     printk("Reserving kernel memory (page num %d to %d)\n", PADDR_TO_PAGE(kernel_start), PADDR_TO_PAGE(mem->pm_end-1));
     mark_range_reserved((uint8_t*)mem->page_map, kernel_start, mem->pm_end-1);
     
-    printk("Setting aside system reserved memory\n");
+    DEBUG_PRINT("Setting aside system reserved memory\n");
     multiboot_rsv_mem_regions(mem, mbd);
 
-    printk("Reserving BDA and Real Mode IVT\n");
+    DEBUG_PRINT("Reserving BDA and Real Mode IVT\n");
     mark_range_reserved((uint8_t*)mem->page_map, 0x0, 0x4ff);
 
-    printk("Reserving Video Memory\n");
+    DEBUG_PRINT("Reserving Video Memory\n");
     mark_range_reserved((uint8_t*)mem->page_map, 0xa0000, 0xfffff);
 
-    printk("Reserving APIC/IOAPIC\n");
+    DEBUG_PRINT("Reserving APIC/IOAPIC\n");
     mark_range_reserved((uint8_t*)mem->page_map, 0xfec00000, 0xfedfffff);
 
     glob_mem = mem;

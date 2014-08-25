@@ -18,6 +18,12 @@
 #define ERROR_PRINT(fmt, args...)   printk("ERROR at %s(%d): " fmt, __FILE__, __LINE__, ##args)
 #endif
 
+#ifndef NUAT_CONFIG_DEBUG_PRINTS
+#undef DEBUG_PRINT
+#define DEBUG_PRINT(fmt, args...)
+#endif
+
+
 #include <dev/ioapic.h>
 #include <dev/timer.h>
 #include <smp.h>
@@ -46,4 +52,17 @@ struct naut_info {
 };
 
 void main (unsigned long mbd, unsigned long magic) __attribute__((section (".text")));
+
+#define NAUT_WELCOME \
+"Welcome to \n" \
+"    _   __               __   _  __            \n" \
+"   / | / /____ _ __  __ / /_ (_)/ /__  __ _____\n" \
+"  /  |/ // __ `// / / // __// // // / / // ___/\n" \
+" / /|  // /_/ // /_/ // /_ / // // /_/ /(__  ) \n" \
+"/_/ |_/ \\__,_/ \\__,_/ \\__//_//_/ \\__,_//____/  \n" \
+"+===============================================+\n" \
+" Kyle C. Hale (c) 2014 | Northwestern University \n" \
+"+===============================================+\n"
+                                               
+
 #endif

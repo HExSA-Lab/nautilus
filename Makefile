@@ -312,6 +312,7 @@ CFLAGS:=   -O2 \
 		   -Wmissing-prototypes \
 		   -Wstrict-prototypes \
 		   -Wno-unused-function \
+		   -Wno-unused-variable \
 		   -ffreestanding \
 		   -fno-stack-protector \
 		   -fno-common \

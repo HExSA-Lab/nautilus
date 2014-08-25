@@ -23,6 +23,9 @@ extern addr_t init_smp_boot;
 extern addr_t end_smp_boot;
 
 /* TODO: compute checksum on MPTable */
+/* TODO: print out MP Table info (we'll eventually get some of this 
+ * stuff from ACPI 
+ */
 
 static uint8_t mp_entry_lengths[5] = {
     MP_TAB_CPU_LEN,
@@ -64,8 +67,6 @@ parse_mptable_cpu (struct sys_info * sys, struct mp_table_entry_cpu * cpu)
 
 
     sys->num_cpus++;
-
-    //DEBUG_PRINT("sanity check: apic id b4:%u, after %u (ptr=%p)\n", cpu->lapic_id, new_cpu->lapic_id, (void*)new_cpu);
 }
 
 
@@ -274,7 +275,7 @@ smp_bringup_aps (struct naut_info * naut)
     for (i = 1; i < naut->sys.num_cpus; i++) {
         int ret;
 
-        printk("Booting secondary CPU %u\n", i);
+        DEBUG_PRINT("Booting secondary CPU %u\n", i);
 
         ret = init_ap_area(ap_area, naut, i);
         if (ret == -1) {
@@ -387,7 +388,7 @@ static void
 smp_ap_finish (struct cpu * core)
 {
     ap_apic_final_init(core);
-    printk("smp: core %u ready, enabling interrupts\n", core->id);
+    DEBUG_PRINT("smp: core %u ready, enabling interrupts\n", core->id);
     sti();
 }
 
@@ -395,12 +396,12 @@ smp_ap_finish (struct cpu * core)
 void 
 smp_ap_entry (struct cpu * core) 
 { 
-    printk("smp: core %u starting up\n", core->id);
+    DEBUG_PRINT("smp: core %u starting up\n", core->id);
     if (smp_ap_setup(core) < 0) {
         panic("Error setting up AP!\n");
     }
 
-    printk("smp: core %u operational\n", core->id);
+    DEBUG_PRINT("smp: core %u operational\n", core->id);
 
     spin_lock(&(core->lock));
     core->booted = 1;
