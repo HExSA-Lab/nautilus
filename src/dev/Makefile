@@ -3,4 +3,5 @@ obj-y += apic.o \
 		 cga.o \
 		 serial.o \
 		 timer.o \
-		 kbd.o 
+		 kbd.o \
+		 pci.o \

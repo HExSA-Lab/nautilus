@@ -9,8 +9,10 @@
 #include <serial.h>
 #include <smp.h>
 #include <irq.h>
+#include <idle.h>
 
 #include <dev/apic.h>
+#include <dev/pci.h>
 #include <dev/ioapic.h>
 #include <dev/timer.h>
 #include <dev/kbd.h>
@@ -20,6 +22,7 @@
 
 static struct naut_info nautilus_info;
 extern spinlock_t printk_lock;
+
 
 
 void 
@@ -33,7 +36,7 @@ main (unsigned long mbd, unsigned long magic)
 
     spinlock_init(&printk_lock);
 
-    printk(NAUT_WELCOME);
+    show_splash();
 
     setup_idt();
 
@@ -58,17 +61,13 @@ main (unsigned long mbd, unsigned long magic)
 
     timer_init(naut);
 
+    pci_init(naut);
+
     // setup per-core area for BSP
     msr_write(MSR_GS_BASE, (uint64_t)&(naut->sys.cpus[0]));
 
     smp_bringup_aps(naut);
 
     sti();
-
-    printk("idle...\n");
-
-    while (1) { halt(); }
-
-
 }
 

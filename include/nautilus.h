@@ -29,6 +29,7 @@
 #include <smp.h>
 #include <paging.h>
 
+
 struct sys_info {
 
     struct cpu * cpus[MAX_CPUS];
@@ -45,6 +46,8 @@ struct sys_info {
 
     uint_t num_tevents;
     struct timer_event * time_events;
+
+    struct pci_info * pci;
 };
 
 struct naut_info {
@@ -53,16 +56,6 @@ struct naut_info {
 
 void main (unsigned long mbd, unsigned long magic) __attribute__((section (".text")));
 
-#define NAUT_WELCOME \
-"Welcome to \n" \
-"    _   __               __   _  __            \n" \
-"   / | / /____ _ __  __ / /_ (_)/ /__  __ _____\n" \
-"  /  |/ // __ `// / / // __// // // / / // ___/\n" \
-" / /|  // /_/ // /_/ // /_ / // // /_/ /(__  ) \n" \
-"/_/ |_/ \\__,_/ \\__,_/ \\__//_//_/ \\__,_//____/  \n" \
-"+===============================================+\n" \
-" Kyle C. Hale (c) 2014 | Northwestern University \n" \
-"+===============================================+\n"
                                                
 
 #endif
