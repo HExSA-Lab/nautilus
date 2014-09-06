@@ -2,6 +2,13 @@
 #include <cga.h>
 #include <string.h>
 #include <cpu.h>
+
+
+static void
+hide_cursor (void)
+{
+    outw(0x200a, 0x3d4);
+}
  
  
 static uint8_t 
@@ -27,6 +34,13 @@ static uint8_t   term_color;
 static volatile uint16_t * term_buf;
  
 
+void term_setpos (size_t x, size_t y)
+{
+    term_row = y;
+    term_col = x;
+}
+
+
 void 
 term_init (void)
 {
@@ -42,10 +56,19 @@ term_init (void)
             term_buf[index] = make_vgaentry(' ', term_color);
         }
     }
+
+    hide_cursor();
 }
  
 
-static void 
+uint8_t 
+term_getcolor (void)
+{
+    return term_color;
+}
+
+
+void 
 term_setcolor (uint8_t color)
 {
     term_color = color;
@@ -78,7 +101,7 @@ term_putc (char c, uint8_t color, size_t x, size_t y)
     term_buf[index] = make_vgaentry(c, color);
 }
  
-static inline void
+inline void
 term_clear (void) 
 {
     size_t i;
@@ -151,19 +174,7 @@ get_cursor (unsigned row, unsigned col)
     return;
 }
 
-static void
-show_cursor (void)
-{
-    /* not implemented */
-    return;
-}
 
-static void
-hide_cursor (void)
-{
-    /* not implemented */
-    return;
-}
 
 void 
 term_print (const char* data)

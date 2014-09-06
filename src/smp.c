@@ -401,7 +401,7 @@ smp_ap_entry (struct cpu * core)
         panic("Error setting up AP!\n");
     }
 
-    DEBUG_PRINT("smp: core %u operational\n", core->id);
+    printk("SMP: CPU (AP) %u operational\n", core->id);
 
     spin_lock(&(core->lock));
     core->booted = 1;

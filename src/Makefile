@@ -10,6 +10,7 @@ obj-y += \
 	msr.o \
 	cpuid.o \
 	smp.o \
+	idle.o \
 	nautilus.o \
 	asm/ \
 	dev/

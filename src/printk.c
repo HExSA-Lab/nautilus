@@ -137,3 +137,28 @@ printk (const char *fmt, ...)
 	return err;
 }
 
+int 
+printk_color (uint8_t color, const char *fmt, ...)
+{
+    va_list args;
+    int err;
+    uint8_t old_color = term_getcolor();
+
+    term_setcolor(color);
+
+	va_start(args, fmt);
+	err = vprintk(fmt, args);
+	va_end(args);
+
+    term_setcolor(old_color);
+
+	return err;
+}
+
+void 
+show_splash (void)
+{
+    printk_color(COLOR_LIGHT_GREEN, NAUT_WELCOME);
+}
+
+
