@@ -1,5 +1,33 @@
 menu "Device options"
 
+config SERIAL_REDIRECT
+    bool "Serial Debugging"
+    depends on DEBUG_PRINTS
+    default n
+    help
+        Redirect all printing to serial device
+
+config DEBUG_APIC
+    bool "Debug APIC"
+    depends on DEBUG_PRINTS
+    default n
+    help
+        Turn on debug prints for the LAPIC driver
+
+config DEBUG_IOAPIC
+    bool "DEBUG IOAPIC"
+    depends on DEBUG_PRINTS
+    default n
+    help 
+        Turn on debug prints for the IOAPIC driver
+
+config DEBUG_PCI
+    bool "Debug PCI"
+    depends on DEBUG_PRINTS
+    default n
+    help 
+        Turn on debug prints for PCI devices
+
 
 config HZ
     int "Timer interrupt frequency"
@@ -8,5 +36,6 @@ config HZ
     help
         Specifies the 8254 PIT default timer
         interrupt frequency
-
 endmenu
+
+    
