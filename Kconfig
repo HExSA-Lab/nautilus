@@ -50,6 +50,14 @@ menu Debugging
       default n
       help
         Turn on debug prints for SMP code
+
+    config DEBUG_THREADS
+      bool "Debug Threads"
+      depends on DEBUG_PRINTS
+      default n
+      help
+        Turn on debug prints for the scheduler/threads
+
     
 endmenu
 

@@ -9,7 +9,9 @@
 #include <serial.h>
 #include <smp.h>
 #include <irq.h>
+#include <thread.h>
 #include <idle.h>
+
 
 #include <dev/apic.h>
 #include <dev/pci.h>
@@ -69,5 +71,17 @@ main (unsigned long mbd, unsigned long magic)
     smp_bringup_aps(naut);
 
     sti();
+
+    sched_init();
+
+    // start our 'screensaver' thread and wait for it
+    void * ret;
+    join(thread_start(screensaver, (void*)0xdeadbeef, 0), &ret);
+
+    printk("Nautilus main thread yielding\n");
+
+    while (1) {
+        yield();
+    }
 }
 

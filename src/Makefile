@@ -11,6 +11,7 @@ obj-y += \
 	cpuid.o \
 	smp.o \
 	idle.o \
+	thread.o \
 	nautilus.o \
 	asm/ \
 	dev/

@@ -4,6 +4,7 @@
 #define ICON_WIDTH 4
 #define ICON_HEIGHT 4
 
-void idle(void);
+void screensaver(void * arg);
+void idle(void * arg);
 
 #endif
