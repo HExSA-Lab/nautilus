@@ -42,7 +42,7 @@ do  {                                      \
 uint8_t irqs_enabled(void);
 
 static inline uint8_t
-atomic_begin_irq (void)
+irq_disable_save (void)
 {
     uint8_t enabled = irqs_enabled();
 
@@ -55,7 +55,7 @@ atomic_begin_irq (void)
         
 
 static inline void 
-atomic_end_irq (uint8_t iflag)
+irq_enable_restore (uint8_t iflag)
 {
     if (irqs_enabled()) {
         panic("interrupts enabled when they shouldn't be!\n");
