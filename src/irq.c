@@ -66,8 +66,9 @@ register_irq_handler (uint16_t irq,
 void 
 disable_8259pic (void)
 {
-    outb(0xff, PIC_SLAVE_DATA_PORT);
+    printk("Disabling legacy 8259 PIC\n");
     outb(0xff, PIC_MASTER_DATA_PORT);
+    outb(0xff, PIC_SLAVE_DATA_PORT);
 }
 
 void 
