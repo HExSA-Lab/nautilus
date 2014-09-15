@@ -46,7 +46,6 @@ pci_cfg_readl (uint8_t bus,
     uint32_t lbus  = (uint32_t)bus;
     uint32_t lslot = (uint32_t)slot;
     uint32_t lfun  = (uint32_t)fun;
-    uint32_t ret;
 
     addr = (lbus  << PCI_BUS_SHIFT) | 
            (lslot << PCI_SLOT_SHIFT) | 
@@ -55,8 +54,7 @@ pci_cfg_readl (uint8_t bus,
            PCI_ENABLE_BIT;
 
     outl(addr, PCI_CFG_ADDR_PORT);
-    ret = inl(PCI_CFG_DATA_PORT);
-    return ret;
+    return inl(PCI_CFG_DATA_PORT);
 }
 
 
@@ -70,16 +68,22 @@ pci_dev_valid (uint8_t bus, uint8_t slot)
 static inline uint8_t 
 pci_get_base_class (uint8_t bus, uint8_t dev, uint8_t fun)
 {
-    return (pci_cfg_readl(bus, dev, fun, 8) >> 24) & 0xff;
+    return (pci_cfg_readl(bus, dev, fun, 0x8) >> 24) & 0xff;
 }
 
 
 static inline uint8_t
 pci_get_sub_class (uint8_t bus, uint8_t dev, uint8_t fun)
 {
-    return (pci_cfg_readl(bus, dev, fun, 8) >> 16) & 0xff;
+    return (pci_cfg_readl(bus, dev, fun, 0x8) >> 16) & 0xff;
 }
 
+
+static inline uint8_t 
+pci_get_rev_id (uint8_t bus, uint8_t dev, uint8_t fun)
+{
+    return (pci_cfg_readw(bus, dev, fun, 0x8) & 0xff);
+}
 
 static inline uint8_t
 pci_get_hdr_type (uint8_t bus, uint8_t dev, uint8_t fun)
@@ -91,21 +95,21 @@ pci_get_hdr_type (uint8_t bus, uint8_t dev, uint8_t fun)
 static inline uint16_t
 pci_get_vendor_id (uint8_t bus, uint8_t dev, uint8_t fun)
 {
-    return pci_cfg_readw(bus, dev, fun, 0);
+    return pci_cfg_readw(bus, dev, fun, 0x0);
 }
 
 
 static inline uint16_t
 pci_get_dev_id (uint8_t bus, uint8_t dev, uint8_t fun)
 {
-    return (pci_cfg_readl(bus, dev, fun, 2) >> 16) & 0xffff;
+    return (pci_cfg_readw(bus, dev, fun, 0x2) & 0xffff);
 }
 
 
 static inline uint8_t 
 pci_get_sec_bus (uint8_t bus, uint8_t dev, uint8_t fun)
 {
-    return (pci_cfg_readl(bus, dev, fun, 0x18) >> 8) & 0xff;
+    return (pci_cfg_readl(bus, dev, fun, 0x18) >> 0x8) & 0xff;
 }
 
 
@@ -180,7 +184,9 @@ pci_dev_probe (struct pci_bus * bus, uint8_t dev)
         return;
     }
 
-    PCI_PRINT("%04d:%02d:%02d.%d (vendor=%x)\n", 0, bus->num, dev, fun, vendor_id);
+    PCI_PRINT("%04d:%02d:%02d.%d %x:%x (rev %d)\n", 0, bus->num, dev, fun, vendor_id, 
+            pci_get_dev_id(bus->num, dev, fun), 
+            pci_get_rev_id(bus->num, dev, fun));
 
     if (pci_dev_create(dev, bus) == NULL) {
         ERROR_PRINT("Could not create PCI device\n");
@@ -278,10 +284,8 @@ pci_init (struct naut_info * naut)
     }
     memset(pci, 0, sizeof(struct pci_info));
 
-    PCI_PRINT("Scanning PCI Bus...\n");
-
+    PCI_PRINT("Probing PCI bus...\n");
     pci_bus_scan(pci);
-    PCI_PRINT("PCI scan complete\n");
 
     naut->sys.pci = pci;
 
