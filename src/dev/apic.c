@@ -1,8 +1,10 @@
 #include <cpu.h>
 #include <cpuid.h>
 #include <msr.h>
+#include <irq.h>
 #include <paging.h>
 #include <nautilus.h>
+#include <percpu.h>
 #include <dev/apic.h>
 #include <lib/liballoc.h>
 
@@ -10,9 +12,6 @@
 #undef DEBUG_PRINT
 #define DEBUG_PRINT(fmt, args...)
 #endif
-
-// TODO: FIX THIS
-static struct apic_dev * hack = NULL;
 
 
 int 
@@ -41,9 +40,10 @@ static int
 apic_sw_enable (struct apic_dev * apic)
 {
     uint32_t val;
-
+    uint8_t flags = irq_disable_save();
     val = apic_read(apic, APIC_REG_SPIV);
     apic_write(apic, APIC_REG_SPIV, val | APIC_SPIV_SW_ENABLE);
+    irq_enable_restore(flags);
     return 0;
 }
 
@@ -52,8 +52,10 @@ static int
 apic_sw_disable (struct apic_dev * apic)
 {
     uint32_t val;
+    uint8_t flags = irq_disable_save();
     val = apic_read(apic, APIC_REG_SPIV);
     apic_write(apic, APIC_REG_SPIV, val & ~APIC_SPIV_SW_ENABLE);
+    irq_enable_restore(flags);
     return 0;
 }
 
@@ -70,9 +72,11 @@ static void
 apic_enable (struct apic_dev * apic) 
 {
     uint64_t data;
+    uint8_t flags = irq_disable_save();
     data = msr_read(IA32_APIC_BASE_MSR);
     msr_write(IA32_APIC_BASE_MSR, data | APIC_GLOBAL_ENABLE);
     apic_sw_enable(apic);
+    irq_enable_restore(flags);
 }
 
 
@@ -94,7 +98,6 @@ apic_set_base_addr (struct apic_dev * apic, addr_t addr)
 {
     uint64_t data;
     data = msr_read(IA32_APIC_BASE_MSR);
-    
     msr_write(IA32_APIC_BASE_MSR, (addr & APIC_BASE_ADDR_MASK) | (data & 0xfff));
 }
 
@@ -102,8 +105,8 @@ apic_set_base_addr (struct apic_dev * apic, addr_t addr)
 void 
 apic_do_eoi (void)
 {
-    //apic_write(apic, APIC_REG_EOR, 0);
-    apic_write(hack, APIC_REG_EOR, 0);
+    struct apic_dev * apic = (struct apic_dev*)per_cpu_get(apic);
+    apic_write(apic, APIC_REG_EOR, 0);
 }
 
 
@@ -153,75 +156,76 @@ apic_ipi (struct apic_dev * apic,
           uint_t remote_id,
           uint_t vector)
 {
-    //cli();
+    uint8_t flags = irq_disable_save();
     apic_write(apic, APIC_REG_ICR2, remote_id << APIC_ICR2_DST_SHIFT);
     apic_write(apic, APIC_REG_ICR, vector | ICR_LEVEL_ASSERT);
-    //sti();
+    irq_enable_restore(flags);
 }
 
 
 void
 apic_self_ipi (struct apic_dev * apic, uint_t vector)
 {
-    //cli();
+    uint8_t flags = irq_disable_save();
     apic_write(apic, APIC_IPI_SELF, vector);
-    //sti();
+    irq_enable_restore(flags);
 }
+
 
 void 
 apic_send_iipi (struct apic_dev * apic, uint32_t remote_id) 
 {
-    //cli();
+    uint8_t flags = irq_disable_save();
     apic_write(apic, APIC_REG_ICR2, remote_id << APIC_ICR2_DST_SHIFT);
     apic_write(apic, APIC_REG_ICR, ICR_TRIG_MODE_LEVEL| ICR_LEVEL_ASSERT | ICR_DEL_MODE_INIT);
-    //sti();
+    irq_enable_restore(flags);
 }
 
 
 void
 apic_deinit_iipi (struct apic_dev * apic, uint32_t remote_id)
 {
-    //cli();
+    uint8_t flags = irq_disable_save();
     apic_write(apic, APIC_REG_ICR2, remote_id << APIC_ICR2_DST_SHIFT);
     apic_write(apic, APIC_REG_ICR, ICR_TRIG_MODE_LEVEL| ICR_DEL_MODE_INIT);
-    //sti();
+    irq_enable_restore(flags);
 }
 
 
 void
 apic_send_sipi (struct apic_dev * apic, uint32_t remote_id, uint8_t target)
 {
-    //cli();
+    uint8_t flags = irq_disable_save();
     apic_write(apic, APIC_REG_ICR2, remote_id << APIC_ICR2_DST_SHIFT);
     apic_write(apic, APIC_REG_ICR, ICR_DEL_MODE_STARTUP | target);
-    //sti();
+    irq_enable_restore(flags);
 }
 
 
 void
 apic_bcast_iipi (struct apic_dev * apic) 
 {
-    //cli();
+    uint8_t flags = irq_disable_save();
     apic_write(apic, APIC_REG_ICR, APIC_IPI_OTHERS | ICR_LEVEL_ASSERT | ICR_TRIG_MODE_LEVEL | ICR_DEL_MODE_INIT);
-    //sti();
+    irq_enable_restore(flags);
 }
 
 
 void
 apic_bcast_deinit_iipi (struct apic_dev * apic)
 {
-    //cli();
+    uint8_t flags = irq_disable_save();
     apic_write(apic, APIC_REG_ICR, APIC_IPI_OTHERS | ICR_TRIG_MODE_LEVEL | ICR_DEL_MODE_INIT);
-    //sti();
+    irq_enable_restore(flags);
 }
 
 
 void
 apic_bcast_sipi (struct apic_dev * apic, uint8_t target)
 {
-    //cli();
+    uint8_t flags = irq_disable_save();
     apic_write(apic, APIC_REG_ICR, APIC_IPI_OTHERS | ICR_DEL_MODE_STARTUP | target);
-    //sti();
+    irq_enable_restore(flags);
 }
 
 /* TODO: add apic dump function */
@@ -332,6 +336,5 @@ apic_init (struct naut_info * naut)
     apic_write(apic, APIC_REG_SPIV, 0x3ff); 
 
     naut->sys.cpus[0]->apic = apic;
-    hack = apic;
 }
 
