@@ -23,13 +23,16 @@ static void
 ioapic_write_irq_entry (struct ioapic * ioapic, uint8_t irq, uint64_t val)
 {
     /* first disable it */
-    ioapic_write_reg(ioapic, IOAPIC_IRQ_ENTRY_LO(irq), IOAPIC_MASK_IRQ);
+    ioapic_mask_irq(ioapic, irq);
 
     /* hi */
     ioapic_write_reg(ioapic, IOAPIC_IRQ_ENTRY_HI(irq), (uint32_t)(val >> 32));
 
     /* lo */
     ioapic_write_reg(ioapic, IOAPIC_IRQ_ENTRY_LO(irq), (uint32_t)(val & 0xffffffff));
+
+    /* re-enable it */
+    ioapic_unmask_irq(ioapic, irq);
 }
 
 
@@ -61,7 +64,8 @@ ioapic_assign_irq (struct ioapic * ioapic,
 {
     ioapic_write_irq_entry(ioapic, irq, 
                            vector                             |
-                           (DELMODE_LOWEST << DEL_MODE_SHIFT) |
+                           //(DELMODE_LOWEST << DEL_MODE_SHIFT) |
+                           (DELMODE_FIXED << DEL_MODE_SHIFT) |
                            (polarity << INTPOL_SHIFT)         | 
                            (trigger_mode << TRIG_MODE_SHIFT));
 
@@ -120,6 +124,7 @@ __ioapic_init (struct ioapic * ioapic)
     ioapic_mask_irq(ioapic, 21);
     ioapic_mask_irq(ioapic, 22);
     ioapic_mask_irq(ioapic, 23);
+
 
     return 0;
 }
