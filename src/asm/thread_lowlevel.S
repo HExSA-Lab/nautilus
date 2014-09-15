@@ -70,12 +70,12 @@ ENTRY(thread_switch)
 
     save_gprs
 
-    movq cur_thread, %rax
+    movq %gs:0x0, %rax
     movq %rsp, (%rax)   /* save the current stack pointer */
 
 
     movq %rdi, %rax     /* load up pointer to the next thread */
-    movq %rax, cur_thread /* make it the new current thread */
+    movq %rax, %gs:0x0 /* make it the new current thread */
     movq (%rax), %rsp       /* load its stack pointer */
 
     restore_gprs        /* load the new thread's GPRs */

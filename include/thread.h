@@ -51,6 +51,7 @@ typedef void (*thread_fun_t)(void * arg);
 void yield(void);
 void schedule(void);
 int sched_init(void);
+int sched_init_ap(void);
 void exit(void * retval);
 void wait(struct thread_queue * wq);
 void wake_waiters(void);
@@ -60,6 +61,19 @@ thread_t* thread_start(thread_fun_t fun, void * arg, uint8_t is_detached);
 void thread_destroy(thread_t * t);
 
 
+#include <percpu.h>
+
+static inline thread_t*
+get_cur_thread (void) 
+{
+    return (thread_t*)per_cpu_get(cur_thread);
+}
+
+static inline void
+put_cur_thread (thread_t * t)
+{
+    per_cpu_put(cur_thread, t);
+}
 
 
 #endif /* !__ASSEMBLER */

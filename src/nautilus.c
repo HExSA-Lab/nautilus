@@ -11,6 +11,7 @@
 #include <irq.h>
 #include <thread.h>
 #include <idle.h>
+#include <percpu.h>
 
 
 #include <dev/apic.h>
@@ -22,10 +23,9 @@
 #include <lib/liballoc_hooks.h>
 #include <lib/liballoc.h>
 
+
 static struct naut_info nautilus_info;
 extern spinlock_t printk_lock;
-
-
 
 void 
 main (unsigned long mbd, unsigned long magic) 
@@ -50,7 +50,6 @@ main (unsigned long mbd, unsigned long magic)
 
     init_liballoc_hooks();
 
-    printk("Disabling legacy 8259 PIC\n");
     disable_8259pic();
 
     smp_early_init(naut);
@@ -66,19 +65,17 @@ main (unsigned long mbd, unsigned long magic)
     pci_init(naut);
 
     // setup per-core area for BSP
-    msr_write(MSR_GS_BASE, (uint64_t)&(naut->sys.cpus[0]));
-
-    smp_bringup_aps(naut);
-
-    sti();
+    msr_write(MSR_GS_BASE, (uint64_t)naut->sys.cpus[0]);
 
     sched_init();
 
-    // start our 'screensaver' thread and wait for it
-    void * ret;
-    join(thread_start(screensaver, (void*)0xdeadbeef, 0), &ret);
+    smp_bringup_aps(naut);
+    
+    sti();
 
-    printk("Nautilus main thread yielding\n");
+    thread_start(side_screensaver, 0, 0);
+
+    printk("Nautilus main thread halting on core %d\n", my_cpu_id());
 
     while (1) {
         yield();

@@ -18,7 +18,7 @@
 #define ERROR_PRINT(fmt, args...)   printk("ERROR at %s(%d): " fmt, __FILE__, __LINE__, ##args)
 #endif
 
-#ifndef NUAT_CONFIG_DEBUG_PRINTS
+#ifndef NAUT_CONFIG_DEBUG_PRINTS
 #undef DEBUG_PRINT
 #define DEBUG_PRINT(fmt, args...)
 #endif

@@ -19,8 +19,11 @@
 #include <dev/apic.h>
 #include <spinlock.h>
 struct naut_info;
+typedef struct thread thread_t;
 
 struct cpu {
+    thread_t * cur_thread; /* KCH: this must be first! */
+
     uint32_t id;
     uint8_t lapic_id;
     uint8_t enabled;
@@ -61,13 +64,6 @@ int smp_bringup_aps(struct naut_info * naut);
 void smp_ap_entry (struct cpu * core);
 
 
-static inline struct cpu*
-get_cpu (void)
-{
-    struct cpu * ret;
-    asm volatile ("movq %%gs:0x0, %0" : "=r"(ret));
-    return ret;
-}
 
 #endif /* !__ASSEMBLER__ */
 #endif

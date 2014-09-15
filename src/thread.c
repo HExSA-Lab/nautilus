@@ -5,6 +5,7 @@
 #include <idle.h>
 #include <paging.h>
 #include <thread.h>
+#include <percpu.h>
 
 #include <lib/liballoc.h>
 
@@ -14,21 +15,20 @@
 #define DEBUG_PRINT(fmt, args...)
 #endif
 #define SCHED_PRINT(fmt, args...) printk("SCHED: " fmt, ##args)
+#define SCHED_DEBUG(fmt, args...) DEBUG_PRINT("SCHED: " fmt, ##args)
 
 
-/* this is the currently running thread */
-thread_t * cur_thread;
 
 /* TODO: lock this */
 static long next_pid = 0;
 
+/* TODO: migrate these to naut struct */
 static struct thread_queue * global_run_q;
 static struct thread_queue * global_thread_list;
 
 extern addr_t boot_stack;
 
 extern void thread_switch(thread_t*);
-
 
 
 static struct thread_queue*
@@ -152,7 +152,7 @@ thread_detach (thread_t * t)
 void
 exit (void * retval) 
 {
-    thread_t * me = cur_thread;
+    thread_t * me = get_cur_thread();
 
     if (irqs_enabled()) {
         cli();
@@ -176,7 +176,7 @@ join (thread_t * t, void ** retval)
 {
 
     ASSERT(irqs_enabled());
-    ASSERT(t->owner == cur_thread);
+    ASSERT(t->owner == get_cur_thread());
     cli();
     if (t->exited == 1) {
         if (t->exit_status) {
@@ -212,9 +212,9 @@ wait (struct thread_queue * wq)
     /* make sure we're not putting ourselves on our 
      * own waitq */
     ASSERT(!irqs_enabled());
-    ASSERT(wq != cur_thread->waitq);
+    ASSERT(wq != (get_cur_thread()->waitq));
 
-    enqueue_thread_on_waitq(cur_thread, wq);
+    enqueue_thread_on_waitq(get_cur_thread(), wq);
     schedule();
 }
 
@@ -252,10 +252,10 @@ get_runnable_thread (void)
 void 
 yield (void)
 {
-    cli();
-    enqueue_thread_on_runq(cur_thread);
+    uint8_t flags = irq_disable_save();
+    enqueue_thread_on_runq(get_cur_thread());
     schedule();
-    sti();
+    irq_enable_restore(flags);
 }
 
 /*
@@ -267,7 +267,7 @@ yield (void)
 void 
 wake_waiters (void)
 {
-    thread_t * me  = cur_thread;
+    thread_t * me  = get_cur_thread();
     thread_t * tmp = NULL;
     thread_t * t   = NULL;
 
@@ -287,11 +287,6 @@ wake_waiters (void)
 }
 
 
-static thread_t* 
-get_cur_thread (void)
-{
-    return cur_thread;
-}
 
 
 static int
@@ -360,7 +355,7 @@ out_err:
 static void
 thread_cleanup (void)
 {
-    DEBUG_PRINT("thread (%d) exiting\n", cur_thread->pid);
+    SCHED_DEBUG("Thread (%d) exiting on core %d\n", get_cur_thread()->pid, my_cpu_id());
     exit(0);
 }
 
@@ -374,6 +369,7 @@ thread_entry (void)
 {
     sti();
 }
+
 
 /*
  * utility function for setting up
@@ -473,11 +469,70 @@ schedule (void)
     runme = get_runnable_thread();
 
     if (!runme) {
-        ERROR_PRINT("Nothing to run\n");
+        uint32_t id = my_cpu_id();
+        ERROR_PRINT("Nothing to run (cpu=%d)\n", id);
         return;
     }
 
     thread_switch(runme);
+}
+
+
+/*
+ * sched_init_ap
+ *
+ * scheduler init routine for APs once they
+ * have booted up
+ *
+ */
+int
+sched_init_ap (void)
+{
+    thread_t * me = NULL;
+    void * my_stack = NULL;
+    uint32_t id = my_cpu_id();
+
+    cli();
+
+    SCHED_DEBUG("Initializing cpu %d\n", id);
+
+    me = malloc(sizeof(thread_t));
+    if (!me) {
+        ERROR_PRINT("Could not allocate thread for AP (%d)\n", id);
+        goto out_err;
+    }
+
+    my_stack = malloc(PAGE_SIZE);
+    if (!my_stack) {
+        ERROR_PRINT("Couldn't allocate new stack for AP (%d)\n", id);
+        goto out_err1;
+    }
+
+    thread_init(me, my_stack, 1);
+
+    me->waitq = thread_queue_create();
+    if (!me->waitq) {
+        ERROR_PRINT("Could not create AP (%d) thread's wait queue\n", id);
+        goto out_err2;
+    }
+
+    // set my current thread
+    put_cur_thread(me);
+
+    // start another idle thread
+    SCHED_DEBUG("Starting idle thread for cpu %d\n", id);
+    thread_start(idle, 0, 0);
+
+    sti();
+    return 0;
+
+out_err2: 
+    free(me->stack);
+out_err1:
+    free(me);
+out_err:
+    sti();
+    return -1;
 }
 
 
@@ -533,7 +588,7 @@ sched_init (void)
         goto out_err3;
     }
 
-    cur_thread = main;
+    put_cur_thread(main);
 
     enqueue_thread_on_tlist(main);
 

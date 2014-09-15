@@ -6,6 +6,9 @@
 #include <msr.h>
 #include <gdt.h>
 #include <cpu.h>
+#include <thread.h>
+#include <idle.h>
+#include <percpu.h>
 #include <dev/ioapic.h>
 #include <dev/apic.h>
 #include <dev/timer.h>
@@ -364,9 +367,9 @@ extern struct gdt_desc64 gdtr64;
 static int
 smp_ap_setup (struct cpu * core)
 {
-    uint64_t core_addr = (uint64_t) &(core->system->cpus[core->id]);
+    uint64_t core_addr = (uint64_t) core->system->cpus[core->id];
 
-    // set FS base (for per-cpu state)
+    // set GS base (for per-cpu state)
     msr_write(MSR_GS_BASE, (uint64_t)core_addr);
 
     // setup IDT
@@ -375,9 +378,6 @@ smp_ap_setup (struct cpu * core)
     // setup GDT
     lgdt64(&gdtr64);
     
-    // TODO: setup my stack 
-
-
     ap_apic_setup(core);
 
     return 0;
@@ -420,8 +420,12 @@ smp_ap_entry (struct cpu * core)
 
     smp_ap_finish(core);
 
+    sched_init_ap();
+    // should not come back from this
+    //thread_start(idle, 0, 0);
+
     while (1) {
-        halt(); 
+        yield();
     }
 }
 
