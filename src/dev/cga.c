@@ -1,7 +1,16 @@
 #include <nautilus.h>
 #include <cga.h>
 #include <string.h>
+#include <spinlock.h>
 #include <cpu.h>
+
+static struct term_info {
+    size_t    row;
+    size_t    col;
+    uint8_t   color;
+    volatile uint16_t * buf;
+    spinlock_t lock;
+} term;
 
 
 static void
@@ -26,34 +35,37 @@ make_vgaentry (char c, uint8_t color)
     return c16 | color16 << 8;
 }
  
- 
-static size_t    term_row;
-static size_t    term_col;
-static uint8_t   term_color;
-
-static volatile uint16_t * term_buf;
- 
 
 void term_setpos (size_t x, size_t y)
 {
-    term_row = y;
-    term_col = x;
+    spin_lock(&(term.lock));
+    term.row = y;
+    term.col = x;
+    spin_unlock(&(term.lock));
+}
+
+
+void term_getpos (size_t* x, size_t* y)
+{
+    *x = term.col;
+    *y = term.row;
 }
 
 
 void 
 term_init (void)
 {
-    term_row = 0;
-    term_col = 0;
-    term_color = make_color(COLOR_LIGHT_GREY, COLOR_BLACK);
-    term_buf = (uint16_t*) VGA_BASE_ADDR;
+    term.row = 0;
+    term.col = 0;
+    term.color = make_color(COLOR_LIGHT_GREY, COLOR_BLACK);
+    term.buf = (uint16_t*) VGA_BASE_ADDR;
+    spinlock_init(&(term.lock));
     for ( size_t y = 0; y < VGA_HEIGHT; y++ )
     {
         for ( size_t x = 0; x < VGA_WIDTH; x++ )
         {
             const size_t index = y * VGA_WIDTH + x;
-            term_buf[index] = make_vgaentry(' ', term_color);
+            term.buf[index] = make_vgaentry(' ', term.color);
         }
     }
 
@@ -64,14 +76,16 @@ term_init (void)
 uint8_t 
 term_getcolor (void)
 {
-    return term_color;
+    return term.color;
 }
 
 
 void 
 term_setcolor (uint8_t color)
 {
-    term_color = color;
+    spin_lock(&(term.lock));
+    term.color = color;
+    spin_unlock(&(term.lock));
 }
  
 
@@ -94,30 +108,35 @@ debug_puts (const char * s)
 }
 
 
+/* NOTE: should be holding a lock while in this function */
 void 
 term_putc (char c, uint8_t color, size_t x, size_t y)
 {
     const size_t index = y * VGA_WIDTH + x;
-    term_buf[index] = make_vgaentry(c, color);
+    term.buf[index] = make_vgaentry(c, color);
 }
  
+
 inline void
 term_clear (void) 
 {
+    spin_lock(&(term.lock));
     size_t i;
     for (i = 0; i < VGA_HEIGHT*VGA_WIDTH; i++) {
-        term_buf[i] = make_vgaentry(' ', term_color);
+        term.buf[i] = make_vgaentry(' ', term.color);
     }
+    spin_unlock(&(term.lock));
 }
 
 
+/* NOTE: should be holding a lock while in this function */
 static void 
 term_scrollup (void) 
 {
     int i;
     int n = (((VGA_HEIGHT-1)*VGA_WIDTH*2)/sizeof(long));
     int lpl = (VGA_WIDTH*2)/sizeof(long);
-    long * pos = (long*)term_buf;
+    long * pos = (long*)term.buf;
     
     for (i = 0; i < n; i++) {
         *pos = *(pos + lpl);
@@ -126,7 +145,7 @@ term_scrollup (void)
 
     size_t index = (VGA_HEIGHT-1) * VGA_WIDTH;
     for (i = 0; i < VGA_WIDTH; i++) {
-        term_buf[index++] = make_vgaentry(' ', term_color);
+        term.buf[index++] = make_vgaentry(' ', term.color);
     }
 }
 
@@ -134,24 +153,29 @@ term_scrollup (void)
 void 
 putchar (char c)
 {
+    spin_lock(&(term.lock));
+    
     if (c == '\n') {
-        term_col = 0;
-        if (++term_row == VGA_HEIGHT) {
+        term.col = 0;
+        if (++term.row == VGA_HEIGHT) {
             term_scrollup();
-            term_row--;
+            term.row--;
         }
+        spin_unlock(&(term.lock));
         return;
     }
 
-    term_putc(c, term_color, term_col, term_row);
+    term_putc(c, term.color, term.col, term.row);
 
-    if (++term_col == VGA_WIDTH) {
-        term_col = 0;
-        if (++term_row == VGA_HEIGHT) {
+    if (++term.col == VGA_WIDTH) {
+        term.col = 0;
+        if (++term.row == VGA_HEIGHT) {
             term_scrollup();
-            term_row--;
+            term.row--;
         }
     }
+
+    spin_unlock(&(term.lock));
 }
 
 

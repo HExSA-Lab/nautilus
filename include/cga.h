@@ -35,5 +35,6 @@ void term_setcolor(uint8_t color);
 uint8_t term_getcolor(void);
 void term_clear(void);
 void term_setpos(size_t x, size_t y);
+void term_getpos(size_t* x, size_t* y);
 
 #endif
