@@ -198,7 +198,7 @@ void
 serial_print_redirect (const char * format, ...) 
 {
     va_list args;
-    uint8_t iflag = atomic_begin_irq();
+    uint8_t iflag = irq_disable_save();
 
     va_start(args, format);
     if (serial_device_ready) {
@@ -208,7 +208,7 @@ serial_print_redirect (const char * format, ...)
     }
     va_end(args);
 
-    atomic_end_irq(iflag);
+    irq_enable_restore(iflag);
 }
 
 void 
@@ -233,21 +233,21 @@ void
 serial_print (const char * format, ...)
 {
   va_list args;
-  uint8_t iflag = atomic_begin_irq();
+  uint8_t iflag = irq_disable_save();
 
   __serial_print(format, args);
   va_end(args);
 
-  atomic_end_irq(iflag);
+  irq_enable_restore(iflag);
 }
 
 
 void 
 serial_print_list (const char * format, va_list ap) 
 {
-  uint8_t iflag = atomic_begin_irq();
+  uint8_t iflag = irq_disable_save();
   __serial_print(format, ap);
-  atomic_end_irq(iflag);
+  irq_enable_restore(iflag);
 }
 
 
@@ -256,13 +256,13 @@ serial_printlevel (int level, const char * format, ...)
 {
   if (level > serial_print_level) {
     va_list args;
-    uint8_t iflag = atomic_begin_irq();
+    uint8_t iflag = irq_disable_save();
     
     va_start(args, format);
     __serial_print(format, args);
     va_end(args);
     
-    atomic_end_irq(iflag);   
+    irq_enable_restore(iflag);   
   }
 }
 
