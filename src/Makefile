@@ -14,5 +14,6 @@ obj-y += \
 	thread.o \
 	nautilus.o \
 	asm/ \
-	dev/
+	dev/ \
+	tests/ 
 	

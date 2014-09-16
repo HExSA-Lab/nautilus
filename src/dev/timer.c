@@ -1,14 +1,22 @@
 #include <nautilus.h>
 #include <irq.h>
 #include <cpu.h>
+#include <percpu.h>
+#include <math.h>
+
+#include <stddef.h>
 
 #include <dev/timer.h>
-
 #include <lib/liballoc.h>
 
-/* TODO: FIX THIS, (priv data for irq handlers) */
-static struct naut_info * timer_naut = NULL;
+#define PIT_RATE 1193182ul
+#define MS      10
+#define LATCH   (PIT_RATE / (1000 / MS))
+#define LOOPS   1000
 
+
+/* TODO: get rid of this */
+static struct naut_info * timer_naut;
 
 static inline void 
 timer_init_event (struct timer_event * t, uint_t delay)
@@ -54,11 +62,11 @@ timer_notify_event (struct timer_event * te)
 static int
 timer_handler (excp_entry_t * excp, excp_vec_t vec)
 {
+    struct sys_info  * sys = per_cpu_get(system);
     int i;
-    struct naut_info * naut = timer_naut;
-    struct timer_event * te = naut->sys.time_events;
+    struct timer_event * te = sys->time_events;
 
-    for (i = 0; i < naut->sys.num_tevents; i++) {
+    for (i = 0; i < sys->num_tevents; i++) {
         if (te[i].active && te[i].ticks > 0) {
             te[i].ticks--;
             if (te[i].ticks == 0) {
@@ -99,11 +107,92 @@ sleep (uint_t msec)
     timer_clear_event(t);
 }
 
+/* KCH: below taken from linux */
+static unsigned long 
+calibrate_tsc (void)
+{
+    uint32_t latch = LATCH;
+    ulong_t ms = MS;
+    int loopmin = LOOPS;
+    uint64_t tsc, t1, t2, delta;
+	unsigned long tscmin, tscmax;
+	int pitcnt;
+
+	/* Set the Gate high, disable speaker */
+	outb((inb(0x61) & ~0x02) | 0x01, 0x61);
+
+	/*
+	 * Setup CTC channel 2* for mode 0, (interrupt on terminal
+	 * count mode), binary count. Set the latch register to 50ms
+	 * (LSB then MSB) to begin countdown.
+	 */
+	outb(0xb0, 0x43);
+	outb(latch & 0xff, 0x42);
+	outb(latch >> 8, 0x42);
+
+	tsc = t1 = t2 = rdtsc();
+
+	pitcnt = 0;
+	tscmax = 0;
+	tscmin = ULONG_MAX;
+	while ((inb(0x61) & 0x20) == 0) {
+		t2 = rdtsc();
+		delta = t2 - tsc;
+		tsc = t2;
+		if ((unsigned long) delta < tscmin)
+			tscmin = (unsigned int) delta;
+		if ((unsigned long) delta > tscmax)
+			tscmax = (unsigned int) delta;
+		pitcnt++;
+	}
+
+	/*
+	 * Sanity checks:
+	 *
+	 * If we were not able to read the PIT more than loopmin
+	 * times, then we have been hit by a massive SMI
+	 *
+	 * If the maximum is 10 times larger than the minimum,
+	 * then we got hit by an SMI as well.
+	 */
+	if (pitcnt < loopmin) {
+        return ULONG_MAX;
+    }
+        
+    /*
+    if (tscmax > 10 * tscmin) {
+        return ULONG_MAX;
+    }
+    */
+
+	/* Calculate the PIT value */
+	delta = t2 - t1;
+	return delta / ms;
+}
+
+
+static void
+detect_cpu_freq (void) 
+{
+    uint8_t flags = irq_disable_save();
+    ulong_t khz = calibrate_tsc();
+    if (khz == ULONG_MAX) {
+        printk("Unable to detect CPU frequency\n");
+        goto out;
+    }
+    printk("CPU frequency detected as %lu.%03lu MHz\n", (ulong_t)khz / 1000, (ulong_t)khz % 1000);
+
+out:
+    irq_enable_restore(flags);
+}
+
 
 int 
 timer_init (struct naut_info * naut)
 {
     uint16_t hz;
+
+    detect_cpu_freq();
 
     naut->sys.num_tevents = NUM_TIMERS;
     naut->sys.time_events = malloc(NUM_TIMERS*sizeof(struct timer_event));
@@ -130,4 +219,5 @@ timer_init (struct naut_info * naut)
 
     return 0;
 }
+
 

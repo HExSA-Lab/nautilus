@@ -28,6 +28,7 @@
 #include <dev/timer.h>
 #include <smp.h>
 #include <paging.h>
+#include <limits.h>
 
 
 struct sys_info {
