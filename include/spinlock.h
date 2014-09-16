@@ -21,6 +21,15 @@ spin_lock (volatile spinlock_t * lock)
 
 
 static inline void
+spin_lock_nopause (volatile spinlock_t * lock)
+{
+    while (__sync_lock_test_and_set(lock, 1)) {
+        /* nothing */
+    }
+}
+
+
+static inline void
 spin_unlock (volatile spinlock_t * lock)
 {
     __sync_lock_release(lock);
