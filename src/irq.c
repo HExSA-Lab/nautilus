@@ -38,6 +38,34 @@ irq_to_vec (uint8_t irq)
 }
 
 
+/* 
+ * this should only be used when the OS interrupt vector
+ * is known ahead of time, that is, *not* in the case
+ * of external interrupts. It's much more likely you
+ * should be using register_irq_handler
+ */
+int 
+register_int_handler (uint16_t int_vec, 
+                      int (*handler)(excp_entry_t *, excp_vec_t),
+                      void * priv_data)
+{
+
+    if (!handler) {
+        ERROR_PRINT("Attempt to register interrupt %d with invalid handler\n");
+        return -1;
+    }
+
+    if (int_vec > 0xff) {
+        ERROR_PRINT("Attempt to register invalid interrupt(0x%x)\n", int_vec);
+        return -1;
+    }
+
+    idt_assign_entry(int_vec, (ulong_t)handler);
+
+    return 0;
+}
+
+
 int 
 register_irq_handler (uint16_t irq, 
                       int (*handler)(excp_entry_t *, excp_vec_t),
