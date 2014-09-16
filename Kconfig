@@ -27,6 +27,14 @@ config MAX_CPUS
 	  Specifies the maximum number of hardware CPUs supported by Nautilus 
 	  For uniprocessor environments, set this to 1
 
+config THREAD_EXIT_KEYCODE
+    int "Thread exit keycode"
+    range 1 255
+    default "196"
+    help
+        uses a special thread exit keycode
+    
+
 menu Debugging
 
     config DEBUG_PAGING

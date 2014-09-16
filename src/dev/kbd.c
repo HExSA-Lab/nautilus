@@ -1,5 +1,6 @@
 #include <nautilus.h>
 #include <irq.h>
+#include <thread.h>
 #include <dev/kbd.h>
 
 #ifndef NAUT_CONFIG_DEBUG_KBD
@@ -11,7 +12,10 @@ static int
 kbd_handler (excp_entry_t * excp, excp_vec_t vec)
 {
 
-    uint8_t status, scan;
+    uint8_t status;
+    uint8_t scan;
+    uint8_t key;
+    uint8_t flag;
 
     status = inb(KBD_CMD_REG);
 
@@ -21,9 +25,24 @@ kbd_handler (excp_entry_t * excp, excp_vec_t vec)
       scan  = inb(KBD_DATA_REG);
       DEBUG_PRINT("Keyboard: status=0x%x, scancode=0x%x\n", status, scan);
       io_delay();
+
+      if (!(scan & KBD_RELEASE)) {
+          goto out;
+      }
+
+#if NAUT_CONFIG_THREAD_EXIT_KEYCODE == 0xc4
+      /* this is a key release */
+      if (scan == 0xc4) {
+          void * ret = NULL;
+          IRQ_HANDLER_END();
+          exit(ret);
+      }
+#endif
+      
     }
 
 
+out:
     IRQ_HANDLER_END();
     return 0;
 }
