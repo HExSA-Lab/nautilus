@@ -713,11 +713,21 @@ out_err0:
 }
 
 
-long
+thread_id_t
 get_tid (void) 
 {
     struct thread * t = per_cpu_get(cur_thread);
     return t->tid;
+}
+
+thread_id_t
+get_parent_tid (void) 
+{
+    struct thread * t = per_cpu_get(cur_thread);
+    if (t && t->owner) {
+        return t->owner->tid;
+    }
+    return -1;
 }
 
 

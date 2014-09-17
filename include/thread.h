@@ -86,7 +86,8 @@ thread_start (thread_fun_t fun,
                int cpu);
 
 void thread_destroy(thread_t * t);
-long get_tid(void);
+thread_id_t get_tid(void);
+thread_id_t get_parent_tid(void);
 
 
 #include <percpu.h>
