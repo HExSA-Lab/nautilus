@@ -3,6 +3,7 @@ obj-y += \
 	printk.o \
 	doprnt.o \
 	idt.o \
+	queue.o \
 	irq.o \
 	mb_utils.o \
 	paging.o \

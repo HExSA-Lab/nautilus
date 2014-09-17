@@ -3,11 +3,8 @@
 
 #ifndef __ASSEMBLER__
 
-#include <list.h>
 #include <spinlock.h>
-
-#define QNODE(x) struct list_head x
-#define INIT_Q(x) INIT_LIST_HEAD(&((x)->queue));
+#include <queue.h>
 
 #define CPU_ANY -1
 #define TSTACK_DEFAULT 0
@@ -16,21 +13,23 @@ typedef void (*thread_fun_t)(void * input, void ** output);
 typedef unsigned stack_size_t;
 typedef long thread_id_t;
 typedef struct thread thread_t;
+typedef struct queue thread_queue_t;
 
 
 struct thread {
     uint64_t rsp; /* KCH: this cannot change */
     void * stack;
     stack_size_t stack_size;
-    QNODE(q_node);
-    QNODE(thr_list_node);
+
+    queue_entry_t runq_node; // formerly q_node
+    queue_entry_t thr_list_node;
     thread_id_t tid;
     struct thread * owner;
 
-    struct thread_queue * waitq;
-    QNODE(wait_node);
+    thread_queue_t * waitq;
+    queue_entry_t wait_node;
 
-    struct thread_queue * cur_run_q;
+    thread_queue_t * cur_run_q;
     void * exit_status;
 
     /* thread has finished? */
@@ -41,21 +40,10 @@ struct thread {
 };
 
 
-struct thread_queue {
-    spinlock_t lock;
-    QNODE(queue);
-    uint32_t num_entries;
-};
-
-
-
 struct sched_state {
-    struct thread_queue * thread_list;
+    thread_queue_t * thread_list;
     uint_t num_threads;
 };
-
-
-
 
 
 /* the thread interface */
@@ -64,7 +52,7 @@ void schedule(void);
 int sched_init(void);
 int sched_init_ap(void);
 void exit(void * retval);
-void wait(struct thread_queue * wq);
+void wait(thread_queue_t * wq);
 void wake_waiters(void);
 int join(thread_t * t, void ** retval);
 

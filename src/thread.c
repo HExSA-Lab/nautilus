@@ -7,6 +7,8 @@
 #include <thread.h>
 #include <percpu.h>
 #include <atomic.h>
+#include <queue.h>
+#include <list.h>
 
 #include <lib/liballoc.h>
 
@@ -20,27 +22,24 @@
 
 static thread_id_t next_tid = 0;
 
-static struct thread_queue * global_thread_list;
+static thread_queue_t * global_thread_list;
 
 extern addr_t boot_stack;
 
 extern void thread_switch(thread_t*);
 
 
-static struct thread_queue*
+static thread_queue_t*
 thread_queue_create (void) 
 {
-    struct thread_queue * q = NULL;
+    thread_queue_t * q = NULL;
 
-    q = malloc(sizeof(struct thread_queue));
+    q = queue_create();
 
     if (!q) {
         ERROR_PRINT("Could not allocate thread queue\n");
         return NULL;
     }
-
-    INIT_Q(q);
-    spinlock_init(&(q->lock));
     return q;
 }
 
@@ -49,49 +48,19 @@ thread_queue_create (void)
  * their entries in the queue
  */
 static void 
-thread_queue_destroy (struct thread_queue * q)
+thread_queue_destroy (thread_queue_t * q)
 {
-    thread_t * tmp = NULL;
-    thread_t * t = NULL;
-    spin_lock(&(q->lock));
-
-    list_for_each_entry_safe(t, tmp, &(q->queue), q_node) {
-        list_del(&(t->q_node));
-    }
-
-    spin_unlock(&(q->lock));
-
-    free(q);
-}
-
-
-static void 
-enqueue_entry (struct thread_queue * q, struct list_head * entry) 
-{
-    spin_lock(&(q->lock));
-    list_add_tail(entry, &(q->queue));
-    spin_unlock(&(q->lock));
-}
-
-
-static void
-dequeue_entry (struct thread_queue * q, struct list_head * entry)
-{
-    spin_lock(&(q->lock));
-    if (!list_empty_careful(&(q->queue))) {
-        list_del(entry);
-    }
-    spin_unlock(&(q->lock));
+    // free any remaining entries
+    queue_destroy(q, 1);
 }
 
 
 static inline void 
 enqueue_thread_on_runq (thread_t * t, int cpu)
 {
-    struct thread_queue * q;
+    thread_queue_t * q = NULL;
     struct sys_info * sys = per_cpu_get(system);
 
-    /* TODO: make this smarter */
     if (cpu == CPU_ANY || 
         cpu < CPU_ANY  || 
         cpu >= sys->num_cpus) {
@@ -110,53 +79,68 @@ enqueue_thread_on_runq (thread_t * t, int cpu)
 
     t->cur_run_q = q;
 
-    enqueue_entry(q, &(t->q_node));
+    enqueue_entry_atomic(q, &(t->runq_node));
 }
 
 
 static inline void 
-enqueue_thread_on_waitq (thread_t * waiter, struct thread_queue * waitq)
+enqueue_thread_on_waitq (thread_t * waiter, thread_queue_t * waitq)
 {
-    enqueue_entry(waitq, &(waiter->wait_node));
+    enqueue_entry_atomic(waitq, &(waiter->wait_node));
 }
 
 
-static inline void
-dequeue_thread_from_waitq (thread_t * waiter, struct thread_queue * waitq)
+static inline thread_t*
+dequeue_thread_from_waitq (thread_t * waiter, thread_queue_t * waitq)
 {
-    dequeue_entry(waitq, &(waiter->wait_node));
+    thread_t * t = NULL;
+    queue_entry_t * elm = dequeue_entry_atomic(waitq, &(waiter->wait_node));
+    t = container_of(elm, thread_t, wait_node);
+    return t;
 }
 
 
-static inline void
+static inline thread_t*
 dequeue_thread_from_runq (thread_t * t)
 {
-    struct thread_queue * q = t->cur_run_q;
+    thread_queue_t * q = t->cur_run_q;
+    queue_entry_t * elm = NULL;
+    thread_t * ret = NULL;
 
     /* bail if the run queue doesn't exist */
     if (!q) {
         ERROR_PRINT("Attempt to dequeue thread not on run queue (cpu=%u)\n", my_cpu_id());
-        return;
+        return NULL;
     }
 
-    dequeue_entry(q, &(t->q_node));
+    elm = dequeue_entry_atomic(q, &(t->runq_node));
+    ret = container_of(elm, thread_t, runq_node);
+
     t->cur_run_q = NULL;
+
+    return ret;
 }
 
 
 static inline void
 enqueue_thread_on_tlist (thread_t * t)
 {
-    struct thread_queue * q = global_thread_list;
-    enqueue_entry(q, &(t->thr_list_node));
+    thread_queue_t * q = global_thread_list;
+    enqueue_entry_atomic(q, &(t->thr_list_node));
 }
 
 
-static inline void
+static inline thread_t*
 dequeue_thread_from_tlist (thread_t * t)
 {
-    struct thread_queue * q = global_thread_list;
-    dequeue_entry(q, &(t->thr_list_node));
+    queue_entry_t * elm = NULL;
+    thread_t * ret = NULL;
+
+    thread_queue_t * q = global_thread_list;
+    elm = dequeue_entry_atomic(q, &(t->thr_list_node));
+    ret = container_of(elm, thread_t, thr_list_node);
+
+    return ret;
 }
 
 
@@ -232,7 +216,7 @@ join (thread_t * t, void ** retval)
  */
 /* TODO: do we need to worry about interrupts here? */
 void
-wait (struct thread_queue * wq)
+wait (thread_queue_t * wq)
 {
     /* make sure we're not putting ourselves on our 
      * own waitq */
@@ -253,8 +237,9 @@ wait (struct thread_queue * wq)
 static thread_t *
 get_runnable_thread (uint32_t cpu)
 {
-    thread_t * runnable = NULL;
-    struct thread_queue * runq = NULL;
+    thread_t * runnable   = NULL;
+    thread_queue_t * runq = NULL;
+    queue_entry_t * elm   = NULL;
     struct sys_info * sys = per_cpu_get(system);
 
     if (cpu >= sys->num_cpus || !sys->cpus[cpu]) {
@@ -269,16 +254,8 @@ get_runnable_thread (uint32_t cpu)
         return NULL;
     }
 
-    spin_lock(&(runq->lock));
-
-    if (!list_empty_careful(&(runq->queue))) {
-        struct list_head * first = runq->queue.next;
-        runnable = list_entry(first, thread_t, q_node);
-        list_del(&(runnable->q_node));
-    }
-
-    spin_unlock(&(runq->lock));
-    return runnable;
+    elm = dequeue_first_atomic(runq);
+    return container_of(elm, thread_t, runq_node);
 }
 
 
@@ -316,8 +293,8 @@ void
 wake_waiters (void)
 {
     thread_t * me  = get_cur_thread();
-    thread_t * tmp = NULL;
-    thread_t * t   = NULL;
+    queue_entry_t * tmp = NULL;
+    queue_entry_t * elm = NULL;
 
     spin_lock(&(me->waitq->lock));
     if (list_empty_careful(&(me->waitq->queue))) {
@@ -325,16 +302,15 @@ wake_waiters (void)
         return;
     }
 
-    list_for_each_entry_safe(t, tmp, &(me->waitq->queue), wait_node) {
+    list_for_each_entry_safe(elm, tmp, &(me->waitq->queue), node) {
         /* KCH TODO: probably shouldn't be holding lock here... */
+        thread_t * t = container_of(elm, thread_t, wait_node);
         enqueue_thread_on_runq(t, t->bound_cpu);
-        list_del(&(t->wait_node));
+        dequeue_entry(&(t->wait_node));
     }
 
     spin_unlock(&(me->waitq->lock));
 }
-
-
 
 
 static int
@@ -496,7 +472,7 @@ thread_destroy (thread_t * t)
     dequeue_thread_from_tlist(t);
 
     /* remove it from any wait queues */
-    list_del(&(t->wait_node));
+    dequeue_entry(&(t->wait_node));
 
     /* remove its own wait queue 
      * (waiters should already have been notified */

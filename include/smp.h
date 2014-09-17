@@ -20,8 +20,9 @@
 #include <spinlock.h>
 
 struct naut_info;
-struct thread_queue;
+struct queue;
 
+typedef struct queue thread_queue_t;
 typedef struct thread thread_t;
 typedef void (*xcall_func_t)(void * arg);
 
@@ -43,7 +44,7 @@ struct cpu {
 
     spinlock_t lock;
 
-    struct thread_queue * run_q;
+    thread_queue_t * run_q;
 
     struct xcall_queue * xcall_q;
 };
