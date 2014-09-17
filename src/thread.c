@@ -194,7 +194,7 @@ join (thread_t * t, void ** retval)
         return 0;
     } else {
         while (!t->exited) {
-            wait(t->waitq);
+            wait(t);
         }
     }
 
@@ -216,8 +216,9 @@ join (thread_t * t, void ** retval)
  */
 /* TODO: do we need to worry about interrupts here? */
 void
-wait (thread_queue_t * wq)
+wait (thread_t * t)
 {
+    thread_queue_t * wq = t->waitq;
     /* make sure we're not putting ourselves on our 
      * own waitq */
     ASSERT(!irqs_enabled());
