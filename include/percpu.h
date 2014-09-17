@@ -52,7 +52,7 @@ struct cpu;
             __r = (typeof(__r)) __per_cpu_get(var,8);\
             break;\
         default: \
-            ERROR_PRINT("undefined op size in per_cpu_var\n");\
+            printk("ERROR: undefined op size in per_cpu_var\n");\
         } \
         __r; })
 

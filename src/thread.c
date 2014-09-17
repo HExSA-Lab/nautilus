@@ -20,8 +20,6 @@
 
 static thread_id_t next_tid = 0;
 
-/* TODO: migrate these to naut struct */
-static struct thread_queue * global_run_q;
 static struct thread_queue * global_thread_list;
 
 extern addr_t boot_stack;
@@ -88,9 +86,30 @@ dequeue_entry (struct thread_queue * q, struct list_head * entry)
 
 
 static inline void 
-enqueue_thread_on_runq (thread_t * t) 
+enqueue_thread_on_runq (thread_t * t, int cpu)
 {
-    struct thread_queue * q = global_run_q;
+    struct thread_queue * q;
+    struct sys_info * sys = per_cpu_get(system);
+
+    /* TODO: make this smarter */
+    if (cpu == CPU_ANY || 
+        cpu < CPU_ANY  || 
+        cpu >= sys->num_cpus) {
+
+        q = per_cpu_get(run_q);
+
+    } else {
+        q = sys->cpus[cpu]->run_q;
+    }
+
+    /* bail if the run queue hasn't been created yet */
+    if (!q) {
+        ERROR_PRINT("Attempt to enqueue thread on non-existant run queue (cpu=%u)\n", cpu);
+        return;
+    }
+
+    t->cur_run_q = q;
+
     enqueue_entry(q, &(t->q_node));
 }
 
@@ -112,8 +131,16 @@ dequeue_thread_from_waitq (thread_t * waiter, struct thread_queue * waitq)
 static inline void
 dequeue_thread_from_runq (thread_t * t)
 {
-    struct thread_queue * q = global_run_q;
+    struct thread_queue * q = t->cur_run_q;
+
+    /* bail if the run queue doesn't exist */
+    if (!q) {
+        ERROR_PRINT("Attempt to dequeue thread not on run queue (cpu=%u)\n", my_cpu_id());
+        return;
+    }
+
     dequeue_entry(q, &(t->q_node));
+    t->cur_run_q = NULL;
 }
 
 
@@ -220,24 +247,46 @@ wait (struct thread_queue * wq)
 /*
  * get_runnable_thread
  *
- * get the next thread in the run queue
+ * get the next thread in the specified thread's CPU
  *
  */
 static thread_t *
-get_runnable_thread (void)
+get_runnable_thread (uint32_t cpu)
 {
     thread_t * runnable = NULL;
+    struct thread_queue * runq = NULL;
+    struct sys_info * sys = per_cpu_get(system);
 
-    spin_lock(&(global_run_q->lock));
+    if (cpu >= sys->num_cpus || !sys->cpus[cpu]) {
+        ERROR_PRINT("Attempt to get thread on invalid CPU (%u)\n", cpu);
+        return NULL;
+    }
 
-    if (!list_empty_careful(&(global_run_q->queue))) {
-        struct list_head * first = global_run_q->queue.next;
+    runq = sys->cpus[cpu]->run_q;
+
+    if (!runq) {
+        ERROR_PRINT("Attempt to get thread from invalid run queue on CPU %u\n", cpu);
+        return NULL;
+    }
+
+    spin_lock(&(runq->lock));
+
+    if (!list_empty_careful(&(runq->queue))) {
+        struct list_head * first = runq->queue.next;
         runnable = list_entry(first, thread_t, q_node);
         list_del(&(runnable->q_node));
     }
 
-    spin_unlock(&(global_run_q->lock));
+    spin_unlock(&(runq->lock));
     return runnable;
+}
+
+
+static thread_t * 
+get_runnable_thread_myq (void) 
+{
+    uint32_t id = my_cpu_id();
+    return get_runnable_thread(id);
 }
 
 
@@ -251,7 +300,8 @@ void
 yield (void)
 {
     uint8_t flags = irq_disable_save();
-    enqueue_thread_on_runq(get_cur_thread());
+    struct thread * t = get_cur_thread();
+    enqueue_thread_on_runq(t, t->bound_cpu);
     schedule();
     irq_enable_restore(flags);
 }
@@ -277,7 +327,7 @@ wake_waiters (void)
 
     list_for_each_entry_safe(t, tmp, &(me->waitq->queue), wait_node) {
         /* KCH TODO: probably shouldn't be holding lock here... */
-        enqueue_thread_on_runq(t);
+        enqueue_thread_on_runq(t, t->bound_cpu);
         list_del(&(t->wait_node));
     }
 
@@ -491,7 +541,7 @@ thread_start (thread_fun_t fun,
 
     thread_setup_init_stack(t, fun, input);
 
-    enqueue_thread_on_runq(t);
+    enqueue_thread_on_runq(t, cpu);
     return t;
 }
 
@@ -509,7 +559,7 @@ schedule (void)
 
     ASSERT(!irqs_enabled());
 
-    runme = get_runnable_thread();
+    runme = get_runnable_thread_myq();
 
     if (!runme) {
         uint32_t id = my_cpu_id();
@@ -534,29 +584,37 @@ sched_init_ap (void)
     thread_t * me = NULL;
     void * my_stack = NULL;
     uint32_t id = my_cpu_id();
+    struct cpu * my_cpu = per_cpu_get(system)->cpus[id];
+    uint8_t flags;
 
-    cli();
+    flags = irq_disable_save();
 
-    SCHED_DEBUG("Initializing cpu %d\n", id);
+    SCHED_DEBUG("Initializing CPU %u\n", id);
+
+    my_cpu->run_q = thread_queue_create();
+    if (!my_cpu->run_q) {
+        ERROR_PRINT("Could not create run queue for CPU %u)\n", id);
+        goto out_err;
+    }
 
     me = malloc(sizeof(thread_t));
     if (!me) {
-        ERROR_PRINT("Could not allocate thread for AP (%d)\n", id);
-        goto out_err;
+        ERROR_PRINT("Could not allocate thread for CPU (%u)\n", id);
+        goto out_err1;
     }
 
     my_stack = malloc(PAGE_SIZE);
     if (!my_stack) {
-        ERROR_PRINT("Couldn't allocate new stack for AP (%d)\n", id);
-        goto out_err1;
+        ERROR_PRINT("Couldn't allocate new stack for CPU (%u)\n", id);
+        goto out_err2;
     }
 
     thread_init(me, my_stack, 1, id);
 
     me->waitq = thread_queue_create();
     if (!me->waitq) {
-        ERROR_PRINT("Could not create AP (%d) thread's wait queue\n", id);
-        goto out_err2;
+        ERROR_PRINT("Could not create CPU (%u) thread's wait queue\n", id);
+        goto out_err3;
     }
 
     // set my current thread
@@ -566,13 +624,15 @@ sched_init_ap (void)
     SCHED_DEBUG("Starting idle thread for cpu %d\n", id);
     thread_start(idle, NULL, NULL, 0, TSTACK_DEFAULT, NULL, id);
 
-    sti();
+    irq_enable_restore(flags);
     return 0;
 
-out_err2: 
+out_err3:
     free(me->stack);
-out_err1:
+out_err2:
     free(me);
+out_err1:
+    thread_queue_destroy(my_cpu->run_q);
 out_err:
     sti();
     return -1;
@@ -589,6 +649,7 @@ int
 sched_init (void) 
 {
     struct sched_state * sched = NULL;
+    struct cpu * my_cpu = per_cpu_get(system)->cpus[0];
     thread_t * main = NULL;
 
     cli();
@@ -598,21 +659,20 @@ sched_init (void)
     sched = malloc(sizeof(struct sched_state));
     if (!sched) {
         ERROR_PRINT("Could not allocate scheduler state\n");
-        return -1;
+        goto out_err0;
     }
     memset(sched, 0, sizeof(struct sched_state));
 
-    sched->run_q = thread_queue_create();
-    if (!sched->run_q) {
+    my_cpu->run_q = thread_queue_create();
+    if (!my_cpu->run_q) {
         ERROR_PRINT("Could not create run queue\n");
-        goto out_err;
+        goto out_err1;
     }
-    global_run_q = sched->run_q;
 
     sched->thread_list = thread_queue_create();
     if (!sched->thread_list) {
         ERROR_PRINT("Could not create thread list\n");
-        goto out_err1;
+        goto out_err2;
     }
     global_thread_list = sched->thread_list;
 
@@ -621,15 +681,14 @@ sched_init (void)
     main  = malloc(sizeof(thread_t));
     if (!main) {
         ERROR_PRINT("Could not allocate main thread\n");
-        goto out_err2;
+        goto out_err3;
     }
-
 
     thread_init(main, (void*)&boot_stack, 1, my_cpu_id());
     main->waitq = thread_queue_create();
     if (!main->waitq) {
         ERROR_PRINT("Could not create main thread's wait queue\n");
-        goto out_err3;
+        goto out_err4;
     }
 
     put_cur_thread(main);
@@ -640,14 +699,16 @@ sched_init (void)
 
     return 0;
 
-out_err3:
+out_err4:
     free(main);
-out_err2:
+out_err3:
     free(sched->thread_list);
+out_err2:
+    free(my_cpu->run_q);
 out_err1: 
-    free(sched->run_q);
-out_err:
     free(sched);
+out_err0:
+    sti();
     return -1;
 }
 

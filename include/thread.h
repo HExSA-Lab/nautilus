@@ -29,6 +29,8 @@ struct thread {
 
     struct thread_queue * waitq;
     QNODE(wait_node);
+
+    struct thread_queue * cur_run_q;
     void * exit_status;
 
     /* thread has finished? */
@@ -48,7 +50,6 @@ struct thread_queue {
 
 
 struct sched_state {
-    struct thread_queue * run_q;
     struct thread_queue * thread_list;
     uint_t num_threads;
 };

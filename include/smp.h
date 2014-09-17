@@ -18,7 +18,10 @@
 
 #include <dev/apic.h>
 #include <spinlock.h>
+
 struct naut_info;
+struct thread_queue;
+
 typedef struct thread thread_t;
 
 struct cpu {
@@ -38,6 +41,8 @@ struct cpu {
     struct sys_info * system;
 
     spinlock_t lock;
+
+    struct thread_queue * run_q;
 
 };
 

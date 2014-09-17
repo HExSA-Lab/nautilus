@@ -33,8 +33,7 @@ screensaver(void * in, void ** out)
     int i;
     int n = TIMEOUT;
 
-    udelay(10*1000000);
-    printk("Running idle loop on core %d\n", my_cpu_id());
+    printk("Running screensaver on core %d\n", my_cpu_id());
     udelay(2*1000000);
     
     term_clear();
@@ -90,7 +89,7 @@ side_screensaver(void * in, void ** out)
     int n = TIMEOUT;
     size_t old_col,old_row;
 
-    printk("Running idle loop on core %d\n", my_cpu_id());
+    printk("Running screensaver on core %d\n", my_cpu_id());
 
     term_getpos(&old_col, &old_row);
     term_setpos(0, 0);
