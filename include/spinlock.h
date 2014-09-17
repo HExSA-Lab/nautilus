@@ -1,6 +1,8 @@
 #ifndef __SPINLOCK_H__
 #define __SPINLOCK_H__
 
+#include <types.h>
+
 typedef uint32_t spinlock_t;
 
 
