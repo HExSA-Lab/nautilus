@@ -15,5 +15,5 @@ obj-y += \
 	nautilus.o \
 	asm/ \
 	dev/ \
-	tests/ 
+	test/
 	
