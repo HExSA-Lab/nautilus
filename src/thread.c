@@ -6,6 +6,7 @@
 #include <paging.h>
 #include <thread.h>
 #include <percpu.h>
+#include <atomic.h>
 
 #include <lib/liballoc.h>
 
@@ -17,10 +18,7 @@
 #define SCHED_PRINT(fmt, args...) printk("SCHED: " fmt, ##args)
 #define SCHED_DEBUG(fmt, args...) DEBUG_PRINT("SCHED: " fmt, ##args)
 
-
-
-/* TODO: lock this */
-static long next_pid = 0;
+static thread_id_t next_tid = 0;
 
 /* TODO: migrate these to naut struct */
 static struct thread_queue * global_run_q;
@@ -290,14 +288,14 @@ wake_waiters (void)
 
 
 static int
-thread_init (thread_t * t, void * stack, uint8_t is_detached)
+thread_init (thread_t * t, void * stack, uint8_t is_detached, int cpu)
 {
-    memset(t, 0, sizeof(thread_t));
-    t->stack    = stack;
-    t->rsp      = (uint64_t)stack + PAGE_SIZE;
-    t->pid      = next_pid++;
-    t->refcount = is_detached ? 1 : 2; // thread references itself as well
-    t->owner    = get_cur_thread();
+    t->stack     = stack;
+    t->rsp       = (uint64_t)stack + PAGE_SIZE;
+    t->tid       = atomic_inc(next_tid);
+    t->refcount  = is_detached ? 1 : 2; // thread references itself as well
+    t->owner     = get_cur_thread();
+    t->bound_cpu = cpu;
 
     t->waitq = thread_queue_create();
     if (!t->waitq) {
@@ -316,9 +314,24 @@ thread_init (thread_t * t, void * stack, uint8_t is_detached)
  * its stack wil not be initialized with any intial data, 
  * and it will go on the thread list, but it wont be runnable
  *
+ * @fun: the function to run
+ * @input: the argument to the thread
+ * @output: where the thread should store its output
+ * @is_detached: true if this thread won't be attached to a parent (it will
+ *               die immediately when it exits)
+ * @stack_size: size of the thread's stack. 0 => let us decide
+ * @tid: thread id of created thread
+ * @cpu: cpu on which to bind the thread. CPU_ANY means any CPU
+ *
  */
 thread_t* 
-thread_create (thread_fun_t fun, void * arg, uint8_t is_detached)
+thread_create (thread_fun_t fun, 
+               void * input,
+               void ** output,
+               uint8_t is_detached,
+               stack_size_t stack_size,
+               thread_id_t * tid,
+               int cpu)
 {
     thread_t * t = NULL;
     void * stack = NULL;
@@ -330,18 +343,29 @@ thread_create (thread_fun_t fun, void * arg, uint8_t is_detached)
     }
     memset(t, 0, sizeof(thread_t));
 
-    stack = (void*)alloc_page();
+    if (stack_size) {
+        stack = (void*)malloc(stack_size);
+        t->stack_size = stack_size;
+    } else {
+        stack = (void*)alloc_page();
+        t->stack_size =  PAGE_SIZE;
+    }
+
     if (!stack) {
         ERROR_PRINT("Could not allocate thread stack\n");
         goto out_err;
     }
 
-    if (thread_init(t, stack, is_detached) < 0) {
+    if (thread_init(t, stack, is_detached, cpu) < 0) {
         ERROR_PRINT("Could not initialize thread\n");
         goto out_err1;
     }
     
     enqueue_thread_on_tlist(t);
+
+    if (tid) {
+        *tid = t->tid;
+    }
 
     return t;
 
@@ -352,10 +376,11 @@ out_err:
     return NULL;
 }
 
+
 static void
 thread_cleanup (void)
 {
-    SCHED_DEBUG("Thread (%d) exiting on core %d\n", get_cur_thread()->pid, my_cpu_id());
+    SCHED_DEBUG("Thread (%d) exiting on core %d\n", get_cur_thread()->tid, my_cpu_id());
     exit(0);
 }
 
@@ -435,19 +460,37 @@ thread_destroy (thread_t * t)
 /* 
  * thread_start
  *
- * creates a thread and puts it on the run queue 
+ * creates a thread and puts it on the specified cpu's run 
+ * queue
+ *
+ * @fun: the function to run
+ * @input: the argument to the thread
+ * @output: where the thread should store its output
+ * @is_detached: true if this thread won't be attached to a parent (it will
+ *               die immediately when it exits)
+ * @stack_size: size of the thread's stack. 0 => let us decide
+ * @tid: thread id of created thread
+ * @cpu: cpu on which to bind the thread. CPU_ANY means any CPU 
+ *
  */
-thread_t*
-thread_start (thread_fun_t fun, void * arg, uint8_t is_detached)
+thread_t* 
+thread_start (thread_fun_t fun, 
+               void * input,
+               void ** output,
+               uint8_t is_detached,
+               stack_size_t stack_size,
+               thread_id_t * tid,
+               int cpu)
 {
     thread_t * t = NULL;
-    t = thread_create(fun, arg, is_detached);
+    t = thread_create(fun, input, output, is_detached, stack_size, tid, cpu);
     if (!t) {
         ERROR_PRINT("Could not create thread\n");
         return NULL;
     }
 
-    thread_setup_init_stack(t, fun, arg);
+    thread_setup_init_stack(t, fun, input);
+
     enqueue_thread_on_runq(t);
     return t;
 }
@@ -508,7 +551,7 @@ sched_init_ap (void)
         goto out_err1;
     }
 
-    thread_init(me, my_stack, 1);
+    thread_init(me, my_stack, 1, id);
 
     me->waitq = thread_queue_create();
     if (!me->waitq) {
@@ -521,7 +564,7 @@ sched_init_ap (void)
 
     // start another idle thread
     SCHED_DEBUG("Starting idle thread for cpu %d\n", id);
-    thread_start(idle, 0, 0);
+    thread_start(idle, NULL, NULL, 0, TSTACK_DEFAULT, NULL, id);
 
     sti();
     return 0;
@@ -581,7 +624,8 @@ sched_init (void)
         goto out_err2;
     }
 
-    thread_init(main, (void*)&boot_stack, 1);
+
+    thread_init(main, (void*)&boot_stack, 1, my_cpu_id());
     main->waitq = thread_queue_create();
     if (!main->waitq) {
         ERROR_PRINT("Could not create main thread's wait queue\n");
@@ -605,6 +649,14 @@ out_err1:
 out_err:
     free(sched);
     return -1;
+}
+
+
+long
+get_tid (void) 
+{
+    struct thread * t = per_cpu_get(cur_thread);
+    return t->tid;
 }
 
 

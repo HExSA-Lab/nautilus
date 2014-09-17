@@ -421,8 +421,6 @@ smp_ap_entry (struct cpu * core)
     smp_ap_finish(core);
 
     sched_init_ap();
-    // should not come back from this
-    //thread_start(idle, 0, 0);
 
     while (1) {
         yield();

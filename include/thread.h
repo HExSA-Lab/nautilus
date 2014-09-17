@@ -9,13 +9,22 @@
 #define QNODE(x) struct list_head x
 #define INIT_Q(x) INIT_LIST_HEAD(&((x)->queue));
 
+#define CPU_ANY -1
+#define TSTACK_DEFAULT 0
+
+typedef void (*thread_fun_t)(void * input, void ** output);
+typedef unsigned stack_size_t;
+typedef long thread_id_t;
+typedef struct thread thread_t;
+
 
 struct thread {
     uint64_t rsp; /* KCH: this cannot change */
     void * stack;
+    stack_size_t stack_size;
     QNODE(q_node);
     QNODE(thr_list_node);
-    long pid;
+    thread_id_t tid;
     struct thread * owner;
 
     struct thread_queue * waitq;
@@ -26,6 +35,7 @@ struct thread {
     uint8_t exited;
 
     unsigned long refcount;
+    int bound_cpu;
 };
 
 
@@ -36,7 +46,6 @@ struct thread_queue {
 };
 
 
-typedef struct thread thread_t;
 
 struct sched_state {
     struct thread_queue * run_q;
@@ -44,7 +53,8 @@ struct sched_state {
     uint_t num_threads;
 };
 
-typedef void (*thread_fun_t)(void * arg);
+
+
 
 
 /* the thread interface */
@@ -56,9 +66,26 @@ void exit(void * retval);
 void wait(struct thread_queue * wq);
 void wake_waiters(void);
 int join(thread_t * t, void ** retval);
-thread_t* thread_create(thread_fun_t fun, void * arg, uint8_t is_detached);
-thread_t* thread_start(thread_fun_t fun, void * arg, uint8_t is_detached);
+
+thread_t* 
+thread_create (thread_fun_t fun, 
+               void * input,
+               void ** output,
+               uint8_t is_detached,
+               stack_size_t stack_size,
+               thread_id_t * tid,
+               int cpu);
+thread_t* 
+thread_start (thread_fun_t fun, 
+               void * input,
+               void ** output,
+               uint8_t is_detached,
+               stack_size_t stack_size,
+               thread_id_t * tid,
+               int cpu);
+
 void thread_destroy(thread_t * t);
+long get_tid(void);
 
 
 #include <percpu.h>
@@ -74,6 +101,7 @@ put_cur_thread (thread_t * t)
 {
     per_cpu_put(cur_thread, t);
 }
+
 
 
 #endif /* !__ASSEMBLER */

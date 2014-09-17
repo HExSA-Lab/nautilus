@@ -73,7 +73,7 @@ main (unsigned long mbd, unsigned long magic)
     
     sti();
 
-    thread_start(side_screensaver, 0, 0);
+    thread_start(side_screensaver, NULL, NULL, 0, TSTACK_DEFAULT, NULL, CPU_ANY);
 
     printk("Nautilus main thread halting on core %d\n", my_cpu_id());
 

@@ -15,7 +15,7 @@
 */
 
 void 
-idle (void * arg)
+idle (void * in, void ** out)
 {
     while (1) {
         yield();
@@ -24,7 +24,7 @@ idle (void * arg)
 
 
 void 
-screensaver(void * arg)
+screensaver(void * in, void ** out)
 {
     uint8_t color = COLOR_LIGHT_RED;
     char c = '#';
@@ -80,7 +80,7 @@ screensaver(void * arg)
 
 
 void 
-side_screensaver(void * arg)
+side_screensaver(void * in, void ** out)
 {
     uint8_t color = COLOR_LIGHT_RED;
     char c = '#';

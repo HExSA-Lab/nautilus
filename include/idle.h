@@ -4,8 +4,8 @@
 #define ICON_WIDTH 4
 #define ICON_HEIGHT 4
 
-void screensaver(void * arg);
-void side_screensaver(void * arg);
-void idle(void * arg);
+void screensaver(void * in, void ** out);
+void side_screensaver(void * in, void ** out);
+void idle(void * in, void ** out);
 
 #endif
