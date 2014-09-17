@@ -38,6 +38,22 @@ static uint8_t mp_entry_lengths[5] = {
     MP_TAB_LINT_LEN,
 };
 
+struct xcall_queue {
+    struct list_head queue;
+};
+
+
+/* xcall queue:
+ * we'll send an IPI to a core by enqueueing one of 
+ * these on its xcall queue. Then we'll IPI it, possibly
+ * with a wait flag
+ */
+struct xcall {
+    struct list_head xcall_node;
+    void * data;
+    xcall_func_t fun;
+};
+
 
 
 static void
@@ -427,4 +443,11 @@ smp_ap_entry (struct cpu * core)
     }
 }
 
+
+uint32_t
+get_num_cpus (void)
+{
+    struct sys_info * sys = per_cpu_get(system);
+    return sys->num_cpus;
+}
 

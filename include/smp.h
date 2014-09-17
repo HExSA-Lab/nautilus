@@ -23,6 +23,7 @@ struct naut_info;
 struct thread_queue;
 
 typedef struct thread thread_t;
+typedef void (*xcall_func_t)(void * arg);
 
 struct cpu {
     thread_t * cur_thread; /* KCH: this must be first! */
@@ -44,7 +45,9 @@ struct cpu {
 
     struct thread_queue * run_q;
 
+    struct xcall_queue * xcall_q;
 };
+
 
 struct ap_init_area {
     uint32_t stack;  // 0
@@ -67,6 +70,7 @@ struct ap_init_area {
 int smp_early_init(struct naut_info * naut);
 int smp_bringup_aps(struct naut_info * naut);
 void smp_ap_entry (struct cpu * core);
+uint32_t get_num_cpus (void);
 
 
 
