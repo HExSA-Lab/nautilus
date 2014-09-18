@@ -10,6 +10,7 @@ obj-y += \
 	string.o \
 	msr.o \
 	cpuid.o \
+	spinlock.o \
 	smp.o \
 	idle.o \
 	thread.o \

@@ -50,9 +50,9 @@ enqueue_entry (queue_t * q, queue_entry_t * entry)
 void 
 enqueue_entry_atomic (queue_t * q, queue_entry_t * entry)
 {
-    spin_lock(&(q->lock));
+    uint8_t flags = spin_lock_irq_save(&(q->lock));
     list_add_tail(&(entry->node), &(q->queue));
-    spin_unlock(&(q->lock));
+    spin_unlock_irq_restore(&(q->lock), flags);
 }
 
 
@@ -68,12 +68,12 @@ queue_entry_t*
 dequeue_entry_atomic (queue_t * q, queue_entry_t * entry)
 {
     queue_entry_t * ret = NULL;
-    spin_lock(&(q->lock));
+    uint8_t flags = spin_lock_irq_save(&(q->lock));
     if (!list_empty_careful(&(q->queue))) {
         ret = entry;
         list_del(&(entry->node));
     } 
-    spin_unlock(&(q->lock));
+    spin_unlock_irq_restore(&(q->lock), flags);
     return ret;
 }
 
@@ -94,14 +94,14 @@ dequeue_first (queue_t * q)
 queue_entry_t* 
 dequeue_first_atomic (queue_t * q)
 {
-    spin_lock(&(q->lock));
+    uint8_t flags = spin_lock_irq_save(&(q->lock));
     queue_entry_t * ret = NULL;
     if (!list_empty_careful(&(q->queue))) {
         struct list_head * first = q->queue.next;
         ret = list_entry(first, queue_entry_t, node);
         list_del(&(ret->node));
     }
-    spin_unlock(&(q->lock));
+    spin_unlock_irq_restore(&(q->lock), flags);
     return ret;
 }
 
@@ -117,9 +117,9 @@ uint8_t
 queue_empty_atomic (queue_t * q)
 {
     uint8_t ret = 1;
-    spin_lock(&(q->lock));
+    uint8_t flags = spin_lock_irq_save(&(q->lock));
     ret = list_empty_careful(&(q->queue));
-    spin_unlock(&(q->lock));
+    spin_unlock_irq_restore(&(q->lock), flags);
     return ret;
 }
 

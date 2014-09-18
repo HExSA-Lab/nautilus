@@ -188,9 +188,9 @@ Serial_Finish (struct Output_Sink * o) { return; }
 static inline void 
 __serial_print (const char * format, va_list ap) 
 {
-  spin_lock(&serial_lock);
+  uint8_t flags = spin_lock_irq_save(&serial_lock);
   Format_Output(&serial_output_sink, format, ap);
-  spin_unlock(&serial_lock);
+  spin_unlock_irq_restore(&serial_lock, flags);
 }
 
 

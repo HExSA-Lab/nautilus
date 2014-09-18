@@ -38,10 +38,10 @@ make_vgaentry (char c, uint8_t color)
 
 void term_setpos (size_t x, size_t y)
 {
-    spin_lock(&(term.lock));
+    uint8_t flags = spin_lock_irq_save(&(term.lock));
     term.row = y;
     term.col = x;
-    spin_unlock(&(term.lock));
+    spin_unlock_irq_restore(&(term.lock), flags);
 }
 
 
@@ -83,9 +83,9 @@ term_getcolor (void)
 void 
 term_setcolor (uint8_t color)
 {
-    spin_lock(&(term.lock));
+    uint8_t flags = spin_lock_irq_save(&(term.lock));
     term.color = color;
-    spin_unlock(&(term.lock));
+    spin_unlock_irq_restore(&(term.lock), flags);
 }
  
 
@@ -120,12 +120,12 @@ term_putc (char c, uint8_t color, size_t x, size_t y)
 inline void
 term_clear (void) 
 {
-    spin_lock(&(term.lock));
+    uint8_t flags = spin_lock_irq_save(&(term.lock));
     size_t i;
     for (i = 0; i < VGA_HEIGHT*VGA_WIDTH; i++) {
         term.buf[i] = make_vgaentry(' ', term.color);
     }
-    spin_unlock(&(term.lock));
+    spin_unlock_irq_restore(&(term.lock), flags);
 }
 
 
@@ -153,7 +153,7 @@ term_scrollup (void)
 void 
 putchar (char c)
 {
-    spin_lock(&(term.lock));
+    uint8_t flags = spin_lock_irq_save(&(term.lock));
     
     if (c == '\n') {
         term.col = 0;
@@ -161,7 +161,7 @@ putchar (char c)
             term_scrollup();
             term.row--;
         }
-        spin_unlock(&(term.lock));
+        spin_unlock_irq_restore(&(term.lock), flags);
         return;
     }
 
@@ -175,7 +175,7 @@ putchar (char c)
         }
     }
 
-    spin_unlock(&(term.lock));
+    spin_unlock_irq_restore(&(term.lock), flags);
 }
 
 
