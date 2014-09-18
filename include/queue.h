@@ -26,6 +26,10 @@ queue_entry_t* dequeue_entry_atomic(queue_t * q, queue_entry_t * entry);
 queue_entry_t* dequeue_first(queue_t * q);
 queue_entry_t* dequeue_first_atomic(queue_t * q);
 
+uint8_t queue_empty(queue_t * q);
+uint8_t queue_empty_atomic(queue_t * q);
+
+
 
 
 

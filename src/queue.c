@@ -106,4 +106,22 @@ dequeue_first_atomic (queue_t * q)
 }
 
 
+uint8_t 
+queue_empty (queue_t * q) 
+{
+    return list_empty(&(q->queue));
+}
+
+
+uint8_t 
+queue_empty_atomic (queue_t * q)
+{
+    uint8_t ret = 1;
+    spin_lock(&(q->lock));
+    ret = list_empty_careful(&(q->queue));
+    spin_unlock(&(q->lock));
+    return ret;
+}
+
+
 
