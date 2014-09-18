@@ -27,6 +27,13 @@
 static struct naut_info nautilus_info;
 extern spinlock_t printk_lock;
 
+static void
+xcall_test (void * arg) 
+{
+    printk("xcall_test! (arg=%x)\n", arg);
+}
+
+
 void 
 main (unsigned long mbd, unsigned long magic) 
 {
@@ -69,11 +76,15 @@ main (unsigned long mbd, unsigned long magic)
 
     sched_init();
 
+    smp_setup_xcall_bsp(naut->sys.cpus[0]);
+
     smp_bringup_aps(naut);
-    
+
     sti();
 
     thread_start(side_screensaver, NULL, NULL, 0, TSTACK_DEFAULT, NULL, 1);
+
+    smp_xcall(1, xcall_test, (void*)0xdeadbeef, 0);
 
     printk("Nautilus main thread halting on core %d\n", my_cpu_id());
 

@@ -7,7 +7,9 @@
 #include <gdt.h>
 #include <cpu.h>
 #include <thread.h>
+#include <queue.h>
 #include <idle.h>
+#include <atomic.h>
 #include <percpu.h>
 #include <dev/ioapic.h>
 #include <dev/apic.h>
@@ -37,23 +39,6 @@ static uint8_t mp_entry_lengths[5] = {
     MP_TAB_IO_INT_LEN,
     MP_TAB_LINT_LEN,
 };
-
-struct xcall_queue {
-    struct list_head queue;
-};
-
-
-/* xcall queue:
- * we'll send an IPI to a core by enqueueing one of 
- * these on its xcall queue. Then we'll IPI it, possibly
- * with a wait flag
- */
-struct xcall {
-    struct list_head xcall_node;
-    void * data;
-    xcall_func_t fun;
-};
-
 
 
 static void
@@ -241,12 +226,13 @@ static inline void
 smp_wait_for_ap (struct naut_info * naut, unsigned int core_num)
 {
     while (1) {
-        spin_lock(&(naut->sys.cpus[core_num]->lock));
-        if (naut->sys.cpus[core_num]->booted) {
-            spin_unlock(&(naut->sys.cpus[core_num]->lock));
+        uint8_t flags;
+        flags = spin_lock_irq_save(&(naut->sys.cpus[core_num]->lock));
+        if (*(volatile uint8_t *)&(naut->sys.cpus[core_num]->booted) == 1) {
+            spin_unlock_irq_restore(&(naut->sys.cpus[core_num]->lock), flags);
             break;
         }
-        spin_unlock(&(naut->sys.cpus[core_num]->lock));
+        spin_unlock_irq_restore(&(naut->sys.cpus[core_num]->lock), flags);
         asm volatile ("pause");
     }
 }
@@ -354,35 +340,57 @@ smp_bringup_aps (struct naut_info * naut)
         }
 
         /* wait for AP to set its boot flag */
-        //smp_wait_for_ap(naut, i);
-        while (1) {
-            spin_lock(&(naut->sys.cpus[i]->lock));
-            if (naut->sys.cpus[i]->booted) {
-                spin_unlock(&(naut->sys.cpus[i]->lock));
-                break;
-            }
-            spin_unlock(&(naut->sys.cpus[i]->lock));
-            asm volatile ("pause");
-        }
+        smp_wait_for_ap(naut, i);
 
         DEBUG_PRINT("Bringup for core %u done.\n", i);
     }
 
-    spin_lock(&cores_ready_lock);
-    smp_all_cores_ready = 1;
-    spin_unlock(&cores_ready_lock);
+    uint8_t flags = spin_lock_irq_save(&cores_ready_lock);
+    *(volatile uint8_t*)&smp_all_cores_ready = 1;
+    spin_unlock_irq_restore(&cores_ready_lock, flags);
 
     return (status|err);
-
 }
 
 
 extern struct idt_desc idt_descriptor;
 extern struct gdt_desc64 gdtr64;
 
+static int xcall_handler(excp_entry_t * e, excp_vec_t v);
+
+
+static int
+smp_xcall_init_queue (struct cpu * core)
+{
+    core->xcall_q = queue_create();
+    if (!core->xcall_q) {
+        ERROR_PRINT("Could not allocate xcall queue on cpu %u\n", core->id);
+        return -1;
+    }
+
+    return 0;
+}
+
+
+int
+smp_setup_xcall_bsp (struct cpu * core)
+{
+    smp_xcall_init_queue(core);
+
+    if (register_int_handler(IPI_VEC_XCALL, xcall_handler, NULL) != 0) {
+        ERROR_PRINT("Could not assign interrupt handler for XCALL on core %u\n", core->id);
+        return -1;
+    }
+
+    return 0;
+}
+
+
 static int
 smp_ap_setup (struct cpu * core)
 {
+    /* TODO: check for errors */
+
     uint64_t core_addr = (uint64_t) core->system->cpus[core->id];
 
     // set GS base (for per-cpu state)
@@ -395,6 +403,10 @@ smp_ap_setup (struct cpu * core)
     lgdt64(&gdtr64);
     
     ap_apic_setup(core);
+
+    smp_xcall_init_queue(core);
+
+    sched_init_ap();
 
     return 0;
 }
@@ -419,24 +431,25 @@ smp_ap_entry (struct cpu * core)
 
     printk("SMP: CPU (AP) %u operational\n", core->id);
 
-    spin_lock(&(core->lock));
-    core->booted = 1;
-    spin_unlock(&(core->lock));
+    /* TODO: make this a sensible cmp op */
+    uint8_t flags = spin_lock_irq_save(&(core->lock));
+    *(volatile uint8_t*)&core->booted = 1;
+    spin_unlock_irq_restore(&(core->lock), flags);
 
+    /* wait on all the other cores to boot up */
     while (1) {
-        spin_lock(&cores_ready_lock);
-        if (smp_all_cores_ready) {
-            spin_unlock(&cores_ready_lock);
+        uint8_t flags = spin_lock_irq_save(&cores_ready_lock);
+        if (*(volatile uint8_t*)&smp_all_cores_ready == 1) {
+            spin_unlock_irq_restore(&cores_ready_lock, flags);
             break;
         }
-        spin_unlock(&cores_ready_lock);
+        spin_unlock_irq_restore(&cores_ready_lock, flags);
                 
         asm volatile ("pause");
     }
 
     smp_ap_finish(core);
 
-    sched_init_ap();
 
     while (1) {
         yield();
@@ -451,3 +464,148 @@ get_num_cpus (void)
     return sys->num_cpus;
 }
 
+static void
+init_xcall (struct xcall * x, void * arg, xcall_func_t fun)
+{
+    x->data       = arg;
+    x->fun        = fun;
+    x->xcall_done = 0;
+}
+
+
+static inline void
+wait_xcall (struct xcall * x)
+{
+
+    while (atomic_cmpswap(x->xcall_done, 1, 0) != 1) {
+        asm volatile ("pause");
+    }
+    /*
+    while (*(volatile uint8_t*)&x->xcall_done != 1) {
+        asm volatile ("pause");
+    }
+    */
+
+    //*(volatile uint8_t*)&x->xcall_done = 0;
+}
+
+
+static inline void
+mark_xcall_done (struct xcall * x) 
+{
+    atomic_cmpswap(x->xcall_done, 0, 1);
+}
+
+
+static int
+xcall_handler (excp_entry_t * e, excp_vec_t v) 
+{
+    queue_t * xcq = per_cpu_get(xcall_q); 
+    struct xcall * x = NULL;
+    queue_entry_t * elm = NULL;
+
+    if (!xcq) {
+        ERROR_PRINT("Badness: no xcall queue on core %u\n", my_cpu_id());
+        return -1;
+    }
+
+    elm = dequeue_first_atomic(xcq);
+    x = container_of(elm, struct xcall, xcall_node);
+    if (!x) {
+        ERROR_PRINT("No XCALL request found on core %u\n", my_cpu_id());
+        return -1;
+    }
+
+    if (x->fun) {
+        x->fun(x->data);
+
+        /* we need to notify the waiter we're done */
+        if (x->has_waiter) {
+            mark_xcall_done(x);
+        }
+
+    } else {
+        ERROR_PRINT("No XCALL function found on core %u\n", my_cpu_id());
+        return -1;
+    }
+
+    return 0;
+}
+
+
+/* 
+ * smp_xcall
+ *
+ * @cpu_id: the cpu to execute the call on
+ * @fun: the function to invoke
+ * @arg: the argument to the function
+ * @wait: this function should block until the reciever finishes
+ *        executing the function
+ *
+ */
+int
+smp_xcall (cpu_id_t cpu_id, 
+           xcall_func_t fun,
+           void * arg,
+           uint8_t wait)
+{
+    struct sys_info * sys = per_cpu_get(system);
+    queue_t * xcq  = NULL;
+    struct xcall x;
+    uint8_t flags;
+
+    DEBUG_PRINT("Initiating SMP XCALL from core %u to core %u\n", my_cpu_id(), cpu_id);
+
+    if (cpu_id > get_num_cpus()) {
+        ERROR_PRINT("Attempt to execute xcall on invalid cpu (%u)\n", cpu_id);
+        return -1;
+    }
+
+    if (cpu_id == my_cpu_id()) {
+
+        flags = irq_disable_save();
+        fun(arg);
+        irq_enable_restore(flags);
+
+    } else {
+        struct xcall * xc = &x;
+
+        if (!wait) {
+            xc = &(sys->cpus[cpu_id]->xcall_nowait_info);
+        }
+
+        init_xcall(xc, arg, fun);
+
+        xcq = sys->cpus[cpu_id]->xcall_q;
+        if (!xcq) {
+            ERROR_PRINT("Attempt by cpu %u to initiate xcall on invalid xcall queue (for cpu %u)\n", 
+                        my_cpu_id(),
+                        cpu_id);
+            return -1;
+        }
+
+        flags = irq_disable_save();
+
+        if (!queue_empty_atomic(xcq)) {
+            ERROR_PRINT("XCALL queue for core %u is not empty, bailing\n", cpu_id);
+            irq_enable_restore(flags);
+            return -1;
+        }
+
+        enqueue_entry_atomic(xcq, &(xc->xcall_node));
+
+        irq_enable_restore(flags);
+
+        /* KCH: WARNING: assumes LAPIC_ID == OS ID  NOT GOOD! */
+        struct apic_dev * apic = per_cpu_get(apic);
+
+        apic_ipi(apic, cpu_id, IPI_VEC_XCALL);
+
+        if (wait) {
+            wait_xcall(xc);
+        }
+
+    }
+
+    return 0;
+}

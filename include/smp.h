@@ -18,18 +18,29 @@
 
 #include <dev/apic.h>
 #include <spinlock.h>
+#include <queue.h>
 
 struct naut_info;
-struct queue;
 
 typedef struct queue thread_queue_t;
 typedef struct thread thread_t;
 typedef void (*xcall_func_t)(void * arg);
+typedef uint32_t cpu_id_t;
+
+
+struct xcall {
+    queue_entry_t xcall_node;
+    void * data;
+    xcall_func_t fun;
+    uint8_t xcall_done;
+    uint8_t has_waiter;
+};
+
 
 struct cpu {
     thread_t * cur_thread; /* KCH: this must be first! */
 
-    uint32_t id;
+    cpu_id_t id;
     uint8_t lapic_id;
     uint8_t enabled;
     uint8_t is_bsp;
@@ -46,7 +57,8 @@ struct cpu {
 
     thread_queue_t * run_q;
 
-    struct xcall_queue * xcall_q;
+    queue_t * xcall_q;
+    struct xcall xcall_nowait_info;
 };
 
 
@@ -70,8 +82,12 @@ struct ap_init_area {
 
 int smp_early_init(struct naut_info * naut);
 int smp_bringup_aps(struct naut_info * naut);
+int smp_xcall(cpu_id_t cpu_id, xcall_func_t fun, void * arg, uint8_t wait);
 void smp_ap_entry (struct cpu * core);
+int smp_setup_xcall_bsp (struct cpu * core);
 uint32_t get_num_cpus (void);
+
+
 
 
 

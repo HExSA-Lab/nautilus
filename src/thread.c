@@ -51,6 +51,7 @@ static void
 thread_queue_destroy (thread_queue_t * q)
 {
     // free any remaining entries
+    DEBUG_PRINT("Destroying thread queue\n");
     queue_destroy(q, 1);
 }
 
@@ -63,7 +64,8 @@ enqueue_thread_on_runq (thread_t * t, int cpu)
 
     if (cpu == CPU_ANY || 
         cpu < CPU_ANY  || 
-        cpu >= sys->num_cpus) {
+        cpu >= sys->num_cpus || 
+        cpu == my_cpu_id()) {
 
         q = per_cpu_get(run_q);
 
@@ -73,7 +75,7 @@ enqueue_thread_on_runq (thread_t * t, int cpu)
 
     /* bail if the run queue hasn't been created yet */
     if (!q) {
-        ERROR_PRINT("Attempt to enqueue thread on non-existant run queue (cpu=%u)\n", cpu);
+        ERROR_PRINT("Attempt (by cpu %d) to enqueue thread (tid=%d) on non-existant run queue (cpu=%u)\n", my_cpu_id(), t->tid, cpu);
         return;
     }
 
@@ -263,7 +265,7 @@ get_runnable_thread (uint32_t cpu)
 static thread_t * 
 get_runnable_thread_myq (void) 
 {
-    uint32_t id = my_cpu_id();
+    cpu_id_t id = my_cpu_id();
     return get_runnable_thread(id);
 }
 
@@ -278,7 +280,7 @@ void
 yield (void)
 {
     uint8_t flags = irq_disable_save();
-    struct thread * t = get_cur_thread();
+    thread_t * t = get_cur_thread();
     enqueue_thread_on_runq(t, t->bound_cpu);
     schedule();
     irq_enable_restore(flags);
@@ -297,9 +299,9 @@ wake_waiters (void)
     queue_entry_t * tmp = NULL;
     queue_entry_t * elm = NULL;
 
-    spin_lock(&(me->waitq->lock));
+    uint8_t flags = spin_lock_irq_save(&(me->waitq->lock));
     if (list_empty_careful(&(me->waitq->queue))) {
-        spin_unlock(&(me->waitq->lock));
+        spin_unlock_irq_restore(&(me->waitq->lock), flags);
         return;
     }
 
@@ -310,7 +312,7 @@ wake_waiters (void)
         dequeue_entry(&(t->wait_node));
     }
 
-    spin_unlock(&(me->waitq->lock));
+    spin_unlock_irq_restore(&(me->waitq->lock), flags);
 }
 
 
@@ -532,14 +534,14 @@ thread_start (thread_fun_t fun,
 void
 schedule (void) 
 {
-    struct thread * runme = NULL;
+    thread_t * runme = NULL;
 
     ASSERT(!irqs_enabled());
 
     runme = get_runnable_thread_myq();
 
     if (!runme) {
-        uint32_t id = my_cpu_id();
+        cpu_id_t id = my_cpu_id();
         ERROR_PRINT("Nothing to run (cpu=%d)\n", id);
         return;
     }
@@ -560,7 +562,7 @@ sched_init_ap (void)
 {
     thread_t * me = NULL;
     void * my_stack = NULL;
-    uint32_t id = my_cpu_id();
+    cpu_id_t id = my_cpu_id();
     struct cpu * my_cpu = per_cpu_get(system)->cpus[id];
     uint8_t flags;
 
@@ -569,6 +571,7 @@ sched_init_ap (void)
     SCHED_DEBUG("Initializing CPU %u\n", id);
 
     my_cpu->run_q = thread_queue_create();
+
     if (!my_cpu->run_q) {
         ERROR_PRINT("Could not create run queue for CPU %u)\n", id);
         goto out_err;
@@ -693,14 +696,14 @@ out_err0:
 thread_id_t
 get_tid (void) 
 {
-    struct thread * t = per_cpu_get(cur_thread);
+    thread_t * t = per_cpu_get(cur_thread);
     return t->tid;
 }
 
 thread_id_t
 get_parent_tid (void) 
 {
-    struct thread * t = per_cpu_get(cur_thread);
+    thread_t * t = per_cpu_get(cur_thread);
     if (t && t->owner) {
         return t->owner->tid;
     }

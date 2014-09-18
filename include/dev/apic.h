@@ -65,6 +65,8 @@
 #define APIC_DISABLE_FOCUS (~(1<<9))
 
 
+#define IPI_VEC_XCALL 0xf3
+
 struct apic_dev {
     ulong_t base_addr;
     uint8_t  version;
