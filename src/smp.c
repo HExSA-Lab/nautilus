@@ -375,6 +375,7 @@ smp_xcall_init_queue (struct cpu * core)
 int
 smp_setup_xcall_bsp (struct cpu * core)
 {
+    printk("Setting up cross-core IPI event queue\n");
     smp_xcall_init_queue(core);
 
     if (register_int_handler(IPI_VEC_XCALL, xcall_handler, NULL) != 0) {
@@ -480,13 +481,6 @@ wait_xcall (struct xcall * x)
     while (atomic_cmpswap(x->xcall_done, 1, 0) != 1) {
         asm volatile ("pause");
     }
-    /*
-    while (*(volatile uint8_t*)&x->xcall_done != 1) {
-        asm volatile ("pause");
-    }
-    */
-
-    //*(volatile uint8_t*)&x->xcall_done = 0;
 }
 
 
