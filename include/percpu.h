@@ -92,14 +92,11 @@ do { \
     
 #define my_cpu_id() per_cpu_get(id)
 
-/* 
- * KCH TODO: this is dangerous, we shouldn't rely on 
- * cpu struct layout 
- */
+#include <msr.h>
 static inline struct cpu*
 get_cpu (void)
 {
-    return &(per_cpu_get(cur_thread));
+    return (struct cpu*)msr_read(MSR_GS_BASE);
 }
 
 #endif /* !__PER_CPU_H__ */
