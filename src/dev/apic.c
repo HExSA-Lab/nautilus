@@ -151,7 +151,7 @@ apic_get_maxlvt (struct apic_dev * apic)
 }
 
 
-void 
+inline void 
 apic_ipi (struct apic_dev * apic, 
           uint_t remote_id,
           uint_t vector)
