@@ -18,6 +18,11 @@
 #define RFLAGS_VIP  (1 << 20)
 
 
+#define PAUSE_WHILE(x) \
+    while ((x)) { \
+        asm volatile("pause"); \
+    } 
+
 #define mbarrier()    asm volatile("mfence":::"memory")
 
 
