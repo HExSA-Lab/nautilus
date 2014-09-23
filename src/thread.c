@@ -319,9 +319,14 @@ wake_waiters (void)
 static int
 thread_init (thread_t * t, void * stack, uint8_t is_detached, int cpu)
 {
+    if (!t) {
+        ERROR_PRINT("Given NULL thread pointer...\n");
+        return -1;
+    }
+
     t->stack     = stack;
     t->rsp       = (uint64_t)stack + PAGE_SIZE;
-    t->tid       = atomic_inc(next_tid);
+    t->tid       = atomic_inc(next_tid) + 1;
     t->refcount  = is_detached ? 1 : 2; // thread references itself as well
     t->owner     = get_cur_thread();
     t->bound_cpu = cpu;
@@ -563,7 +568,7 @@ sched_init_ap (void)
     thread_t * me = NULL;
     void * my_stack = NULL;
     cpu_id_t id = my_cpu_id();
-    struct cpu * my_cpu = per_cpu_get(system)->cpus[id];
+    struct cpu * my_cpu = get_cpu();
     uint8_t flags;
 
     flags = irq_disable_save();
@@ -589,11 +594,8 @@ sched_init_ap (void)
         goto out_err2;
     }
 
-    thread_init(me, my_stack, 1, id);
-
-    me->waitq = thread_queue_create();
-    if (!me->waitq) {
-        ERROR_PRINT("Could not create CPU (%u) thread's wait queue\n", id);
+    if (thread_init(me, my_stack, 1, id) != 0) {
+        ERROR_PRINT("Could not init start thread on core %u\n", id);
         goto out_err3;
     }
 
