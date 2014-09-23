@@ -3,6 +3,7 @@
 #include <intrinsics.h>
 #include <string.h>
 #include <paging.h>
+#include <percpu.h>
 
 extern ulong_t handler_table[NUM_IDT_ENTRIES];
 
@@ -20,7 +21,7 @@ null_excp_handler (excp_entry_t * excp,
                    excp_vec_t vector,
                    addr_t fault_addr)
 {
-    panic("unhandled exception, (v=0x%x), addr=(%p), last_addr=(%p)\n", vector,(void*)excp->rip, (void*)fault_addr);
+    panic("unhandled exception, (v=0x%x), addr=(%p), last_addr=(%p) (core=%u)\n", vector,(void*)excp->rip, (void*)fault_addr, my_cpu_id());
     return 0;
 }
 
