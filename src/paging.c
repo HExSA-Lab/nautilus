@@ -5,6 +5,7 @@
 #include <idt.h>
 #include <cpu.h>
 #include <lib/bitmap.h>
+#include <percpu.h>
 
 
 #ifndef NAUT_CONFIG_DEBUG_PAGING
@@ -245,7 +246,7 @@ pf_handler (excp_entry_t * excp,
             excp_vec_t     vector,
             addr_t         fault_addr)
 {
-    panic("Page Fault. Fault addr: 0x%x\n", fault_addr);
+    panic("Page Fault. Faulting RIP: 0x%x core=%u\n", fault_addr, my_cpu_id());
 
     /*
     if (drill_page_tables(fault_addr, 0, 0) < 0) {
