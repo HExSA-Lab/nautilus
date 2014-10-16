@@ -1,16 +1,18 @@
 #include <nautilus.h>
 #include <dev/apic.h>
 #include <irq.h>
+#include <cpu.h>
 #include <percpu.h>
-#include <spinlock.h>
+#include <atomic.h>
 #include <math.h>
+#include <assert.h>
 
 #define PING_VEC 0xf0
 #define PONG_VEC 0xf1
 
 #define TRIALS 1000
 void ipi_test_setup(void);
-void ipi_begin_test(void);
+void ipi_begin_test(cpu_id_t);
 
 
 static struct time_struct {
@@ -19,8 +21,7 @@ static struct time_struct {
     uint64_t sum;
     uint64_t max;
     uint64_t min;
-    uint8_t done;
-    spinlock_t lock;
+    volatile unsigned done;
 } time;
 
 
@@ -46,8 +47,6 @@ static int
 ping (excp_entry_t * excp, excp_vec_t vec)
 {
     struct apic_dev * apic = per_cpu_get(apic);
-    uint32_t id = per_cpu_get(id);
-    //printk("PING: running on cpu %u\n", id);
     apic_ipi(apic, 0, PONG_VEC);
     IRQ_HANDLER_END();
     return 0;
@@ -58,9 +57,24 @@ static int
 pong (excp_entry_t * excp, excp_vec_t vec)
 {
     time_end();
-    while (!(__sync_bool_compare_and_swap((volatile uint8_t*)&(time.done), 0, 1))) {
-        asm volatile ("pause");
+
+    //printk("PONG\n");
+    //PAUSE_WHILE(atomic_cmpswap(time.done, 0, 1) != 0);
+    //time.done = 1;
+    //mbarrier();
+
+    while (1) {
+        cli();
+        if (__sync_bool_compare_and_swap((volatile unsigned*)&(time.done), 0, 1) == 0) {
+            sti();
+            break;
+        }
+        sti();
+        asm volatile("pause");
     }
+
+
+    //ASSERT(!irqs_enabled());
     IRQ_HANDLER_END();
     return 0;
 }
@@ -78,29 +92,39 @@ ipi_test_setup (void)
         ERROR_PRINT("Could not register int handler\n");
         return;
     }
-    spinlock_init(&(time.lock));
 }
 
 
 void
-ipi_begin_test (void)
+ipi_begin_test (cpu_id_t cpu)
 {
     struct apic_dev * apic = per_cpu_get(apic);
     int i;
     uint64_t avg;
 
+    if (cpu >= per_cpu_get(system)->num_cpus) {
+        ERROR_PRINT("IPI_TEST: invalid cpu number (%u)\n", cpu);
+        return;
+    }
+
     memset(&time, 0, sizeof(time));
     time.min = ULONG_MAX;
 
     /* IPI the remote core (1 for now) */
-    printk("Starting IPI PING-PONG...\n");
+    printk("Starting IPI PING-PONG between core %u and core %u \n", my_cpu_id(), cpu);
 
     for (i = 0; i < TRIALS; i++) {
         uint64_t diff;
         time_start();
-        apic_ipi(apic, 1, PING_VEC);
+        apic_ipi(apic, cpu, PING_VEC);
 
-        while (*(volatile uint8_t*)(&time.done) != 1) {
+        while (1) {
+            cli();
+            if (*(volatile unsigned*)&(time.done) == 1) {
+                sti();
+                break;
+            }
+            sti();
             asm volatile ("pause");
         }
 
