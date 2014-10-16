@@ -47,7 +47,7 @@ struct cpu {
     uint32_t cpu_sig;
     uint32_t feat_flags;
 
-    uint8_t booted;
+    volatile uint8_t booted;
 
     struct apic_dev * apic;
 
@@ -59,6 +59,8 @@ struct cpu {
 
     queue_t * xcall_q;
     struct xcall xcall_nowait_info;
+
+    ulong_t cpu_khz; 
 };
 
 

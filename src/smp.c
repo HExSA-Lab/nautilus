@@ -6,6 +6,7 @@
 #include <msr.h>
 #include <gdt.h>
 #include <cpu.h>
+#include <assert.h>
 #include <thread.h>
 #include <queue.h>
 #include <idle.h>
@@ -20,9 +21,11 @@
 #undef DEBUG_PRINT
 #define DEBUG_PRINT(fmt, args...)
 #endif
+#define SMP_PRINT(fmt, args...) printk("SMP: " fmt, ##args)
+#define SMP_DEBUG(fmt, args...) DEBUG_PRINT("SMP: " fmt, ##args)
 
-static uint8_t smp_all_cores_ready = 0;
-spinlock_t cores_ready_lock;
+
+static volatile unsigned smp_core_count = 1; // assume BSP is booted
 
 extern addr_t init_smp_boot;
 extern addr_t end_smp_boot;
@@ -68,7 +71,6 @@ parse_mptable_cpu (struct sys_info * sys, struct mp_table_entry_cpu * cpu)
     spinlock_init(&new_cpu->lock);
 
     sys->cpus[sys->num_cpus] = new_cpu;
-
 
     sys->num_cpus++;
 }
@@ -225,6 +227,10 @@ init_ap_area (struct ap_init_area * ap_area,
 static inline void 
 smp_wait_for_ap (struct naut_info * naut, unsigned int core_num)
 {
+    struct cpu * core = naut->sys.cpus[core_num];
+    BARRIER_WHILE(!core->booted);
+
+    /*
     while (1) {
         uint8_t flags;
         flags = spin_lock_irq_save(&(naut->sys.cpus[core_num]->lock));
@@ -235,6 +241,7 @@ smp_wait_for_ap (struct naut_info * naut, unsigned int core_num)
         spin_unlock_irq_restore(&(naut->sys.cpus[core_num]->lock), flags);
         asm volatile ("pause");
     }
+    */
 }
 
 
@@ -252,8 +259,6 @@ smp_bringup_aps (struct naut_info * naut)
     int status = 0; 
     int err = 0;
     int i, j, maxlvt;
-
-    spinlock_init(&cores_ready_lock);
 
     maxlvt = apic_get_maxlvt(apic);
 
@@ -295,7 +300,6 @@ smp_bringup_aps (struct naut_info * naut)
 
         /* wait for status to update */
         status = apic_wait_for_send(apic);
-        DEBUG_PRINT("INIT send complete\n");
 
         mbarrier();
 
@@ -305,14 +309,13 @@ smp_bringup_aps (struct naut_info * naut)
         /* deassert INIT IPI (level-triggered) */
         apic_deinit_iipi(apic, naut->sys.cpus[i]->lapic_id);
 
-
         for (j = 1; j <= 2; j++) {
             if (maxlvt > 3) {
                 apic_write(apic, APIC_REG_ESR, 0);
             }
             apic_read(apic, APIC_REG_ESR);
 
-            DEBUG_PRINT("sending SIPI %u to core %u\n", j, i);
+            DEBUG_PRINT("sending SIPI %u to core %u (vec=%x)\n", j, i, target_vec);
 
             /* send the startup signal */
             apic_send_sipi(apic, naut->sys.cpus[i]->lapic_id, target_vec);
@@ -345,9 +348,7 @@ smp_bringup_aps (struct naut_info * naut)
         DEBUG_PRINT("Bringup for core %u done.\n", i);
     }
 
-    uint8_t flags = spin_lock_irq_save(&cores_ready_lock);
-    *(volatile uint8_t*)&smp_all_cores_ready = 1;
-    spin_unlock_irq_restore(&cores_ready_lock, flags);
+    BARRIER_WHILE(smp_core_count != naut->sys.num_cpus);
 
     return (status|err);
 }
@@ -391,17 +392,16 @@ static int
 smp_ap_setup (struct cpu * core)
 {
     /* TODO: check for errors */
-
-    uint64_t core_addr = (uint64_t) core->system->cpus[core->id];
-
-    // set GS base (for per-cpu state)
-    msr_write(MSR_GS_BASE, (uint64_t)core_addr);
-
     // setup IDT
     lidt(&idt_descriptor);
 
     // setup GDT
     lgdt64(&gdtr64);
+
+    uint64_t core_addr = (uint64_t) core->system->cpus[core->id];
+
+    // set GS base (for per-cpu state)
+    msr_write(MSR_GS_BASE, (uint64_t)core_addr);
     
     ap_apic_setup(core);
 
@@ -425,35 +425,38 @@ smp_ap_finish (struct cpu * core)
 void 
 smp_ap_entry (struct cpu * core) 
 { 
+    struct cpu * my_cpu = NULL;
     DEBUG_PRINT("smp: core %u starting up\n", core->id);
     if (smp_ap_setup(core) < 0) {
         panic("Error setting up AP!\n");
     }
 
-    printk("SMP: CPU (AP) %u operational\n", core->id);
+    /* we should now be able to pull our CPU pointer out of GS
+     * This is important, because the stack will be clobbered
+     * for the next CPU boot! 
+     */
+    my_cpu = get_cpu();
+    printk("SMP: CPU (AP) %u operational\n", my_cpu->id);
 
-    /* TODO: make this a sensible cmp op */
-    uint8_t flags = spin_lock_irq_save(&(core->lock));
-    *(volatile uint8_t*)&core->booted = 1;
-    spin_unlock_irq_restore(&(core->lock), flags);
+    PAUSE_WHILE(atomic_cmpswap(my_cpu->booted, 0, 1) != 0);
+
+    atomic_inc(smp_core_count);
+
+    // turns interrupts on
+    smp_ap_finish(my_cpu);
 
     /* wait on all the other cores to boot up */
+    BARRIER_WHILE(smp_core_count != core->system->num_cpus);
+
+    /* TODO: we need to somehow switch stacks here
+     * if we're actually going to yield, otherwise, 
+     * other cores will stomp on the same stack space 
+     * when they get interrupts 
+     */
+    ASSERT(irqs_enabled());
     while (1) {
-        uint8_t flags = spin_lock_irq_save(&cores_ready_lock);
-        if (*(volatile uint8_t*)&smp_all_cores_ready == 1) {
-            spin_unlock_irq_restore(&cores_ready_lock, flags);
-            break;
-        }
-        spin_unlock_irq_restore(&cores_ready_lock, flags);
-                
-        asm volatile ("pause");
-    }
-
-    smp_ap_finish(core);
-
-
-    while (1) {
-        yield();
+        //yield();
+        halt();
     }
 }
 
