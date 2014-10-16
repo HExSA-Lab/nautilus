@@ -25,6 +25,11 @@
 
 #define mbarrier()    asm volatile("mfence":::"memory")
 
+#define BARRIER_WHILE(x) \
+    while ((x)) { \
+        mbarrier(); \
+    }
+
 
 static inline ulong_t 
 read_cr0 (void)
