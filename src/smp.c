@@ -442,6 +442,12 @@ smp_ap_entry (struct cpu * core)
 
     atomic_inc(smp_core_count);
 
+    // switch from boot stack to my new stack (allocated in thread_init)
+    thread_t * cur = get_cur_thread();
+    asm volatile ("movq %[newrsp], %%rsp;\n"
+                  "movq %[newrsp], %%rbp;\n" 
+                  : : [newrsp] "m" (cur->rsp));
+
     // turns interrupts on
     smp_ap_finish(my_cpu);
 
@@ -455,8 +461,8 @@ smp_ap_entry (struct cpu * core)
      */
     ASSERT(irqs_enabled());
     while (1) {
-        //yield();
-        halt();
+        yield();
+        //halt();
     }
 }
 
