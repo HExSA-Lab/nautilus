@@ -5,6 +5,7 @@
 #include <paging.h>
 #include <nautilus.h>
 #include <percpu.h>
+#include <intrinsics.h>
 #include <dev/apic.h>
 #include <lib/liballoc.h>
 
@@ -151,10 +152,10 @@ apic_get_maxlvt (struct apic_dev * apic)
 }
 
 
-inline void 
+inline void __always_inline
 apic_ipi (struct apic_dev * apic, 
           uint_t remote_id,
-          uint_t vector)
+          uint_t vector) 
 {
     uint8_t flags = irq_disable_save();
     apic_write(apic, APIC_REG_ICR2, remote_id << APIC_ICR2_DST_SHIFT);
