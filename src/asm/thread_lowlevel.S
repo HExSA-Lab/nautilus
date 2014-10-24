@@ -81,3 +81,8 @@ ENTRY(thread_switch)
     restore_gprs        /* load the new thread's GPRs */
 
     iretq /* and off we go */
+
+ENTRY(thread_entry) 
+    sti
+    retq
+    

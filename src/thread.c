@@ -27,6 +27,7 @@ static thread_queue_t * global_thread_list;
 extern addr_t boot_stack;
 
 extern void thread_switch(thread_t*);
+extern void thread_entry(void *);
 
 
 static thread_queue_t*
@@ -419,16 +420,6 @@ thread_cleanup (void)
 }
 
 
-/*
- * the first thing a thread will do
- * when it starts is enable interrupts
- */
-static void
-thread_entry (void)
-{
-    sti();
-}
-
 
 /*
  * utility function for setting up
@@ -446,21 +437,26 @@ static void
 thread_setup_init_stack (thread_t * t, thread_fun_t fun, void * arg)
 {
 
-#define THREAD_SETUP_SIZE  (64+120)
+#define RSP_STACK_OFFSET   8
+#define GPR_RDI_OFFSET     48
+#define GPR_SAVE_SIZE      120
+#define STACK_SAVE_SIZE    64
+#define THREAD_SETUP_SIZE  (STACK_SAVE_SIZE + GPR_SAVE_SIZE)
+
     // this will set the initial GPRs to 0
     memset((void*)t->rsp, 0, THREAD_SETUP_SIZE);
 
     thread_push(t, (uint64_t)&thread_cleanup);
     thread_push(t, (uint64_t)fun);
     thread_push(t, (uint64_t)KERNEL_DS); //SS
-    thread_push(t, (uint64_t)(t->rsp+8)); // rsp
+    thread_push(t, (uint64_t)(t->rsp+RSP_STACK_OFFSET)); // rsp
     thread_push(t, (uint64_t)0UL); // rflags
     thread_push(t, (uint64_t)KERNEL_CS);
     thread_push(t, (uint64_t)&thread_entry);
     thread_push(t, 0); // err no
     thread_push(t, 0); // intr no
-    *(uint64_t*)(t->rsp-64) = (uint64_t)arg;
-    t->rsp -= 120; // account for the GPRS;
+    *(uint64_t*)(t->rsp-GPR_RDI_OFFSET) = (uint64_t)arg; // we overwrite RDI with the arg
+    t->rsp -= GPR_SAVE_SIZE; // account for the GPRS;
 }
 
 
