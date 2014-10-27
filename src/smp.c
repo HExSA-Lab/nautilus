@@ -425,7 +425,7 @@ smp_ap_finish (struct cpu * core)
 void 
 smp_ap_entry (struct cpu * core) 
 { 
-    struct cpu * my_cpu = NULL;
+    register struct cpu * my_cpu asm("rdx");
     DEBUG_PRINT("smp: core %u starting up\n", core->id);
     if (smp_ap_setup(core) < 0) {
         panic("Error setting up AP!\n");
@@ -438,15 +438,16 @@ smp_ap_entry (struct cpu * core)
     my_cpu = get_cpu();
     printk("SMP: CPU (AP) %u operational\n", my_cpu->id);
 
-    PAUSE_WHILE(atomic_cmpswap(my_cpu->booted, 0, 1) != 0);
-
-    atomic_inc(smp_core_count);
-
     // switch from boot stack to my new stack (allocated in thread_init)
     thread_t * cur = get_cur_thread();
     asm volatile ("movq %[newrsp], %%rsp;\n"
                   "movq %[newrsp], %%rbp;\n" 
-                  : : [newrsp] "m" (cur->rsp));
+                  : : [newrsp] "m" (cur->rsp) : "rsp", "rbp");
+
+    PAUSE_WHILE(atomic_cmpswap(my_cpu->booted, 0, 1) != 0);
+
+    atomic_inc(smp_core_count);
+
 
     // turns interrupts on
     smp_ap_finish(my_cpu);
