@@ -382,7 +382,7 @@ thread_create (thread_fun_t fun,
         stack = (void*)malloc(stack_size);
         t->stack_size = stack_size;
     } else {
-        stack = (void*)alloc_page();
+        stack = (void*)malloc(PAGE_SIZE);
         t->stack_size =  PAGE_SIZE;
     }
 
