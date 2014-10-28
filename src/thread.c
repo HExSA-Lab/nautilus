@@ -371,6 +371,11 @@ thread_create (thread_fun_t fun,
     thread_t * t = NULL;
     void * stack = NULL;
 
+    if (cpu >= per_cpu_get(system)->num_cpus && cpu != CPU_ANY) {
+        ERROR_PRINT("thread create received invalid CPU id (%u)\n", cpu);
+        return NULL;
+    }
+
     t = malloc(sizeof(thread_t));
     if (!t) {
         ERROR_PRINT("Could not allocate thread struct\n");
