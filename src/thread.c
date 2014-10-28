@@ -302,8 +302,7 @@ wake_waiters (void)
 
     uint8_t flags = spin_lock_irq_save(&(me->waitq->lock));
     if (list_empty_careful(&(me->waitq->queue))) {
-        spin_unlock_irq_restore(&(me->waitq->lock), flags);
-        return;
+        goto out;
     }
 
     list_for_each_entry_safe(elm, tmp, &(me->waitq->queue), node) {
@@ -313,6 +312,7 @@ wake_waiters (void)
         dequeue_entry(&(t->wait_node));
     }
 
+out:
     spin_unlock_irq_restore(&(me->waitq->lock), flags);
 }
 
