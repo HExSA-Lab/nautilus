@@ -14,6 +14,7 @@ obj-y += \
 	smp.o \
 	idle.o \
 	thread.o \
+	barrier.o \
 	nautilus.o \
 	asm/ \
 	dev/ \

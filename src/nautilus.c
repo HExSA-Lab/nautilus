@@ -13,6 +13,7 @@
 #include <idle.h>
 #include <percpu.h>
 
+#include <barrier.h>
 
 #include <dev/apic.h>
 #include <dev/pci.h>
@@ -27,12 +28,13 @@
 static struct naut_info nautilus_info;
 extern spinlock_t printk_lock;
 
-static void
-xcall_test (void * arg) 
+static void xcall_test (void * arg)
 {
-    printk("xcall_test! (arg=%x)\n", arg);
+    printk("Running xcore test on core %u\n", my_cpu_id());
 }
 
+extern void ipi_test_setup(void);
+extern void ipi_begin_test(cpu_id_t t);
 
 void 
 main (unsigned long mbd, unsigned long magic) 
@@ -80,13 +82,23 @@ main (unsigned long mbd, unsigned long magic)
 
     smp_bringup_aps(naut);
 
+    //sti();
+
+    //thread_start(side_screensaver, NULL, NULL, 0, TSTACK_DEFAULT, NULL, 1);
+
+    //smp_xcall(1, xcall_test, (void*)0xdeadbeef, 1);
+
+    /*
+    ipi_test_setup();
+
+    ipi_begin_test(1);
+    ipi_begin_test(8);
+    ipi_begin_test(4);
+    */
     sti();
+    barrier_test();
 
-    thread_start(side_screensaver, NULL, NULL, 0, TSTACK_DEFAULT, NULL, 1);
-
-    smp_xcall(1, xcall_test, (void*)0xdeadbeef, 0);
-
-    printk("Nautilus main thread halting on core %d\n", my_cpu_id());
+    printk("Nautilus main thread yielding on core %d\n", my_cpu_id());
 
     while (1) {
         yield();
