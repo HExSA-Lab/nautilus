@@ -2,6 +2,7 @@
 #include <barrier.h>
 #include <cpu.h>
 #include <atomic.h>
+#include <intrinsics.h>
 #include <thread.h>
 
 #include <lib/liballoc.h>
@@ -14,7 +15,7 @@ barrier_init (barrier_t * barrier, uint32_t count)
     memset(barrier, 0, sizeof(barrier_t));
     spinlock_init(&barrier->lock);
 
-    if (count == 0) {
+    if (unlikely(count == 0)) {
         ERROR_PRINT("Barrier count must be greater than 0\n");
         return -1;
     }
@@ -23,6 +24,30 @@ barrier_init (barrier_t * barrier, uint32_t count)
     barrier->remaining  = count;
 
     return 0;
+}
+
+
+int 
+barrier_destroy (barrier_t * barrier)
+{
+    int flags;
+    int res;
+
+    if (!barrier) {
+        return -1;
+    }
+
+    flags = spin_lock_irq_save(&barrier->lock);
+    
+    if (likely(barrier->remaining == barrier->init_count)) {
+        res = 0;
+    } else {
+        /* someone is still waiting at the barrier? */
+        res = -1;
+        spin_unlock_irq_restore(&barrier->lock, flags);
+    }
+
+    return res;
 }
 
 
@@ -95,5 +120,7 @@ void barrier_test(void)
     barrier_wait(b);
 
     printk("Barrier test successful\n");
+    barrier_destroy(b);
+    free(b);
 }
 
