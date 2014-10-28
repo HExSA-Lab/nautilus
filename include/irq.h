@@ -22,22 +22,10 @@
 #define IRQ_HANDLER_END() apic_do_eoi()
 
 
-#define enable_irqs()                     \
-do  {                                     \
-    if (irqs_enabled()) {                 \
-         panic("irqs already enabled!\n");\
-    }                                     \
-    sti();                                \
-} while (0)
+#define enable_irqs() sti()
 
 
-#define disable_irqs()                     \
-do  {                                      \
-    if (!irqs_enabled()) {                 \
-         panic("irqs already disabled!\n");\
-    }                                      \
-    cli();                                 \
-} while (0)
+#define disable_irqs() cli()
 
 uint8_t irqs_enabled(void);
 
@@ -57,10 +45,6 @@ irq_disable_save (void)
 static inline void 
 irq_enable_restore (uint8_t iflag)
 {
-    if (irqs_enabled()) {
-        panic("interrupts enabled when they shouldn't be!\n");
-    }
-
     if (iflag) {
         /* Interrupts were originally enabled, so turn them back on */
         enable_irqs();
