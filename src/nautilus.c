@@ -15,6 +15,7 @@
 
 #include <barrier.h>
 #include <rwlock.h>
+#include <condvar.h>
 
 #include <dev/apic.h>
 #include <dev/pci.h>
@@ -97,7 +98,7 @@ main (unsigned long mbd, unsigned long magic)
     ipi_begin_test(4);
     */
     sti();
-    rwlock_test();
+    condvar_test();
 
     printk("Nautilus main thread yielding on core %d\n", my_cpu_id());
 

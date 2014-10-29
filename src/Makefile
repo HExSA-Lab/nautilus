@@ -12,6 +12,7 @@ obj-y += \
 	cpuid.o \
 	spinlock.o \
 	rwlock.o \
+	condvar.o \
 	smp.o \
 	idle.o \
 	thread.o \

@@ -9,6 +9,7 @@
 #include <atomic.h>
 #include <queue.h>
 #include <list.h>
+#include <errno.h>
 
 #include <lib/liballoc.h>
 
@@ -30,7 +31,7 @@ extern void thread_switch(thread_t*);
 extern void thread_entry(void *);
 
 
-static thread_queue_t*
+thread_queue_t*
 thread_queue_create (void) 
 {
     thread_queue_t * q = NULL;
@@ -45,10 +46,12 @@ thread_queue_create (void)
 }
 
 
+
+
 /* NOTE: this does not delete the threads in the queue, just
  * their entries in the queue
  */
-static void 
+void 
 thread_queue_destroy (thread_queue_t * q)
 {
     // free any remaining entries
@@ -57,7 +60,7 @@ thread_queue_destroy (thread_queue_t * q)
 }
 
 
-static inline void 
+inline void 
 enqueue_thread_on_runq (thread_t * t, int cpu)
 {
     thread_queue_t * q = NULL;
@@ -89,6 +92,14 @@ enqueue_thread_on_runq (thread_t * t, int cpu)
 static inline void 
 enqueue_thread_on_waitq (thread_t * waiter, thread_queue_t * waitq)
 {
+    /* are we already waiting on another queue? */
+    if (waiter->waiting) {
+        ERROR_PRINT("Attempt to put thread on more than one wait queue\n");
+        return;
+    } else {
+        waiter->waiting = 1;
+    }
+
     enqueue_entry_atomic(waitq, &(waiter->wait_node));
 }
 
@@ -99,6 +110,11 @@ dequeue_thread_from_waitq (thread_t * waiter, thread_queue_t * waitq)
     thread_t * t = NULL;
     queue_entry_t * elm = dequeue_entry_atomic(waitq, &(waiter->wait_node));
     t = container_of(elm, thread_t, wait_node);
+
+    if (t) {
+        t->waiting = 0;
+    }
+
     return t;
 }
 
@@ -316,6 +332,63 @@ out:
     spin_unlock_irq_restore(&(me->waitq->lock), flags);
 }
 
+
+/*
+ * 
+ * Goes to sleep on the given queue
+ *
+ */
+int 
+thread_queue_sleep (thread_queue_t * q)
+{
+    uint8_t flags = irq_disable_save();
+    enqueue_thread_on_waitq(get_cur_thread(), q);
+    schedule();
+    irq_enable_restore(flags);
+    return 0;
+}
+
+
+int 
+thread_queue_wake_one (thread_queue_t * q)
+{
+    queue_entry_t * elm = NULL;
+    thread_t * t = NULL;
+
+    if (!q) {
+        ERROR_PRINT("Attempt to wake up thread on non-existant thread queue\n");
+        return -EINVAL;
+    }
+
+    elm = dequeue_first_atomic(q);
+    t = container_of(elm, thread_t, wait_node);
+
+    enqueue_thread_on_runq(t, t->bound_cpu);
+    t->waiting = 0;
+
+    return 0;
+}
+
+
+int
+thread_queue_wake_all (thread_queue_t * q)
+{
+    queue_entry_t * elm = NULL;
+    thread_t * t = NULL;
+
+    if (!q) {
+        ERROR_PRINT("Attempt to wake up thread on non-existant thread queue\n");
+        return -EINVAL;
+    }
+
+    while ((elm = dequeue_first_atomic(q))) {
+        t = container_of(elm, thread_t, wait_node);
+        enqueue_thread_on_runq(t, t->bound_cpu);
+        t->waiting = 0;
+    }
+
+    return 0;
+}
 
 static int
 thread_init (thread_t * t, void * stack, uint8_t is_detached, int cpu)

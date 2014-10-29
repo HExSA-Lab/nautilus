@@ -28,6 +28,7 @@ struct thread {
 
     thread_queue_t * waitq;
     queue_entry_t wait_node;
+    uint8_t waiting;
 
     thread_queue_t * cur_run_q;
     void * exit_status;
@@ -37,6 +38,7 @@ struct thread {
 
     unsigned long refcount;
     int bound_cpu;
+
 };
 
 
@@ -77,6 +79,12 @@ void thread_destroy(thread_t * t);
 thread_id_t get_tid(void);
 thread_id_t get_parent_tid(void);
 
+thread_queue_t * thread_queue_create (void);
+void thread_queue_destroy(thread_queue_t * q);
+inline void enqueue_thread_on_runq(thread_t * t, int cpu);
+int thread_queue_sleep(thread_queue_t * q);
+int thread_queue_wake_one(thread_queue_t * q);
+int thread_queue_wake_all(thread_queue_t * q);
 
 #include <percpu.h>
 
