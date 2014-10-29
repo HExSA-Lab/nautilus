@@ -25,6 +25,22 @@ condvar_init (condvar_t * c)
 }
 
 
+int
+condvar_destroy (condvar_t * c)
+{
+    int flags = spin_lock_irq_save(&c->lock);
+    if (c->nwaiters != 0) {
+        spin_unlock_irq_restore(&c->lock, flags);
+        return -EINVAL;
+    }
+
+    thread_queue_destroy(c->wait_queue);
+    c->nwaiters = 0;
+    spin_unlock_irq_restore(&c->lock, flags);
+    return 0;
+}
+
+
 uint8_t
 condvar_wait (condvar_t * c, spinlock_t * l, uint8_t flags)
 {
@@ -111,6 +127,11 @@ test3 (void * in, void ** out)
 
     printk("test 3 signalling 2nd time\n");
     condvar_signal(c);
+
+    while (condvar_destroy(c) < 0) {
+        yield();
+    }
+    free(c);
 }
 
 

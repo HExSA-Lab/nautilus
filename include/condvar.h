@@ -10,6 +10,7 @@ typedef struct condvar {
 } condvar_t;
 
 int condvar_init(condvar_t * c);
+int condvar_destroy(condvar_t * c);
 uint8_t condvar_wait(condvar_t * c, spinlock_t * l, uint8_t flags);
 int condvar_signal(condvar_t * c);
 int condvar_bcast(condvar_t * c);

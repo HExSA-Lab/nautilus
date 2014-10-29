@@ -55,7 +55,7 @@ void
 thread_queue_destroy (thread_queue_t * q)
 {
     // free any remaining entries
-    DEBUG_PRINT("Destroying thread queue\n");
+    SCHED_DEBUG("Destroying thread queue\n");
     queue_destroy(q, 1);
 }
 
