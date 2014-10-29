@@ -98,7 +98,7 @@ main (unsigned long mbd, unsigned long magic)
     ipi_begin_test(4);
     */
     sti();
-    condvar_test();
+    tls_test();
 
     printk("Nautilus main thread yielding on core %d\n", my_cpu_id());
 

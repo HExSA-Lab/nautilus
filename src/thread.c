@@ -30,6 +30,8 @@ extern addr_t boot_stack;
 extern void thread_switch(thread_t*);
 extern void thread_entry(void *);
 
+static struct tls tls_keys[TLS_MAX_KEYS];
+
 
 thread_queue_t*
 thread_queue_create (void) 
@@ -177,6 +179,100 @@ thread_detach (thread_t * t)
 }
 
 
+int
+tls_key_create (tls_key_t * key, void (*destructor)(void*))
+{
+    int i;
+
+    for (i = 0; i < TLS_MAX_KEYS; i++) {
+        unsigned sn = tls_keys[i].seq_num;
+
+        if (TLS_KEY_AVAIL(sn) && TLS_KEY_USABLE(sn) &&
+            atomic_cmpswap(tls_keys[i].seq_num, sn, sn+1) == sn) {
+
+            tls_keys[i].destructor = destructor;
+            *key = i;
+
+            /* we're done */
+            return 0;
+        }
+    }
+
+    return -EAGAIN;
+}
+
+
+int 
+tls_key_delete (tls_key_t key)
+{
+    if (likely(key < TLS_MAX_KEYS)) {
+        unsigned sn = tls_keys[key].seq_num;
+
+        if (likely(!TLS_KEY_AVAIL(sn)) &&
+            atomic_cmpswap(tls_keys[key].seq_num, sn, sn+1) == sn) {
+            return 0;
+        }
+    }
+
+    return -EINVAL;
+}
+
+
+void*
+tls_get (tls_key_t key) 
+{
+    thread_t * t;
+
+    if (unlikely(key >= TLS_MAX_KEYS)) {
+        return NULL;
+    }
+
+    t = get_cur_thread();
+    return (void*)t->tls[key];
+}
+
+
+int 
+tls_set (tls_key_t key, const void * val)
+{
+    thread_t * t;
+    unsigned sn;
+
+    if (key >= TLS_MAX_KEYS || 
+        TLS_KEY_AVAIL((sn = tls_keys[key].seq_num))) {
+        return -EINVAL;
+    }
+
+    t = get_cur_thread();
+    t->tls[key] = val;
+    return 0;
+}
+
+
+static void 
+tls_exit (void) 
+{
+    thread_t * t = get_cur_thread();
+    unsigned i, j;
+    uint8_t called = 0;
+
+    for (i = 0; i < MIN_DESTRUCT_ITER; i++) {
+        for (j = 0 ; j < TLS_MAX_KEYS; j++) {
+            void * val = (void*)t->tls[j]; 
+            if (val && tls_keys[j].destructor) {
+                called = 1;
+                t->tls[j] = NULL;
+                tls_keys[j].destructor(val);
+            }
+
+            if (!called) {
+                break;
+            }
+        }
+    }
+}
+
+
 void
 exit (void * retval) 
 {
@@ -188,6 +284,9 @@ exit (void * retval)
 
     me->exited = 1;
     me->exit_status = retval;
+
+    /* clear any thread local storage that may have been allocated */
+    tls_exit();
 
     /* wake up everyone who is waiting on me */
     wake_waiters();
@@ -785,5 +884,65 @@ get_parent_tid (void)
     }
     return -1;
 }
+
+
+static void 
+tls_dummy (void * in, void ** out)
+{
+    unsigned i;
+    tls_key_t * keys = NULL;
+
+    printk("Beginning test of thread local storage...\n");
+    keys = malloc(sizeof(tls_key_t)*TLS_MAX_KEYS);
+    if (!keys) {
+        ERROR_PRINT("could not allocate keys\n");
+        return;
+    }
+
+    for (i = 0; i < TLS_MAX_KEYS; i++) {
+        if (tls_key_create(&keys[i], NULL) != 0) {
+            ERROR_PRINT("Could not create TLS key (%u)\n", i);
+            return;
+        }
+
+        if (tls_set(keys[i], (const void *)(i + 100L)) != 0) {
+            ERROR_PRINT("Could not set TLS key (%u)\n", i);
+            return;
+        }
+
+    }
+
+    for (i = 0; i < TLS_MAX_KEYS; i++) {
+        if (tls_get(keys[i]) != (void*)(i + 100L)) {
+            ERROR_PRINT("Mismatched TLS val! Got %p, should be %p\n", tls_get(keys[i]), (void*)(i+100L));
+            return;
+        }
+
+        if (tls_key_delete(keys[i]) != 0) {
+            ERROR_PRINT("Could not delete TLS key %u\n", i);
+            return;
+        }
+    }
+
+    if (tls_key_create(&keys[0], NULL) != 0) {
+        ERROR_PRINT("2nd key create failed\n");
+        return;
+    }
+    
+    if (tls_key_delete(keys[0]) != 0) {
+        ERROR_PRINT("2nd key delete failed\n");
+        return;
+    }
+
+    printk("Thread local storage test succeeded\n");
+}
+
+void 
+tls_test (void)
+{
+    thread_start(tls_dummy, NULL, NULL, 1, TSTACK_DEFAULT, NULL, 1);
+}
+
+
 
 

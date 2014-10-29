@@ -9,12 +9,26 @@
 #define CPU_ANY -1
 #define TSTACK_DEFAULT 0
 
+
+
 typedef void (*thread_fun_t)(void * input, void ** output);
 typedef unsigned stack_size_t;
 typedef long thread_id_t;
 typedef struct thread thread_t;
 typedef struct queue thread_queue_t;
 
+
+#define TLS_MAX_KEYS 256
+#define MIN_DESTRUCT_ITER 4
+#define TLS_KEY_AVAIL(x) (((x) & 1) == 0)
+#define TLS_KEY_USABLE(x) ((unsigned long)(x) < (unsigned long)((x)+2))
+
+typedef unsigned int tls_key_t; 
+
+struct tls {
+    unsigned seq_num;
+    void (*destructor)(void*);
+};
 
 struct thread {
     uint64_t rsp; /* KCH: this cannot change */
@@ -39,6 +53,7 @@ struct thread {
     unsigned long refcount;
     int bound_cpu;
 
+    const void * tls[TLS_MAX_KEYS];
 };
 
 
@@ -85,6 +100,13 @@ inline void enqueue_thread_on_runq(thread_t * t, int cpu);
 int thread_queue_sleep(thread_queue_t * q);
 int thread_queue_wake_one(thread_queue_t * q);
 int thread_queue_wake_all(thread_queue_t * q);
+
+
+int tls_key_create(tls_key_t * key, void (*destructor)(void*));
+int tls_key_delete(tls_key_t key);
+void* tls_get(tls_key_t key);
+int tls_set(tls_key_t key, const void * val);
+void tls_test(void);
 
 #include <percpu.h>
 
