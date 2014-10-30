@@ -135,8 +135,13 @@ cmd_cc_i_c       = $(CPP) $(c_flags)   -o $@ $<
 
 quiet_cmd_cc_o_c = CC $(quiet_modtag)  $@
 
+# KCH: C++ (.cc, etc)) files
+quiet_cmd_cxx_o_cc = CXX $(quiet_modtag) $@
+
+cmd_cxx_o_cc = $(CXX) $(cxx_flags) -c -o $@ $<
 ifndef CONFIG_MODVERSIONS
 cmd_cc_o_c = $(CC) $(c_flags) -c -o $@ $<
+
 
 else
 # When module versioning is enabled the following steps are executed:
@@ -175,11 +180,25 @@ define rule_cc_o_c
 	mv -f $(@D)/.$(@F).tmp $(@D)/.$(@F).cmd
 endef
 
+define rule_cxx_o_cc
+	$(call echo-cmd,checksrc) $(cmd_checksrc)			  \
+	$(call echo-cmd,cxx_o_cc) $(cmd_cxx_o_cc);				  \
+	$(cmd_modversions)						               \
+	scripts/basic/fixdep $(depfile) $@ '$(call make-cmd,cxx_o_cc)' > $(@D)/.$(@F).tmp;  \
+	rm -f $(depfile);						  \
+	mv -f $(@D)/.$(@F).tmp $(@D)/.$(@F).cmd
+endef
+
+
 # Built-in and composite module parts
 
 %.o: %.c FORCE
 	$(call cmd,force_checksrc)
 	$(call if_changed_rule,cc_o_c)
+
+%.o: %.cc FORCE
+	$(call cmd,force_checksrc)
+	$(call if_changed_rule,cxx_o_cc)
 
 # Single-part modules are special since we need to mark them in $(MODVERDIR)
 
