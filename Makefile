@@ -332,7 +332,7 @@ CFLAGS:=   -O2 \
 
 
 #--whole-archive was in below
-LDFLAGS         := -z max-page-size=0x1000  -L/home/kyle/opt/cross/lib/gcc/x86_64-elf/4.8.0 
+LDFLAGS         := -z max-page-size=0x1000 
 
 ifeq ($(call cc-option-yn, -fgnu89-inline),y)
 CFLAGS		+= -fgnu89-inline
@@ -458,8 +458,8 @@ scripts_basic: include/autoconf.h
 core-y          := src/
 libs-y		:= lib/ \
 			   /usr/lib64/libstdc++.a \
-			   /home/kyle/opt/cross/lib/gcc/x86_64-elf/4.8.0/libgcc.a \
-			   /usr/lib64/libsupc++.a \
+			   #/home/kyle/opt/cross/lib/gcc/x86_64-elf/4.8.0/libgcc.a \
+			   #/usr/lib64/libsupc++.a \
 
 			   #/usr/lib64/libc.a \
 
