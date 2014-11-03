@@ -25,7 +25,7 @@
  */
 
 #include <stdarg.h>
-#include <string.h>
+#include <naut_string.h>
 #include <types.h>
 #include <doprnt.h>
 

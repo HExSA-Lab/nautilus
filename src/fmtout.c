@@ -32,7 +32,7 @@
 
 #include <stdarg.h>
 #include <stddef.h>
-#include <string.h>
+#include <naut_string.h>
 //#include <limits.h>
 #include <fmtout.h> /* DHH: for struct Output_Sink */
 

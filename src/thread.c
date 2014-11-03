@@ -1,6 +1,6 @@
 #include <nautilus.h>
 #include <cpu.h>
-#include <assert.h>
+#include <naut_assert.h>
 #include <irq.h>
 #include <idle.h>
 #include <paging.h>

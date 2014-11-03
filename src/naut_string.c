@@ -1,12 +1,12 @@
 /**
  * Kyle C. Hale 2014
- * string.h
+ * 
  *
  * utility functions, we'll have these here just in case we need them
  *
  */
 
-#include <string.h>
+#include <naut_string.h>
 #include <types.h>
 
 #ifdef NAUT_CONFIG_USE_NAUT_BUILTINS
@@ -57,6 +57,48 @@ memset (void * dst, char c, size_t n)
 
     return dst;
 }
+
+
+void * 
+memmove (void * dst, const void * src, size_t n)
+{
+    unsigned long int dstp = (long int) dst;
+    unsigned long int srcp = (long int) src;
+
+    /* This test makes the forward copying code be used whenever possible.
+       Reduces the working set.  */
+    if (dstp - srcp >= n) {
+        /* Copy from the beginning to the end.  */
+        dst = memcpy (dst, src, n);
+    } else {
+        /* Copy from the end to the beginning.  */
+        srcp += n;
+        dstp += n;
+
+        /* If there not too few bytes to copy, use word copy.  */
+        if (n >= OP_T_THRES)
+        {
+            /* Copy just a few bytes to make DSTP aligned.  */
+            n -= dstp % OPSIZ;
+            BYTE_COPY_BWD (dstp, srcp, dstp % OPSIZ);
+
+            /* Copy from SRCP to DSTP taking advantage of the known
+               alignment of DSTP.  Number of bytes remaining is put
+               in the third argument, i.e. in LEN.  This number may
+               vary from machine to machine.  */
+
+            WORD_COPY_BWD (dstp, srcp, n, n);
+
+            /* Fall out and copy the tail.  */
+        }
+
+        /* There are just a few bytes to copy.  Use byte memory operations.  */
+        BYTE_COPY_BWD (dstp, srcp, n);
+    }
+
+    return dst;
+}
+
         
 
 int 

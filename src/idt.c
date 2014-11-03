@@ -1,7 +1,7 @@
 #include <nautilus.h>
 #include <idt.h>
 #include <intrinsics.h>
-#include <string.h>
+#include <naut_string.h>
 #include <paging.h>
 #include <percpu.h>
 

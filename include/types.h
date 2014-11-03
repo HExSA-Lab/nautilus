@@ -19,8 +19,10 @@ typedef unsigned long ulong_t;
 typedef unsigned long size_t;
 typedef long          ssize_t;
 
-typedef unsigned long long uint64_t;
-typedef long long          sint64_t;
+//typedef unsigned long long uint64_t;
+typedef unsigned long uint64_t;
+//typedef long long          sint64_t;
+typedef long sint64_t;
 
 typedef unsigned int uint32_t;
 typedef int          sint32_t;
@@ -35,7 +37,10 @@ typedef char          sint8_t;
 typedef ulong_t addr_t;
 typedef uchar_t bool_t;
 
-#define NULL ((void *)0)
+//#define NULL ((void *)0)
+#ifndef NULL
+#define NULL 0
+#endif
 #define FALSE 0
 #define TRUE 1
 

@@ -5,7 +5,7 @@
 
 #include <types.h>
 #include <lib/bitops.h>
-#include <string.h>
+#include <naut_string.h>
 
 extern int __bitmap_empty(const unsigned long *bitmap, int bits);
 extern int __bitmap_full(const unsigned long *bitmap, int bits);

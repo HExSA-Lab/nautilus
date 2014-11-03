@@ -31,7 +31,7 @@
 
 #include <stddef.h>
 #include <stdarg.h>
-#include <string.h>
+#include <naut_string.h>
 #include <doprnt.h>
 #include <cga.h>
 #include <spinlock.h>

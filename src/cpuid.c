@@ -1,6 +1,6 @@
 #include <nautilus.h>
 #include <cpuid.h>
-#include <string.h>
+#include <naut_string.h>
 
 
 void 

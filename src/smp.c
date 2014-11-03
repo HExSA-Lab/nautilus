@@ -6,7 +6,7 @@
 #include <msr.h>
 #include <gdt.h>
 #include <cpu.h>
-#include <assert.h>
+#include <naut_assert.h>
 #include <thread.h>
 #include <queue.h>
 #include <idle.h>

@@ -47,7 +47,7 @@ jmp early_excp_common;
 #include <types.h>
 #include <gdt.h>
 #include <intrinsics.h>
-#include <string.h>
+#include <naut_string.h>
 
 
 extern const uint8_t early_excp_handlers[NUM_EXCEPTIONS][10];

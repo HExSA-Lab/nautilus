@@ -1,6 +1,6 @@
 #include <nautilus.h>
 #include <paging.h>
-#include <string.h>
+#include <naut_string.h>
 #include <mb_utils.h>
 #include <idt.h>
 #include <cpu.h>
