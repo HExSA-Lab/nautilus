@@ -5,7 +5,7 @@
 #include <percpu.h>
 #include <atomic.h>
 #include <math.h>
-#include <assert.h>
+#include <naut_assert.h>
 
 #define PING_VEC 0xf0
 #define PONG_VEC 0xf1
@@ -25,7 +25,7 @@ static struct time_struct {
 } time;
 
 
-static inline void
+static inline void __always_inline
 time_start (void)
 {
     uint32_t lo, hi;
@@ -34,7 +34,7 @@ time_start (void)
 }
 
 
-static inline void
+static inline void __always_inline
 time_end (void)
 {
     uint32_t lo, hi;
@@ -95,6 +95,9 @@ ipi_test_setup (void)
 }
 
 
+#define APIC_WRITE(apic, reg, val) \
+    *(volatile uint32_t*)(apic->base_addr + (reg)) = (val);
+
 void
 ipi_begin_test (cpu_id_t cpu)
 {
@@ -116,7 +119,10 @@ ipi_begin_test (cpu_id_t cpu)
     for (i = 0; i < TRIALS; i++) {
         uint64_t diff;
         time_start();
-        apic_ipi(apic, cpu, PING_VEC);
+        asm volatile ("cli");
+        APIC_WRITE(apic, APIC_REG_ICR2, cpu << APIC_ICR2_DST_SHIFT);
+        APIC_WRITE(apic, APIC_REG_ICR, PING_VEC | ICR_LEVEL_ASSERT);
+        asm volatile ("sti");
 
         while (1) {
             cli();
