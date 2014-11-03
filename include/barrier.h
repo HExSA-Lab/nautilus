@@ -1,6 +1,10 @@
 #ifndef __BARRIER_H__
 #define __BARRIER_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <spinlock.h>
 #include <event.h>
 
@@ -24,5 +28,9 @@ int barrier_init (barrier_t * barrier, uint32_t count);
 int barrier_destroy (barrier_t * barrier);
 int barrier_wait (barrier_t * barrier);
 void barrier_test(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* !__BARRIER_H__ */

@@ -1,6 +1,10 @@
 #ifndef __PAGING_H__
 #define __PAGING_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <types.h>
 #include <idt.h>
 
@@ -203,5 +207,9 @@ int free_pages(void * addr, int num);
 addr_t alloc_pages(int num);
 
 int pf_handler(excp_entry_t * excp, excp_vec_t vector, addr_t fault_addr);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -1,6 +1,10 @@
 #ifndef __SPINLOCK_H__
 #define __SPINLOCK_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <types.h>
 
 typedef uint32_t spinlock_t;
@@ -32,5 +36,8 @@ spin_unlock (volatile spinlock_t * lock);
 inline void
 spin_unlock_irq_restore (volatile spinlock_t * lock, uint8_t flags);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif

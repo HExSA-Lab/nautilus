@@ -1,6 +1,10 @@
 #ifndef __RWLOCK_H__
 #define __RWLOCK_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <spinlock.h>
 
 struct rwlock {
@@ -20,5 +24,8 @@ int rwlock_wr_unlock_irq_restore(rwlock_t * l, uint8_t flags);
 
 void rwlock_test(void);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -1,6 +1,10 @@
 #ifndef __PER_CPU_H__
 #define __PER_CPU_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stddef.h>
 
 struct cpu;
@@ -98,5 +102,9 @@ get_cpu (void)
 {
     return (struct cpu*)msr_read(MSR_GS_BASE);
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* !__PER_CPU_H__ */

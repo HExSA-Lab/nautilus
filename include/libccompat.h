@@ -1,6 +1,10 @@
 #ifndef __LIBCCOMPAT_H__
 #define __LIBCCOMPAT_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <nautilus.h>
 
 #define UNDEF_FUN_ERR() ERROR_PRINT("Function (%s) undefined\n", __func__)
@@ -29,5 +33,9 @@ int fprintf(FILE*, const char*, ...);
 int fputc(int, FILE*);
 int fputs(const char*, FILE*);
 size_t fwrite(const void*, size_t, size_t, FILE*);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
