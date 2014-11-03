@@ -175,7 +175,8 @@ SUBARCH := $(shell uname -m | sed -e s/i.86/i386/  )
 # Note: Some architectures assign CROSS_COMPILE in their arch/*/Makefile
 
 ARCH		?= $(SUBARCH)
-CROSS_COMPILE	?= /home/kyle/opt/cross/bin/x86_64-elf-
+CROSS_COMPILE	?= 
+#CROSS_COMPILE	?= /home/kyle/opt/cross/bin/x86_64-elf-
 
 # Architecture as present in compile.h
 UTS_MACHINE := $(ARCH)
@@ -305,14 +306,10 @@ NAUT_INCLUDE      := -Iinclude \
 
 CPPFLAGS        := $(NAUT_INCLUDE) -D__NAUTILUS__
 
-CXXFLAGS := -fno-exceptions -fno-omit-frame-pointer -fno-rtti
+CXXFLAGS := -fno-exceptions -fno-omit-frame-pointer -fno-rtti 
 #CFLAGS 		:=  -fno-stack-protector -Wall -Werror  -mno-red-zone -fno-common 
 CFLAGS:=   -O2 \
-		   -std=gnu99 \
 		   -Wall \
-		   -Werror \
-		   -Wmissing-prototypes \
-		   -Wstrict-prototypes \
 		   -Wno-unused-function \
 		   -Wno-unused-variable \
 		   -ffreestanding \
@@ -328,10 +325,14 @@ CFLAGS:=   -O2 \
 		   -mno-sse3 \
 		   -mno-3dnow \
 		    $(call cc-option, -Wno-unused-but-set-variable,)
+		   #-std=gnu99 \
+		   #-Werror \
+		   #-Wmissing-prototypes \
+		   #-Wstrict-prototypes \
 
 
 #--whole-archive was in below
-LDFLAGS         := -nostdlib -z max-page-size=0x1000 
+LDFLAGS         := -z max-page-size=0x1000  -L/home/kyle/opt/cross/lib/gcc/x86_64-elf/4.8.0 
 
 ifeq ($(call cc-option-yn, -fgnu89-inline),y)
 CFLAGS		+= -fgnu89-inline
@@ -455,7 +456,12 @@ scripts_basic: include/autoconf.h
 
 # Objects we will link into Nautilus / subdirs we need to visit
 core-y          := src/
-libs-y		:= lib/
+libs-y		:= lib/ \
+			   /usr/lib64/libstdc++.a \
+			   /home/kyle/opt/cross/lib/gcc/x86_64-elf/4.8.0/libgcc.a \
+			   /usr/lib64/libsupc++.a \
+
+			   #/usr/lib64/libc.a \
 
 
 ifeq ($(dot-config),1)

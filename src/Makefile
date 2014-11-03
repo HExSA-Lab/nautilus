@@ -7,7 +7,7 @@ obj-y += \
 	irq.o \
 	mb_utils.o \
 	paging.o \
-	string.o \
+	naut_string.o \
 	msr.o \
 	cpuid.o \
 	spinlock.o \
@@ -17,8 +17,14 @@ obj-y += \
 	idle.o \
 	thread.o \
 	barrier.o \
+	libccompat.o \
+	hello_world.o \
 	nautilus.o \
+	libccompat.o \
+	cxxglue.o \
 	asm/ \
 	dev/ \
-	test/
+	test/  \
+	legion_runtime/
+	
 	
