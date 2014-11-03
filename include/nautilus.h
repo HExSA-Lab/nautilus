@@ -5,6 +5,10 @@
 #include <serial.h>
 #include <types.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 
 #ifdef NAUT_CONFIG_SERIAL_REDIRECT
 #include <serial.h>
@@ -57,6 +61,9 @@ struct naut_info {
 
 void main (unsigned long mbd, unsigned long magic) __attribute__((section (".text")));
 
+#ifdef __cplusplus
+}
+#endif
                                                
 
 #endif

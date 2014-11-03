@@ -1,6 +1,10 @@
 #ifndef __THREAD_H__
 #define __THREAD_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef __ASSEMBLER__
 
 #include <spinlock.h>
@@ -125,5 +129,9 @@ put_cur_thread (thread_t * t)
 
 
 #endif /* !__ASSEMBLER */
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif  /* !__THREAD_H__ */

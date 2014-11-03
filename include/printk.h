@@ -1,6 +1,10 @@
 #ifndef __PRINTK_H__
 #define __PRINTK_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define	PRINTK_BUFMAX	128
 #include <stdarg.h>
 #include <types.h>
@@ -22,4 +26,7 @@ void show_splash(void);
 " Kyle C. Hale (c) 2014 | Northwestern University   \n" \
 "+===============================================+  \n\n"
 
+#ifdef __cplusplus
+}
+#endif
 #endif
