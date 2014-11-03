@@ -44,7 +44,7 @@ jmp early_excp_common;
 
 #ifndef __ASSEMBLER__
 
-#include <types.h>
+#include <naut_types.h>
 #include <gdt.h>
 #include <intrinsics.h>
 #include <naut_string.h>

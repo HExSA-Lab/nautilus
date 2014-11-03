@@ -10,7 +10,7 @@
 
 */
 
-#include <types.h>
+#include <naut_types.h>
 //#include <new>
 
 extern "C" void printk(const char *fmt, ...);

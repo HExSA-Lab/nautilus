@@ -3,7 +3,7 @@
 
 #ifndef __ASSEMBLER__
 
-#include <types.h>
+#include <naut_types.h>
 #include <lib/bitops.h>
 #include <naut_string.h>
 

@@ -1,7 +1,7 @@
 #ifndef __APIC_H__
 #define __APIC_H__
 
-#include <types.h>
+#include <naut_types.h>
 
 #define IA32_APIC_BASE_MSR        0x1b
 #define IA32_APIC_BASE_MSR_BSP    0x100 

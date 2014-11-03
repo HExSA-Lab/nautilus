@@ -2,7 +2,7 @@
 #define __CPUID_H__
 
 #include <intrinsics.h>
-#include <types.h>
+#include <naut_types.h>
 
 #define CPUID_FEATURE_INFO       0x1
 

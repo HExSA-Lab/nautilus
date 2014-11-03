@@ -3,7 +3,7 @@
 
 #include <printk.h>
 #include <serial.h>
-#include <types.h>
+#include <naut_types.h>
 
 #ifdef __cplusplus
 extern "C" {

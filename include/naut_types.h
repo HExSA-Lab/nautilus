@@ -1,5 +1,5 @@
-#ifndef __TYPES_H__
-#define __TYPES_H__
+#ifndef __NAUT_TYPES_H__
+#define __NAUT_TYPES_H__
 
 typedef signed char   schar_t;
 typedef unsigned char uchar_t;

@@ -1,7 +1,7 @@
 #ifndef __IOAPIC_H__
 #define __IOAPIC_H__
 
-#include <types.h>
+#include <naut_types.h>
 #include <intrinsics.h>
 
 #define MAX_IOAPICS 32

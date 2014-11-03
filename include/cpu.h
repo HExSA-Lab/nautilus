@@ -1,7 +1,7 @@
 #ifndef __CPU_H__
 #define __CPU_H__
 
-#include <types.h>
+#include <naut_types.h>
 
 #define RFLAGS_CF   (1 << 0)
 #define RFLAGS_PF   (1 << 2)

@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-#include <types.h>
+#include <naut_types.h>
 
 typedef uint32_t spinlock_t;
 

@@ -7,7 +7,7 @@
  */
 
 #include <naut_string.h>
-#include <types.h>
+#include <naut_types.h>
 
 #ifdef NAUT_CONFIG_USE_NAUT_BUILTINS
 size_t 

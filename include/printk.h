@@ -7,7 +7,7 @@ extern "C" {
 
 #define	PRINTK_BUFMAX	128
 #include <stdarg.h>
-#include <types.h>
+#include <naut_types.h>
 
 void panic (const char * fmt, ...);
 int printk (const char * fmt, ...);

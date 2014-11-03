@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-#include <types.h>
+#include <naut_types.h>
 
 
 #define isspace(c)      (c == ' ' || c == '\f' || c == '\n' || c == '\r' || c == '\t' || c == '\v')
