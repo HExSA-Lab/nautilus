@@ -1,6 +1,6 @@
 #include <nautilus.h>
 #include <cga.h>
-#include <string.h>
+#include <naut_string.h>
 #include <spinlock.h>
 #include <cpu.h>
 
@@ -60,9 +60,11 @@ term_init (void)
     term.color = make_color(COLOR_LIGHT_GREY, COLOR_BLACK);
     term.buf = (uint16_t*) VGA_BASE_ADDR;
     spinlock_init(&(term.lock));
-    for ( size_t y = 0; y < VGA_HEIGHT; y++ )
+    size_t y;
+    size_t x;
+    for ( y = 0; y < VGA_HEIGHT; y++ )
     {
-        for ( size_t x = 0; x < VGA_WIDTH; x++ )
+        for ( x = 0; x < VGA_WIDTH; x++ )
         {
             const size_t index = y * VGA_WIDTH + x;
             term.buf[index] = make_vgaentry(' ', term.color);
