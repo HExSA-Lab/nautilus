@@ -1,6 +1,10 @@
 #ifndef __CPU_H__
 #define __CPU_H__
 
+#ifdef __cplusplus 
+extern "C" {
+#endif
+
 #include <naut_types.h>
 
 #define RFLAGS_CF   (1 << 0)
@@ -227,6 +231,9 @@ static void udelay(uint_t n) {
 }
 
     
+#ifdef __cplusplus 
+}
+#endif
 
 
 #endif

@@ -1,6 +1,10 @@
 #ifndef __SMP_H__
 #define __SMP_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define MAX_CPUS 128
 
 #define AP_TRAMPOLINE_ADDR 0xf000 
@@ -91,6 +95,9 @@ uint32_t get_num_cpus (void);
 
 
 
+#ifdef __cplusplus
+}
+#endif
 
 
 #endif /* !__ASSEMBLER__ */

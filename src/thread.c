@@ -274,7 +274,7 @@ tls_exit (void)
 
 
 void
-exit (void * retval) 
+thread_exit (void * retval) 
 {
     thread_t * me = get_cur_thread();
 
@@ -593,7 +593,7 @@ static void
 thread_cleanup (void)
 {
     SCHED_DEBUG("Thread (%d) exiting on core %d\n", get_cur_thread()->tid, my_cpu_id());
-    exit(0);
+    thread_exit(0);
 }
 
 

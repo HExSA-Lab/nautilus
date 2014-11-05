@@ -72,7 +72,7 @@ void yield(void);
 void schedule(void);
 int sched_init(void);
 int sched_init_ap(void);
-void exit(void * retval);
+void thread_exit(void * retval);
 void wait(thread_t * t);
 void wake_waiters(void);
 int join(thread_t * t, void ** retval);

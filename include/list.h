@@ -137,8 +137,8 @@ static inline void __list_del(struct list_head * prev, struct list_head * next)
 static inline void list_del(struct list_head *entry)
 {
 	__list_del(entry->prev, entry->next);
-	entry->next = LIST_POISON1;
-	entry->prev = LIST_POISON2;
+	entry->next = (struct list_head*)LIST_POISON1;
+	entry->prev = (struct list_head*)LIST_POISON2;
 }
 
 /**
@@ -494,8 +494,8 @@ static inline void __hlist_del(struct hlist_node *n)
 static inline void hlist_del(struct hlist_node *n)
 {
 	__hlist_del(n);
-	n->next = LIST_POISON1;
-	n->pprev = LIST_POISON2;
+	n->next = (struct hlist_node*)LIST_POISON1;
+	n->pprev = (struct hlist_node**)LIST_POISON2;
 }
 
 static inline void hlist_del_init(struct hlist_node *n)
@@ -599,7 +599,7 @@ static inline void hlist_add_after(struct hlist_node *n,
 
 
 #ifdef __cplusplus
-extern "C" {
+}
 #endif
 
 #endif

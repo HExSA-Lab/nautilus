@@ -1,6 +1,10 @@
 #ifndef __NAUT_TYPES_H__
 #define __NAUT_TYPES_H__
 
+#ifdef __cplusplus 
+extern "C" {
+#endif
+
 typedef signed char   schar_t;
 typedef unsigned char uchar_t;
 
@@ -43,5 +47,9 @@ typedef uchar_t bool_t;
 #endif
 #define FALSE 0
 #define TRUE 1
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

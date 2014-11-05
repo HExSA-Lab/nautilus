@@ -1,6 +1,10 @@
 #ifndef __IRQ_H__
 #define __IRQ_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <nautilus.h>
 #include <idt.h>
 #include <cpu.h>
@@ -61,5 +65,9 @@ int register_irq_handler (uint16_t irq,
 int register_int_handler (uint16_t int_vec,
                           int (*handler)(excp_entry_t *, excp_vec_t),
                           void * priv_data);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -3,6 +3,10 @@
 
 #include <naut_types.h>
 
+#ifdef __cplusplus 
+extern "C" {
+#endif
+
 #define IA32_APIC_BASE_MSR        0x1b
 #define IA32_APIC_BASE_MSR_BSP    0x100 
 #define IA32_APIC_BASE_MSR_ENABLE 0x800
@@ -113,5 +117,8 @@ int apic_get_maxlvt(struct apic_dev * apic);
 uint32_t apic_wait_for_send(struct apic_dev* apic);
 
 
+#ifdef __cplusplus 
+}
+#endif
 
 #endif

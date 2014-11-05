@@ -3,6 +3,10 @@
 
 #include <asm/lowlevel.h>
 
+#ifdef __cplusplus 
+extern "C" {
+#endif
+
 #define NUM_IDT_ENTRIES 256
 #define NUM_EXCEPTIONS  32
 
@@ -113,8 +117,8 @@ int null_irq_handler(excp_entry_t * excp, excp_vec_t vector);
 
 static inline void
 write_gate_desc (struct   gate_desc64 * idt,
-                 gate_type_t gate, 
-                 uint32_t    type, 
+                 uint32_t gate, 
+                 gate_type_t type, 
                  void      * func,
                  uint32_t    dpl,
                  uint32_t    ist, 
@@ -151,6 +155,10 @@ lidt (const struct idt_desc * d)
 }
 
 #endif /* !__ASSEMBLER__ */
+
+#ifdef __cplusplus 
+}
+#endif
 
 
 #endif /* __IDT_H__ */

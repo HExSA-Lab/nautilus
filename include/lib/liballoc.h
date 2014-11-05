@@ -3,6 +3,10 @@
 
 #include <naut_types.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define _ALLOC_SKIP_DEFINE 
 
 
@@ -21,9 +25,6 @@ typedef	unsigned int	size_t;
 
 #endif
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 
 /** This is a boundary tag which is prepended to the

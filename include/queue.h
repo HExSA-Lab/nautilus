@@ -1,6 +1,10 @@
 #ifndef __QUEUE_H__
 #define __QUEUE_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <spinlock.h>
 #include <list.h>
 
@@ -31,6 +35,9 @@ uint8_t queue_empty_atomic(queue_t * q);
 
 
 
+#ifdef __cplusplus
+}
+#endif
 
 
 #endif

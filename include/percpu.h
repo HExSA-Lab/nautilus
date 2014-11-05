@@ -28,6 +28,8 @@ struct cpu;
 #define __percpu_seg %%gs
 
 
+#include <nautilus.h>
+
 #define __per_cpu_get(var, n)                                        \
     ({                                                               \
     typeof(((struct cpu*)0)->var) __r;                             \
@@ -64,13 +66,14 @@ struct cpu;
 #define __per_cpu_put(var, newval, n) \
 do {\
      asm volatile (__xpand_str(__movop_##n) " "  __xpand_str(__percpu_seg)":%p[_o], " __xpand_str(__areg_##n) ";\n" \
-                   "1:\n\t " __xpand_str(__cmpop_##n) " %[new],"  __xpand_str(__percpu_seg) ":%p[_o];\n"     \
+                   "1:\n\t " __xpand_str(__cmpop_##n) " %[newv],"  __xpand_str(__percpu_seg) ":%p[_o];\n"     \
                    "\tjnz 1b;\n" \
                    : /* no outputs */ \
                    : [_o] "n" (offsetof(struct cpu, var)), \
-                     [new] "r" (newval) \
+                     [newv] "r" (newval) \
                    : "rax", "memory"); \
 } while (0)
+
 
 #define per_cpu_put(var, newval)                                      \
 do { \
@@ -97,6 +100,7 @@ do { \
 #define my_cpu_id() per_cpu_get(id)
 
 #include <msr.h>
+#include <smp.h>
 static inline struct cpu*
 get_cpu (void)
 {

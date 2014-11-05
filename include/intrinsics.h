@@ -3,9 +3,17 @@
 
 
 #define __packed __attribute__ ((packed))
-#define __always_inline __attribute__ ((always_inline))
 
+#ifndef __always_inline
+#define __always_inline __attribute__ ((always_inline))
+#endif
+
+#ifndef unlikely
 #define unlikely(c) __builtin_expect((c), 0)
+#endif
+
+#ifndef likely
 #define likely(c)   __builtin_expect((c), 1)
+#endif
 
 #endif
