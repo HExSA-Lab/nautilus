@@ -26,13 +26,26 @@ SECTIONS
 
     .text ALIGN(0x1000) : 
     {
-        *(.text)
+        *(.text*)
         *(.gnu.linkonce.t*)
     }
-    
-    .data ALIGN(0x1000) : AT(ADDR(.text) + SIZEOF(.text))
+
+    .init_array ALIGN(0x1000) : AT(ADDR(.text) + SIZEOF(.text))
     {
-        *(.data)
+        *(.init_array*)
+        *(.gnu.linkonce.init_array*)
+    }
+
+
+    .gcc_except_table ALIGN(0x1000) : AT(ADDR(.init_array) + SIZEOF(.init_array))
+    {
+        *(.gcc_except_table*)
+        *(.gnu.linkonce.gcc_except*)
+    }
+    
+    .data ALIGN(0x1000) : AT(ADDR(.gcc_except_table) + SIZEOF(.gcc_except_table))
+    {
+        *(.data*)
         *(.gnu.linkonce.d*)
     }
     
@@ -42,12 +55,20 @@ SECTIONS
         *(.gnu.linkonce.r*)
     }
     
+
+    .got ALIGN(0x1000) : AT(ADDR(.rodata)+SIZEOF(.rodata))
+    {
+        *(.got*)
+        *(.gnu.linkconce.got*)
+    }
+
+
     _loadEnd = .; 
     
     .bss ALIGN(0x1000) : AT(ADDR(.rodata)+SIZEOF(.rodata))
     {
         *(COMMON)
-        *(.bss)
+        *(.bss*)
         *(.gnu.linkonce.b*)
     }
     
