@@ -6,7 +6,6 @@ extern "C" {
 #endif
 
 #include <spinlock.h>
-#include <event.h>
 
 #define BARRIER_LAST 1
 
