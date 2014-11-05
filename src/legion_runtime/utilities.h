@@ -18,12 +18,12 @@
 #define __RUNTIME_UTILITIES_H__
 
 #include <iostream>
+#include <cstring>
 #include <string>
 
 #include <cstdlib>
 #include <cstdio>
 #include <cassert>
-#include <cstring>
 #include <cstdarg>
 
 #include <map>
@@ -175,7 +175,8 @@ namespace LegionRuntime {
             std::map<std::string, int>::iterator it = Logger::get_categories_by_name().find(name);
             if(it == Logger::get_categories_by_name().end()) {
               fprintf(stderr, "unknown log category '%s'!\n", name.c_str());
-              exit(1);
+              //exit(1);
+              abort();
             }
 
             Logger::get_log_cats_enabled()[it->second] = enable;

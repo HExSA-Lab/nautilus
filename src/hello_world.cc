@@ -15,6 +15,11 @@
 
 
 #include <cstdio>
+//#include <nautilus.h>
+//#include <naut_string.h>
+//
+extern "C" void printk (const char * fmt, ...);
+extern "C" void panic (const char * fmt, ...);
 
 #include "legion_runtime/legion.h"
 
@@ -34,7 +39,7 @@ void hello_world_task(const Task *task,
                       Context ctx, HighLevelRuntime *runtime)
 {
   // A task runs just like a normal C++ function.
-  printf("Hello World!\n");
+  printk("Hello World Legion!\n");
 }
 
 // We have a main function just like a standard C++ program.
@@ -42,6 +47,8 @@ void hello_world_task(const Task *task,
 int go(int argc, char **argv);
 int go(int argc, char **argv)
 {
+
+    panic("we are now in a legion function\n");
   // Before starting the Legion runtime, you first have to tell it
   // what the ID is for the top-level task.
   HighLevelRuntime::set_top_level_task_id(HELLO_WORLD_ID);
@@ -61,4 +68,8 @@ int go(int argc, char **argv)
   // execution.  We'll never return from this call, but its return 
   // signature will return an int to satisfy the type checker.
   return HighLevelRuntime::start(argc, argv);
+}
+
+extern "C" void go_c (int argc, char ** argv) {
+    go(argc, argv);
 }

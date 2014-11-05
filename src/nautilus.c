@@ -26,6 +26,7 @@
 #include <lib/liballoc_hooks.h>
 #include <lib/liballoc.h>
 
+extern void go_c (int argc, char ** argv);
 
 static struct naut_info nautilus_info;
 extern spinlock_t printk_lock;
@@ -96,11 +97,19 @@ main (unsigned long mbd, unsigned long magic)
     ipi_begin_test(1);
     ipi_begin_test(8);
     ipi_begin_test(4);
-    */
-    sti();
     tls_test();
+    */
+
+    sti();
+
+    char * blah[] = {"test", 0};
+    
+    panic("end\n");
+    go_c(1, blah);
 
     printk("Nautilus main thread yielding on core %d\n", my_cpu_id());
+
+
 
     while (1) {
         yield();

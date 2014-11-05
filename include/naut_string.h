@@ -1,6 +1,8 @@
 #ifndef __STRING_H__
 #define __STRING_H__
 
+#ifndef __LEGION__
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -120,4 +122,6 @@ void str_tolower (char * s);
 }
 #endif
 
-#endif
+#endif /* !__LEGION__ */
+
+#endif 

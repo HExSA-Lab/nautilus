@@ -1634,7 +1634,8 @@ namespace LegionRuntime {
       std::map<Memory,std::set<Memory> > visible_memories_from_memory;
       std::map<Memory,std::set<Processor> > visible_procs_from_memory;
       bool explicit_utility_procs;
-      void *background_pthread; // pointer to pthread_t in the background
+      //void *background_pthread; // pointer to pthread_t in the background
+      void *background_kthread;
     public:
       struct NodeAnnounceData;
 

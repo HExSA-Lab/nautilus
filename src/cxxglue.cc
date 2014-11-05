@@ -152,6 +152,7 @@ void operator delete[](void *p)
 }
 
 
+/*
 namespace std {
 
     void __throw_bad_alloc(void) {
@@ -162,5 +163,6 @@ namespace std {
         BAD();
     }
 }
+*/
 
 

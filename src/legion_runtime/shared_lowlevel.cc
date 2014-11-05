@@ -24,9 +24,9 @@
 
 using namespace LegionRuntime::Accessor;
 
-#include <cstdio>
 #include <cstring>
 #include <cassert>
+#include <cstdio>
 #include <cstdlib>
 
 #include <map>
@@ -42,6 +42,19 @@ using namespace LegionRuntime::Accessor;
 #include <signal.h>
 #include <execinfo.h>
 #endif
+
+
+#define __LEGION__
+
+/* KCH: NAUTILUS */
+#include <thread.h>
+#include <condvar.h>
+#include <rwlock.h>
+#include <spinlock.h>
+#include <barrier.h>
+#include <irq.h>
+//#include <libccompat.h>
+//#include <atomic.h>
 
 #define BASE_EVENTS	  1024	
 #define BASE_RESERVATIONS 64	
@@ -73,48 +86,57 @@ using namespace LegionRuntime::Accessor;
 	(cmd);
 #endif
 
+		//PTHREAD_SAFE_CALL(pthread_mutex_lock(&debug_mutex));	\
+		//PTHREAD_SAFE_CALL(pthread_mutex_unlock(&debug_mutex));	\
+        //
+        //
+// KCH
+#undef DEBUG_PRINT
 #ifdef DEBUG_PRINT
 #define DPRINT1(str,arg)						\
 	{								\
-		PTHREAD_SAFE_CALL(pthread_mutex_lock(&debug_mutex));	\
+		int flags = spin_lock_irq_save(&debug_mutex); \
 		fprintf(stderr,str,arg);				\
 		fflush(stderr);						\
-		PTHREAD_SAFE_CALL(pthread_mutex_unlock(&debug_mutex));	\
+		spin_unlock_irq_restore(&debug_mutex, flags); \
 	}
 
 #define DPRINT2(str,arg1,arg2)						\
 	{								\
-		PTHREAD_SAFE_CALL(pthread_mutex_lock(&debug_mutex));	\
+		int flags = spin_lock_irq_save(&debug_mutex); \
 		fprintf(stderr,str,arg1,arg2);				\
 		fflush(stderr);						\
-		PTHREAD_SAFE_CALL(pthread_mutex_unlock(&debug_mutex));	\
+		spin_unlock_irq_restore(&debug_mutex, flags); \
 	}
 
 #define DPRINT3(str,arg1,arg2,arg3)					\
 	{								\
-		PTHREAD_SAFE_CALL(pthread_mutex_lock(&debug_mutex));	\
+		int flags = spin_lock_irq_save(&debug_mutex); \
 		fprintf(stderr,str,arg1,arg2,arg3);			\
 		fflush(stderr);						\
-		PTHREAD_SAFE_CALL(pthread_mutex_unlock(&debug_mutex));	\
+		spin_unlock_irq_restore(&debug_mutex, flags); \
 	}
 
 #define DPRINT4(str,arg1,arg2,arg3,arg4)				\
 	{								\
-		PTHREAD_SAFE_CALL(pthread_mutex_lock(&debug_mutex));	\
+		int flags = spin_lock_irq_save(&debug_mutex); \
 		fprintf(stderr,str,arg1,arg2,arg3,arg4);		\
 		fflush(stderr);						\
-		PTHREAD_SAFE_CALL(pthread_mutex_unlock(&debug_mutex));	\
+		spin_unlock_irq_restore(&debug_mutex, flags); \
 	}
 
 // Declration for the debug mutex
-pthread_mutex_t debug_mutex;
+//pthread_mutex_t debug_mutex;
+spinlock_t debug_mutex;
 #endif // DEBUG_PRINT
 
 // Local processor id
 // Instead of using __thread, we'll try and make this
 // code more portable by using pthread thread local storage
 //__thread unsigned local_proc_id;
-pthread_key_t local_proc_key;
+//pthread_key_t local_proc_key;
+
+tls_key_t local_proc_key;
 static void thread_proc_free(void *arg)
 {
   assert(arg != NULL);
@@ -194,6 +216,7 @@ namespace LegionRuntime {
       std::vector<RegionInstance::Impl*> instances;
       std::deque<RegionInstance::Impl*> free_instances;
       Machine *machine;
+      /*
       pthread_rwlock_t event_lock;
       pthread_mutex_t  free_event_lock;
       pthread_rwlock_t reservation_lock;
@@ -205,6 +228,19 @@ namespace LegionRuntime {
       pthread_mutex_t  free_alloc_lock;
       pthread_rwlock_t instance_lock;
       pthread_mutex_t  free_inst_lock;
+      */
+
+      rwlock_t         event_lock;
+      spinlock_t       free_event_lock;
+      rwlock_t         reservation_lock;
+      spinlock_t       free_reservation_lock;
+      rwlock_t         proc_group_lock;
+      rwlock_t         metadata_lock;
+      spinlock_t       free_metas_lock;
+      rwlock_t         allocator_lock;
+      spinlock_t       free_alloc_lock;
+      rwlock_t         instance_lock;
+      spinlock_t       free_inst_lock;
     };
 
     /* static */
@@ -225,9 +261,14 @@ namespace LegionRuntime {
       const unsigned num_dma_threads;
     protected:
       bool dma_shutdown;
+      /*
       pthread_mutex_t dma_lock;
       pthread_cond_t dma_cond;
       std::vector<pthread_t> dma_threads;
+      */
+      spinlock_t      dma_lock;
+      condvar_t       dma_cond;
+      std::vector<thread_t*> dma_threads;
       std::deque<CopyOperation*> ready_copies;
     };
     
@@ -242,27 +283,39 @@ namespace LegionRuntime {
     public:
       PerThreadTimerData(void)
       {
-        unsigned *local_proc_id = (unsigned*)pthread_getspecific(local_proc_key);
+        /*
+        //unsigned *local_proc_id = (unsigned*)pthread_getspecific(local_proc_key);
+        unsigned *local_proc_id = (unsigned*)tls_get(local_proc_key);
         thread = *local_proc_id; 
         mutex = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
         PTHREAD_SAFE_CALL(pthread_mutex_init(mutex,NULL));
+        */
+        unsigned *local_proc_id = (unsigned*)tls_get(local_proc_key);
+        thread = *local_proc_id;
+        mutex = (spinlock_t*)malloc(sizeof(spinlock_t));
+        spinlock_init(mutex);
       }
       ~PerThreadTimerData(void)
       {
-        PTHREAD_SAFE_CALL(pthread_mutex_destroy(mutex));
+        //PTHREAD_SAFE_CALL(pthread_mutex_destroy(mutex));
+        spinlock_deinit(mutex);
+
         free(mutex);
       }
 
       unsigned thread;
       std::list<TimerStackEntry> timer_stack;
       std::map<int, double> timer_accum;
-      pthread_mutex_t *mutex;
+      //pthread_mutex_t *mutex;
+      spinlock_t *mutex;
     };
 
-    pthread_mutex_t global_timer_mutex = PTHREAD_MUTEX_INITIALIZER;
+    //pthread_mutex_t global_timer_mutex = PTHREAD_MUTEX_INITIALIZER;
+    spinlock_t global_timer_mutex = SPINLOCK_INITIALIZER;
     std::vector<PerThreadTimerData*> timer_data;
-    //__thread PerThreadTimerData *thread_timer_data;
-    pthread_key_t thread_timer_key;
+    //__thread PerThreadTimerData *thread_timer_data; **commented out by legion devs
+    //pthread_key_t thread_timer_key;
+    tls_key_t thread_timer_key;
     static void thread_timer_free(void *arg)
     {
       assert(arg != NULL);
@@ -273,29 +326,43 @@ namespace LegionRuntime {
 #ifdef DETAILED_TIMING
     /*static*/ void DetailedTimer::clear_timers(bool all_nodes /*=true*/)
     {
-      PTHREAD_SAFE_CALL(pthread_mutex_lock(&global_timer_mutex));
+      //PTHREAD_SAFE_CALL(pthread_mutex_lock(&global_timer_mutex));
+      int flags1 = spin_lock_irq_save(&global_timer_mutex);
       for (std::vector<PerThreadTimerData*>::iterator it = timer_data.begin();
             it != timer_data.end(); it++)
       {
         // Take each thread's data lock as well
-        PTHREAD_SAFE_CALL(pthread_mutex_lock(((*it)->mutex)));
+        //PTHREAD_SAFE_CALL(pthread_mutex_lock(((*it)->mutex)));
+        int flags2 = spin_lock_irq_save(((*it)->mutex));
         (*it)->timer_accum.clear();
-        PTHREAD_SAFE_CALL(pthread_mutex_unlock(((*it)->mutex)));
+        //PTHREAD_SAFE_CALL(pthread_mutex_unlock(((*it)->mutex)));
+        spin_unlock_irq_restore(((*it)->mutex), flags2);
       }
-      PTHREAD_SAFE_CALL(pthread_mutex_unlock(&global_timer_mutex));
+      //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&global_timer_mutex));
+      spin_unlock_irq_restore(&global_timer_mutex, flags1);
     }
 
     /*static*/ void DetailedTimer::push_timer(int timer_kind)
     {
+        /*
       PerThreadTimerData *thread_timer_data = 
         (PerThreadTimerData*) pthread_getspecific(thread_timer_key);
+        */
+      PerThreadTimerData *thread_timer_data = (PerThreadTimerData*)tls_get(thread_timer_key);
       if (!thread_timer_data)
       {
-        PTHREAD_SAFE_CALL(pthread_mutex_lock(&global_timer_mutex));
+        //PTHREAD_SAFE_CALL(pthread_mutex_lock(&global_timer_mutex));
+        int flags1 = spin_lock_irq_save(&global_timer_mutex);
+
         thread_timer_data = new PerThreadTimerData();
-        PTHREAD_SAFE_CALL(pthread_setspecific(thread_timer_key,thread_timer_data));
+
+        //PTHREAD_SAFE_CALL(pthread_setspecific(thread_timer_key,thread_timer_data));
+        tls_set(thread_timer_key, thread_timer_data);
+
         timer_data.push_back(thread_timer_data);
-        PTHREAD_SAFE_CALL(pthread_mutex_unlock(&global_timer_mutex));
+
+        //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&global_timer_mutex));
+        spin_unlock_irq_restore(&global_timer_mutex, flags1);
       }
 
       // no lock required here - only our thread touches the stack
@@ -310,12 +377,17 @@ namespace LegionRuntime {
 
     /*static*/ void DetailedTimer::pop_timer(void)
     {
+        /*
       PerThreadTimerData *thread_timer_data =
         (PerThreadTimerData*) pthread_getspecific(thread_timer_key);
+        */
+        PerThreadTimerData *thread_timer_data = (PerThreadTimerData*)tls_get(thread_timer_key);
       if (!thread_timer_data)
       {
-        printf("Got pop without initialized thread data !?\n");
-        exit(1);
+        //printf("Got pop without initialized thread data !?\n");
+        printk("Got pop without initialized thread data !?\n");
+        //exit(1);
+        abort();
       }
 
       // no conflicts on stack
@@ -336,7 +408,8 @@ namespace LegionRuntime {
       // We do need a lock to touch the accumulator
       if (old_top.timer_kind > 0)
       {
-        PTHREAD_SAFE_CALL(pthread_mutex_lock(thread_timer_data->mutex));
+        //PTHREAD_SAFE_CALL(pthread_mutex_lock(thread_timer_data->mutex));
+        int flags = spin_lock_irq_save(thread_timer_data->mutex);
         
         std::map<int,double>::iterator it = thread_timer_data->timer_accum.find(old_top.timer_kind);
         if (it != thread_timer_data->timer_accum.end())
@@ -344,19 +417,22 @@ namespace LegionRuntime {
         else
           thread_timer_data->timer_accum.insert(std::make_pair(old_top.timer_kind,elapsed));
 
-        PTHREAD_SAFE_CALL(pthread_mutex_unlock(thread_timer_data->mutex));
+        //PTHREAD_SAFE_CALL(pthread_mutex_unlock(thread_timer_data->mutex));
+        spin_unlock_irq_restore(thread_timer_data->mutex, flags);
       }
     }
 
     /*static*/ void DetailedTimer::roll_up_timers(std::map<int,double> &timers, bool local_only)
     {
-      PTHREAD_SAFE_CALL(pthread_mutex_lock(&global_timer_mutex));
+      //PTHREAD_SAFE_CALL(pthread_mutex_lock(&global_timer_mutex));
+        int flags = spin_lock_irq_save(thread_timer_data->mutex);
 
       for (std::vector<PerThreadTimerData*>::iterator it = timer_data.begin();
             it != timer_data.end(); it++)
       {
         // Take the local lock for each thread's data too
-        PTHREAD_SAFE_CALL(pthread_mutex_lock(((*it)->mutex)));
+        //PTHREAD_SAFE_CALL(pthread_mutex_lock(((*it)->mutex)));
+        int flags2 = spin_lock_irq_save((*it)->mutex);
 
         for (std::map<int,double>::iterator it2 = (*it)->timer_accum.begin();
               it2 != (*it)->timer_accum.end(); it2++)
@@ -368,10 +444,12 @@ namespace LegionRuntime {
             timers.insert(*it2);
         }
 
-        PTHREAD_SAFE_CALL(pthread_mutex_unlock(((*it)->mutex)));
+        //PTHREAD_SAFE_CALL(pthread_mutex_unlock(((*it)->mutex)));
+        spin_unlock_irq_restore((*it)->mutex, flags2);
       }
 
-      PTHREAD_SAFE_CALL(pthread_mutex_unlock(&global_timer_mutex));
+      //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&global_timer_mutex));
+      spin_unlock_irq_restore(&global_timer_mutex, flags);
     }
 
     /*static*/ void DetailedTimer::report_timers(bool local_only /* = false*/)
@@ -380,13 +458,16 @@ namespace LegionRuntime {
 
       roll_up_timers(timers, local_only);
 
-      printf("DETAILED_TIMING_SUMMARY:\n");
+      //printf("DETAILED_TIMING_SUMMARY:\n");
+      printk("DETAILED_TIMING_SUMMARY:\n");
       for (std::map<int,double>::iterator it = timers.begin();
             it != timers.end(); it++)
       {
-        printf("%12s - %7.3f s\n", stringify(it->first), it->second);
+        //printf("%12s - %7.3f s\n", stringify(it->first), it->second);
+        printk("%12s - %7.3f s\n", stringify(it->first), it->second);
       }
-      printf("END OF DETAILED TIMING SUMMARY\n");
+      //printf("END OF DETAILED TIMING SUMMARY\n");
+      printk("END OF DETAILED TIMING SUMMARY\n");
     }
 #endif
     
@@ -429,10 +510,18 @@ namespace LegionRuntime {
 	  generation = 0;
           free_generation = 0;
 	  sources = 0;
-          mutex = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
-          wait_cond = (pthread_cond_t*)malloc(sizeof(pthread_cond_t));
-	  PTHREAD_SAFE_CALL(pthread_mutex_init(mutex,NULL));
-	  PTHREAD_SAFE_CALL(pthread_cond_init(wait_cond,NULL));
+          //mutex = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
+          mutex = (spinlock_t*)malloc(sizeof(spinlock_t));
+
+          //wait_cond = (pthread_cond_t*)malloc(sizeof(pthread_cond_t));
+          wait_cond = (condvar_t*)malloc(sizeof(condvar_t));
+
+	  //PTHREAD_SAFE_CALL(pthread_mutex_init(mutex,NULL));
+      spinlock_init(mutex);
+
+	  //PTHREAD_SAFE_CALL(pthread_cond_init(wait_cond,NULL));
+      condvar_init(wait_cond);
+
 	  if (in_use)
 	  {
 	    // Always initialize the current event to hand out to
@@ -449,8 +538,10 @@ namespace LegionRuntime {
 	}
         ~EventImpl(void)
         {
-          PTHREAD_SAFE_CALL(pthread_mutex_destroy(mutex));
-          PTHREAD_SAFE_CALL(pthread_cond_destroy(wait_cond));
+          //PTHREAD_SAFE_CALL(pthread_mutex_destroy(mutex));
+          //PTHREAD_SAFE_CALL(pthread_cond_destroy(wait_cond));
+          spinlock_deinit(mutex);
+          condvar_destroy(wait_cond);
           free(mutex);
           free(wait_cond);
         }
@@ -491,8 +582,10 @@ namespace LegionRuntime {
 	// so we can detect when the event has triggered with testing
 	// generational equality
 	Event current; 
-	pthread_mutex_t *mutex;
-	pthread_cond_t *wait_cond;
+	//pthread_mutex_t *mutex;
+	//pthread_cond_t *wait_cond;
+    spinlock_t *mutex;
+    condvar_t *wait_cond;
         std::list<TriggerableInfo> triggerables;
     }; 
 
@@ -503,7 +596,10 @@ namespace LegionRuntime {
     class ProcessorImpl : public Triggerable {
     public:
         // For creation of normal processors when there is no utility processors
-        ProcessorImpl(pthread_barrier_t *init, const Processor::TaskIDTable &table, 
+        
+        /*ProcessorImpl(pthread_barrier_t *init, const Processor::TaskIDTable &table, 
+                      Processor p, size_t stacksize, bool return_finish = false) */
+        ProcessorImpl(barrier_t *init, const Processor::TaskIDTable &table, 
                       Processor p, size_t stacksize, bool return_finish = false) 
           : init_bar(init), task_table(table), proc(p), 
             proc_kind(Processor::LOC_PROC), utility_proc(this),
@@ -519,7 +615,9 @@ namespace LegionRuntime {
           util_users.insert(p);
         }
         // For the creation of normal processors when there are utility processors
-        ProcessorImpl(pthread_barrier_t *init, const Processor::TaskIDTable &table,
+        /*ProcessorImpl(pthread_barrier_t *init, const Processor::TaskIDTable &table,
+                      Processor p, size_t stacksize, ProcessorImpl *util, bool return_finish = false)*/
+        ProcessorImpl(barrier_t *init, const Processor::TaskIDTable &table,
                       Processor p, size_t stacksize, ProcessorImpl *util, bool return_finish = false)
           : init_bar(init), task_table(table), proc(p), 
             utility(util->get_utility_processor()), 
@@ -533,7 +631,9 @@ namespace LegionRuntime {
           num_idle_tasks = 0;
         }
         // For the creation of explicit utility processors
-        ProcessorImpl(pthread_barrier_t *init, const Processor::TaskIDTable &table,
+        /*ProcessorImpl(pthread_barrier_t *init, const Processor::TaskIDTable &table,
+                      Processor p, size_t stacksize, unsigned num_owners, bool return_finish = false)*/
+        ProcessorImpl(barrier_t *init, const Processor::TaskIDTable &table,
                       Processor p, size_t stacksize, unsigned num_owners, bool return_finish = false)
           : init_bar(init), task_table(table), proc(p), 
             proc_kind(Processor::UTIL_PROC), utility_proc(this),
@@ -548,9 +648,14 @@ namespace LegionRuntime {
         }
         virtual ~ProcessorImpl(void)
         {
+                /*
                 PTHREAD_SAFE_CALL(pthread_mutex_destroy(mutex));
                 PTHREAD_SAFE_CALL(pthread_cond_destroy(wait_cond));
                 PTHREAD_SAFE_CALL(pthread_attr_destroy(&attr));
+                */
+                spinlock_deinit(mutex);
+                condvar_destroy(wait_cond);
+
                 free(mutex);
                 free(wait_cond);
         }
@@ -581,7 +686,7 @@ namespace LegionRuntime {
         void increment_utility(void);
         void decrement_utility(void);
     protected:
-	bool execute_task(bool permit_shutdown);
+	bool execute_task(bool permit_shutdown, int flags);
         bool perform_scheduling(bool need_lock);
     protected:
 	class TaskDesc {
@@ -622,9 +727,10 @@ namespace LegionRuntime {
     protected:
         void add_to_ready_queue(TaskDesc *desc);
     public:
-        pthread_attr_t attr; // For setting pthread parameters when starting the thread
+        //pthread_attr_t attr; // For setting pthread parameters when starting the thread
     protected:
-        pthread_barrier_t *init_bar;
+        //pthread_barrier_t *init_bar;
+        barrier_t *init_bar;
 	Processor::TaskIDTable task_table;
 	Processor proc;
         Processor utility;
@@ -632,8 +738,10 @@ namespace LegionRuntime {
         ProcessorImpl *utility_proc;
 	std::list<TaskDesc*> ready_queue;
 	std::list<TaskDesc*> waiting_queue;
-	pthread_mutex_t *mutex;
-	pthread_cond_t *wait_cond;
+	//pthread_mutex_t *mutex;
+	//pthread_cond_t *wait_cond;
+    spinlock_t *mutex;
+    condvar_t *wait_cond;
 	// Used for detecting the shutdown condition
 	bool shutdown;
         bool idle_task_enabled;
@@ -790,9 +898,11 @@ namespace LegionRuntime {
     bool EventImpl::has_triggered(EventGeneration needed_gen)
     {
 	bool result = false;
-	PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
 	result = (needed_gen <= generation);
-	PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
 	return result;
     }
 
@@ -801,19 +911,23 @@ namespace LegionRuntime {
         if (block)
         {
             // First check to see if the event has triggered
-            PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));	
+            //PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));	
+            int flags = spin_lock_irq_save(mutex);
             // Wait until the generation indicates that the event has occurred
             while (needed_gen > generation) 
             {
                     DetailedTimer::ScopedPush sp(TIME_NONE);
-                    PTHREAD_SAFE_CALL(pthread_cond_wait(wait_cond,mutex));
+                    //PTHREAD_SAFE_CALL(pthread_cond_wait(wait_cond,mutex));
+                    condvar_wait(wait_cond, mutex, flags);
             }
-            PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+            //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+            spin_unlock_irq_restore(mutex, flags);
         }
         else
         {
             // Try preempting the process
-            unsigned *local_proc_id = (unsigned*)pthread_getspecific(local_proc_key);
+            //unsigned *local_proc_id = (unsigned*)pthread_getspecific(local_proc_key);
+            unsigned *local_proc_id = (unsigned*)tls_get(local_proc_key);
             Processor local = { *local_proc_id };
             ProcessorImpl *impl = Runtime::get_runtime()->get_processor_impl(local);
             // This call will only return once the event has triggered
@@ -825,12 +939,14 @@ namespace LegionRuntime {
     {
         EventImpl *src_impl = Runtime::get_runtime()->get_event_impl(wait_for);
         bool trigger_now = true;
-        PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+        //PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+        int flags = spin_lock_irq_save(mutex);
         // Trigger the event now unless we can register a dependence
         if ((src_impl != this) && 
             src_impl->register_dependent(this, wait_for.gen))
           trigger_now = false;
-        PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+        //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+        spin_unlock_irq_restore(mutex, flags);
         if (trigger_now)
           trigger();
     }
@@ -839,7 +955,8 @@ namespace LegionRuntime {
     {
 	// We need the lock here so that events we've already registered
 	// can't trigger this event before sources is set
-	PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
 #ifdef DEBUG_PRINT
 	//DPRINT2("Mering events into event %u generation %u\n",index,generation);
 #endif
@@ -873,7 +990,8 @@ namespace LegionRuntime {
           // return no event since all the preceding events have already triggered
           ret = Event::NO_EVENT;
         }
-	PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
         // If ret does not exist, put this back on the list of free events
         if (!ret.exists())
           Runtime::get_runtime()->free_event(this);
@@ -883,7 +1001,8 @@ namespace LegionRuntime {
     bool EventImpl::trigger(unsigned count, TriggerHandle handle)
     {
 	// Update the generation
-	PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
 #ifdef DEBUG_LOW_LEVEL
         assert(in_use);
 	assert(sources >= count);
@@ -927,9 +1046,11 @@ namespace LegionRuntime {
                   current.gen++;
                 }
                 // Wake up any waiters
-		PTHREAD_SAFE_CALL(pthread_cond_broadcast(wait_cond));
+		//PTHREAD_SAFE_CALL(pthread_cond_broadcast(wait_cond));
+        condvar_bcast(wait_cond);
 		// Can't be holding the lock when triggering other triggerables
-		PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+		//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+        spin_unlock_irq_restore(mutex, flags);
 		// Trigger any dependent events for this generation
                 for (std::vector<TriggerableInfo>::const_iterator it = 
                       to_trigger.begin(); it != to_trigger.end(); it++)
@@ -942,7 +1063,8 @@ namespace LegionRuntime {
         else
         {
           // Not done so release the lock
-          PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));	
+          //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));	
+          spin_unlock_irq_restore(mutex, flags);
         }
         // tell the runtime that we're free
         if (finished)
@@ -955,7 +1077,8 @@ namespace LegionRuntime {
     {
 	bool result = false;
         // Try acquiring the lock, if we don't get it then just move on
-        PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+        //PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+        int flags = spin_lock_irq_save(mutex);
 	if (!in_use)
 	{
 		in_use = true;
@@ -970,14 +1093,17 @@ namespace LegionRuntime {
 		assert(current.exists());
 #endif
 	}	
-	PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
 	return result;
     }
 
     bool EventImpl::register_dependent(Triggerable *target, EventGeneration gen, TriggerHandle handle)
     {
 	bool result = false;
-	PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
+
 	// Make sure they're asking for the right generation, otherwise it's already triggered
 	if (gen > generation)
 	{
@@ -985,7 +1111,8 @@ namespace LegionRuntime {
 		// Enqueue it
                 triggerables.push_back(TriggerableInfo(target, handle, gen));
 	}
-	PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));	
+	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));	
+    spin_unlock_irq_restore(mutex, flags);
 	return result;
     }
 
@@ -994,9 +1121,11 @@ namespace LegionRuntime {
 #ifdef DEBUG_LOW_LEVEL
         assert(in_use);
 #endif
-	PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
 	Event result = current;
-	PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
 	return result;
     }
 
@@ -1005,11 +1134,13 @@ namespace LegionRuntime {
 #ifdef DEBUG_LOW_LEVEL
       assert(in_use);
 #endif
-      PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+      //PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
       UserEvent result; 
       result.id = current.id;
       result.gen = current.gen;
-      PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+      //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
       return result;
     }
 
@@ -1020,7 +1151,8 @@ namespace LegionRuntime {
 #ifdef DEBUG_LOW_LEVEL
       assert(in_use);
 #endif
-      PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+      //PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
       Barrier result;
       result.id = current.id;
       result.gen = current.gen;
@@ -1029,7 +1161,8 @@ namespace LegionRuntime {
       arrivals = expected_arrivals;
       // Make sure we don't prematurely free this event
       free_generation = (unsigned)-1;
-      PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+      //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
       return result;
     }
 
@@ -1038,14 +1171,16 @@ namespace LegionRuntime {
 #ifdef DEBUG_LOW_LEVEL
       assert(in_use);
 #endif
-      PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+      //PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
 #ifdef DEBUG_LOW_LEVEL
       if (delta < 0) // If we're deleting, make sure nothing weird happens
         assert(int(sources) > (-delta));
 #endif
       int old_sources = sources;
       sources += delta;
-      PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+      //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
       //log_barrier.info("barrier " IDFMT ".%d - adjust %d + %d = %d",
       //	       current.id, current.gen, old_sources, delta, old_sources + delta);
       Barrier result;
@@ -1170,8 +1305,10 @@ namespace LegionRuntime {
 		holders = 0;
 		waiters = false;
                 next_handle = 1;
-                mutex = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
-		PTHREAD_SAFE_CALL(pthread_mutex_init(mutex,NULL));
+                //mutex = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
+		//PTHREAD_SAFE_CALL(pthread_mutex_init(mutex,NULL));
+        mutex = (spinlock_t*)malloc(sizeof(spinlock_t));
+        spinlock_init(mutex);
                 if (activate)
                 {
                     if (dsize > 0)
@@ -1199,7 +1336,8 @@ namespace LegionRuntime {
 	}	
         ~ReservationImpl(void)
         {
-                PTHREAD_SAFE_CALL(pthread_mutex_destroy(mutex));
+                //PTHREAD_SAFE_CALL(pthread_mutex_destroy(mutex));
+                spinlock_deinit(mutex);
                 free(mutex);
                 if (data_size != 0)
                 {
@@ -1244,7 +1382,8 @@ namespace LegionRuntime {
 	unsigned holders;
         TriggerHandle next_handle; // all numbers >0 are reservation requests, 0 is release trigger handle
 	std::list<ReservationRecord> requests;
-	pthread_mutex_t *mutex;
+	//pthread_mutex_t *mutex;
+    spinlock_t *mutex;
         void *data;
         size_t data_size;
     };
@@ -1293,7 +1432,8 @@ namespace LegionRuntime {
     Event ReservationImpl::acquire(unsigned m, bool exc, Event wait_on)
     {
 	Event result = Event::NO_EVENT;
-	PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
         log_reservation(LEVEL_DEBUG,"reservation request: reservation=%x mode=%d "
                                     "excl=%d event=" IDFMT "/%d count=%d",
                  index, m, exc, wait_on.id, wait_on.gen, holders); 
@@ -1351,7 +1491,8 @@ namespace LegionRuntime {
 #endif
           }
         }
-	PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
 	return result;
     }
 
@@ -1379,7 +1520,8 @@ namespace LegionRuntime {
 
     void ReservationImpl::release(Event wait_on)
     {
-	PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
         log_reservation(LEVEL_DEBUG,"release request: reservation=%x mode=%d excl=%d event=" IDFMT "/%d count=%d",
                  index, mode, exclusive, wait_on.id, wait_on.gen, holders);
         std::set<EventImpl*> to_trigger;
@@ -1400,7 +1542,8 @@ namespace LegionRuntime {
 		// No need to wait to perform the release 
 		perform_release(to_trigger);		
 	}
-	PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
         // Don't perform any triggers while holding the reservation's mutex 
         for (std::set<EventImpl*>::const_iterator it = to_trigger.begin();
               it != to_trigger.end(); it++)
@@ -1414,7 +1557,8 @@ namespace LegionRuntime {
     bool ReservationImpl::trigger(unsigned count, TriggerHandle handle)
     {
         std::set<EventImpl*> to_trigger;
-	PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
         // If the trigger handle is 0 then release the reservation, 
         // otherwise find the reservation request to wake up
         if (handle == 0)
@@ -1474,7 +1618,8 @@ namespace LegionRuntime {
           assert(found);
 #endif
         }
-	PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
         // Don't perform any triggers while holding the reservation's mutex 
         for (std::set<EventImpl*>::const_iterator it = to_trigger.begin();
               it != to_trigger.end(); it++)
@@ -1577,7 +1722,8 @@ namespace LegionRuntime {
     bool ReservationImpl::activate(size_t dsize)
     {
 	bool result = false;
-        PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+        //PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+        int flags = spin_lock_irq_save(mutex);
 	if (!active)
 	{
 		active = true;
@@ -1597,13 +1743,15 @@ namespace LegionRuntime {
                     data = NULL;
                 }
 	}
-	PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
 	return result;
     }
 
     void ReservationImpl::deactivate(void)
     {
-	PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
 	active = false;	
         if (data_size > 0)
         {
@@ -1614,7 +1762,9 @@ namespace LegionRuntime {
             data = NULL;
             data_size = 0;
         }
-	PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
+
         Runtime::get_runtime()->free_reservation(this);
     }
 
@@ -1706,12 +1856,20 @@ namespace LegionRuntime {
         // stack size is 0 if we don't need a thread at all
         if(stacksize == 0) return;
 
+        /*
         mutex = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
         wait_cond = (pthread_cond_t*)malloc(sizeof(pthread_cond_t));
         PTHREAD_SAFE_CALL(pthread_mutex_init(mutex,NULL));
         PTHREAD_SAFE_CALL(pthread_cond_init(wait_cond,NULL));
         PTHREAD_SAFE_CALL(pthread_attr_init(&attr));
         PTHREAD_SAFE_CALL(pthread_attr_setstacksize(&attr,stacksize));
+        */
+        mutex = (spinlock_t*)malloc(sizeof(spinlock_t));
+        wait_cond = (condvar_t*)malloc(sizeof(condvar_t));
+        spinlock_init(mutex);
+        condvar_init(wait_cond);
+
+        /* KCH TODO: something with the attr above */
         shutdown = false;
         shutdown_trigger = NULL;
     }
@@ -1734,9 +1892,12 @@ namespace LegionRuntime {
 	return result;
     }
 
+    /* KCH STOPPED HERE */
+
     void ProcessorImpl::enqueue_task(TaskDesc *task)
     {
-        PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+        //PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
 	if (task->wait.exists())
 	{
 		// Try registering this processor with the event
@@ -1750,7 +1911,8 @@ namespace LegionRuntime {
                         add_to_ready_queue(task);
 			// If it wasn't registered, then the event triggered
 			// Notify the processor thread in case it is waiting
-			PTHREAD_SAFE_CALL(pthread_cond_signal(wait_cond));
+			//PTHREAD_SAFE_CALL(pthread_cond_signal(wait_cond));
+            condvar_signal(wait_cond);
 		}	
 		else
 		{
@@ -1769,9 +1931,11 @@ namespace LegionRuntime {
 		// Put it on the ready queue
                 add_to_ready_queue(task);
 		// Signal the thread there is a task to run in case it is waiting
-		PTHREAD_SAFE_CALL(pthread_cond_signal(wait_cond));
+		//PTHREAD_SAFE_CALL(pthread_cond_signal(wait_cond));
+                condvar_signal(wait_cond);
 	}
-	PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
     }
 
     void ProcessorImpl::add_to_ready_queue(TaskDesc *task)
@@ -1806,7 +1970,8 @@ namespace LegionRuntime {
 
     void ProcessorImpl::release_user()
     {
-      PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+      //PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
 #ifdef DEBUG_LOW_LEVEL
       assert(remaining_stops > 0);
 #endif
@@ -1817,13 +1982,16 @@ namespace LegionRuntime {
         shutdown = true;
       }
       // Signal in case the utility processor is waiting on work
-      PTHREAD_SAFE_CALL(pthread_cond_signal(wait_cond));
-      PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+      //PTHREAD_SAFE_CALL(pthread_cond_signal(wait_cond));
+      condvar_signal(wait_cond);
+      //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
     }
 
     void ProcessorImpl::utility_finish(void)
     {
-      PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+      //PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
 #ifdef DEBUG_LOW_LEVEL
       assert(!is_utility_proc);
       assert(!util_shutdown);
@@ -1831,8 +1999,11 @@ namespace LegionRuntime {
       // Set util shutdown to true
       util_shutdown = true;
       // send a signal in case the processor was waiting
-      PTHREAD_SAFE_CALL(pthread_cond_signal(wait_cond));
-      PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+      //PTHREAD_SAFE_CALL(pthread_cond_signal(wait_cond));
+      condvar_signal(wait_cond);
+
+      //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+      spin_unlock_irq_restore(mutex, flags);
     }
 
     const std::set<Processor>& ProcessorImpl::get_utility_users(void) const
@@ -1854,41 +2025,51 @@ namespace LegionRuntime {
 
     void ProcessorImpl::enable_idle_task(void)
     {
-        PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+        //PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
         if (!idle_task_enabled && (utility_proc != this))
           utility_proc->increment_utility();
         idle_task_enabled = true;
         // Wake up thread so it can run the idle task
-        PTHREAD_SAFE_CALL(pthread_cond_signal(wait_cond));
-        PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+        //PTHREAD_SAFE_CALL(pthread_cond_signal(wait_cond));
+        condvar_signal(wait_cond);
+        //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+        spin_unlock_irq_restore(mutex, flags);
     }
 
     void ProcessorImpl::disable_idle_task(void)
     {
-        PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+        //PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
         if (idle_task_enabled && (utility_proc != this))
           utility_proc->decrement_utility();
         idle_task_enabled = false;    
-        PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+        //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+        spin_unlock_irq_restore(mutex, flags);
     }
 
     void ProcessorImpl::increment_utility(void)
     {
-      PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+      //PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
       if (num_idle_tasks == 0)
-        PTHREAD_SAFE_CALL(pthread_cond_signal(wait_cond));
+        //PTHREAD_SAFE_CALL(pthread_cond_signal(wait_cond));
+        condvar_signal(wait_cond);
       num_idle_tasks++;
-      PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+      //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+      spin_unlock_irq_restore(mutex, flags);
     }
 
     void ProcessorImpl::decrement_utility(void)
     {
-      PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+      //PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
 #ifdef DEBUG_LOW_LEVEL
       assert(num_idle_tasks > 0);
 #endif
       num_idle_tasks--;
-      PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+      //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+      spin_unlock_irq_restore(mutex, flags);
     }
 
     void ProcessorImpl::run(void)
@@ -1903,11 +2084,15 @@ namespace LegionRuntime {
         }
         // Wait for all the processors to be ready to go
 #ifndef __MACH__
-        int bar_result = pthread_barrier_wait(init_bar);
-        if (bar_result == PTHREAD_BARRIER_SERIAL_THREAD)
+        //int bar_result = pthread_barrier_wait(init_bar);
+        int bar_result = barrier_wait(init_bar);
+        //if (bar_result == PTHREAD_BARRIER_SERIAL_THREAD)
+        if (bar_result == BARRIER_LAST)
         {
           // Free the barrier
-          PTHREAD_SAFE_CALL(pthread_barrier_destroy(init_bar));
+          //PTHREAD_SAFE_CALL(pthread_barrier_destroy(init_bar));
+          barrier_destroy(init_bar);
+
           free(init_bar);
         }
 #if DEBUG_LOW_LEVEL
@@ -1928,9 +2113,10 @@ namespace LegionRuntime {
 	while (true)
 	{
 		// Make sure we're holding the lock
-		PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+		//PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
 		// This task will perform the unlock
-		bool quit = execute_task(true);
+		bool quit = execute_task(true, flags);
 		if(quit) break;
 	}
     }
@@ -1938,11 +2124,13 @@ namespace LegionRuntime {
     void ProcessorImpl::preempt(EventImpl *event, EventImpl::EventGeneration needed)
     {
 	// Try registering this processor with the event in case it goes to sleep
-	PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
 	if (!(event->register_dependent(this, needed)))
 	{
 		// The even triggered, release the lock and return
-		PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+		//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+        spin_unlock_irq_restore(mutex, flags);
 		return;
 	}
         // have to hold the lock here when testing this
@@ -1951,23 +2139,28 @@ namespace LegionRuntime {
 	while (!(event->has_triggered(needed)))
 	{
                 // Don't permit shutdowns since there is still a task waiting
-		execute_task(false);
+		execute_task(false, flags);
                 // Relock the task for our next attempt
-		PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+		//PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
 	}
-        PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+        //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+        spin_unlock_irq_restore(mutex, flags);
     }
 
     bool ProcessorImpl::perform_scheduling(bool need_lock)
     {
+        int flags;
       if (need_lock)
-        PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+        //PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+          flags = spin_lock_irq_save(mutex);
       // See if we should invoke the scheduler
       if (has_scheduler && idle_task_enabled && !scheduler_invoked
           && !shutdown && ready_queue.empty())
       {
         scheduler_invoked = true;
-        PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+        //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+        spin_unlock_irq_restore(mutex, flags);
         Processor::TaskFuncPtr scheduler = task_table[Processor::TASK_ID_PROCESSOR_IDLE];
         scheduler(NULL, 0, proc);
         // Return from the scheduler, so we can reevaluate status
@@ -1978,7 +2171,8 @@ namespace LegionRuntime {
       // If we acquired the lock then we should always unlock it
       if (need_lock)
       {
-        PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+        //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+        spin_unlock_irq_restore(mutex, flags);
         return true;
       }
       // Otherwise the scheduler wasn't invoked so we still hold the lock
@@ -1988,7 +2182,7 @@ namespace LegionRuntime {
     // Must always be holding the lock when calling this task
     // This task will always unlock it
     // returns true if the shutdown task was executed
-    bool ProcessorImpl::execute_task(bool permit_shutdown)
+    bool ProcessorImpl::execute_task(bool permit_shutdown, int flags)
     {
         // Look through the waiting queue, to see if any tasks
         // have been woken up	
@@ -2008,9 +2202,11 @@ namespace LegionRuntime {
         {
           if (num_idle_tasks == 0)
           {
-            PTHREAD_SAFE_CALL(pthread_cond_wait(wait_cond,mutex));
+            //PTHREAD_SAFE_CALL(pthread_cond_wait(wait_cond,mutex));
+            condvar_wait(wait_cond, mutex, irqs_enabled());
           }
-          PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+          //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+          spin_unlock_irq_restore(mutex, flags);
           // Note we don't need the lock to read these
           // since they don't change after the constructor is called
           for (std::vector<ProcessorImpl*>::const_iterator it = constituents.begin();
@@ -2034,11 +2230,13 @@ namespace LegionRuntime {
                         {
                           DetailedTimer::ScopedPush sp(TIME_NONE);
                           // Wait for our utility processor to indicate that its done
-                          PTHREAD_SAFE_CALL(pthread_cond_wait(wait_cond,mutex));
+                          //PTHREAD_SAFE_CALL(pthread_cond_wait(wait_cond,mutex));
+                          condvar_wait(wait_cond, mutex, flags);
                         }
                         // unlock the lock, just in case someone else decides they want to tell us something
                         // to do even though we've already exited
-                        PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+                        //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+                        spin_unlock_irq_restore(mutex, flags);
                         // Check to see if there is a shutdown method
                         if (task_table.find(Processor::TASK_ID_PROCESSOR_SHUTDOWN) != task_table.end())
                         {
@@ -2055,10 +2253,13 @@ namespace LegionRuntime {
                         }
                         else
                         {
-                          PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+                          //PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+                            int flags = spin_lock_irq_save(mutex);
                           while (remaining_stops > 0)
-                            PTHREAD_SAFE_CALL(pthread_cond_wait(wait_cond,mutex));
-                          PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+                            //PTHREAD_SAFE_CALL(pthread_cond_wait(wait_cond,mutex));
+                            condvar_wait(wait_cond, mutex, flags);
+                          //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+                          spin_unlock_irq_restore(mutex, flags);
                           // Send shutdown messages to all our users that aren't us
                           for (std::set<Processor>::const_iterator it = util_users.begin();
                                 it != util_users.end(); it++)
@@ -2078,14 +2279,17 @@ namespace LegionRuntime {
                 if (!shutdown)
                 {
                   DetailedTimer::ScopedPush sp(TIME_NONE);
-                  PTHREAD_SAFE_CALL(pthread_cond_wait(wait_cond,mutex));
+                  //PTHREAD_SAFE_CALL(pthread_cond_wait(wait_cond,mutex));
+                  condvar_wait(wait_cond, mutex, flags);
                 }
-		PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+		//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+        spin_unlock_irq_restore(mutex, flags);
 	}
         else if (scheduler_invoked)
         {
                 // Don't allow other tasks to be run while running the idle task
-                PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+                //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+                spin_unlock_irq_restore(mutex, flags);
                 return false;
         }
 	else
@@ -2093,7 +2297,8 @@ namespace LegionRuntime {
 		// Pop a task off the queue and run it
 		TaskDesc *task = ready_queue.front();
 		ready_queue.pop_front();
-		PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));	
+		//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));	
+        spin_unlock_irq_restore(mutex, flags);
                 // See if we need to run it or if has already been done
                 int start_count = __sync_fetch_and_add(&(task->start_arrivals),1);
                 // If we are the first one to do arrival at this task do it
@@ -2143,7 +2348,8 @@ namespace LegionRuntime {
     {
 	// We're not sure which task is ready, but at least one of them is
 	// so wake up the processor thread if it is waiting
-	PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
         // The trigger handle is the ID of the event we were
         // waiting on.  Move any tasks in the waiting queue
         // waiting on that event over to the ready queue
@@ -2159,8 +2365,10 @@ namespace LegionRuntime {
           else
             it++;
         }
-	PTHREAD_SAFE_CALL(pthread_cond_signal(wait_cond));
-	PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_cond_signal(wait_cond));
+    condvar_signal(wait_cond);
+	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
         return false;
     }
 
@@ -2173,14 +2381,17 @@ namespace LegionRuntime {
         {
           unsigned *thread_id = (unsigned*)malloc(sizeof(unsigned));
           *thread_id = proc->proc.id;
-          PTHREAD_SAFE_CALL( pthread_setspecific(local_proc_key, thread_id) );
+          //PTHREAD_SAFE_CALL( pthread_setspecific(local_proc_key, thread_id) );
+          tls_set(local_proc_key, thread_id);
         }
         // Also set the value of thread timer key
-        PTHREAD_SAFE_CALL( pthread_setspecific(thread_timer_key, NULL) );
+        //PTHREAD_SAFE_CALL( pthread_setspecific(thread_timer_key, NULL) );
+        tls_set(thread_timer_key, NULL);
 	// Will never return from this call
 	proc->run();
         if (!proc->return_on_finish)
-          pthread_exit(NULL);	
+          //pthread_exit(NULL);	
+          thread_exit(NULL);
         return NULL;
     }
 
@@ -2220,12 +2431,16 @@ namespace LegionRuntime {
 	MemoryImpl(size_t max, Memory::Kind k) 
 		: max_size(max), remaining(max), kind(k)
 	{
-                mutex = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
-		PTHREAD_SAFE_CALL(pthread_mutex_init(mutex,NULL));
+                //mutex = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
+		//PTHREAD_SAFE_CALL(pthread_mutex_init(mutex,NULL));
+        mutex = (spinlock_t*)malloc(sizeof(spinlock_t));
+        spinlock_init(mutex);
+
 	}
         ~MemoryImpl(void)
         {
-                PTHREAD_SAFE_CALL(pthread_mutex_destroy(mutex));
+                //PTHREAD_SAFE_CALL(pthread_mutex_destroy(mutex));
+                spinlock_deinit(mutex);
                 free(mutex);
         }
     public:
@@ -2237,21 +2452,25 @@ namespace LegionRuntime {
     private:
 	const size_t max_size;
 	size_t remaining;
-	pthread_mutex_t *mutex;
+	//pthread_mutex_t *mutex;
+    spinlock_t *mutex;
         const Memory::Kind kind;
     };
 
     size_t MemoryImpl::remaining_bytes(void) 
     {
-	PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
 	size_t result = remaining;
-	PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
 	return result;
     }
 
     void* MemoryImpl::allocate_space(size_t size)
     {
-	PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
 	void *ptr = NULL;
 	if (size < remaining)
 	{
@@ -2261,19 +2480,22 @@ namespace LegionRuntime {
 		assert(ptr != NULL);
 #endif
 	}
-	PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
 	return ptr;
     }
 
     void MemoryImpl::free_space(void *ptr, size_t size)
     {
-	PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
 #ifdef DEBUG_LOW_LEVEL
 	assert(ptr != NULL);
 #endif
 	remaining += size;
 	free(ptr);
-	PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
     }
 
     size_t MemoryImpl::total_space(void) const
@@ -2752,7 +2974,8 @@ namespace LegionRuntime {
           redop_id(_redop_id), red_fold(_red_fold),
           done_event(_done_event) 
       {
-        PTHREAD_SAFE_CALL(pthread_mutex_init(&mutex,NULL));    
+        //PTHREAD_SAFE_CALL(pthread_mutex_init(&mutex,NULL));    
+        spinlock_init(&mutex);
         // If we don't have a done event, make one
         if (!done_event)
           done_event = Runtime::get_runtime()->get_free_event();
@@ -2760,7 +2983,8 @@ namespace LegionRuntime {
 
       ~CopyOperation(void)
       {
-        PTHREAD_SAFE_CALL(pthread_mutex_destroy(&mutex));
+        //PTHREAD_SAFE_CALL(pthread_mutex_destroy(&mutex));
+        spinlock_deinit(&mutex);
       }
 
       void perform_copy_operation(void);
@@ -2776,7 +3000,8 @@ namespace LegionRuntime {
       ReductionOpID redop_id;
       bool red_fold;
       EventImpl *done_event;
-      pthread_mutex_t mutex;
+      //pthread_mutex_t mutex;
+      spinlock_t mutex;
     };
 
     ////////////////////////////////////////////////////////
@@ -2786,8 +3011,10 @@ namespace LegionRuntime {
     class IndexSpace::Impl {
     public:
 	Impl(int idx, size_t num, bool activate = false) {
-                mutex = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
-		PTHREAD_SAFE_CALL(pthread_mutex_init(mutex,NULL));
+                //mutex = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
+		//PTHREAD_SAFE_CALL(pthread_mutex_init(mutex,NULL));
+        mutex = (spinlock_t*)malloc(sizeof(spinlock_t));
+        spinlock_init(mutex);
 		active = activate;
 		index = idx;
 		if (activate)
@@ -2800,8 +3027,10 @@ namespace LegionRuntime {
 	}
 
         Impl(int idx, IndexSpace::Impl *par, const ElementMask &m, bool activate = false) {
-                mutex = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
-                PTHREAD_SAFE_CALL(pthread_mutex_init(mutex,NULL));
+                //mutex = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
+                //PTHREAD_SAFE_CALL(pthread_mutex_init(mutex,NULL));
+                mutex = (spinlock_t*)malloc(sizeof(spinlock_t*));
+                spinlock_init(mutex);
 		active = activate;
 		index = idx;
 		if (activate)
@@ -2816,7 +3045,8 @@ namespace LegionRuntime {
 
         ~Impl(void)
         {
-                PTHREAD_SAFE_CALL(pthread_mutex_destroy(mutex));
+                //PTHREAD_SAFE_CALL(pthread_mutex_destroy(mutex));
+                spinlock_deinit(mutex);
                 free(mutex);
         }
     public:
@@ -2864,7 +3094,8 @@ namespace LegionRuntime {
 	//std::set<RegionAllocatorUntyped> allocators;
 	std::set<RegionInstance> instances;
 	ReservationImpl *reservation;
-	pthread_mutex_t *mutex;
+	//pthread_mutex_t *mutex;
+    spinlock_t *mutex;
 	bool active;
 	int index;
 	size_t num_elmts;
@@ -2882,13 +3113,16 @@ namespace LegionRuntime {
       Impl(IndexSpace is)
         : is_impl(Runtime::get_runtime()->get_metadata_impl(is))
       {
-	mutex = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
-	PTHREAD_SAFE_CALL(pthread_mutex_init(mutex,NULL));
+	//mutex = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
+	//PTHREAD_SAFE_CALL(pthread_mutex_init(mutex,NULL));
+    mutex = (spinlock_t*)malloc(sizeof(spinlock_t));
+    spinlock_init(mutex);
       }
       
       ~Impl(void)
       {
-	PTHREAD_SAFE_CALL(pthread_mutex_destroy(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_destroy(mutex));
+    spinlock_deinit(mutex);
 	::free(mutex);
       }
 
@@ -2901,7 +3135,8 @@ namespace LegionRuntime {
 
     private:
       IndexSpace::Impl *is_impl;
-      pthread_mutex_t *mutex;
+      //pthread_mutex_t *mutex;
+      spinlock_t *mutex;
     }; 
 
     unsigned IndexSpaceAllocator::alloc(unsigned count /*= 1*/) const
@@ -2955,8 +3190,10 @@ namespace LegionRuntime {
 	    reduction((op!=NULL)), list((parent!=NULL)), redop(op), 
             parent_impl(parent), cur_entry(0), index(idx), next_handle(1)
 	{
-                mutex = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
-		PTHREAD_SAFE_CALL(pthread_mutex_init(mutex,NULL));
+                //mutex = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
+		//PTHREAD_SAFE_CALL(pthread_mutex_init(mutex,NULL));
+        mutex = (spinlock_t*)malloc(sizeof(spinlock_t));
+        spinlock_init(mutex);
 		active = activate;
 		if (active)
 		{
@@ -2974,7 +3211,8 @@ namespace LegionRuntime {
 
         ~Impl(void)
         {
-                PTHREAD_SAFE_CALL(pthread_mutex_destroy(mutex));
+                //PTHREAD_SAFE_CALL(pthread_mutex_destroy(mutex));
+                spinlock_deinit(mutex);
                 free(mutex);
         }
     public:
@@ -3028,7 +3266,8 @@ namespace LegionRuntime {
         size_t block_size;
         DomainLinearization linearization;
 	Memory memory;
-	pthread_mutex_t *mutex;
+	//pthread_mutex_t *mutex;
+    spinlock_t *mutex;
         bool reduction; // reduction fold
         bool list; // reduction list
         const ReductionOpUntyped *redop; // for all reductions
@@ -3130,7 +3369,8 @@ namespace LegionRuntime {
 					char *base, const ReductionOpUntyped *op, RegionInstance::Impl *parent)
     {
 	bool result = false;
-        PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+        //PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
 	if (!active)
 	{
 		active = true;
@@ -3155,13 +3395,15 @@ namespace LegionRuntime {
 #endif
 		reservation = Runtime::get_runtime()->get_free_reservation();
 	}
-	PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
 	return result;
     }
 
     void RegionInstance::Impl::deactivate(void)
     {
-	PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
 	active = false;
 	MemoryImpl *mem = Runtime::get_runtime()->get_memory_impl(memory);
 	mem->free_space(base_ptr,allocation_size);
@@ -3177,7 +3419,8 @@ namespace LegionRuntime {
         list = false;
 	reservation->deactivate();
 	reservation = NULL;
-	PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
         Runtime::get_runtime()->free_instance(this);
     }
 
@@ -3208,7 +3451,8 @@ namespace LegionRuntime {
 	{
 		// Try registering this as a triggerable with the event	
 		EventImpl *event_impl = Runtime::get_runtime()->get_event_impl(wait_on);
-		PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+		//PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
 		if (event_impl->register_dependent(this,wait_on.gen,next_handle))
 		{
                         CopyOperation2 op(target_impl,Runtime::get_runtime()->get_free_event(),
@@ -3216,12 +3460,14 @@ namespace LegionRuntime {
                         // Put it in the list of copy operations
                         pending_copies.push_back(op);
                         next_handle++;
-			PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+			//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+                        spin_unlock_irq_restore(mutex, flags);
 			return op.complete->get_event();
 		}
 		else
 		{
-			PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+			//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+            spin_unlock_irq_restore(mutex, flags);
                         // Nothing to wait for
                         // Fall through and perform the copy
 		}
@@ -3232,7 +3478,8 @@ namespace LegionRuntime {
 
     bool RegionInstance::Impl::trigger(unsigned count, TriggerHandle handle)
     {
-	PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
         // Find the copy operation in the set
         bool found = false;
         EventImpl *complete = NULL; 
@@ -3252,7 +3499,8 @@ namespace LegionRuntime {
 #ifdef DEBUG_LOW_LEVEL
         assert(found);
 #endif
-	PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
         // Trigger the event saying we're done while not holding the lock!
         complete->trigger();
         return false;
@@ -3340,7 +3588,8 @@ namespace LegionRuntime {
           {
              fprintf(stderr,"Cannot copy from non-reduction instance %d to reduction instance %d\n",
                       this->index, target->index);
-             exit(1);
+             //exit(1);
+             abort();
           }
 #endif
           // This is a normal copy
@@ -3368,7 +3617,8 @@ namespace LegionRuntime {
               {
                 fprintf(stderr,"Illegal copy between reduction instances %d and %d with different reduction operations\n",
                           this->index, target->index);
-                exit(1);
+                //exit(1);
+                abort();
               }
 #endif
               if (target->list)
@@ -3401,14 +3651,16 @@ namespace LegionRuntime {
               {
                   fprintf(stderr,"Cannot copy from fold reduction instance %d to list reduction instance %d\n",
                           this->index, target->index);
-                  exit(1);
+                  //exit(1);
+                abort();
               }
               // Make sure they have the same reduction op
               if (this->redop != target->redop)
               {
                 fprintf(stderr,"Illegal copy between reduction instances %d and %d with different reduction operations\n",
                           this->index, target->index);
-                exit(1);
+                //exit(1);
+                abort();
               }
 #endif
               // Reduction-to-reduction copy
@@ -3880,7 +4132,8 @@ namespace LegionRuntime {
     bool IndexSpace::Impl::activate(size_t num)
     {
 	bool result = false;
-        PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+        //PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
 	if (!active)
 	{ 
 		active = true;
@@ -3890,14 +4143,16 @@ namespace LegionRuntime {
                 mask = ElementMask(num_elmts);
                 parent = NULL;
 	}
-	PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
 	return result;
     }
 
     bool IndexSpace::Impl::activate(const ElementMask &m)
     {
       bool result = false;
-      PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+      //PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
       if (!active)
       {
         active = true;
@@ -3907,14 +4162,16 @@ namespace LegionRuntime {
         mask = m;
         parent = NULL;
       }
-      PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+      //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
       return result;
     }
 
     bool IndexSpace::Impl::activate(IndexSpace::Impl *par, const ElementMask &m)
     {
       bool result = false;
-      PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+      //PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
       if (!active)
       {
         active = true;
@@ -3924,13 +4181,15 @@ namespace LegionRuntime {
         mask = m;
         parent = par;
       }
-      PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+      //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
       return result;
     }
 
     void IndexSpace::Impl::deactivate(void)
     {
-	PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
 	active = false;
 	num_elmts = 0;
         // Mike: The High Level Runtime is responsible for deleting instances!
@@ -3945,14 +4204,16 @@ namespace LegionRuntime {
 	instances.clear();
 	reservation->deactivate();
 	reservation = NULL;
-	PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
         Runtime::get_runtime()->free_metadata(this);
     }
 
     unsigned IndexSpace::Impl::allocate_space(unsigned count)
     {
         int result = 0;
-        PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+        //PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
         if (parent == NULL)
         {
             // Do the allocation ourselves
@@ -3962,7 +4223,8 @@ namespace LegionRuntime {
               // Allocation failure, didn't work
               fprintf(stderr,"Allocation failure in shared low level runtime. "
                   "No available space for %d elements in region %d.\n",count, index);
-              exit(1);
+              //exit(1);
+                abort();
           }
           //printf("Allocating element %d in region %d\n",result,index);
         }
@@ -3976,13 +4238,15 @@ namespace LegionRuntime {
 #endif
         // Update the mask to reflect the allocation
         mask.enable(result,count);
-        PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+        //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
         return unsigned(result);
     }
 
     void IndexSpace::Impl::free_space(unsigned ptr, unsigned count)
     {
-        PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+        //PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
 #ifdef DEBUG_LOW_LEVEL
         // Some sanity checks
         assert(int(ptr) < mask.get_num_elmts());
@@ -4000,7 +4264,8 @@ namespace LegionRuntime {
         }
         // Update our mask no matter what
         mask.disable(ptr,count);
-        PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+        //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
     }
 
     IndexSpace IndexSpace::Impl::get_metadata(void)
@@ -4067,7 +4332,8 @@ namespace LegionRuntime {
 	  redop->init(ptr, rounded_num_elmts);
 	}
 
-	PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
 	IndexSpace r = { static_cast<id_t>(index) };
 	RegionInstance::Impl* impl = Runtime::get_runtime()->get_free_instance(r, m,
 									       num_elements, 
@@ -4080,7 +4346,8 @@ namespace LegionRuntime {
 									       NULL/*parent instance*/);
 	RegionInstance inst = impl->get_instance();
 	instances.insert(inst);
-	PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
 	return inst;
     }
 
@@ -4108,19 +4375,22 @@ namespace LegionRuntime {
 #ifdef DEBUG_LOW_LEVEL
         assert(parent_impl != NULL);
 #endif
-        PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+        //PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
         IndexSpace r = { index };
         RegionInstance::Impl *impl = Runtime::get_runtime()->get_free_instance(r,m,list_size,op->sizeof_rhs, ptr, op, parent_impl);
         RegionInstance inst = impl->get_instance();
         instances.insert(inst);
-        PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+        //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+        spin_unlock_irq_restore(mutex, flags);
         return inst;
     }
 #endif
 
     void IndexSpace::Impl::destroy_instance(RegionInstance inst)
     {
-	PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
+    int flags = spin_lock_irq_save(mutex);
 	std::set<RegionInstance>::iterator it = instances.find(inst);
 #ifdef DEBUG_LOW_LEVEL
 	assert(it != instances.end());
@@ -4128,7 +4398,8 @@ namespace LegionRuntime {
 	instances.erase(it);
 	RegionInstance::Impl *impl = Runtime::get_runtime()->get_instance_impl(inst);
 	impl->deactivate();
-	PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
+    spin_unlock_irq_restore(mutex, flags);
     }
 
     Reservation IndexSpace::Impl::get_reservation(void)
@@ -4440,10 +4711,14 @@ namespace LegionRuntime {
         EventImpl *event_impl = Runtime::get_runtime()->get_event_impl(wait_on);
         // Need to hold the mutex here in case we have to set the done_event
         // to make sure it gets set before trigger is called
-        PTHREAD_SAFE_CALL(pthread_mutex_lock(&mutex));
+        //PTHREAD_SAFE_CALL(pthread_mutex_lock(&mutex));
+        int flags = spin_lock_irq_save(&mutex);
+
         if (event_impl->register_dependent(this, wait_on.gen, 0)) 
           enqueue = false;
-        PTHREAD_SAFE_CALL(pthread_mutex_unlock(&mutex));
+        //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&mutex));
+        spin_unlock_irq_restore(&mutex, flags);
+        
       }
       if (enqueue)
         Runtime::get_dma_queue()->enqueue_dma(this);
@@ -4547,34 +4822,50 @@ namespace LegionRuntime {
     DMAQueue::DMAQueue(unsigned num_threads)
       : num_dma_threads(num_threads), dma_shutdown(false)
     {
-      PTHREAD_SAFE_CALL(pthread_mutex_init(&dma_lock,NULL));
-      PTHREAD_SAFE_CALL(pthread_cond_init(&dma_cond,NULL));
+      //PTHREAD_SAFE_CALL(pthread_mutex_init(&dma_lock,NULL));
+      spinlock_init(&dma_lock);
+      //PTHREAD_SAFE_CALL(pthread_cond_init(&dma_cond,NULL));
+      condvar_init(&dma_cond);
       dma_threads.resize(num_dma_threads);
     }
 
     void DMAQueue::start(void)
     {
-      pthread_attr_t attr;
-      PTHREAD_SAFE_CALL(pthread_attr_init(&attr));
+      //pthread_attr_t attr;
+      //PTHREAD_SAFE_CALL(pthread_attr_init(&attr));
       for (unsigned idx = 0; idx < num_dma_threads; idx++)
       {
+          /*
         PTHREAD_SAFE_CALL(pthread_create(&dma_threads[idx], &attr,
                                          DMAQueue::start_dma_thread, (void*)this));
+                                         */
+          dma_threads[idx] = thread_start((void (*)(void*,void**))DMAQueue::start_dma_thread, 
+                                          (void*)this, 
+                                          NULL,
+                                          0,
+                                          TSTACK_DEFAULT,
+                                          NULL,
+                                          CPU_ANY);
       }
-      PTHREAD_SAFE_CALL(pthread_attr_destroy(&attr));
+      //PTHREAD_SAFE_CALL(pthread_attr_destroy(&attr));
     }
 
     void DMAQueue::shutdown(void)
     {
-      PTHREAD_SAFE_CALL(pthread_mutex_lock(&dma_lock));
+      //PTHREAD_SAFE_CALL(pthread_mutex_lock(&dma_lock));
+      int flags = spin_lock_irq_save(&dma_lock);
       dma_shutdown = true;
-      PTHREAD_SAFE_CALL(pthread_cond_broadcast(&dma_cond));
-      PTHREAD_SAFE_CALL(pthread_mutex_unlock(&dma_lock));
+      //PTHREAD_SAFE_CALL(pthread_cond_broadcast(&dma_cond));
+      //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&dma_lock));
+      condvar_bcast(&dma_cond);
+      spin_unlock_irq_restore(&dma_lock, flags);
       // Now join on all the threads
       for (unsigned idx = 0; idx < num_dma_threads; idx++)
       {
         void *result;
-        PTHREAD_SAFE_CALL(pthread_join(dma_threads[idx],&result));
+        //PTHREAD_SAFE_CALL(pthread_join(dma_threads[idx],&result));
+        join(dma_threads[idx], &result);
+
       }
     }
 
@@ -4583,11 +4874,13 @@ namespace LegionRuntime {
       while (true)
       {
         CopyOperation *copy = NULL;
-        PTHREAD_SAFE_CALL(pthread_mutex_lock(&dma_lock));
+        //PTHREAD_SAFE_CALL(pthread_mutex_lock(&dma_lock));
+        int flags = spin_lock_irq_save(&dma_lock);
         if (ready_copies.empty() && !dma_shutdown)
         {
           // Go to sleep
-          PTHREAD_SAFE_CALL(pthread_cond_wait(&dma_cond, &dma_lock));
+          //PTHREAD_SAFE_CALL(pthread_cond_wait(&dma_cond, &dma_lock));
+          condvar_wait(&dma_cond, &dma_lock, flags);
         }
         // When we wake up see if there is anything
         // to do or see if we are done
@@ -4598,12 +4891,14 @@ namespace LegionRuntime {
         }
         else if (dma_shutdown)
         {
-          PTHREAD_SAFE_CALL(pthread_mutex_unlock(&dma_lock));
+          //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&dma_lock));
+          spin_unlock_irq_restore(&dma_lock, flags);
           // Break out of the loop
           break;
         }
         // Release our lock
-        PTHREAD_SAFE_CALL(pthread_mutex_unlock(&dma_lock));
+        //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&dma_lock));
+        spin_unlock_irq_restore(&dma_lock, flags);
         // If we have a copy perform it and then delete it
         if (copy != NULL)
         {
@@ -4617,10 +4912,13 @@ namespace LegionRuntime {
     {
       if (num_dma_threads > 0)
       {
-        PTHREAD_SAFE_CALL(pthread_mutex_lock(&dma_lock));
+        //PTHREAD_SAFE_CALL(pthread_mutex_lock(&dma_lock));
+        int flags = spin_lock_irq_save(&dma_lock);
         ready_copies.push_back(copy);
-        PTHREAD_SAFE_CALL(pthread_cond_signal(&dma_cond));
-        PTHREAD_SAFE_CALL(pthread_mutex_unlock(&dma_lock));
+        //PTHREAD_SAFE_CALL(pthread_cond_signal(&dma_cond));
+        condvar_signal(&dma_cond);
+        //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&dma_lock));
+        spin_unlock_irq_restore(&dma_lock, flags);
       }
       else
       {
@@ -4634,7 +4932,8 @@ namespace LegionRuntime {
     {
       DMAQueue *dma_queue = (DMAQueue*)args;
       dma_queue->run_dma_loop();
-      pthread_exit(NULL);
+      // pthread_exit(NULL);
+      thread_exit(NULL);
     }
 
 #ifdef LEGION_BACKTRACE
@@ -4666,14 +4965,16 @@ namespace LegionRuntime {
 			const Processor::TaskIDTable &task_table,
                         const ReductionOpTable &redop_table,
 			bool cps_style, Processor::TaskFuncID init_id)
-      : background_pthread(NULL)
+      //: background_pthread(NULL)
+      : background_kthread(NULL)
     {
 	// Default nobody can use task id 0 since that is the shutdown id
 	if (task_table.find(0) != task_table.end())
 	{
 		fprintf(stderr,"Using task_id 0 in the task table is illegal!  Task_id 0 is the shutdown task\n");
 		fflush(stderr);
-		exit(1);
+		//exit(1);
+                abort();
 	}
 
         unsigned num_cpus = NUM_PROCS;
@@ -4684,11 +4985,14 @@ namespace LegionRuntime {
         size_t cpu_stack_size = STACK_SIZE;
 
 #ifdef DEBUG_PRINT
-	PTHREAD_SAFE_CALL(pthread_mutex_init(&debug_mutex,NULL));
+	//PTHREAD_SAFE_CALL(pthread_mutex_init(&debug_mutex,NULL));
+    spinlock_init(&debug_mutex);
 #endif
         // Create the pthread keys for thread local data
-        PTHREAD_SAFE_CALL( pthread_key_create(&local_proc_key, thread_proc_free) );
-        PTHREAD_SAFE_CALL( pthread_key_create(&thread_timer_key, thread_timer_free) );
+        //PTHREAD_SAFE_CALL( pthread_key_create(&local_proc_key, thread_proc_free) );
+        //PTHREAD_SAFE_CALL( pthread_key_create(&thread_timer_key, thread_timer_free) );
+        tls_key_create(&local_proc_key, thread_proc_free);
+        tls_key_create(&thread_timer_key, thread_timer_free);
 
         for (int i=1; i < *argc; i++)
         {
@@ -4712,7 +5016,8 @@ namespace LegionRuntime {
         {
             fprintf(stderr,"The number of processor groups (%d) cannot be greater than the number of cpus (%d)\n",num_utility_cpus,num_cpus);
             fflush(stderr);
-            exit(1);
+            //exit(1);
+                abort();
         }
 
 	// Create the runtime and initialize with this machine
@@ -4726,8 +5031,10 @@ namespace LegionRuntime {
         // find in proc 0 with NULL
         Runtime::runtime->processors.push_back(NULL);
 #ifndef __MACH__
-        pthread_barrier_t *init_barrier = (pthread_barrier_t*)malloc(sizeof(pthread_barrier_t));
-        PTHREAD_SAFE_CALL(pthread_barrier_init(init_barrier,NULL,(num_cpus+num_utility_cpus)));
+        //pthread_barrier_t *init_barrier = (pthread_barrier_t*)malloc(sizeof(pthread_barrier_t));
+        //PTHREAD_SAFE_CALL(pthread_barrier_init(init_barrier,NULL,(num_cpus+num_utility_cpus)));
+        barrier_t *init_barrier = (barrier_t*)malloc(sizeof(barrier_t));
+        barrier_init(init_barrier, num_cpus+num_utility_cpus);
 #else
         pthread_barrier_t *init_barrier = new pthread_barrier_t(num_cpus+num_utility_cpus);
 #endif
@@ -4842,7 +5149,8 @@ namespace LegionRuntime {
                         "for the shared low-level runtime. Use '-ll:csize' "
                         "to adjust the memory to a positive value.\n");
                 fflush(stderr);
-                exit(1);
+                //exit(1);
+                abort();
         }
         if (cpu_l1_size_in_kb > 0)
         {
@@ -4934,8 +5242,10 @@ namespace LegionRuntime {
 	// Finally do the initialization for thread 0
         unsigned *local_proc_id = (unsigned*)malloc(sizeof(unsigned));
 	*local_proc_id = 1;
-        PTHREAD_SAFE_CALL( pthread_setspecific(local_proc_key, local_proc_id) );
-        PTHREAD_SAFE_CALL( pthread_setspecific(thread_timer_key, NULL) );
+        //PTHREAD_SAFE_CALL( pthread_setspecific(local_proc_key, local_proc_id) );
+        //PTHREAD_SAFE_CALL( pthread_setspecific(thread_timer_key, NULL) );
+        tls_set(local_proc_key, local_proc_id);
+        tls_set(thread_timer_key, NULL);
 
 #ifdef LEGION_BACKTRACE
         signal(SIGSEGV, legion_backtrace);
@@ -4984,13 +5294,24 @@ namespace LegionRuntime {
 	margs->args = args;
 	margs->arglen = arglen;
 	
+    /*
 	pthread_t *threadp = (pthread_t*)malloc(sizeof(pthread_t));
 	pthread_attr_t attr;
 	PTHREAD_SAFE_CALL( pthread_attr_init(&attr) );
 	PTHREAD_SAFE_CALL( pthread_create(threadp, &attr, &background_run_thread, (void *)margs) );
 	PTHREAD_SAFE_CALL( pthread_attr_destroy(&attr) );
+    */
+    thread_t * threadp = thread_start((void (*) (void*, void**))background_run_thread, 
+            (void*)margs, 
+            NULL,
+            0,
+            TSTACK_DEFAULT,
+            NULL,
+            CPU_ANY);
+
         // Save this pointer in the background thread
-        background_pthread = threadp;
+        //background_pthread = threadp;
+        background_kthread = threadp;
 	return;
       }
 
@@ -5002,11 +5323,19 @@ namespace LegionRuntime {
 	}
       }
       // Start the threads for each of the processors (including the utility processors)
-      std::vector<pthread_t> other_threads(Runtime::runtime->processors.size());
+      //std::vector<pthread_t> other_threads(Runtime::runtime->processors.size());
+      std::vector<thread_t*> other_threads(Runtime::runtime->processors.size());
       for (unsigned id=2; id<Runtime::runtime->processors.size(); id++)
       {
               ProcessorImpl *impl = Runtime::runtime->processors[id];
-              PTHREAD_SAFE_CALL(pthread_create(&(other_threads[id]), &(impl->attr), ProcessorImpl::start, (void*)impl));
+              //PTHREAD_SAFE_CALL(pthread_create(&(other_threads[id]), &(impl->attr), ProcessorImpl::start, (void*)impl));
+              other_threads[id] = thread_start((void (*)(void*, void**))ProcessorImpl::start,
+                      (void*)impl,
+                      NULL,
+                      0,
+                      TSTACK_DEFAULT,
+                      NULL,
+                      CPU_ANY);
       }
       Runtime::dma_queue->start();
 
@@ -5017,14 +5346,16 @@ namespace LegionRuntime {
       for (unsigned id=2; id<other_threads.size(); id++)
       {
           void *result;
-          PTHREAD_SAFE_CALL(pthread_join(other_threads[id],&result));
+          //PTHREAD_SAFE_CALL(pthread_join(other_threads[id],&result));
+          join(other_threads[id], &result);
       }
       Runtime::dma_queue->shutdown();
 #ifdef ORDERED_LOGGING 
       Logger::finalize();
 #endif
       // Once we're done with this, then we can exit with a successful error code
-      exit(0);
+      //exit(0);
+      abort();
     }
 
     void Machine::shutdown(bool local_request /*= true*/)
@@ -5041,14 +5372,19 @@ namespace LegionRuntime {
 
     void Machine::wait_for_shutdown(void)
     {
-      if (background_pthread != NULL)
+      //if (background_pthread != NULL)
+      if (background_kthread != NULL)
       {
-        pthread_t *background_thread = (pthread_t*)background_pthread;
+        //pthread_t *background_thread = (pthread_t*)background_pthread;
+        thread_t *background_thread = (thread_t*)background_kthread;
         void *result;
-        PTHREAD_SAFE_CALL(pthread_join(*background_thread, &result));
-        free(background_thread);
+        //PTHREAD_SAFE_CALL(pthread_join(*background_thread, &result));
+        join(background_thread, &result);
+        //free(background_thread);
+        thread_destroy(background_thread);
         // Set this to null so we don't need to do wait anymore
-        background_pthread = NULL;
+        //background_pthread = NULL;
+        background_kthread = NULL;
       }
     }
 
@@ -5079,7 +5415,8 @@ namespace LegionRuntime {
 
     /*static*/ Processor Machine::get_executing_processor(void)
     {
-      unsigned *local_proc_id = (unsigned*)pthread_getspecific(local_proc_key);
+      //unsigned *local_proc_id = (unsigned*)pthread_getspecific(local_proc_key);
+      unsigned *local_proc_id = (unsigned*)tls_get(local_proc_key);
       Processor local = { *local_proc_id };
       return local;
     }
@@ -5187,6 +5524,7 @@ namespace LegionRuntime {
                   free_instances.push_back(instances.back());
 	}
 
+    /*
 	PTHREAD_SAFE_CALL(pthread_rwlock_init(&event_lock,NULL));
         PTHREAD_SAFE_CALL(pthread_mutex_init(&free_event_lock,NULL));
 	PTHREAD_SAFE_CALL(pthread_rwlock_init(&reservation_lock,NULL));
@@ -5198,27 +5536,46 @@ namespace LegionRuntime {
         PTHREAD_SAFE_CALL(pthread_mutex_init(&free_alloc_lock,NULL));
 	PTHREAD_SAFE_CALL(pthread_rwlock_init(&instance_lock,NULL));
         PTHREAD_SAFE_CALL(pthread_mutex_init(&free_inst_lock,NULL));
+        */
+
+
+    rwlock_init(&event_lock);
+    spinlock_init(&free_event_lock);
+    rwlock_init(&reservation_lock);
+    spinlock_init(&free_reservation_lock);
+    rwlock_init(&proc_group_lock);
+    rwlock_init(&metadata_lock);
+    spinlock_init(&free_metas_lock);
+    rwlock_init(&allocator_lock);
+    spinlock_init(&free_alloc_lock);
+    rwlock_init(&instance_lock);
+    spinlock_init(&free_inst_lock);
+
     }
 
     EventImpl* Runtime::get_event_impl(Event e)
     {
         EventImpl::EventIndex i = e.id;
-        PTHREAD_SAFE_CALL(pthread_rwlock_rdlock(&event_lock));
+        //PTHREAD_SAFE_CALL(pthread_rwlock_rdlock(&event_lock));
+        rwlock_rd_lock(&event_lock);
 #ifdef DEBUG_LOW_LEVEL
 	assert(i != 0);
 	assert(i < events.size());
 #endif
         EventImpl *result = events[i];
-        PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&event_lock));
+        //PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&event_lock));
+        rwlock_rd_unlock(&event_lock);
 	return result;
     }
 
     void Runtime::free_event(EventImpl *e)
     {
       // Put this event back on the list of free events
-      PTHREAD_SAFE_CALL(pthread_mutex_lock(&free_event_lock));
+      //PTHREAD_SAFE_CALL(pthread_mutex_lock(&free_event_lock));
+      int flags = spin_lock_irq_save(&free_event_lock);
       free_events.push_back(e);
-      PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_event_lock));
+      //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_event_lock));
+      spin_unlock_irq_restore(&free_event_lock, flags);
     }
 
     void Runtime::print_event_waiters(void)
@@ -5233,21 +5590,25 @@ namespace LegionRuntime {
 
     ReservationImpl* Runtime::get_reservation_impl(Reservation r)
     {
-        PTHREAD_SAFE_CALL(pthread_rwlock_rdlock(&reservation_lock));
+        //PTHREAD_SAFE_CALL(pthread_rwlock_rdlock(&reservation_lock));
+        rwlock_rd_lock(&reservation_lock);
 #ifdef DEBUG_LOW_LEVEL
 	assert(r.id != 0);
 	assert(r.id < reservations.size());
 #endif
         ReservationImpl *result = reservations[r.id];
-        PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&reservation_lock));
+        //PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&reservation_lock));
+        rwlock_rd_unlock(&reservation_lock);
 	return result;
     }
 
     void Runtime::free_reservation(ReservationImpl *r)
     {
-      PTHREAD_SAFE_CALL(pthread_mutex_lock(&free_reservation_lock));
+      //PTHREAD_SAFE_CALL(pthread_mutex_lock(&free_reservation_lock));
+      int flags = spin_lock_irq_save(&free_reservation_lock);
       free_reservations.push_back(r);
-      PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_reservation_lock));
+      //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_reservation_lock));
+      spin_unlock_irq_restore(&free_reservation_lock, flags);
     }
 
     MemoryImpl* Runtime::get_memory_impl(Memory m)
@@ -5265,12 +5626,14 @@ namespace LegionRuntime {
     {
       if(p.id >= ProcessorGroup::FIRST_PROC_GROUP_ID) {
 	int id = p.id - ProcessorGroup::FIRST_PROC_GROUP_ID;
-        PTHREAD_SAFE_CALL(pthread_rwlock_rdlock(&proc_group_lock));
+        //PTHREAD_SAFE_CALL(pthread_rwlock_rdlock(&proc_group_lock));
+        rwlock_rd_lock(&proc_group_lock);
 #ifdef DEBUG_LOW_LEVEL
 	assert(id < proc_groups.size());
 #endif
 	ProcessorGroup *grp = proc_groups[id];
-        PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&proc_group_lock));
+        //PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&proc_group_lock));
+        rwlock_rd_unlock(&proc_group_lock);
 	return grp;
       }
 
@@ -5283,51 +5646,61 @@ namespace LegionRuntime {
 
     IndexSpace::Impl* Runtime::get_metadata_impl(IndexSpace m)
     {
-        PTHREAD_SAFE_CALL(pthread_rwlock_rdlock(&metadata_lock));
+        //PTHREAD_SAFE_CALL(pthread_rwlock_rdlock(&metadata_lock));
+        rwlock_rd_lock(&metadata_lock);
 #ifdef DEBUG_LOW_LEVEL
 	assert(m.id != 0);
 	assert(m.id < metadatas.size());
 #endif
         IndexSpace::Impl *result = metadatas[m.id];
-        PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&metadata_lock));
+        //PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&metadata_lock));
+        rwlock_rd_unlock(&metadata_lock);
 	return result;
     }
 
     void Runtime::free_metadata(IndexSpace::Impl *impl)
     {
-        PTHREAD_SAFE_CALL(pthread_mutex_lock(&free_metas_lock));
+        //PTHREAD_SAFE_CALL(pthread_mutex_lock(&free_metas_lock));
+        int flags = spin_lock_irq_save(&free_metas_lock);
         free_metas.push_back(impl);
-        PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_metas_lock));
+        //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_metas_lock));
+        spin_unlock_irq_restore(&free_metas_lock, flags);
     }
 
     RegionInstance::Impl* Runtime::get_instance_impl(RegionInstance i)
     {
-        PTHREAD_SAFE_CALL(pthread_rwlock_rdlock(&instance_lock));
+        //PTHREAD_SAFE_CALL(pthread_rwlock_rdlock(&instance_lock));
+        rwlock_rd_lock(&instance_lock);
 #ifdef DEBUG_LOW_LEVEL
 	assert(i.id != 0);
 	assert(i.id < instances.size());
 #endif
         RegionInstance::Impl *result = instances[i.id];
-        PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&instance_lock));
+        //PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&instance_lock));
+        rwlock_rd_unlock(&instance_lock);
 	return result;
     }
 
     void Runtime::free_instance(RegionInstance::Impl *impl)
     {
-        PTHREAD_SAFE_CALL(pthread_mutex_lock(&free_inst_lock));
+        //PTHREAD_SAFE_CALL(pthread_mutex_lock(&free_inst_lock));
+        int flags = spin_lock_irq_save(&free_inst_lock);
         free_instances.push_back(impl);
-        PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_inst_lock));
+        //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_inst_lock));
+        spin_unlock_irq_restore(&free_inst_lock, flags);
     }
 
     EventImpl* Runtime::get_free_event()
     {
-        PTHREAD_SAFE_CALL(pthread_mutex_lock(&free_event_lock));
+        //PTHREAD_SAFE_CALL(pthread_mutex_lock(&free_event_lock));
+        int flags = spin_lock_irq_save(&free_event_lock);
         if (!free_events.empty())
         {
           EventImpl *result = free_events.front();
           free_events.pop_front();
           // Release the lock
-          PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_event_lock));
+          //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_event_lock));
+          spin_unlock_irq_restore(&free_event_lock, flags);
           // Activate this event
           bool activated = result->activate();
 #ifdef DEBUG_LOW_LEVEL
@@ -5337,7 +5710,8 @@ namespace LegionRuntime {
         }
         // We weren't able to get a new event, get the writer lock
         // for the vector of event implementations and add some more
-        PTHREAD_SAFE_CALL(pthread_rwlock_wrlock(&event_lock));
+        //PTHREAD_SAFE_CALL(pthread_rwlock_wrlock(&event_lock));
+        int flags2 = rwlock_wr_lock_irq_save(&event_lock);
         unsigned index = events.size();
         EventImpl *result = new EventImpl(index,true);
         events.push_back(result);
@@ -5349,20 +5723,24 @@ namespace LegionRuntime {
           free_events.push_back(temp);
         }
         // Release the lock on events
-        PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&event_lock));
+        //PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&event_lock));
+        rwlock_wr_unlock_irq_restore(&event_lock, flags2);
         // Release the lock on free events
-        PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_event_lock));
+        //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_event_lock));
+        spin_unlock_irq_restore(&free_event_lock, flags);
         return result;
     }
 
     ReservationImpl* Runtime::get_free_reservation(size_t data_size/*= 0*/)
     {
-        PTHREAD_SAFE_CALL(pthread_mutex_lock(&free_reservation_lock));
+        //PTHREAD_SAFE_CALL(pthread_mutex_lock(&free_reservation_lock));
+        int flags = spin_lock_irq_save(&free_reservation_lock);
         if (!free_reservations.empty())
         {
           ReservationImpl *result = free_reservations.front();
           free_reservations.pop_front();
-          PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_reservation_lock));
+          //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_reservation_lock));
+          spin_unlock_irq_restore(&free_reservation_lock, flags);
           bool activated = result->activate(data_size);
 #ifdef DEBUG_LOW_LEVEL
           assert(activated);
@@ -5370,7 +5748,8 @@ namespace LegionRuntime {
           return result;
         }
         // We weren't able to get a new event, get the writer lock
-	PTHREAD_SAFE_CALL(pthread_rwlock_wrlock(&reservation_lock));
+	//PTHREAD_SAFE_CALL(pthread_rwlock_wrlock(&reservation_lock));
+    int flags2 = rwlock_wr_lock_irq_save(&reservation_lock);
 	unsigned index = reservations.size();
 	reservations.push_back(new ReservationImpl(index,true,data_size));
 	ReservationImpl *result = reservations[index];
@@ -5380,21 +5759,25 @@ namespace LegionRuntime {
           reservations.push_back(new ReservationImpl(index+idx,false));
           free_reservations.push_back(reservations.back());
         }
-	PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&reservation_lock));	
-        PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_reservation_lock));
+	//PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&reservation_lock));	
+        //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_reservation_lock));
+        rwlock_wr_unlock_irq_restore(&reservation_lock, flags2);
+        spin_unlock_irq_restore(&free_reservation_lock, flags);
 	return result;
     }
 
     ProcessorGroup *Runtime::get_free_proc_group(const std::vector<Processor>& members)
     {
       // this adds to the list of proc groups, so take the write lock
-      PTHREAD_SAFE_CALL(pthread_rwlock_wrlock(&proc_group_lock));
+      //PTHREAD_SAFE_CALL(pthread_rwlock_wrlock(&proc_group_lock));
+      int flags = rwlock_wr_lock_irq_save(&proc_group_lock);
       unsigned index = proc_groups.size();
       Processor p;
       p.id = index + ProcessorGroup::FIRST_PROC_GROUP_ID;
       ProcessorGroup *grp = new ProcessorGroup(p);
       proc_groups.push_back(grp);
-      PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&proc_group_lock));
+      //PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&proc_group_lock));
+      rwlock_wr_unlock_irq_restore(&proc_group_lock, flags);
 
       // we can add the members without holding the lock
       for(std::vector<Processor>::const_iterator it = members.begin();
@@ -5407,12 +5790,14 @@ namespace LegionRuntime {
 
     IndexSpace::Impl* Runtime::get_free_metadata(size_t num_elmts)
     {
-        PTHREAD_SAFE_CALL(pthread_mutex_lock(&free_metas_lock));
+        //PTHREAD_SAFE_CALL(pthread_mutex_lock(&free_metas_lock));
+        int flags = spin_lock_irq_save(&free_metas_lock);
         if (!free_metas.empty())
         {
           IndexSpace::Impl *result = free_metas.front();
           free_metas.pop_front();
-          PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_metas_lock));
+          //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_metas_lock));
+          spin_unlock_irq_restore(&free_metas_lock, flags);
           bool activated = result->activate(num_elmts);
 #ifdef DEBUG_LOW_LEVEL
           assert(activated);
@@ -5420,7 +5805,8 @@ namespace LegionRuntime {
           return result;
         }
 	// Otherwise there are no free metadata so make a new one
-	PTHREAD_SAFE_CALL(pthread_rwlock_wrlock(&metadata_lock));
+	//PTHREAD_SAFE_CALL(pthread_rwlock_wrlock(&metadata_lock));
+    int flags2 = rwlock_wr_lock_irq_save(&metadata_lock);
 	unsigned int index = metadatas.size();
 	metadatas.push_back(new IndexSpace::Impl(index,num_elmts,true));
 	IndexSpace::Impl *result = metadatas[index];
@@ -5430,19 +5816,23 @@ namespace LegionRuntime {
           metadatas.push_back(new IndexSpace::Impl(index+idx,0,false));
           free_metas.push_back(metadatas.back());
         }
-	PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&metadata_lock));
-        PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_metas_lock));
+	//PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&metadata_lock));
+        //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_metas_lock));
+        rwlock_wr_unlock_irq_restore(&metadata_lock, flags2);
+        spin_unlock_irq_restore(&free_metas_lock, flags);
 	return result;
     }
 
     IndexSpace::Impl* Runtime::get_free_metadata(const ElementMask &mask)
     {
-        PTHREAD_SAFE_CALL(pthread_mutex_lock(&free_metas_lock));
+        //PTHREAD_SAFE_CALL(pthread_mutex_lock(&free_metas_lock));
+        int flags = spin_lock_irq_save(&free_metas_lock);
         if (!free_metas.empty())
         {
           IndexSpace::Impl *result = free_metas.front();
           free_metas.pop_front();
-          PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_metas_lock));
+          //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_metas_lock));
+          spin_unlock_irq_restore(&free_metas_lock, flags);
           bool activated = result->activate(mask);
 #ifdef DEBUG_LOW_LEVEL
           assert(activated);
@@ -5450,7 +5840,9 @@ namespace LegionRuntime {
           return result;
         }
         // Otherwise there are no free metadata so make a new one
-	PTHREAD_SAFE_CALL(pthread_rwlock_wrlock(&metadata_lock));
+	//PTHREAD_SAFE_CALL(pthread_rwlock_wrlock(&metadata_lock));
+    int flags2 = rwlock_wr_lock_irq_save(&metadata_lock);
+    
 	unsigned int index = metadatas.size();
 	metadatas.push_back(new IndexSpace::Impl(index,0,false));
 	IndexSpace::Impl *result = metadatas[index];
@@ -5460,20 +5852,24 @@ namespace LegionRuntime {
           metadatas.push_back(new IndexSpace::Impl(index+idx,0,false));
           free_metas.push_back(metadatas.back());
         }
-	PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&metadata_lock));
-        PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_metas_lock));
+	//PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&metadata_lock));
+    rwlock_wr_unlock_irq_restore(&metadata_lock, flags2);
+        //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_metas_lock));
+        spin_unlock_irq_restore(&free_metas_lock, flags);
         result->activate(mask);
 	return result;
     }
 
     IndexSpace::Impl* Runtime::get_free_metadata(IndexSpace::Impl *parent, const ElementMask &mask)
     {
-        PTHREAD_SAFE_CALL(pthread_mutex_lock(&free_metas_lock));
+        //PTHREAD_SAFE_CALL(pthread_mutex_lock(&free_metas_lock));
+        int flags = spin_lock_irq_save(&free_metas_lock);
         if (!free_metas.empty())
         {
           IndexSpace::Impl *result = free_metas.front();
           free_metas.pop_front();
-          PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_metas_lock));
+          //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_metas_lock));
+          spin_unlock_irq_restore(&free_metas_lock, flags);
           bool activated = result->activate(parent,mask);
 #ifdef DEBUG_LOW_LEVEL
           assert(activated);
@@ -5481,7 +5877,8 @@ namespace LegionRuntime {
           return result;
         }
 	// Otherwise there are no free metadata so make a new one
-	PTHREAD_SAFE_CALL(pthread_rwlock_wrlock(&metadata_lock));
+	//PTHREAD_SAFE_CALL(pthread_rwlock_wrlock(&metadata_lock));
+    int flags2 = rwlock_wr_lock_irq_save(&metadata_lock);
 	unsigned int index = metadatas.size();
 	metadatas.push_back(new IndexSpace::Impl(index,parent,mask,true));
 	IndexSpace::Impl *result = metadatas[index];
@@ -5491,8 +5888,10 @@ namespace LegionRuntime {
           metadatas.push_back(new IndexSpace::Impl(index+idx,0,false));
           free_metas.push_back(metadatas.back());
         }
-	PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&metadata_lock));
-        PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_metas_lock));
+	//PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&metadata_lock));
+    rwlock_wr_unlock_irq_restore(&metadata_lock, flags2);
+        //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_metas_lock));
+        spin_unlock_irq_restore(&free_metas_lock, flags);
 	return result;
     }
 
@@ -5505,12 +5904,14 @@ namespace LegionRuntime {
 						     char *ptr, const ReductionOpUntyped *redop,
 						     RegionInstance::Impl *parent)
     {
-        PTHREAD_SAFE_CALL(pthread_mutex_lock(&free_inst_lock));
+        //PTHREAD_SAFE_CALL(pthread_mutex_lock(&free_inst_lock));
+        int flags = spin_lock_irq_save(&free_inst_lock);
         if (!free_instances.empty())
         {
           RegionInstance::Impl *result = free_instances.front();
           free_instances.pop_front();
-          PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_inst_lock));
+          //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_inst_lock));
+          spin_unlock_irq_restore(&free_inst_lock, flags);
           bool activated = result->activate(r, m, num_elmts, alloc_size, 
                                             field_sizes, elmt_size, block_size, 
                                             linearization, ptr, redop, parent);
@@ -5520,7 +5921,8 @@ namespace LegionRuntime {
           return result;
         }
 	// Nothing free so make a new one
-	PTHREAD_SAFE_CALL(pthread_rwlock_wrlock(&instance_lock));
+	// PTHREAD_SAFE_CALL(pthread_rwlock_wrlock(&instance_lock));
+    int flags2 = rwlock_wr_lock_irq_save(&instance_lock);
 	unsigned int index = instances.size();
 	instances.push_back(new RegionInstance::Impl(index, r, m, num_elmts, alloc_size,
                                                      field_sizes,
@@ -5542,8 +5944,10 @@ namespace LegionRuntime {
 						       false));
           free_instances.push_back(instances.back());
         }
-	PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&instance_lock));
-        PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_inst_lock));
+	//PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&instance_lock));
+    rwlock_wr_unlock_irq_restore(&instance_lock, flags2);
+        //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_inst_lock));
+        spin_unlock_irq_restore(&free_inst_lock, flags);
 	return result;
     }
 
@@ -5573,7 +5977,8 @@ namespace LegionRuntime {
   /*static*/ void Logger::logvprintf(LogLevel level, int category, const char *fmt, va_list args)
   {
     char buffer[400];
-    unsigned *local_proc_id = (unsigned*)pthread_getspecific(local_proc_key);
+    //unsigned *local_proc_id = (unsigned*)pthread_getspecific(local_proc_key);
+    unsigned *local_proc_id = (unsigned*)tls_get(local_proc_key);
     sprintf(buffer, "[%d - %lx] {%s}{%s}: ",
             0, /*pthread_self()*/long(*local_proc_id), Logger::stringify(level), Logger::get_categories_by_id()[category].c_str());
     int len = strlen(buffer);

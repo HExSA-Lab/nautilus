@@ -17,14 +17,13 @@ obj-y += \
 	idle.o \
 	thread.o \
 	barrier.o \
-	libccompat.o \
-	hello_world.o \
 	nautilus.o \
-	libccompat.o \
-	cxxglue.o \
 	asm/ \
 	dev/ \
 	test/  \
+	libccompat.o \
+	cxxglue.o \
+	hello_world.o \
 	legion_runtime/
 	
 	
