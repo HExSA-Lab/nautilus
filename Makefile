@@ -306,7 +306,7 @@ NAUT_INCLUDE      := -Iinclude \
 
 CPPFLAGS        := $(NAUT_INCLUDE) -D__NAUTILUS__
 
-CXXFLAGS := -fno-exceptions -fno-omit-frame-pointer -fno-rtti 
+CXXFLAGS := -fno-exceptions -fno-omit-frame-pointer -fno-rtti -ffreestanding
 #CFLAGS 		:=  -fno-stack-protector -Wall -Werror  -mno-red-zone -fno-common 
 CFLAGS:=   -O2 \
 		   -Wall \
