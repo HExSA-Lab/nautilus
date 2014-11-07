@@ -86,3 +86,99 @@ ENTRY(thread_entry)
     sti
     retq
     
+// RBP and RSP are intentionally not saved here
+// 15 quadwords (14 regs + flags)
+
+
+#define GPR_SAVE()	                        \
+pushq %rax	;				\
+pushq %rbx	;				\
+pushq %rcx	;				\
+pushq %rdx	;				\
+pushq %rsi	;				\
+pushq %rdi	;				\
+pushq %rbp  ;               \
+pushq %r8	;				\
+pushq %r9	;				\
+pushq %r10	;				\
+pushq %r11	;				\
+pushq %r12	;				\
+pushq %r13	;				\
+pushq %r14	;				\
+pushq %r15      ;                               \
+pushfq          ;
+
+#define GPR_LOAD_NO_RAX()	                \
+popfq           ;                               \
+popq %r15       ;                               \
+popq %r14	;				\
+popq %r13	;				\
+popq %r12	;				\
+popq %r11	;				\
+popq %r10	;				\
+popq %r9	;				\
+popq %r8	;				\
+popq %rbp   ;               \
+popq %rdi	;				\
+popq %rsi	;				\
+popq %rdx	;				\
+popq %rcx	;				\
+popq %rbx	;				\
+
+#define GPR_LOAD()                              \
+GPR_LOAD_NO_RAX()                                \
+popq %rax       ;
+
+#define GPR_LOAD_SKIP_RAX()                     \
+GPR_LOAD_NO_RAX()                                \
+leaq 8(%rsp), %rsp     ;                     // This instruction must not affect CCs
+
+#define FPR_SAVE()			// WRITE ME
+#define FPR_LOAD()
+
+#define SR_SAVE()           // WRITE ME
+#define SR_LOAD()
+
+
+#define REG_SAVE() GPR_SAVE() SR_SAVE() FPR_SAVE()
+#define REG_LOAD() FPR_LOAD() SR_LOAD() GPR_LOAD()
+
+#define REG_LOAD_SKIP_RAX() FPR_LOAD() SR_LOAD() GPR_LOAD_SKIP_RAX()
+
+#define GPR_SAVE_SIZE (15*8)
+#define SR_SAVE_SIZE (0)
+#define FPR_SAVE_SIZE (0)
+
+#define REG_SAVE_SIZE (GPR_SAVE_SIZE+SR_SAVE_SIZE+FPR_SAVE_SIZE)
+	
+
+/*
+	The entry point for forking a thread is essentially
+	like a context switch away from a thread in that we
+	need to capture a snapshot of the caller's register
+	state and clone his stack.   We do in two stages
+	the first is here, where we snapshot the register
+	state on the caller's stack, preceded by another copy
+	of the return address.  then we call the internal
+	fork routine which will clone the stack, including this
+	data.  The launcher will then switch to the cloned
+	stack and restore register state and return
+
+*/	
+
+ENTRY(thread_fork)
+    cli                         // turn interrupts off
+	REG_SAVE()                  // RBP and RSP will be handled in _thread_fork
+
+	// Note that callee will see us as part of the stack frame
+	// of our caller
+	callq _thread_fork  ;    // goto C code which will return for us
+
+
+// Both the parent and child will get back here, albeit on
+// different stacks and different rax return values
+ENTRY(_fork_return)
+	REG_LOAD_SKIP_RAX()         // we want the return produced by _thread_fork
+    sti                         // turn interrupts back on (this is actually unnecessary in the child but oh well)
+	retq                        // and back we go
+

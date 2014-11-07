@@ -16,7 +16,7 @@ extern "C" {
 
 
 typedef void (*thread_fun_t)(void * input, void ** output);
-typedef unsigned stack_size_t;
+typedef uint64_t stack_size_t;
 typedef long thread_id_t;
 typedef struct thread thread_t;
 typedef struct queue thread_queue_t;
@@ -93,6 +93,9 @@ thread_start (thread_fun_t fun,
                stack_size_t stack_size,
                thread_id_t * tid,
                int cpu);
+
+extern thread_id_t thread_fork(void);
+thread_id_t _thread_fork(void);
 
 void thread_destroy(thread_t * t);
 thread_id_t get_tid(void);

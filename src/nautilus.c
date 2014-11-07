@@ -102,14 +102,19 @@ main (unsigned long mbd, unsigned long magic)
 
     sti();
 
+    /*
     char * blah[] = {"test", 0};
     
     panic("end\n");
     go_c(1, blah);
+    */
+    int ret = thread_fork();
 
-    printk("Nautilus main thread yielding on core %d\n", my_cpu_id());
-
-
+    if (ret == 0) {
+        printk("Nautilus forked child thread yielding on core %u (tid=%u)\n", my_cpu_id(), get_tid());
+    } else {
+        printk("Nautilus main thread yielding on core %d (forked child %u)\n", my_cpu_id(), ret);
+    }
 
     while (1) {
         yield();

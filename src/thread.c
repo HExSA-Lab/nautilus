@@ -498,7 +498,7 @@ thread_init (thread_t * t, void * stack, uint8_t is_detached, int cpu)
     }
 
     t->stack     = stack;
-    t->rsp       = (uint64_t)stack + PAGE_SIZE;
+    t->rsp       = (uint64_t)stack + t->stack_size;
     t->tid       = atomic_inc(next_tid) + 1;
     t->refcount  = is_detached ? 1 : 2; // thread references itself as well
     t->owner     = get_cur_thread();
@@ -589,6 +589,8 @@ out_err:
 }
 
 
+
+
 static void
 thread_cleanup (void)
 {
@@ -620,11 +622,15 @@ thread_setup_init_stack (thread_t * t, thread_fun_t fun, void * arg)
 #define STACK_SAVE_SIZE    64
 #define THREAD_SETUP_SIZE  (STACK_SAVE_SIZE + GPR_SAVE_SIZE)
 
-    // this will set the initial GPRs to 0
-    memset((void*)t->rsp, 0, THREAD_SETUP_SIZE);
+    /*
+     * if this is a thread fork, this part is taken care of
+     * in _thread_fork(). There is no function!
+     */
+    if (fun) {
+        thread_push(t, (uint64_t)&thread_cleanup);
+        thread_push(t, (uint64_t)fun);
+    }
 
-    thread_push(t, (uint64_t)&thread_cleanup);
-    thread_push(t, (uint64_t)fun);
     thread_push(t, (uint64_t)KERNEL_DS); //SS
     thread_push(t, (uint64_t)(t->rsp+RSP_STACK_OFFSET)); // rsp
     thread_push(t, (uint64_t)0UL); // rflags
@@ -634,6 +640,87 @@ thread_setup_init_stack (thread_t * t, thread_fun_t fun, void * arg)
     thread_push(t, 0); // intr no
     *(uint64_t*)(t->rsp-GPR_RDI_OFFSET) = (uint64_t)arg; // we overwrite RDI with the arg
     t->rsp -= GPR_SAVE_SIZE; // account for the GPRS;
+}
+
+
+// push the child stack down by this much just in case
+// we only have one caller frame to mangle
+// the launcher function needs to put a new return address
+// prior to the current stack frame, at least.
+// should be at least 16
+#define LAUNCHPAD 16
+#define STACK_CLONE_DEPTH 2
+#define STACK_SIZE_MIN    (4096 * 16)
+#define LAUNCHER_STACK_SIZE STACK_SIZE_MIN
+
+/* 
+ * note that this isn't called directly. It is vectored
+ * into from an assembly stub
+ *
+ * tid returned in parent, 0 returned to child
+ */
+thread_id_t 
+_thread_fork (void)
+{
+    thread_t     *t;
+    thread_id_t  tid;
+    stack_size_t size, alloc_size;
+    uint64_t     rbp1_offset_from_ret0_addr;
+    void         *child_stack;
+
+    void *rbp0      = __builtin_frame_address(0);                   // current rbp, *rbp0 = rbp1
+    void *rbp1      = __builtin_frame_address(1);                   // caller rbp, *rbp1 = rbp2  (forker's frame)
+    void *rbp_tos   = __builtin_frame_address(STACK_CLONE_DEPTH);   // should scan backward to avoid having this be zero or crazy
+    void *ret0_addr = rbp0 + 8;
+
+    // we're being called with a stack not as deep as STACK_CLONE_DEPTH...
+    // fail back to a single frame...
+    if (rbp_tos == 0 || rbp_tos < rbp1) { 
+        rbp_tos = rbp1;
+    }
+
+    // from last byte of tos_rbp to the last byte of the stack on return from this function (return address of wrapper
+    // the "launch pad" is added so that in the case where there is no stack frame above the caller
+    // we still have the space to fake one.
+    size = (rbp_tos + 8) - ret0_addr + LAUNCHPAD;   
+
+    rbp1_offset_from_ret0_addr = rbp1 - ret0_addr;
+
+    alloc_size = (size > STACK_SIZE_MIN) ? size : STACK_SIZE_MIN;    // at least enough to grow to STACK_SIZE_MIN
+
+    t = thread_create(NULL,        // no function pointer, we'll set rip explicity in just a sec...
+                      NULL,        // no input args, it's not a function
+                      NULL,        // no output args
+                      0,           // this thread's parent will wait on it
+                      alloc_size,  // stack size
+                      &tid,        // give me a thread id
+                      CPU_ANY);    // not bound to any particular CPU
+
+    if (!t) {
+        ERROR_PRINT("Could not fork thread\n");
+        return -1;
+    }
+
+    child_stack = t->stack;
+
+    // first push our cleanup function so we get an exit hook
+    thread_push(t, (uint64_t)&thread_cleanup);
+
+    // Copy stack frames of caller and up to stack max
+    // this should copy from 1st byte of my_rbp to last byte of tos_rbp
+    // notice that leaves ret
+    memcpy(child_stack + alloc_size - size, ret0_addr, size - LAUNCHPAD);
+    t->rsp = (uint64_t)(child_stack + alloc_size - size);
+
+    // now we need to setup the interrupt stack etc.
+    // we provide null for thread func to indicate this is a fork
+    thread_setup_init_stack(t, NULL, NULL); 
+
+    // put it on the run queue
+    enqueue_thread_on_runq(t, CPU_ANY);
+
+    // return child's tid to parent
+    return tid;
 }
 
 
