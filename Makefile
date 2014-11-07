@@ -314,6 +314,7 @@ CFLAGS:=   -O2 \
 		   -Wno-unused-variable \
 		   -ffreestanding \
 		   -fno-stack-protector \
+		   -fno-omit-frame-pointer \
 		   -fno-common \
 		   -fno-exceptions \
 		   -fno-reorder-functions \

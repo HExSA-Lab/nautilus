@@ -96,3 +96,19 @@ ENTRY(init_smp_boot)
 .globl end_smp_boot
 end_smp_boot:
 
+
+/*
+ * we come in with two arguments:
+ * rdi = new rsp
+ * rsi = new rbp
+ * we leave with a new stack
+ */
+ENTRY(smp_ap_stack_switch)
+     pushq %rcx           // let's not clobber regs
+     movq 8(%rsp), %rcx   // save the old stack's ret addr (to get back to C)
+     movq %rsi, %rbp      // set our new frame pointer
+     popq %rsi            // we can now reuse rsi for the old value of rcx
+     movq %rdi, %rsp      // switch stacks
+     pushq %rcx           // push our return address back to C
+     movq %rsi, %rcx      // restore rcx
+     retq

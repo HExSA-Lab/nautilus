@@ -25,6 +25,8 @@
 #define SMP_DEBUG(fmt, args...) DEBUG_PRINT("SMP: " fmt, ##args)
 
 
+extern void smp_ap_stack_switch(uint64_t newrsp, uint64_t newrbp);
+
 static volatile unsigned smp_core_count = 1; // assume BSP is booted
 
 extern addr_t init_smp_boot;
@@ -440,9 +442,10 @@ smp_ap_entry (struct cpu * core)
 
     // switch from boot stack to my new stack (allocated in thread_init)
     thread_t * cur = get_cur_thread();
-    asm volatile ("movq %[newrsp], %%rsp;\n"
-                  "movq %[newrsp], %%rbp;\n" 
-                  : : [newrsp] "m" (cur->rsp) : "rsp", "rbp");
+
+    // we have to call into assembly since GCC 
+    // wont let us clobber rbp
+    smp_ap_stack_switch(cur->rsp, cur->rsp);
 
     PAUSE_WHILE(atomic_cmpswap(my_cpu->booted, 0, 1) != 0);
 
