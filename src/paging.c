@@ -5,6 +5,7 @@
 #include <idt.h>
 #include <cpu.h>
 #include <lib/bitmap.h>
+#include <lib/liballoc.h>
 #include <percpu.h>
 
 
@@ -20,9 +21,16 @@ extern ulong_t pdpt;
 
 static struct mem_info * glob_mem;
 
+/* 
+ * KCH BIG NOTE: Most of the following code assumes that we'll
+ * be using 2MB pages. This will eventually change, but for now,
+ * BE CAREFUL WHEN EDITING THIS CODE! 
+ */
+
+
 /*
 static int 
-drill_pt (pte_t * pt, addr_t addr, addr_t map_addr, uint_t flags)
+drill_pt (pte_t * pt, addr_t addr, addr_t map_addr, uint64_t flags)
 {
     uint_t pt_idx = PADDR_TO_PT_IDX(addr);
     addr_t page = 0;
@@ -65,7 +73,7 @@ drill_pt (pte_t * pt, addr_t addr, addr_t map_addr, uint_t flags)
 
 
 static int 
-drill_pd (pde_t * pd, addr_t addr, addr_t map_addr, uint_t flags)
+drill_pd (pde_t * pd, addr_t addr, addr_t map_addr, uint64_t flags)
 {
     uint_t pd_idx = PADDR_TO_PD_IDX(addr);
     pte_t * pt = 0;
@@ -76,21 +84,22 @@ drill_pd (pde_t * pd, addr_t addr, addr_t map_addr, uint_t flags)
     if (PDE_PRESENT(pd[pd_idx])) {
 
         DEBUG_PRINT("pd entry is present, setting (addr=%p,flags=%x)\n", (void*)map_addr,flags);
-        pd[pd_idx] = map_addr | flags | (1<<7);
+        pd[pd_idx] = map_addr | flags | PTE_PAGE_SIZE_BIT | PTE_PRESENT_BIT;
         invlpg(map_addr);
 
     } else {
 
-        panic("pde not present!\n");
-
         if (map_addr) {
+
             DEBUG_PRINT("creating manual mapping to paddr: %p\n", map_addr);
             page = map_addr;
-            pd[pd_idx] = page | flags;
+            // NOTE: 2MB page assumption
+            pd[pd_idx] = page | flags | PTE_PAGE_SIZE_BIT;
+
         } else {
-            panic("trying to allocate page with no mapping provided!\n");
 
-
+            panic("trying to allocate 2MB page with no address provided!\n");
+#if 0
             DEBUG_PRINT("pd entry not there, creating a new one\n");
             pt = (pte_t*)alloc_page();
 
@@ -102,16 +111,16 @@ drill_pd (pde_t * pd, addr_t addr, addr_t map_addr, uint_t flags)
             memset((void*)pt, 0, NUM_PT_ENTRIES*sizeof(pte_t));
 
             pd[pd_idx] = (ulong_t)pt | PTE_PRESENT_BIT | PTE_WRITABLE_BIT;
+#endif
         }
     }
 
     return 0;
-    //return drill_pt(pt, addr, map_addr, flags);
 }
 
 
 static int 
-drill_pdpt (pdpte_t * pdpt, addr_t addr, addr_t map_addr, uint_t flags)
+drill_pdpt (pdpte_t * pdpt, addr_t addr, addr_t map_addr, uint64_t flags)
 {
     uint_t pdpt_idx = PADDR_TO_PDPT_IDX(addr);
     pde_t * pd = 0;
@@ -125,7 +134,7 @@ drill_pdpt (pdpte_t * pdpt, addr_t addr, addr_t map_addr, uint_t flags)
 
     } else {
 
-        DEBUG_PRINT("pdpt entry not there, creating a new one\n");
+        DEBUG_PRINT("pdpt entry not there, creating a new page directory\n");
         pd = (pde_t*)alloc_page();
 
         if (!pd) {
@@ -139,12 +148,13 @@ drill_pdpt (pdpte_t * pdpt, addr_t addr, addr_t map_addr, uint_t flags)
 
     }
 
+    DEBUG_PRINT("the entry (addr: 0x%x): 0x%x\n", &pdpt[pdpt_idx], pdpt[pdpt_idx]);
     return drill_pd(pd, addr, map_addr, flags);
 }
 
 
 static int 
-drill_page_tables (addr_t addr, addr_t map_addr, uint_t flags)
+drill_page_tables (addr_t addr, addr_t map_addr, uint64_t flags)
 {
     pml4e_t * _pml4 = (pml4e_t*)&pml4;
     uint_t pml4_idx = PADDR_TO_PML4_IDX(addr);
@@ -178,14 +188,14 @@ drill_page_tables (addr_t addr, addr_t map_addr, uint_t flags)
 
 
 int 
-create_page_mapping (addr_t vaddr, addr_t paddr, uint_t flags)
+create_page_mapping (addr_t vaddr, addr_t paddr, uint64_t flags)
 {
     /* unused */
     return 0;
 }
 
 int
-map_page_nocache (addr_t paddr, uint_t flags)
+map_page_nocache (addr_t paddr, uint64_t flags)
 {
     if (drill_page_tables(paddr, paddr, flags|PTE_CACHE_DISABLE_BIT) != 0) {
         ERROR_PRINT("error marking page range uncacheable\n");
@@ -246,7 +256,7 @@ pf_handler (excp_entry_t * excp,
             excp_vec_t     vector,
             addr_t         fault_addr)
 {
-    panic("Page Fault. Faulting RIP: 0x%x core=%u\n", fault_addr, my_cpu_id());
+    panic("\n+++ Page Fault +++\nRIP: %p    Fault Address: %p \nError Code: 0x%x    (core=%u)\n", (void*)excp->rip, (void*)fault_addr, excp->error_code, my_cpu_id());
 
     /*
     if (drill_page_tables(fault_addr, 0, 0) < 0) {
@@ -299,24 +309,28 @@ finish_ident_map (struct mem_info * mem, ulong_t mbd)
     }
 
     /* we've already mapped the first 1GB with 1 PD, 512 PDEs */
-    //num_pdes = (mem->phys_mem_avail >> PAGE_SHIFT) - NUM_PD_ENTRIES;
-    num_pdes = 3584;
-    num_pds = (num_pdes%NUM_PD_ENTRIES) ? (num_pdes/NUM_PD_ENTRIES) + 1 : (num_pdes/NUM_PD_ENTRIES);
+    num_pdes = (mem->phys_mem_avail >> PAGE_SHIFT) - NUM_PD_ENTRIES;
+    num_pds = (num_pdes % NUM_PD_ENTRIES) ? 
+        (num_pdes / NUM_PD_ENTRIES) + 1 : 
+        (num_pdes / NUM_PD_ENTRIES);
 
     DEBUG_PRINT("Adding %u page directories, %u new 2MB pages\n", num_pds, num_pdes);
 
     for (i = 0; i < num_pds; i++, pd_start+=NUM_PD_ENTRIES) {
 
         /* fill in the new page directory */
-        for (j = 0; (i*512 + j) < num_pdes; j++, paddr_start+=MEM_2MB) {
-            *(pd_start + j) = paddr_start | 0x83; // PS bit is 1
+        for (j = 0; (i * NUM_PD_ENTRIES + j) < num_pdes; j++, paddr_start += MEM_2MB) {
+            *(pd_start + j) = paddr_start | 
+                              PTE_PRESENT_BIT | 
+                              PTE_WRITABLE_BIT | 
+                              PTE_PAGE_SIZE_BIT;
         }
 
         /* point pdpte to new page dir (start at second pdpte)*/
-        pdpt_start[i+1] = (ulong_t)pd_start |PTE_PRESENT_BIT|PTE_WRITABLE_BIT;
+        pdpt_start[i+1] = (ulong_t)pd_start | PTE_PRESENT_BIT | PTE_WRITABLE_BIT;
     }
 
-    return (ulong_t)(pd_start+NUM_PD_ENTRIES);
+    return (ulong_t)(pd_start + NUM_PD_ENTRIES);
 }
 
 

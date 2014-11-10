@@ -50,11 +50,17 @@ extern "C" {
 #define PTE_ADDR_MASK (~((1<<12)-1))
 
 
-#define PTE_PRESENT_BIT 1UL
-#define PTE_WRITABLE_BIT 2UL
-#define PTE_KERNEL_ONLY_BIT (1UL<<3)
-#define PTE_WRITE_THROUGH_BIT (1UL<<4)
-#define PTE_CACHE_DISABLE_BIT (1UL<<5)
+#define PTE_PRESENT_BIT       1ULL
+#define PTE_WRITABLE_BIT      2ULL
+#define PTE_KERNEL_ONLY_BIT   (1ULL<<2)
+#define PTE_WRITE_THROUGH_BIT (1ULL<<3)
+#define PTE_CACHE_DISABLE_BIT (1ULL<<4)
+#define PTE_ACCESSED_BIT      (1ULL<<5)
+#define PTE_DIRTY_BIT         (1ULL<<6)
+#define PTE_PAGE_SIZE_BIT     (1ULL<<7)
+#define PTE_GLOBAL_BIT        (1ULL<<8)
+#define PTE_PAT_BIT           (1ULL<<12)
+#define PTE_NX_BIT            (1ULL<<63)
 
 #define PML4E_PRESENT(x) ((x) & 1)
 #define PML4E_WRITABLE(x) ((x) & 2)
@@ -194,8 +200,8 @@ mark_range_reserved (uchar_t * m,
 }
 
 
-int create_page_mapping (addr_t vaddr, addr_t paddr, uint_t flags);
-int map_page_nocache (addr_t paddr, uint_t flags);
+int create_page_mapping (addr_t vaddr, addr_t paddr, uint64_t flags);
+int map_page_nocache (addr_t paddr, uint64_t flags);
 void paging_init(struct mem_info * mem, ulong_t mbd);
 addr_t alloc_page(void);
 int free_page(addr_t addr);

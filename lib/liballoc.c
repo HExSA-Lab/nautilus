@@ -36,9 +36,8 @@ unsigned int l_inuse = 0;			//< The amount of memory in use (malloc'ed).
 
 
 static int l_initialized = 0;			//< Flag to indicate initialization.	
-//static int l_pageSize  = 4096;			//< Individual page size
-static int l_pageSize  = PAGE_SIZE;//2097152;			//< Individual page size
-static int l_pageCount = 1;//16;			//< Minimum number of pages to allocate.
+static int l_pageSize  = PAGE_SIZE;	    //< Individual page size
+static int l_pageCount = 1;			    //< Minimum number of pages to allocate.
 
 
 // ***********   HELPER FUNCTIONS  *******************************
