@@ -1,4 +1,5 @@
 #include <idt.h>
+#include <thread.h>
 
 .code64
 .align 8
@@ -56,39 +57,34 @@ early_irq_handlers:
     vector = vector + 1
     .endr
 
+
 .globl early_irq_common
 .align 8
 early_irq_common:
 
-    pushq %rax
-    pushq %rcx
-    pushq %rdx
-    pushq %rsi 
-    pushq %rdi  
-    pushq %r8    
-    pushq %r9     
-    pushq %r10     
-    pushq %r11      
+    SAVE_GPRS()
 
-    leaq 80(%rsp), %rdi # pointer to exception struct
-    movq 72(%rsp), %rsi # irq num
+    leaq 128(%rsp), %rdi # pointer to exception struct
+    movq 120(%rsp), %rsi # irq num
     movq $handler_table, %rdx
     movq (%rdx, %rsi, 8), %rcx
 
     callq *%rcx
+
     testq %rax, %rax
     jnz irq_err
 
-    popq %r11
-    popq %r10 
-    popq %r9
-    popq %r8
-    popq %rdi
-    popq %rsi
-    popq %rdx
-    popq %rcx
-    popq %rax
-    addq $8, %rsp # no error code
+    // we're back from the irq handler
+    // do we need to switch to someone else?
+    callq need_resched
+    testq %rax, %rax
+    jz thr_return
+    movq %rax, %rdi
+    jmp thread_switch_intr_entry 
+
+thr_return:
+    RESTORE_GPRS()
+    addq $8, %rsp // pop the irq num, don't need it now
     iretq
 
 irq_err:

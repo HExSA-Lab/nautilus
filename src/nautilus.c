@@ -39,6 +39,14 @@ static void xcall_test (void * arg)
 extern void ipi_test_setup(void);
 extern void ipi_begin_test(cpu_id_t t);
 
+static void tfun (void * in, void ** out)
+{
+    while (1) {
+        printk("thread tfun running (tid=%u)\n", get_tid());
+        yield();
+    }
+}
+
 void 
 main (unsigned long mbd, unsigned long magic) 
 {
@@ -85,7 +93,6 @@ main (unsigned long mbd, unsigned long magic)
 
     smp_bringup_aps(naut);
 
-    //sti();
 
     //thread_start(side_screensaver, NULL, NULL, 0, TSTACK_DEFAULT, NULL, 1);
 
@@ -100,14 +107,13 @@ main (unsigned long mbd, unsigned long magic)
     tls_test();
     */
 
-    sti();
-
     /*
     char * blah[] = {"test", 0};
     
     panic("end\n");
     go_c(1, blah);
     */
+    /*
     int ret = thread_fork();
 
     if (ret == 0) {
@@ -115,8 +121,21 @@ main (unsigned long mbd, unsigned long magic)
     } else {
         printk("Nautilus main thread yielding on core %d (forked child %u)\n", my_cpu_id(), ret);
     }
+    */
+
+
+    thread_start(tfun, 
+                  NULL,
+                  NULL,
+                  0,
+                  TSTACK_DEFAULT,
+                  NULL,
+                  0);
+
+    sti();
 
     while (1) {
+        printk("nautilus main thread (core 0) yielding\n");
         yield();
     }
 }

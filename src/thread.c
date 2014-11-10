@@ -374,6 +374,9 @@ get_runnable_thread (uint32_t cpu)
     }
 
     elm = dequeue_first_atomic(runq);
+    if (!elm) {
+        return NULL;
+    }
     return container_of(elm, thread_t, runq_node);
 }
 
@@ -559,8 +562,8 @@ thread_create (thread_fun_t fun,
         stack = (void*)malloc(stack_size);
         t->stack_size = stack_size;
     } else {
-        stack = (void*)malloc(PAGE_SIZE);
-        t->stack_size =  PAGE_SIZE;
+        stack = (void*)malloc(PAGE_SIZE_4KB);
+        t->stack_size =  PAGE_SIZE_4KB;
     }
 
     if (!stack) {
@@ -582,7 +585,7 @@ thread_create (thread_fun_t fun,
     return t;
 
 out_err1:
-    free_page((addr_t)stack);
+    free(stack);
 out_err:
     free(t);
     return NULL;
@@ -631,15 +634,14 @@ thread_setup_init_stack (thread_t * t, thread_fun_t fun, void * arg)
         thread_push(t, (uint64_t)fun);
     }
 
-    thread_push(t, (uint64_t)KERNEL_DS); //SS
+    thread_push(t, (uint64_t)KERNEL_SS);                 // SS
     thread_push(t, (uint64_t)(t->rsp+RSP_STACK_OFFSET)); // rsp
-    thread_push(t, (uint64_t)0UL); // rflags
+    thread_push(t, (uint64_t)0UL);                       // rflags
     thread_push(t, (uint64_t)KERNEL_CS);
     thread_push(t, (uint64_t)&thread_entry);
-    thread_push(t, 0); // err no
-    thread_push(t, 0); // intr no
-    *(uint64_t*)(t->rsp-GPR_RDI_OFFSET) = (uint64_t)arg; // we overwrite RDI with the arg
-    t->rsp -= GPR_SAVE_SIZE; // account for the GPRS;
+    thread_push(t, 0xdeadbeef);                          // intr no
+    *(uint64_t*)(t->rsp-GPR_RDI_OFFSET) = (uint64_t)arg; // we overwrite RDI with the input arg
+    t->rsp -= GPR_SAVE_SIZE;                             // account for the GPRS;
 }
 
 
@@ -790,6 +792,25 @@ thread_start (thread_fun_t fun,
 }
 
 
+thread_t*
+need_resched (void) 
+{
+    thread_t * p;
+    thread_t * c;
+
+    ASSERT(!irqs_enabled());
+
+    c = get_cur_thread();
+    p = get_runnable_thread_myq();
+
+    if (p) {
+        enqueue_thread_on_runq(c, c->bound_cpu);
+    }
+
+    //printk("Need resched returning %p (tid=%u) (rsp=%p)\n", (void*)p, p->tid, (void*)p->rsp);
+    return p;
+}
+
 /* 
  * schedule
  *
@@ -893,8 +914,9 @@ sched_init (void)
     struct sched_state * sched = NULL;
     struct cpu * my_cpu = per_cpu_get(system)->cpus[0];
     thread_t * main = NULL;
+    int flags;
 
-    cli();
+    flags = irq_disable_save();
 
     SCHED_PRINT("Initializing scheduler\n");
 
@@ -937,7 +959,7 @@ sched_init (void)
 
     enqueue_thread_on_tlist(main);
 
-    sti();
+    irq_enable_restore(flags);
 
     return 0;
 
