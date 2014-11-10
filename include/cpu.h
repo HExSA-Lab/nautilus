@@ -217,6 +217,13 @@ invlpg (unsigned long addr)
 }
 
 
+static inline void
+wbinvd (void) 
+{
+    asm volatile("wbinvd" : : : "memory");
+}
+
+
 static inline void io_delay(void)
 {
     const uint16_t DELAY_PORT = 0x80;
