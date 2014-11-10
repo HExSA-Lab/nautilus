@@ -25,7 +25,7 @@
 #define SMP_DEBUG(fmt, args...) DEBUG_PRINT("SMP: " fmt, ##args)
 
 
-extern void smp_ap_stack_switch(uint64_t newrsp, uint64_t newrbp);
+extern struct cpu * smp_ap_stack_switch(uint64_t, uint64_t, struct cpu*);
 
 static volatile unsigned smp_core_count = 1; // assume BSP is booted
 
@@ -262,6 +262,10 @@ smp_bringup_aps (struct naut_info * naut)
     int err = 0;
     int i, j, maxlvt;
 
+    if (naut->sys.num_cpus == 1) {
+        return 0;
+    }
+
     maxlvt = apic_get_maxlvt(apic);
 
     DEBUG_PRINT("passing target page num %x to SIPI\n", target_vec);
@@ -427,7 +431,7 @@ smp_ap_finish (struct cpu * core)
 void 
 smp_ap_entry (struct cpu * core) 
 { 
-    register struct cpu * my_cpu asm("rdx");
+    struct cpu * my_cpu;
     DEBUG_PRINT("smp: core %u starting up\n", core->id);
     if (smp_ap_setup(core) < 0) {
         panic("Error setting up AP!\n");
@@ -438,19 +442,22 @@ smp_ap_entry (struct cpu * core)
      * for the next CPU boot! 
      */
     my_cpu = get_cpu();
-    printk("SMP: CPU (AP) %u operational\n", my_cpu->id);
+    printk("SMP: CPU (AP) %u operational)\n", my_cpu->id);
 
     // switch from boot stack to my new stack (allocated in thread_init)
     thread_t * cur = get_cur_thread();
 
-    // we have to call into assembly since GCC 
-    // wont let us clobber rbp
-    smp_ap_stack_switch(cur->rsp, cur->rsp);
+    /* 
+     * we have to call into assembly since GCC 
+     * wont let us clobber rbp. Note how we reassign
+     * my_cpu. This is so we don't lose it in the
+     * switch (it's sitting on the stack!)
+     */
+    my_cpu = smp_ap_stack_switch(cur->rsp, cur->rsp, my_cpu);
 
     PAUSE_WHILE(atomic_cmpswap(my_cpu->booted, 0, 1) != 0);
 
     atomic_inc(smp_core_count);
-
 
     // turns interrupts on
     smp_ap_finish(my_cpu);
@@ -458,15 +465,9 @@ smp_ap_entry (struct cpu * core)
     /* wait on all the other cores to boot up */
     BARRIER_WHILE(smp_core_count != core->system->num_cpus);
 
-    /* TODO: we need to somehow switch stacks here
-     * if we're actually going to yield, otherwise, 
-     * other cores will stomp on the same stack space 
-     * when they get interrupts 
-     */
     ASSERT(irqs_enabled());
     while (1) {
         yield();
-        //halt();
     }
 }
 

@@ -101,6 +101,7 @@ end_smp_boot:
  * we come in with two arguments:
  * rdi = new rsp
  * rsi = new rbp
+ * rdx = cpu_ptr
  * we leave with a new stack
  */
 ENTRY(smp_ap_stack_switch)
@@ -111,4 +112,5 @@ ENTRY(smp_ap_stack_switch)
      movq %rdi, %rsp      // switch stacks
      pushq %rcx           // push our return address back to C
      movq %rsi, %rcx      // restore rcx
+     movq %rdx, %rax      // return the old cpu pointer
      retq
