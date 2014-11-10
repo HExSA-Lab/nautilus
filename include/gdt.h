@@ -33,5 +33,6 @@ lgdt64 (const struct gdt_desc64 * g)
 
 #define KERNEL_CS 8
 #define KERNEL_DS 16
+#define KERNEL_SS KERNEL_DS
 
 #endif

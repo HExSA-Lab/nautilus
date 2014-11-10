@@ -4,10 +4,41 @@
 #include <naut_string.h>
 #include <paging.h>
 #include <percpu.h>
+#include <cpu.h>
 
 extern ulong_t handler_table[NUM_IDT_ENTRIES];
 
 struct gate_desc64 idt64[NUM_IDT_ENTRIES] __page_align;
+
+#define EXCP_NAME 0
+#define EXCP_MNEMONIC 1
+const char * excp_codes[NUM_EXCEPTIONS][2] = {
+    {"Divide By Zero",           "#DE"},
+    {"Debug",                    "#DB"},
+    {"Non-maskable Interrupt",   "N/A"},
+    {"Breakpoint Exception",     "#BP"},
+    {"Overflow Exception",       "#OF"},
+    {"Bound Range Exceeded",     "#BR"},
+    {"Invalid Opcode",           "#UD"},
+    {"Device Not Available",     "#NM"},
+    {"Double Fault",             "#DF"},
+    {"Coproc Segment Overrun",   "N/A"},
+    {"Invalid TSS",              "#TS"},
+    {"Segment Not Present",      "#NP"},
+    {"Stack Segment Fault",      "#SS"},
+    {"General Protection Fault", "#GP"},
+    {"Page Fault",               "#PF"},
+    {"Reserved",                 "N/A"},
+    {"x86 FP Exception",         "#MF"},
+    {"Alignment Check",          "#AC"},
+    {"Machine Check",            "#MC"},
+    {"SIMD FP Exception",        "#XM"},
+    {"Virtualization Exception", "#VE"},
+    {"Reserved",                 "N/A"},
+    {"Security Exception",       "#SX"},
+    {"Reserved",                 "N/A"},
+};
+
 
 struct idt_desc idt_descriptor =
 {
@@ -21,7 +52,23 @@ null_excp_handler (excp_entry_t * excp,
                    excp_vec_t vector,
                    addr_t fault_addr)
 {
-    panic("unhandled exception, (v=0x%x), addr=(%p), last_addr=(%p) (core=%u)\n", vector,(void*)excp->rip, (void*)fault_addr, my_cpu_id());
+    printk("\n+++ UNHANDLED EXCEPTION +++\n");
+    if (vector >= 0 && vector < 32) {
+        printk("[%s] <%s>\n    RIP=%p    fault addr=%p    (core=%u)\n", 
+                excp_codes[vector][EXCP_NAME],
+                excp_codes[vector][EXCP_MNEMONIC],
+                (void*)excp->rip, 
+                (void*)fault_addr, 
+                my_cpu_id());
+    } else {
+        printk("[Unknown Exception] (vector=0x%x)\n    RIP=(%p)    fault addr=%p    (core=%u)\n", 
+                vector,
+                (void*)excp->rip,
+                (void*)fault_addr,
+                my_cpu_id());
+    }
+
+    panic("+++ HALTING +++\n");
     return 0;
 }
 

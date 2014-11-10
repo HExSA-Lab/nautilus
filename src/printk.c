@@ -36,6 +36,7 @@
 #include <cga.h>
 #include <spinlock.h>
 #include <printk.h>
+#include <backtrace.h>
 
 spinlock_t printk_lock;
 
@@ -110,6 +111,8 @@ panic (const char * fmt, ...)
     vprintk(fmt, arg);
     va_end(arg);
 
+    print_gprs();
+    backtrace();
    __asm__ __volatile__ ("cli");
    while(1);
 }
