@@ -34,7 +34,6 @@ void abort(void);
 int clock_gettime(clockid_t, struct timespec*);
 void __assert_fail(const char*, const char*, unsigned, const char*);
 int vfprintf(FILE*, const char*, va_list);
-void vsnprintf(char*, size_t, const char*, va_list);
 long int lrand48(void);
 char * strerror(int);
 
@@ -67,7 +66,6 @@ char *__nl_langinfo_l(nl_item item, locale_t locale);
 
 #define GEN_HDR(x) int x (void);
 
-GEN_HDR(sprintf)
 GEN_HDR(writev)
 GEN_HDR(ungetwc)
 GEN_HDR(__errno_location)

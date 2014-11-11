@@ -22,9 +22,9 @@ obj-y += \
 	asm/ \
 	dev/ \
 	test/  \
-	#libccompat.o \
-	#cxxglue.o \
-	#hello_world.o \
-	#legion_runtime/
+	libccompat.o \
+	cxxglue.o \
+	hello_world.o \
+	legion_runtime/
 	
 	

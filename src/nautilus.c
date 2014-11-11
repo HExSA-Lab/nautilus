@@ -107,12 +107,10 @@ main (unsigned long mbd, unsigned long magic)
     tls_test();
     */
 
-    /*
     char * blah[] = {"test", 0};
     
-    panic("end\n");
+    //panic("end\n");
     go_c(1, blah);
-    */
     /*
     int ret = thread_fork();
 

@@ -48,7 +48,7 @@ int go(int argc, char **argv);
 int go(int argc, char **argv)
 {
 
-    panic("we are now in a legion function\n");
+  printk("in legion code...\n");
   // Before starting the Legion runtime, you first have to tell it
   // what the ID is for the top-level task.
   HighLevelRuntime::set_top_level_task_id(HELLO_WORLD_ID);

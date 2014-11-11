@@ -45,11 +45,6 @@ vfprintf (FILE * stream, const char * format, va_list arg)
 }
 
 
-void
-vsnprintf (char * s, size_t n, const char * format, va_list arg)
-{
-    UNDEF_FUN_ERR();
-}
 
 
 long int
@@ -258,7 +253,6 @@ __nl_langinfo_l (nl_item item, locale_t locale)
 
 
 /* became lazy... */
-GEN_DEF(sprintf)
 GEN_DEF(writev)
 GEN_DEF(ungetwc)
 GEN_DEF(__errno_location)
