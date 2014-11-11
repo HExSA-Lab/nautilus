@@ -46,6 +46,9 @@
 
 spinlock_t printk_lock;
 
+extern void __serial_print(const char * format, va_list ap);
+extern void serial_print_redirect(const char * format, ...);
+
 struct printk_state {
 	char buf[PRINTK_BUFMAX];
 	unsigned int index;
@@ -88,7 +91,7 @@ printk_char (char * arg, int c)
 }
 
 
-static int 
+int 
 vprintk (const char * fmt, va_list args)
 {
 	struct printk_state state;
@@ -114,7 +117,11 @@ panic (const char * fmt, ...)
     va_list arg;
 
     va_start(arg, fmt);
+#ifdef NAUT_CONFIG_SERIAL_REDIRECT
+    __serial_print(fmt, arg);
+#else
     vprintk(fmt, arg);
+#endif
     va_end(arg);
 
     print_gprs();
@@ -137,10 +144,14 @@ int
 printk (const char *fmt, ...)
 {
 	va_list	args;
-	int err;
+	int err = 0;
 
 	va_start(args, fmt);
+#ifdef NAUT_CONFIG_SERIAL_REDIRECT
+    __serial_print(fmt, args);
+#else 
 	err = vprintk(fmt, args);
+#endif
 	va_end(args);
 
 	return err;

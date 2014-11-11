@@ -11,6 +11,7 @@ extern "C" {
 
 void panic (const char * fmt, ...);
 int printk (const char * fmt, ...);
+int vprintk(const char * fmt, va_list args);
 int early_printk (const char * fmt, va_list args);
 int printk_color (uint8_t color, const char * fmt, ...);
 void show_splash(void);

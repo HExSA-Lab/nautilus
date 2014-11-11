@@ -5,6 +5,9 @@
 #include <irq.h>
 #include <cpu.h>
 
+
+extern int vprintk(const char * fmt, va_list args);
+
 static spinlock_t serial_lock; /* for SMP */
 static uint8_t serial_device_ready = 0;
 uint16_t serial_io_addr = 0;
@@ -185,12 +188,18 @@ static void
 Serial_Finish (struct Output_Sink * o) { return; }
 
 
-static inline void 
+void 
 __serial_print (const char * format, va_list ap) 
 {
-  uint8_t flags = spin_lock_irq_save(&serial_lock);
-  Format_Output(&serial_output_sink, format, ap);
-  spin_unlock_irq_restore(&serial_lock, flags);
+    uint8_t flags;
+
+    if (serial_device_ready) {
+        flags = spin_lock_irq_save(&serial_lock);
+        Format_Output(&serial_output_sink, format, ap);
+        spin_unlock_irq_restore(&serial_lock, flags);
+    } else {
+        vprintk(format, ap);
+    }
 }
 
 
@@ -281,7 +290,6 @@ serial_init (void)
 
   register_irq_handler(COM1_IRQ, serial_irq_handler, NULL);
   serial_init_addr(DEFAULT_SERIAL_ADDR);
-
 
   serial_device_ready = 1;
 }

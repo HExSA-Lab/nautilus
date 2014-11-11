@@ -1,14 +1,13 @@
 #ifndef __NAUT_ASSERT_H__
 #define __NAUT_ASSERT_H__
 
-//#include <nautilus.h>
-//#include <thread.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-extern int printk(const char*fmt, ...);
+extern void serial_print_redirect(const char * format, ...);
+extern int printk(const char* fmt, ...);
+
 
 #define ASSERT(cond)                   \
 do {                            \

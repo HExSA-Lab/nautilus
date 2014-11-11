@@ -12,15 +12,14 @@ extern "C" {
 
 #ifdef NAUT_CONFIG_SERIAL_REDIRECT
 #include <serial.h>
-#define printk(fmt, args...)        serial_print_redirect(fmt, ##args)
 #define DEBUG_PRINT(fmt, args...)   serial_print_redirect("DEBUG: " fmt, ##args)
 #define ERROR_PRINT(fmt, args...)   serial_print_redirect("ERROR at %s(%d): " fmt, __FILE__, __LINE__, ##args)
-#define panic(fmt, args...)         panic_serial("PANIC at %s(%d): " fmt, __FILE__, __LINE__, ##args)
 #else
-#define panic(fmt, args...)         panic("PANIC at %s(%d): " fmt, __FILE__, __LINE__, ##args)
 #define DEBUG_PRINT(fmt, args...)   printk("DEBUG: " fmt, ##args)
 #define ERROR_PRINT(fmt, args...)   printk("ERROR at %s(%d): " fmt, __FILE__, __LINE__, ##args)
 #endif
+
+#define panic(fmt, args...)         panic("PANIC at %s(%d): " fmt, __FILE__, __LINE__, ##args)
 
 #ifndef NAUT_CONFIG_DEBUG_PRINTS
 #undef DEBUG_PRINT
