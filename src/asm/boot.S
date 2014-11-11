@@ -24,7 +24,7 @@ multiboot_hdr:
 
     /* entry point */
     .word 3, 0
-    .long 12
+    .long 16
     .long nautilus_entry
     .long 0
 
