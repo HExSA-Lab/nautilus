@@ -65,7 +65,7 @@ SECTIONS
 
     _loadEnd = .; 
     
-    .bss ALIGN(0x1000) : AT(ADDR(.rodata)+SIZEOF(.rodata))
+    .bss ALIGN(0x1000) : AT(ADDR(.got)+SIZEOF(.got))
     {
         *(COMMON)
         *(.bss*)
