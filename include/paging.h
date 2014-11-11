@@ -7,6 +7,7 @@ extern "C" {
 
 #include <naut_types.h>
 #include <idt.h>
+#include <printk.h>
 
 #define PAGE_SHIFT_4KB 12UL
 #define PAGE_SHIFT_2MB 21UL

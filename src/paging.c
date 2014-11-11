@@ -302,7 +302,7 @@ finish_ident_map (struct mem_info * mem, ulong_t mbd)
     int i, j;
 
     /* make sure not to overwrite multiboot header */
-    if (mbd > kernel_end) {
+    if (mbd >= kernel_end) {
         pd_start = (ulong_t*)(mbd + multiboot_get_size(mbd));
     } else {
         pd_start = (ulong_t*)kernel_end;
@@ -316,7 +316,7 @@ finish_ident_map (struct mem_info * mem, ulong_t mbd)
 
     DEBUG_PRINT("Adding %u page directories, %u new 2MB pages\n", num_pds, num_pdes);
 
-    for (i = 0; i < num_pds; i++, pd_start+=NUM_PD_ENTRIES) {
+    for (i = 0; i < num_pds; i++, pd_start += NUM_PD_ENTRIES) {
 
         /* fill in the new page directory */
         for (j = 0; (i * NUM_PD_ENTRIES + j) < num_pdes; j++, paddr_start += MEM_2MB) {

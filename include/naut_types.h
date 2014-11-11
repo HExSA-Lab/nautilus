@@ -48,6 +48,14 @@ typedef uchar_t bool_t;
 #define FALSE 0
 #define TRUE 1
 
+#ifndef true
+#define true 1
+#endif
+
+#ifndef false
+#define false 0
+#endif
+
 #ifdef __cplusplus
 }
 #endif
