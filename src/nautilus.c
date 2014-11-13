@@ -39,6 +39,7 @@ static void xcall_test (void * arg)
 extern void ipi_test_setup(void);
 extern void ipi_begin_test(cpu_id_t t);
 
+
 static void tfun (void * in, void ** out)
 {
     while (1) {
@@ -93,24 +94,19 @@ main (unsigned long mbd, unsigned long magic)
 
     smp_bringup_aps(naut);
 
+#ifdef NAUT_CONFIG_NO_RT
 
-    //thread_start(side_screensaver, NULL, NULL, 0, TSTACK_DEFAULT, NULL, 1);
+#if 0
+    // test thread launch
+    thread_start(tfun, 
+                  NULL,
+                  NULL,
+                  0,
+                  TSTACK_DEFAULT,
+                  NULL,
+                  0);
 
-    //smp_xcall(1, xcall_test, (void*)0xdeadbeef, 1);
-
-    /*
-    ipi_test_setup();
-
-    ipi_begin_test(1);
-    ipi_begin_test(8);
-    ipi_begin_test(4);
-    tls_test();
-    */
-
-    char * blah[] = {"test", 0};
-    
-    //panic("end\n");
-    go_c(1, blah);
+    // test thread fork
     /*
     int ret = thread_fork();
 
@@ -122,18 +118,44 @@ main (unsigned long mbd, unsigned long magic)
     */
 
 
-    thread_start(tfun, 
-                  NULL,
-                  NULL,
-                  0,
-                  TSTACK_DEFAULT,
-                  NULL,
-                  0);
+#endif
+
+    // screen saver
+    thread_start(side_screensaver, NULL, NULL, 0, TSTACK_DEFAULT, NULL, 1);
+
+    //smp_xcall(1, xcall_test, (void*)0xdeadbeef, 1);
+
+    /*
+    ipi_test_setup();
+
+    ipi_begin_test(1);
+    ipi_begin_test(8);
+    ipi_begin_test(4);
+    tls_test();
+    */
+#endif
+
+#ifdef NAUT_CONFIG_LEGION_RT
+    char * blah[] = {"test", 0};
+    
+    //panic("end\n");
+    go_c(1, blah);
+
+#endif
+
+#ifdef NAUT_CONFIG_NDPC_RT
+
+#endif
+
+#ifdef NAUT_CONFIG_NESL_RT
+
+#endif
+
 
     sti();
 
+    printk("nautilus main thread (core 0) yielding\n");
     while (1) {
-        printk("nautilus main thread (core 0) yielding\n");
         yield();
     }
 }

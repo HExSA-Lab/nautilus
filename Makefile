@@ -280,12 +280,13 @@ AS		= $(CROSS_COMPILE)as
 LD		= $(CROSS_COMPILE)ld
 CC		= $(CROSS_COMPILE)gcc
 CPP		= $(CC) -E
-CXX     = $(CROSS_COMPILE)g++
+CXX             = $(CROSS_COMPILE)g++
 AR		= $(CROSS_COMPILE)ar
 NM		= $(CROSS_COMPILE)nm
 STRIP		= $(CROSS_COMPILE)strip
 OBJCOPY		= $(CROSS_COMPILE)objcopy
 OBJDUMP		= $(CROSS_COMPILE)objdump
+GRUBMKRESCUE    = $(CROSS_COMPILE)grub-mkrescue
 AWK		= awk
 GENKSYMS	= scripts/genksyms/genksyms
 DEPMOD		= /sbin/depmod
@@ -457,12 +458,8 @@ scripts_basic: include/autoconf.h
 
 # Objects we will link into Nautilus / subdirs we need to visit
 core-y          := src/
-libs-y		:= lib/ \
-			   /usr/lib64/libstdc++.a \
-			   #/home/kyle/opt/cross/lib/gcc/x86_64-elf/4.8.0/libgcc.a \
-			   #/usr/lib64/libsupc++.a \
+libs-y		:= lib/ 
 
-			   #/usr/lib64/libc.a \
 
 
 ifeq ($(dot-config),1)
@@ -490,6 +487,30 @@ else
 # Dummy target needed, because used as prerequisite
 include/autoconf.h: ;
 endif
+
+
+#
+# Update libs, etc based on NAUT_CONFIG_TOOL_ROOT 
+#
+#
+ifeq ($(NAUT_CONFIG_TOOLCHAIN_ROOT)a,a)
+ifeq ($(CROSS_COMPILE)a, a)
+# guess where the std libs are 
+  libs-y += /usr/lib64/libstdc++.a
+else
+  libs-y += $(CROSS_COMPILE)/../lib64/libstdc++.a
+endif
+else
+  libs-y += $(NAUT_CONFIG_TOOLCHAIN_ROOT)/lib64/libstdc++.a
+endif
+
+                           #$(NAUT_CONF_TOOLCHAIN_ROOT)/lib64/libstdc++.a
+			   #-lstdc++ 
+                           #/usr/lib64/libstdc++.a \
+			   #/home/kyle/opt/cross/lib/gcc/x86_64-elf/4.8.0/libgcc.a \
+			   #/usr/lib64/libsupc++.a \
+
+			   #/usr/lib64/libc.a \
 
 
 # The all: target is the default when no target is given on the
@@ -595,7 +616,7 @@ nautilus: $(BIN_NAME)
 
 isoimage: nautilus
 	cp $(BIN_NAME) iso/boot
-	grub-mkrescue -o $(ISO_NAME) iso
+	$(GRUBMKRESCUE) -o $(ISO_NAME) iso
 
 nautilus.asm: $(BIN_NAME)
 	$(OBJDUMP) --disassemble $< > $@

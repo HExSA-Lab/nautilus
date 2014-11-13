@@ -22,9 +22,10 @@ obj-y += \
 	asm/ \
 	dev/ \
 	test/  \
-	libccompat.o \
-	cxxglue.o \
-	hello_world.o \
-	legion_runtime/
-	
-	
+	libccompat.o 
+
+
+obj-$(NAUT_CONFIG_LEGION_RT) += cxxglue.o hello_world.o legion_runtime/
+obj-$(NAUT_CONFIG_NDPC_RT) += cxxglue.o
+obj-$(NAUT_CONFIG_NESL_RT) += 
+obj-$(NAUT_CONFIG_NESL_RT) += 

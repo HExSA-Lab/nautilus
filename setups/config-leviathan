@@ -1,0 +1,41 @@
+#
+# Automatically generated make config: don't edit
+#Nautilus: 
+# Wed Nov 12 17:25:25 2014
+#
+NAUT_CONFIG_DEBUG_INFO=y
+NAUT_CONFIG_DEBUG_PRINTS=y
+NAUT_CONFIG_USE_NAUT_BUILTINS=y
+NAUT_CONFIG_MAX_CPUS=16
+NAUT_CONFIG_THREAD_EXIT_KEYCODE=196
+
+#
+# Debugging
+#
+# NAUT_CONFIG_DEBUG_PAGING is not set
+# NAUT_CONFIG_DEBUG_MALLOC is not set
+# NAUT_CONFIG_DEBUG_SMP is not set
+# NAUT_CONFIG_DEBUG_THREADS is not set
+
+#
+# Parallel Run-time Integration
+#
+# NAUT_CONFIG_LEGION_RT is not set
+# NAUT_CONFIG_NDPC_RT is not set
+# NAUT_CONFIG_NESL_RT is not set
+NAUT_CONFIG_NO_RT=y
+
+#
+# Build Config
+#
+NAUT_CONFIG_GCC_ROOT="/usr/local/gcc492"
+
+#
+# Device options
+#
+# NAUT_CONFIG_SERIAL_REDIRECT is not set
+# NAUT_CONFIG_DEBUG_APIC is not set
+# NAUT_CONFIG_DEBUG_IOAPIC is not set
+# NAUT_CONFIG_DEBUG_PCI is not set
+# NAUT_CONFIG_DEBUG_KBD is not set
+NAUT_CONFIG_HZ=100
