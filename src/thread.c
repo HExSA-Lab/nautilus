@@ -328,6 +328,7 @@ thread_setup_init_stack (nk_thread_t * t, nk_thread_fun_t fun, void * arg)
 
 #define RSP_STACK_OFFSET   8
 #define GPR_RDI_OFFSET     48
+#define GPR_RAX_OFFSET     8
 #define GPR_SAVE_SIZE      120
 #define STACK_SAVE_SIZE    64
 #define THREAD_SETUP_SIZE  (STACK_SAVE_SIZE + GPR_SAVE_SIZE)
@@ -346,8 +347,14 @@ thread_setup_init_stack (nk_thread_t * t, nk_thread_fun_t fun, void * arg)
     thread_push(t, (uint64_t)0UL);                       // rflags
     thread_push(t, (uint64_t)KERNEL_CS);
     thread_push(t, (uint64_t)&nk_thread_entry);
-    thread_push(t, 0xdeadbeef);                          // intr no
+    thread_push(t, 0);                                   // intr no
     *(uint64_t*)(t->rsp-GPR_RDI_OFFSET) = (uint64_t)arg; // we overwrite RDI with the input arg
+
+    /* the child will also get its thread_id_t back */
+    if (fun) {
+        *(uint64_t*)(t->rsp-GPR_RAX_OFFSET) = (uint64_t)t;
+    }
+
     t->rsp -= GPR_SAVE_SIZE;                             // account for the GPRS;
 }
 
@@ -998,7 +1005,7 @@ nk_get_parent_tid (void)
  * note that this isn't called directly. It is vectored
  * into from an assembly stub
  *
- * tid returned in parent, 0 returned to child
+ * new tid is returned both to parent and child
  */
 nk_thread_id_t 
 __thread_fork (void)

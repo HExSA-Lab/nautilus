@@ -37,7 +37,7 @@ nk_thread_start (nk_thread_fun_t fun,
                  nk_thread_id_t * tid,
                  int cpu);
 
-extern nk_thread_id_t thread_fork(void);
+extern nk_thread_id_t nk_thread_fork(void);
 
 void nk_set_thread_fork_output(void * result);
 void nk_yield(void);
