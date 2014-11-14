@@ -33,7 +33,7 @@ extern spinlock_t printk_lock;
 
 
 inline struct naut_info*
-get_nautilus_info (void)
+nk_get_nautilus_info (void)
 {
     return &nautilus_info;
 }
@@ -74,7 +74,7 @@ main (unsigned long mbd, unsigned long magic)
 
     detect_cpu();
 
-    paging_init(&(naut->sys.mem), mbd);
+    nk_paging_init(&(naut->sys.mem), mbd);
 
     init_liballoc_hooks();
 

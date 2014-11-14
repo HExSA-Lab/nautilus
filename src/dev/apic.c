@@ -303,12 +303,12 @@ apic_init (struct naut_info * naut)
     DEBUG_PRINT("apic base addr: %p\n", apic->base_addr);
 
     DEBUG_PRINT("Reserving APIC address space\n");
-    if (reserve_page(apic->base_addr) < 0) {
+    if (nk_reserve_page(apic->base_addr) < 0) {
         DEBUG_PRINT("LAPIC mem region already reserved\n");
     }
     
     /* map in the lapic as uncacheable */
-    if (map_page_nocache(apic->base_addr, PTE_PRESENT_BIT|PTE_WRITABLE_BIT) == -1) {
+    if (nk_map_page_nocache(apic->base_addr, PTE_PRESENT_BIT|PTE_WRITABLE_BIT) == -1) {
         panic("Could not map APIC\n");
     }
 

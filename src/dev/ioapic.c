@@ -96,7 +96,7 @@ __ioapic_init (struct ioapic * ioapic)
 {
     int i;
 
-    if (map_page_nocache(ioapic->base, PTE_PRESENT_BIT|PTE_WRITABLE_BIT) == -1) {
+    if (nk_map_page_nocache(ioapic->base, PTE_PRESENT_BIT|PTE_WRITABLE_BIT) == -1) {
         panic("Could not map IOAPIC\n");
         return -1;
     }

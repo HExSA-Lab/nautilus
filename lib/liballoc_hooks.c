@@ -32,14 +32,14 @@ liballoc_unlock ()
 void * 
 liballoc_alloc (unsigned num)
 {
-    return (void*)alloc_pages(num);
+    return (void*)nk_alloc_pages(num);
 }
 
 
 int
 liballoc_free (void * ptr, unsigned num)
 {
-    return free_pages(ptr, num);
+    return nk_free_pages(ptr, num);
 }
 
 

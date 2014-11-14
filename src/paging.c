@@ -4,6 +4,7 @@
 #include <mb_utils.h>
 #include <idt.h>
 #include <cpu.h>
+#include <errno.h>
 #include <naut_assert.h>
 #include <lib/bitmap.h>
 #include <lib/liballoc.h>
@@ -147,11 +148,11 @@ drill_pdpt (pdpte_t * pdpt, addr_t addr, addr_t map_addr, uint64_t flags)
     } else {
 
         DEBUG_PRINT("pdpt entry not there, creating a new page directory\n");
-        pd = (pde_t*)alloc_page();
+        pd = (pde_t*)nk_alloc_page();
 
         if (!pd) {
             ERROR_PRINT("out of memory in %s\n", __FUNCTION__);
-            return -1;
+            return -EINVAL;
         }
 
         memset((void*)pd, 0, NUM_PD_ENTRIES*sizeof(pde_t));
@@ -183,11 +184,11 @@ drill_page_tables (addr_t addr, addr_t map_addr, uint64_t flags)
 
         DEBUG_PRINT("pml4 entry not there, creating a new one\n");
 
-        pdpt = (pdpte_t*)alloc_page();
+        pdpt = (pdpte_t*)nk_alloc_page();
 
         if (!pdpt) {
             ERROR_PRINT("out of memory in %s\n", __FUNCTION__);
-            return -1;
+            return -EINVAL;
         }
 
         memset((void*)pdpt, 0, NUM_PDPT_ENTRIES*sizeof(pdpte_t));
@@ -199,53 +200,115 @@ drill_page_tables (addr_t addr, addr_t map_addr, uint64_t flags)
 }
 
 
+/*
+ * nk_create_page_mapping
+ *
+ * @vaddr: virtual address to map to
+ * @paddr: physical address to create mapping for 
+ *         (must be page aligned)
+ * @flags: bits to set in the PTE
+ *
+ * create a manual page mapping
+ * (currently unused since we're using an ident map)
+ *
+ */
 int 
-create_page_mapping (addr_t vaddr, addr_t paddr, uint64_t flags)
+nk_create_page_mapping (addr_t vaddr, addr_t paddr, uint64_t flags)
 {
-    /* unused */
-    return 0;
+    /* TODO: implement */
+    return -1;
 }
 
+
+/*
+ * nk_map_page_nocache
+ *
+ * map this page as non-cacheable
+ * 
+ * @paddr: the physical address to create a mapping for
+ *         (must be page aligned)
+ * @flags: the flags (besides non-cacheable) to use in the PTE
+ *
+ * returns -EINVAL on error, 0 on success 
+ *
+ */
 int
-map_page_nocache (addr_t paddr, uint64_t flags)
+nk_map_page_nocache (addr_t paddr, uint64_t flags)
 {
+    ASSERT((unsigned long)paddr % PAGE_SIZE == 0);
     if (drill_page_tables(paddr, paddr, flags|PTE_CACHE_DISABLE_BIT) != 0) {
         ERROR_PRINT("error marking page range uncacheable\n");
-        return -1;
+        return -EINVAL;
     }
     return 0;
 }
 
 
+
+/* 
+ * nk_free_page
+ *
+ * free the page pointed to by addr
+ *
+ * @addr: the address of the page to free
+ *        (must be page aligned)
+ *
+ * returns -EINVAL on error, 0 on success
+ *
+ */
 int
-free_page (addr_t addr) 
+nk_free_page (addr_t addr) 
 {
-    return free_pages((void*)addr, 1);
+    ASSERT((unsigned long)addr % PAGE_SIZE == 0);
+    return nk_free_pages((void*)addr, 1);
 }
 
 
-/* num must be power of 2 */
+/* 
+ * nk_free_pages
+ *
+ * free a number of pages 
+ *
+ * @addr: the address of the starting page (must be page aligned)
+ * @num: the number of pages to free (must be power of 2)
+ *
+ * returns 0 on success
+ *
+ */
 int 
-free_pages (void * addr, unsigned num)
+nk_free_pages (void * addr, unsigned num)
 {
-    struct mem_info * mem = &(get_nautilus_info()->sys.mem);
-    uint_t pgnum          = PADDR_TO_PAGE((addr_t)addr);
+    struct nk_mem_info * mem = &(nk_get_nautilus_info()->sys.mem);
+    uint_t pgnum             = PADDR_TO_PAGE((addr_t)addr);
+
+    ASSERT((unsigned long)addr % PAGE_SIZE == 0);
+    ASSERT(!(num & (num-1)));
 
     bitmap_release_region(mem->page_map, pgnum, num);
     return 0;
 }
 
 
-/* num must be power of 2 */
+/*
+ * nk_alloc_pages
+ *
+ * alloc n pages
+ *
+ * @n: the number of pages to allocate
+ *
+ * returns NULL on error, the address of the page 
+ * on success
+ *
+ */
 addr_t 
-alloc_pages (unsigned num)
+nk_alloc_pages (unsigned n)
 {
-    struct mem_info * mem = &(get_nautilus_info()->sys.mem);
-    int order             = get_count_order(num);
-    int p                 = bitmap_find_free_region(mem->page_map, mem->npages, order);
+    struct nk_mem_info * mem = &(nk_get_nautilus_info()->sys.mem);
+    int order                = get_count_order(n);
+    int p                    = bitmap_find_free_region(mem->page_map, mem->npages, order);
 
     if (p < 0) {
-        panic("Could not find %u free pages\n", num);
+        panic("Could not find %u free pages\n", n);
         return (addr_t)NULL;
     } 
 
@@ -253,52 +316,96 @@ alloc_pages (unsigned num)
 }
 
 
+/*
+ * nk_alloc_page
+ *
+ * allocate a single page
+ *
+ */
 addr_t 
-alloc_page (void) 
+nk_alloc_page (void) 
 {
-    return alloc_pages(1);
+    return nk_alloc_pages(1);
 }
 
 
+/*
+ * nk_pf_handler
+ *
+ * page fault handler
+ *
+ */
 int
-pf_handler (excp_entry_t * excp,
-            excp_vec_t     vector,
-            addr_t         fault_addr)
+nk_pf_handler (excp_entry_t * excp,
+               excp_vec_t     vector,
+               addr_t         fault_addr)
 {
     panic("\n+++ Page Fault +++\nRIP: %p    Fault Address: %p \nError Code: 0x%x    (core=%u)\n", (void*)excp->rip, (void*)fault_addr, excp->error_code, my_cpu_id());
-
     return 0;
 }
 
 
+/*
+ * nk_reserve_pages
+ *
+ * mark a range of pages as unusable by heap allocator
+ *
+ * @paddr: the address of the first page to start reserving at
+ * @n: the number of pages
+ *
+ * returns -1 on error, 0 on success
+ *
+ */
 int 
-reserve_pages (addr_t paddr, unsigned n)
+nk_reserve_pages (addr_t paddr, unsigned n)
 {
-    struct mem_info * mem = &(get_nautilus_info()->sys.mem);
+    struct nk_mem_info * mem = &(nk_get_nautilus_info()->sys.mem);
     int order = get_count_order(n);
     return bitmap_allocate_region(mem->page_map, PADDR_TO_PAGE(paddr), order);
 }
 
 
+/*
+ * nk_reserve_page
+ *
+ * reserve a single page (cannot be used by heap allocator)
+ *
+ * @paddr: the start address of the page to reserve
+ *
+ * returns -1 on error, 0 on success
+ *
+ */
 int
-reserve_page (addr_t paddr)
+nk_reserve_page (addr_t paddr)
 {
-    return reserve_pages(paddr, 1);
+    return nk_reserve_pages(paddr, 1);
 }
 
 
+/*
+ * nk_reserve_range
+ *
+ * reserve a range of pages specified by the given addresses
+ *
+ * @start: address of page to start with
+ * @end: end address of the range (this one is rounded up to the next page
+ *       boundary)
+ *
+ * returns -1 on error, 0 on success
+ *
+ */
 int 
-reserve_range (addr_t start, addr_t end)
+nk_reserve_range (addr_t start, addr_t end)
 {
     int npages = (end - start) / PAGE_SIZE;
     npages = (end - start) % PAGE_SIZE ? npages + 1 : npages;
-    return reserve_pages(PADDR_TO_PAGE(start), npages);
+    return nk_reserve_pages(PADDR_TO_PAGE(start), npages);
 }
 
 
 /* TODO: make this account for if we need a new pdpt... */
 static ulong_t
-finish_ident_map (struct mem_info * mem, ulong_t mbd)
+finish_ident_map (struct nk_mem_info * mem, ulong_t mbd)
 {
     addr_t kernel_end     = (addr_t)&_bssEnd;
     ulong_t * pdpt_start  = (ulong_t*)&pdpt;
@@ -355,7 +462,7 @@ finish_ident_map (struct mem_info * mem, ulong_t mbd)
 
 
 void
-paging_init (struct mem_info * mem, ulong_t mbd)
+nk_paging_init (struct nk_mem_info * mem, ulong_t mbd)
 {
     addr_t kernel_start   = (addr_t)&_loadStart;
     ulong_t page_dir_end  = 0;
@@ -387,23 +494,20 @@ paging_init (struct mem_info * mem, ulong_t mbd)
 
     // set kernel memory + page directories + page frame bitmap as reserved
     printk("Reserving kernel memory %p - %p (page num %d to %d)\n", kernel_start, mem->pm_end-1,PADDR_TO_PAGE(kernel_start), PADDR_TO_PAGE(mem->pm_end-1));
-    reserve_range(kernel_start, mem->pm_end);
+    nk_reserve_range(kernel_start, mem->pm_end);
     
     DEBUG_PRINT("Setting aside system reserved memory\n");
     multiboot_rsv_mem_regions(mem, mbd);
 
     DEBUG_PRINT("Reserving BDA and Real Mode IVT\n");
-    reserve_range((addr_t)0x0, (addr_t)0x4ff);
+    nk_reserve_range((addr_t)0x0, (addr_t)0x4ff);
 
     DEBUG_PRINT("Reserving Video Memory\n");
-    reserve_range((addr_t)0xa0000, (addr_t)0xfffff);
+    nk_reserve_range((addr_t)0xa0000, (addr_t)0xfffff);
 
     DEBUG_PRINT("Reserving APIC/IOAPIC\n");
     
     /* TODO: these shouldn't be hardcoded */
-    reserve_range((addr_t)0xfec00000, (addr_t)0xfedfffff);
+    nk_reserve_range((addr_t)0xfec00000, (addr_t)0xfedfffff);
 
 }
-
-
-

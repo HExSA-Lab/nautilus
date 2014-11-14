@@ -8,6 +8,53 @@ extern "C" {
 #include <naut_types.h>
 #include <idt.h>
 #include <printk.h>
+    
+typedef ulong_t pml4e_t;
+typedef ulong_t pdpte_t;
+typedef ulong_t pde_t;
+typedef ulong_t pte_t;
+
+
+struct nk_pf_error {
+    union {
+        uint32_t val;
+        struct {
+            uint8_t p       : 1;
+            uint8_t wr      : 1;
+            uint8_t usr     : 1;
+            uint8_t rsvd_bit: 1;
+            uint8_t ifetch  : 1;
+            uint32_t rsvd   : 27;
+        };
+    };
+} __packed;
+
+
+typedef struct nk_pf_error nk_pf_err_t;
+
+struct nk_mem_info {
+    ulong_t * page_map;
+    addr_t    pm_start;
+    addr_t    pm_end;
+    ulong_t   phys_mem_avail;
+    ulong_t   npages;
+};
+
+
+int nk_create_page_mapping (addr_t vaddr, addr_t paddr, uint64_t flags);
+int nk_map_page_nocache (addr_t paddr, uint64_t flags);
+void nk_paging_init(struct nk_mem_info * mem, ulong_t mbd);
+addr_t nk_alloc_page(void);
+int nk_free_page(addr_t addr);
+int nk_reserve_pages(addr_t paddr, unsigned n);
+int nk_reserve_page(addr_t paddr);
+int nk_reserve_range(addr_t start, addr_t end);
+
+/* hooks */
+int nk_free_pages(void * addr, unsigned num);
+addr_t nk_alloc_pages(unsigned num);
+
+int nk_pf_handler(excp_entry_t * excp, excp_vec_t vector, addr_t fault_addr);
 
 #define PAGE_SHIFT_4KB 12UL
 #define PAGE_SHIFT_2MB 21UL
@@ -108,113 +155,6 @@ extern "C" {
 #define PAGE_MAP_BIT_IDX(n)  (n % 8)
 
 
-typedef ulong_t pml4e_t;
-typedef ulong_t pdpte_t;
-typedef ulong_t pde_t;
-typedef ulong_t pte_t;
-
-
-struct pf_error {
-    union {
-        uint32_t val;
-        struct {
-            uint8_t p       : 1;
-            uint8_t wr      : 1;
-            uint8_t usr     : 1;
-            uint8_t rsvd_bit: 1;
-            uint8_t ifetch  : 1;
-            uint32_t rsvd   : 27;
-        };
-    };
-} __packed;
-
-
-typedef struct pf_error pf_err_t;
-
-struct mem_info {
-    ulong_t * page_map;
-    addr_t    pm_start;
-    addr_t    pm_end;
-    ulong_t   phys_mem_avail;
-    ulong_t   npages;
-};
-
-
-
-// find the first zero bit in a word
-/*
-static inline uint8_t
-ff_zero (ulong_t srch)
-{
-    asm volatile("rep; bsf %1, %0"
-            : "=r" (srch)
-            : "r" (~srch));
-
-    return srch;
-}
-
-static inline void
-set_bit (int idx, volatile ulong_t * addr)
-{
-    asm volatile("bts %1, %0":
-                 "=m" (*(volatile long *) (addr)) :
-                 "Ir" (idx) : 
-                 "memory");
-}
-
-
-static inline void
-unset_bit (int idx, volatile ulong_t * addr)
-{
-    asm volatile("btr %1, %0" : 
-                 "=m" (*(volatile long *) (addr)) :
-                 "Ir" (idx));
-}
-*/
-
-
-// TODO: optimize this with native instructions
-// s and e must be page-aligned
-static inline void
-mark_range_reserved (uchar_t * m, 
-                     ulong_t s, 
-                     ulong_t e)
-{
-    ulong_t start_page  = s>>PAGE_SHIFT;
-    ulong_t end_page    = e>>PAGE_SHIFT;
-    ulong_t start_byte  = start_page>>3;
-    ulong_t end_byte    = end_page>>3;
-    uint_t i;
-
-    if (start_byte == end_byte) {
-        m[start_byte] |= (((uchar_t)~0) >> (7-(end_page%8))) &
-                         (((uchar_t)~0) << (start_page%8));
-    } else {
-
-        m[start_byte] |= ((uchar_t)~0) >> (start_page%8);
-        m[end_byte]   |= ((uchar_t)~0) << (7-(end_page%8));
-
-        for (i = start_byte + 1; i < end_byte; i++) {
-            m[i] |= 0xffu;
-        }
-    }
-}
-
-
-int create_page_mapping (addr_t vaddr, addr_t paddr, uint64_t flags);
-int map_page_nocache (addr_t paddr, uint64_t flags);
-void paging_init(struct mem_info * mem, ulong_t mbd);
-addr_t alloc_page(void);
-int free_page(addr_t addr);
-int reserve_pages(addr_t paddr, unsigned n);
-int reserve_page(addr_t paddr);
-int reserve_range(addr_t start, addr_t end);
-
-/* hooks */
-int free_pages(void * addr, unsigned num);
-addr_t alloc_pages(unsigned num);
-
-int pf_handler(excp_entry_t * excp, excp_vec_t vector, addr_t fault_addr);
 
 #ifdef __cplusplus
 }

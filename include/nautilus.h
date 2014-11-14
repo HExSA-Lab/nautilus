@@ -42,7 +42,7 @@ struct sys_info {
     uint32_t num_cpus;
     uint32_t num_ioapics;
 
-    struct mem_info mem;
+    struct nk_mem_info mem;
 
     uint32_t bsp_id;
 
@@ -59,7 +59,7 @@ struct naut_info {
 };
 
 void main (unsigned long mbd, unsigned long magic) __attribute__((section (".text")));
-inline struct naut_info* get_nautilus_info(void);
+inline struct naut_info* nk_get_nautilus_info(void);
 
 #ifdef __cplusplus
 }

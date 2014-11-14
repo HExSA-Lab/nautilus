@@ -131,7 +131,7 @@ setup_idt (void)
         //set_intr_gate(idt64, i, &early_excp_handlers[i]);
     }
 
-    if (idt_assign_entry(PF_EXCP, (ulong_t)pf_handler) < 0) {
+    if (idt_assign_entry(PF_EXCP, (ulong_t)nk_pf_handler) < 0) {
         ERROR_PRINT("Couldn't assign page fault handler\n");
         return -1;
     }
