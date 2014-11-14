@@ -69,5 +69,60 @@ menu Debugging
     
 endmenu
 
+menu "Parallel Run-time Integration""
+
+    choice 
+        prompt "Selection of Parallel Run-time"
+        default NO_RT
+
+        config LEGION_RT
+          bool "Legion RT"
+          
+        
+        config LEGION_RT_ROOT
+            string "Legion RT Root"
+            depends on LEGION_RT
+            help 
+              Directory where the intended Legion run-time is installed
+
+        config NDPC_RT
+          bool  "NDPC RT"
+
+        config NDPC_RT_ROOT
+            string "NDPC RT Root"
+            depends on NDPC_RT
+            help 
+              Directory where the intended NDPC run-time is installed
+
+        config NESL_RT
+          bool  "NESL RT"
+
+        config NESL_RT_ROOT
+            string "NESL RT Root"
+            depends on NESL_RT
+            help 
+              Directory where the intended NESL run-time is installed
+
+        config NO_RT
+          bool "No parallel run-time"
+          
+     endchoice
+        
+
+endmenu
+
+
+menu "Build Config"
+
+    config TOOLCHAIN_ROOT
+      string "Toolchain Root"
+      default /usr
+      help 
+       Directory where the intended GCC toolchain, binutils, libraries, grub, etc are installed.
+
+
+endmenu
+
+
 source "src/dev/Kconfig"
 
