@@ -9,9 +9,9 @@ extern "C" {
 
 #define BARRIER_LAST 1
 
-typedef struct barrier barrier_t;
+typedef struct nk_barrier nk_barrier_t;
 
-struct barrier {
+struct nk_barrier {
     spinlock_t lock; /* SLOW */
     
     unsigned remaining;
@@ -23,10 +23,10 @@ struct barrier {
     volatile unsigned notify;
 } __attribute__ ((packed));
 
-int barrier_init (barrier_t * barrier, uint32_t count);
-int barrier_destroy (barrier_t * barrier);
-int barrier_wait (barrier_t * barrier);
-void barrier_test(void);
+int nk_barrier_init (nk_barrier_t * barrier, uint32_t count);
+int nk_barrier_destroy (nk_barrier_t * barrier);
+int nk_barrier_wait (nk_barrier_t * barrier);
+void nk_barrier_test(void);
 
 #ifdef __cplusplus
 }

@@ -12,10 +12,10 @@
  *
  */
 
-extern void yield(void);
+extern void nk_yield(void);
 
 int
-rwlock_init (rwlock_t * l)
+nk_rwlock_init (nk_rwlock_t * l)
 {
     l->readers = 0;
     spinlock_init(&l->lock);
@@ -24,7 +24,7 @@ rwlock_init (rwlock_t * l)
 
 
 int 
-rwlock_rd_lock (rwlock_t * l)
+nk_rwlock_rd_lock (nk_rwlock_t * l)
 {
     int flags = spin_lock_irq_save(&l->lock);
     ++l->readers;
@@ -34,7 +34,7 @@ rwlock_rd_lock (rwlock_t * l)
 
 
 int 
-rwlock_rd_unlock (rwlock_t * l) 
+nk_rwlock_rd_unlock (nk_rwlock_t * l) 
 {
     int flags = spin_lock_irq_save(&l->lock);
     /* TODO: cond_signal/broadcast */
@@ -45,7 +45,7 @@ rwlock_rd_unlock (rwlock_t * l)
 
 
 int 
-rwlock_wr_lock (rwlock_t * l)
+nk_rwlock_wr_lock (nk_rwlock_t * l)
 {
     while (1) {
         spin_lock(&l->lock);
@@ -55,7 +55,7 @@ rwlock_wr_lock (rwlock_t * l)
         } else { 
             spin_unlock(&l->lock);
             /* TODO: use a condvar here */
-            yield();
+            nk_yield();
         }
     }
 
@@ -64,7 +64,7 @@ rwlock_wr_lock (rwlock_t * l)
 
 
 int 
-rwlock_wr_unlock (rwlock_t * l)
+nk_rwlock_wr_unlock (nk_rwlock_t * l)
 {
     spin_unlock(&l->lock);
     return 0;
@@ -72,7 +72,7 @@ rwlock_wr_unlock (rwlock_t * l)
 
 
 uint8_t 
-rwlock_wr_lock_irq_save (rwlock_t * l)
+nk_rwlock_wr_lock_irq_save (nk_rwlock_t * l)
 {
     int flags;
 
@@ -84,7 +84,7 @@ rwlock_wr_lock_irq_save (rwlock_t * l)
         } else {
             spin_unlock_irq_restore(&l->lock, flags);
             /* TODO: use a condvar here */
-            yield();
+            nk_yield();
         }
     }
 
@@ -93,7 +93,7 @@ rwlock_wr_lock_irq_save (rwlock_t * l)
 
 
 int 
-rwlock_wr_unlock_irq_restore (rwlock_t * l, uint8_t flags)
+nk_rwlock_wr_unlock_irq_restore (nk_rwlock_t * l, uint8_t flags)
 {
     spin_unlock_irq_restore(&l->lock, flags);
     return 0;
@@ -103,12 +103,12 @@ rwlock_wr_unlock_irq_restore (rwlock_t * l, uint8_t flags)
 static void 
 reader1 (void * in, void ** out) 
 {
-    rwlock_t * rl = (rwlock_t*)in;
+    nk_rwlock_t * rl = (nk_rwlock_t*)in;
     int n = 1000;
     int i = 0;
-    rwlock_rd_lock(rl);
+    nk_rwlock_rd_lock(rl);
     i++;
-    rwlock_rd_unlock(rl);
+    nk_rwlock_rd_unlock(rl);
 
 }
 
@@ -117,38 +117,38 @@ reader2 (void * in, void ** out)
 {
     int n = 2000;
     int i = 0;
-    rwlock_t * rl = (rwlock_t*)in;
-    rwlock_rd_lock(rl);
+    nk_rwlock_t * rl = (nk_rwlock_t*)in;
+    nk_rwlock_rd_lock(rl);
     i++;
-    rwlock_rd_unlock(rl);
+    nk_rwlock_rd_unlock(rl);
 }
 
 static void 
 writer (void * in, void ** out)
 {
-    rwlock_t * rl = (rwlock_t*)in;
+    nk_rwlock_t * rl = (nk_rwlock_t*)in;
     int n = 0;
-    uint8_t flags = rwlock_wr_lock_irq_save(rl);
+    uint8_t flags = nk_rwlock_wr_lock_irq_save(rl);
     n++;
-    rwlock_wr_unlock_irq_restore(rl, flags);
+    nk_rwlock_wr_unlock_irq_restore(rl, flags);
 }
 
 
 void
-rwlock_test (void) 
+nk_rwlock_test (void) 
 {
-    rwlock_t * rl = NULL;
-    rl = malloc(sizeof(rwlock_t));
+    nk_rwlock_t * rl = NULL;
+    rl = malloc(sizeof(nk_rwlock_t));
     if (!rl) {
         ERROR_PRINT("Could not allocate rwlock\n");
         return;
     }
 
-    rwlock_init(rl);
+    nk_rwlock_init(rl);
 
-    thread_start(reader1, rl, NULL, 1, TSTACK_DEFAULT, NULL, 1);
-    thread_start(reader2, rl, NULL, 1, TSTACK_DEFAULT, NULL, 2);
-    thread_start(writer, rl, NULL, 1, TSTACK_DEFAULT, NULL, 3);
+    nk_thread_start(reader1, rl, NULL, 1, TSTACK_DEFAULT, NULL, 1);
+    nk_thread_start(reader2, rl, NULL, 1, TSTACK_DEFAULT, NULL, 2);
+    nk_thread_start(writer, rl, NULL, 1, TSTACK_DEFAULT, NULL, 3);
 
 }
 

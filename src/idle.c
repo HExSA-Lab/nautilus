@@ -18,7 +18,7 @@ void
 idle (void * in, void ** out)
 {
     while (1) {
-        yield();
+        nk_yield();
     }
 }
 
@@ -69,7 +69,7 @@ screensaver(void * in, void ** out)
             udelay(INNER_LOOP_DELAY);
         } 
 
-        yield();
+        nk_yield();
     }
 
     term_clear();
@@ -124,7 +124,7 @@ side_screensaver(void * in, void ** out)
             udelay(INNER_LOOP_DELAY);
         } 
 
-        yield();
+        nk_yield();
     }
 
     term_setpos(0,0);

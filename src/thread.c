@@ -13,7 +13,6 @@
 
 #include <lib/liballoc.h>
 
-
 #ifndef NAUT_CONFIG_DEBUG_THREADS
 #undef  DEBUG_PRINT
 #define DEBUG_PRINT(fmt, args...)
@@ -21,24 +20,24 @@
 #define SCHED_PRINT(fmt, args...) printk("SCHED: " fmt, ##args)
 #define SCHED_DEBUG(fmt, args...) DEBUG_PRINT("SCHED: " fmt, ##args)
 
-static thread_id_t next_tid = 0;
-
-static thread_queue_t * global_thread_list;
+static unsigned long next_tid = 0;
+static nk_thread_queue_t * global_thread_list;
 
 extern addr_t boot_stack;
-
-extern void thread_switch(thread_t*);
-extern void thread_entry(void *);
-
-static struct tls tls_keys[TLS_MAX_KEYS];
+extern void nk_thread_switch(nk_thread_t*);
+extern void nk_thread_entry(void *);
+static struct nk_tls tls_keys[TLS_MAX_KEYS];
 
 
-thread_queue_t*
-thread_queue_create (void) 
+/****** SEE BELOW FOR EXTERNAL THREAD INTERFACE ********/
+
+
+nk_thread_queue_t*
+nk_thread_queue_create (void) 
 {
-    thread_queue_t * q = NULL;
+    nk_thread_queue_t * q = NULL;
 
-    q = queue_create();
+    q = nk_queue_create();
 
     if (!q) {
         ERROR_PRINT("Could not allocate thread queue\n");
@@ -49,23 +48,22 @@ thread_queue_create (void)
 
 
 
-
 /* NOTE: this does not delete the threads in the queue, just
  * their entries in the queue
  */
 void 
-thread_queue_destroy (thread_queue_t * q)
+nk_thread_queue_destroy (nk_thread_queue_t * q)
 {
     // free any remaining entries
     SCHED_DEBUG("Destroying thread queue\n");
-    queue_destroy(q, 1);
+    nk_queue_destroy(q, 1);
 }
 
 
 inline void 
-enqueue_thread_on_runq (thread_t * t, int cpu)
+nk_enqueue_thread_on_runq (nk_thread_t * t, int cpu)
 {
-    thread_queue_t * q = NULL;
+    nk_thread_queue_t * q = NULL;
     struct sys_info * sys = per_cpu_get(system);
 
     if (cpu == CPU_ANY || 
@@ -87,12 +85,12 @@ enqueue_thread_on_runq (thread_t * t, int cpu)
 
     t->cur_run_q = q;
 
-    enqueue_entry_atomic(q, &(t->runq_node));
+    nk_enqueue_entry_atomic(q, &(t->runq_node));
 }
 
 
 static inline void 
-enqueue_thread_on_waitq (thread_t * waiter, thread_queue_t * waitq)
+enqueue_thread_on_waitq (nk_thread_t * waiter, nk_thread_queue_t * waitq)
 {
     /* are we already waiting on another queue? */
     if (waiter->waiting) {
@@ -102,16 +100,16 @@ enqueue_thread_on_waitq (thread_t * waiter, thread_queue_t * waitq)
         waiter->waiting = 1;
     }
 
-    enqueue_entry_atomic(waitq, &(waiter->wait_node));
+    nk_enqueue_entry_atomic(waitq, &(waiter->wait_node));
 }
 
 
-static inline thread_t*
-dequeue_thread_from_waitq (thread_t * waiter, thread_queue_t * waitq)
+static inline nk_thread_t*
+dequeue_thread_from_waitq (nk_thread_t * waiter, nk_thread_queue_t * waitq)
 {
-    thread_t * t = NULL;
-    queue_entry_t * elm = dequeue_entry_atomic(waitq, &(waiter->wait_node));
-    t = container_of(elm, thread_t, wait_node);
+    nk_thread_t * t = NULL;
+    nk_queue_entry_t * elm = nk_dequeue_entry_atomic(waitq, &(waiter->wait_node));
+    t = container_of(elm, nk_thread_t, wait_node);
 
     if (t) {
         t->waiting = 0;
@@ -121,12 +119,12 @@ dequeue_thread_from_waitq (thread_t * waiter, thread_queue_t * waitq)
 }
 
 
-static inline thread_t*
-dequeue_thread_from_runq (thread_t * t)
+inline nk_thread_t*
+nk_dequeue_thread_from_runq (nk_thread_t * t)
 {
-    thread_queue_t * q = t->cur_run_q;
-    queue_entry_t * elm = NULL;
-    thread_t * ret = NULL;
+    nk_thread_queue_t * q = t->cur_run_q;
+    nk_queue_entry_t * elm = NULL;
+    nk_thread_t * ret = NULL;
 
     /* bail if the run queue doesn't exist */
     if (!q) {
@@ -134,8 +132,8 @@ dequeue_thread_from_runq (thread_t * t)
         return NULL;
     }
 
-    elm = dequeue_entry_atomic(q, &(t->runq_node));
-    ret = container_of(elm, thread_t, runq_node);
+    elm = nk_dequeue_entry_atomic(q, &(t->runq_node));
+    ret = container_of(elm, nk_thread_t, runq_node);
 
     t->cur_run_q = NULL;
 
@@ -144,22 +142,22 @@ dequeue_thread_from_runq (thread_t * t)
 
 
 static inline void
-enqueue_thread_on_tlist (thread_t * t)
+enqueue_thread_on_tlist (nk_thread_t * t)
 {
-    thread_queue_t * q = global_thread_list;
-    enqueue_entry_atomic(q, &(t->thr_list_node));
+    nk_thread_queue_t * q = global_thread_list;
+    nk_enqueue_entry_atomic(q, &(t->thr_list_node));
 }
 
 
-static inline thread_t*
-dequeue_thread_from_tlist (thread_t * t)
+static inline nk_thread_t*
+dequeue_thread_from_tlist (nk_thread_t * t)
 {
-    queue_entry_t * elm = NULL;
-    thread_t * ret = NULL;
+    nk_queue_entry_t * elm = NULL;
+    nk_thread_t * ret = NULL;
 
-    thread_queue_t * q = global_thread_list;
-    elm = dequeue_entry_atomic(q, &(t->thr_list_node));
-    ret = container_of(elm, thread_t, thr_list_node);
+    nk_thread_queue_t * q = global_thread_list;
+    elm = nk_dequeue_entry_atomic(q, &(t->thr_list_node));
+    ret = container_of(elm, nk_thread_t, thr_list_node);
 
     return ret;
 }
@@ -167,92 +165,24 @@ dequeue_thread_from_tlist (thread_t * t)
 
 /* this function assumes interrupts are off */
 static int
-thread_detach (thread_t * t)
+thread_detach (nk_thread_t * t)
 {
     ASSERT(t->refcount > 0);
 
     if (--t->refcount == 0) {
-        thread_destroy(t);
+        nk_thread_destroy(t);
     }
 
     return 0;
 }
 
 
-int
-tls_key_create (tls_key_t * key, void (*destructor)(void*))
-{
-    int i;
-
-    for (i = 0; i < TLS_MAX_KEYS; i++) {
-        unsigned sn = tls_keys[i].seq_num;
-
-        if (TLS_KEY_AVAIL(sn) && TLS_KEY_USABLE(sn) &&
-            atomic_cmpswap(tls_keys[i].seq_num, sn, sn+1) == sn) {
-
-            tls_keys[i].destructor = destructor;
-            *key = i;
-
-            /* we're done */
-            return 0;
-        }
-    }
-
-    return -EAGAIN;
-}
-
-
-int 
-tls_key_delete (tls_key_t key)
-{
-    if (likely(key < TLS_MAX_KEYS)) {
-        unsigned sn = tls_keys[key].seq_num;
-
-        if (likely(!TLS_KEY_AVAIL(sn)) &&
-            atomic_cmpswap(tls_keys[key].seq_num, sn, sn+1) == sn) {
-            return 0;
-        }
-    }
-
-    return -EINVAL;
-}
-
-
-void*
-tls_get (tls_key_t key) 
-{
-    thread_t * t;
-
-    if (unlikely(key >= TLS_MAX_KEYS)) {
-        return NULL;
-    }
-
-    t = get_cur_thread();
-    return (void*)t->tls[key];
-}
-
-
-int 
-tls_set (tls_key_t key, const void * val)
-{
-    thread_t * t;
-    unsigned sn;
-
-    if (key >= TLS_MAX_KEYS || 
-        TLS_KEY_AVAIL((sn = tls_keys[key].seq_num))) {
-        return -EINVAL;
-    }
-
-    t = get_cur_thread();
-    t->tls[key] = val;
-    return 0;
-}
 
 
 static void 
 tls_exit (void) 
 {
-    thread_t * t = get_cur_thread();
+    nk_thread_t * t = get_cur_thread();
     unsigned i, j;
     uint8_t called = 0;
 
@@ -273,78 +203,8 @@ tls_exit (void)
 }
 
 
-void
-thread_exit (void * retval) 
-{
-    thread_t * me = get_cur_thread();
-
-    if (irqs_enabled()) {
-        cli();
-    }
-
-    me->exited = 1;
-    me->exit_status = retval;
-
-    /* clear any thread local storage that may have been allocated */
-    tls_exit();
-
-    /* wake up everyone who is waiting on me */
-    wake_waiters();
-
-    schedule();
-
-    /* we should never get here! */
-    panic("Should never get here!\n");
-}
 
 
-int
-join (thread_t * t, void ** retval)
-{
-
-    ASSERT(irqs_enabled());
-    ASSERT(t->owner == get_cur_thread());
-    cli();
-    if (t->exited == 1) {
-        if (t->exit_status) {
-            *retval = t->exit_status;
-        }
-        return 0;
-    } else {
-        while (!t->exited) {
-            wait(t);
-        }
-    }
-
-    *retval = t->exit_status;
-
-    thread_detach(t);
-
-    sti();
-    return 0;
-}
-
-
-/* 
- * wait
- *
- * wait on a given thread
- * we shouldn't come in here with interrupts on
- *
- */
-/* TODO: do we need to worry about interrupts here? */
-void
-wait (thread_t * t)
-{
-    thread_queue_t * wq = t->waitq;
-    /* make sure we're not putting ourselves on our 
-     * own waitq */
-    ASSERT(!irqs_enabled());
-    ASSERT(wq != (get_cur_thread()->waitq));
-
-    enqueue_thread_on_waitq(get_cur_thread(), wq);
-    schedule();
-}
 
 
 /*
@@ -353,12 +213,12 @@ wait (thread_t * t)
  * get the next thread in the specified thread's CPU
  *
  */
-static thread_t *
+static nk_thread_t *
 get_runnable_thread (uint32_t cpu)
 {
-    thread_t * runnable   = NULL;
-    thread_queue_t * runq = NULL;
-    queue_entry_t * elm   = NULL;
+    nk_thread_t * runnable   = NULL;
+    nk_thread_queue_t * runq = NULL;
+    nk_queue_entry_t * elm   = NULL;
     struct sys_info * sys = per_cpu_get(system);
 
     if (cpu >= sys->num_cpus || !sys->cpus[cpu]) {
@@ -373,15 +233,15 @@ get_runnable_thread (uint32_t cpu)
         return NULL;
     }
 
-    elm = dequeue_first_atomic(runq);
+    elm = nk_dequeue_first_atomic(runq);
     if (!elm) {
         return NULL;
     }
-    return container_of(elm, thread_t, runq_node);
+    return container_of(elm, nk_thread_t, runq_node);
 }
 
 
-static thread_t * 
+static nk_thread_t * 
 get_runnable_thread_myq (void) 
 {
     cpu_id_t id = my_cpu_id();
@@ -389,121 +249,13 @@ get_runnable_thread_myq (void)
 }
 
 
-/*
- * yield
- *
- * schedule some other thread
- *
- */
-void 
-yield (void)
-{
-    uint8_t flags = irq_disable_save();
-    thread_t * t = get_cur_thread();
-    enqueue_thread_on_runq(t, t->bound_cpu);
-    schedule();
-    irq_enable_restore(flags);
-}
-
-/*
- * wake_waiters
- *
- * wake all threads that are waiting on me
- *
- */
-void 
-wake_waiters (void)
-{
-    thread_t * me  = get_cur_thread();
-    queue_entry_t * tmp = NULL;
-    queue_entry_t * elm = NULL;
-
-    uint8_t flags = spin_lock_irq_save(&(me->waitq->lock));
-    if (list_empty_careful(&(me->waitq->queue))) {
-        goto out;
-    }
-
-    list_for_each_entry_safe(elm, tmp, &(me->waitq->queue), node) {
-        /* KCH TODO: probably shouldn't be holding lock here... */
-        thread_t * t = container_of(elm, thread_t, wait_node);
-        enqueue_thread_on_runq(t, t->bound_cpu);
-        dequeue_entry(&(t->wait_node));
-    }
-
-out:
-    spin_unlock_irq_restore(&(me->waitq->lock), flags);
-}
-
-
-/*
- * 
- * Goes to sleep on the given queue
- *
- */
-int 
-thread_queue_sleep (thread_queue_t * q)
-{
-    uint8_t flags = irq_disable_save();
-    enqueue_thread_on_waitq(get_cur_thread(), q);
-    schedule();
-    irq_enable_restore(flags);
-    return 0;
-}
-
-
-int 
-thread_queue_wake_one (thread_queue_t * q)
-{
-    queue_entry_t * elm = NULL;
-    thread_t * t = NULL;
-
-    if (!q) {
-        ERROR_PRINT("Attempt to wake up thread on non-existant thread queue\n");
-        return -EINVAL;
-    }
-
-    elm = dequeue_first_atomic(q);
-
-    /* no one is sleeping on this queue */
-    if (!elm) {
-        return 0;
-    }
-
-    t = container_of(elm, thread_t, wait_node);
-
-    enqueue_thread_on_runq(t, t->bound_cpu);
-    t->waiting = 0;
-
-    return 0;
-}
-
-
-int
-thread_queue_wake_all (thread_queue_t * q)
-{
-    queue_entry_t * elm = NULL;
-    thread_t * t = NULL;
-
-    if (!q) {
-        ERROR_PRINT("Attempt to wake up thread on non-existant thread queue\n");
-        return -EINVAL;
-    }
-
-    while ((elm = dequeue_first_atomic(q))) {
-        t = container_of(elm, thread_t, wait_node);
-        enqueue_thread_on_runq(t, t->bound_cpu);
-        t->waiting = 0;
-    }
-
-    return 0;
-}
 
 static int
-thread_init (thread_t * t, void * stack, uint8_t is_detached, int cpu)
+thread_init (nk_thread_t * t, void * stack, uint8_t is_detached, int cpu)
 {
     if (!t) {
         ERROR_PRINT("Given NULL thread pointer...\n");
-        return -1;
+        return -EINVAL;
     }
 
     t->stack     = stack;
@@ -513,18 +265,74 @@ thread_init (thread_t * t, void * stack, uint8_t is_detached, int cpu)
     t->owner     = get_cur_thread();
     t->bound_cpu = cpu;
 
-    t->waitq = thread_queue_create();
+    t->waitq = nk_thread_queue_create();
     if (!t->waitq) {
         ERROR_PRINT("Could not create thread's wait queue\n");
-        return -1;
+        return -EINVAL;
     }
 
     return 0;
 }
 
 
+static void
+thread_cleanup (void)
+{
+    SCHED_DEBUG("Thread (%d) exiting on core %d\n", get_cur_thread()->tid, my_cpu_id());
+    nk_thread_exit(0);
+}
+
+
+/*
+ * utility function for setting up
+ * a thread's stack 
+ */
+static inline void
+thread_push (nk_thread_t * t, uint64_t x)
+{
+    t->rsp -= 8;
+    *(uint64_t*)(t->rsp) = x;
+}
+
+
+static void
+thread_setup_init_stack (nk_thread_t * t, nk_thread_fun_t fun, void * arg)
+{
+
+#define RSP_STACK_OFFSET   8
+#define GPR_RDI_OFFSET     48
+#define GPR_SAVE_SIZE      120
+#define STACK_SAVE_SIZE    64
+#define THREAD_SETUP_SIZE  (STACK_SAVE_SIZE + GPR_SAVE_SIZE)
+
+    /*
+     * if this is a thread fork, this part is taken care of
+     * in _thread_fork(). There is no function!
+     */
+    if (fun) {
+        thread_push(t, (uint64_t)&thread_cleanup);
+        thread_push(t, (uint64_t)fun);
+    }
+
+    thread_push(t, (uint64_t)KERNEL_SS);                 // SS
+    thread_push(t, (uint64_t)(t->rsp+RSP_STACK_OFFSET)); // rsp
+    thread_push(t, (uint64_t)0UL);                       // rflags
+    thread_push(t, (uint64_t)KERNEL_CS);
+    thread_push(t, (uint64_t)&nk_thread_entry);
+    thread_push(t, 0xdeadbeef);                          // intr no
+    *(uint64_t*)(t->rsp-GPR_RDI_OFFSET) = (uint64_t)arg; // we overwrite RDI with the input arg
+    t->rsp -= GPR_SAVE_SIZE;                             // account for the GPRS;
+}
+
+
+
+
+/****** EXTERNAL THREAD INTERFACE ******/
+
+
+
 /* 
- * thread_create
+ * nk_thread_create
  *
  * creates a thread. 
  * its stack wil not be initialized with any intial data, 
@@ -536,33 +344,35 @@ thread_init (thread_t * t, void * stack, uint8_t is_detached, int cpu)
  * @is_detached: true if this thread won't be attached to a parent (it will
  *               die immediately when it exits)
  * @stack_size: size of the thread's stack. 0 => let us decide
- * @tid: thread id of created thread
+ * @tid: opaque user object for the thread to be set (this is the output)
  * @cpu: cpu on which to bind the thread. CPU_ANY means any CPU
  *
+ * return: on error returns -EINVAL, returns 0 on success
+ *
  */
-thread_t* 
-thread_create (thread_fun_t fun, 
-               void * input,
-               void ** output,
-               uint8_t is_detached,
-               stack_size_t stack_size,
-               thread_id_t * tid,
-               int cpu)
+int
+nk_thread_create (nk_thread_fun_t fun, 
+                  void * input,
+                  void ** output,
+                  uint8_t is_detached,
+                  nk_stack_size_t stack_size,
+                  nk_thread_id_t * tid,
+                  int cpu)
 {
-    thread_t * t = NULL;
-    void * stack = NULL;
+    nk_thread_t * t = NULL;
+    void * stack    = NULL;
 
     if (cpu >= per_cpu_get(system)->num_cpus && cpu != CPU_ANY) {
         ERROR_PRINT("thread create received invalid CPU id (%u)\n", cpu);
-        return NULL;
+        return -EINVAL;
     }
 
-    t = malloc(sizeof(thread_t));
+    t = malloc(sizeof(nk_thread_t));
     if (!t) {
         ERROR_PRINT("Could not allocate thread struct\n");
-        return NULL;
+        return -EINVAL;
     }
-    memset(t, 0, sizeof(thread_t));
+    memset(t, 0, sizeof(nk_thread_t));
 
     if (stack_size) {
         stack = (void*)malloc(stack_size);
@@ -585,71 +395,483 @@ thread_create (thread_fun_t fun,
     enqueue_thread_on_tlist(t);
 
     if (tid) {
-        *tid = t->tid;
+        *tid = (nk_thread_id_t)t;
     }
 
-    DEBUG_PRINT("Thread create creating new thread with t=%p, tid=%u\n", t, t->tid);
-    return t;
+    DEBUG_PRINT("Thread create creating new thread with t=%p, tid=%lu\n", t, t->tid);
+
+    return 0;
 
 out_err1:
     free(stack);
 out_err:
     free(t);
+    return -1;
+}
+
+
+/* 
+ * nk_thread_start
+ *
+ * creates a thread and puts it on the specified cpu's run 
+ * queue
+ *
+ * @fun: the function to run
+ * @input: the argument to the thread
+ * @output: where the thread should store its output
+ * @is_detached: true if this thread won't be attached to a parent (it will
+ *               die immediately when it exits)
+ * @stack_size: size of the thread's stack. 0 => let us decide
+ * @tid: the opaque pointer passed to the user (output variable)
+ * @cpu: cpu on which to bind the thread. CPU_ANY means any CPU 
+ *
+ *
+ * on error, returns -EINVAL, otherwise 0
+ */
+int
+nk_thread_start (nk_thread_fun_t fun, 
+                 void * input,
+                 void ** output,
+                 uint8_t is_detached,
+                 nk_stack_size_t stack_size,
+                 nk_thread_id_t * tid,
+                 int cpu)
+{
+    nk_thread_id_t newtid   = NULL;
+    nk_thread_t * newthread = NULL;
+
+    if (nk_thread_create(fun, input, output, is_detached, stack_size, &newtid, cpu) < 0) {
+        ERROR_PRINT("Could not create thread\n");
+        return -1;
+    }
+
+    newthread = (nk_thread_t*)newtid;
+
+    thread_setup_init_stack(newthread, fun, input);
+
+    nk_enqueue_thread_on_runq(newthread, cpu);
+    DEBUG_PRINT("started thread (%p, tid=%u) on cpu %u\n", newthread, newthread->tid, cpu);
+    return 0;
+}
+
+
+/*
+ * wake_waiters
+ *
+ * wake all threads that are waiting on me
+ *
+ */
+void 
+nk_wake_waiters (void)
+{
+    nk_thread_t * me  = get_cur_thread();
+    nk_queue_entry_t * tmp = NULL;
+    nk_queue_entry_t * elm = NULL;
+
+    uint8_t flags = spin_lock_irq_save(&(me->waitq->lock));
+    if (list_empty_careful(&(me->waitq->queue))) {
+        goto out;
+    }
+
+    list_for_each_entry_safe(elm, tmp, &(me->waitq->queue), node) {
+        /* KCH TODO: probably shouldn't be holding lock here... */
+        nk_thread_t * t = container_of(elm, nk_thread_t, wait_node);
+        nk_enqueue_thread_on_runq(t, t->bound_cpu);
+        nk_dequeue_entry(&(t->wait_node));
+    }
+
+out:
+    spin_unlock_irq_restore(&(me->waitq->lock), flags);
+}
+
+
+/*
+ * nk_thread_exit
+ *
+ * exit from this thread
+ *
+ * @retval: the value to return to the parent
+ *
+ * If there is someone waiting on this thread, this 
+ * function will wake them up. This will also call
+ * any destructors for thread local storage
+ *
+ */
+void
+nk_thread_exit (void * retval) 
+{
+    nk_thread_t * me = get_cur_thread();
+
+    if (irqs_enabled()) {
+        cli();
+    }
+
+    me->exited = 1;
+    me->exit_status = retval;
+
+    /* clear any thread local storage that may have been allocated */
+    tls_exit();
+
+    /* wake up everyone who is waiting on me */
+    nk_wake_waiters();
+
+    nk_schedule();
+
+    /* we should never get here! */
+    panic("Should never get here!\n");
+}
+
+
+/*
+ * nk_thread_destroy
+ *
+ * destroys a thread and reclaims its memory (its stack page mostly)
+ * interrupts should be off
+ *
+ * @t: the thread to destroy
+ *
+ */
+void 
+nk_thread_destroy (nk_thread_id_t t)
+{
+    nk_thread_t * thethread = (nk_thread_t*)t;
+    ASSERT(!irqs_enabled());
+
+    nk_dequeue_thread_from_runq(thethread);
+    dequeue_thread_from_tlist(thethread);
+
+    /* remove it from any wait queues */
+    nk_dequeue_entry(&(thethread->wait_node));
+
+    /* remove its own wait queue 
+     * (waiters should already have been notified */
+    nk_thread_queue_destroy(thethread->waitq);
+
+    free(thethread->stack);
+    free(thethread);
+}
+
+
+/*
+ * nk_join
+ *
+ * join (wait) on the given thread
+ *
+ * t: the thread to wait on
+ * retval: where the waited-on thread should 
+ *         put its output
+ *
+ * returns  -EINVAL on error, 0 on success
+ *
+ */
+int
+nk_join (nk_thread_id_t t, void ** retval)
+{
+    nk_thread_t *thethread = (nk_thread_t*)t;
+
+    ASSERT(irqs_enabled());
+    ASSERT(thethread->owner == get_cur_thread());
+    cli();
+    if (thethread->exited == 1) {
+        if (thethread->exit_status) {
+            *retval = thethread->exit_status;
+        }
+        return 0;
+    } else {
+        while (!thethread->exited) {
+            nk_wait(t);
+        }
+    }
+
+    *retval = thethread->exit_status;
+
+    thread_detach(thethread);
+
+    sti();
+    return 0;
+}
+
+
+/* 
+ * nk_wait
+ *
+ * Go to sleep on a thread's wait queue. 
+ *
+ * @t : the thread to wait on
+ *
+ */
+void
+nk_wait (nk_thread_id_t t)
+{
+    nk_thread_t * cur    = get_cur_thread();
+    nk_thread_t * waiton = (nk_thread_t*)t;
+
+    nk_thread_queue_t * wq = waiton->waitq;
+
+    /* make sure we're not putting ourselves on our 
+     * own waitq */
+    ASSERT(!irqs_enabled());
+    ASSERT(wq != cur->waitq);
+
+    enqueue_thread_on_waitq(cur, wq);
+    nk_schedule();
+}
+
+
+/*
+ * nk_yield
+ *
+ * schedule some other thread
+ *
+ */
+void 
+nk_yield (void)
+{
+    uint8_t flags   = irq_disable_save();
+    nk_thread_t * t = get_cur_thread();
+
+    nk_enqueue_thread_on_runq(t, t->bound_cpu);
+    nk_schedule();
+    irq_enable_restore(flags);
+}
+
+
+/*
+ * nk_thread_queue_sleep
+ *
+ * Goes to sleep on the given queue
+ *
+ * @q: the thread queue to sleep on
+ * 
+ */
+int 
+nk_thread_queue_sleep (nk_thread_queue_t * q)
+{
+    uint8_t flags = irq_disable_save();
+    enqueue_thread_on_waitq(get_cur_thread(), q);
+    nk_schedule();
+    irq_enable_restore(flags);
+    return 0;
+}
+
+
+/* 
+ * nk_thread_queue_wake_one
+ *
+ * wake one thread waiting on this queue
+ *
+ * @q: the queue to use
+ *
+ * returns -EINVAL on error, 0 on success
+ *
+ */
+int 
+nk_thread_queue_wake_one (nk_thread_queue_t * q)
+{
+    nk_queue_entry_t * elm = NULL;
+    nk_thread_t * t = NULL;
+
+    if (!q) {
+        ERROR_PRINT("Attempt to wake up thread on non-existant thread queue\n");
+        return -EINVAL;
+    }
+
+    elm = nk_dequeue_first_atomic(q);
+
+    /* no one is sleeping on this queue */
+    if (!elm) {
+        return 0;
+    }
+
+    t = container_of(elm, nk_thread_t, wait_node);
+
+    nk_enqueue_thread_on_runq(t, t->bound_cpu);
+    t->waiting = 0;
+
+    return 0;
+}
+
+
+/* 
+ * nk_thread_queue_wake_all
+ *
+ * wake all threads waiting on this queue
+ *
+ * @q: the queue to use
+ *
+ * returns -EINVAL on error, 0 on success
+ *
+ */
+int
+nk_thread_queue_wake_all (nk_thread_queue_t * q)
+{
+    nk_queue_entry_t * elm = NULL;
+    nk_thread_t * t = NULL;
+
+    if (!q) {
+        ERROR_PRINT("Attempt to wake up thread on non-existant thread queue\n");
+        return -EINVAL;
+    }
+
+    while ((elm = nk_dequeue_first_atomic(q))) {
+        t = container_of(elm, nk_thread_t, wait_node);
+        nk_enqueue_thread_on_runq(t, t->bound_cpu);
+        t->waiting = 0;
+    }
+
+    return 0;
+}
+
+
+/* 
+ * nk_tls_key_create
+ *
+ * create thread local storage
+ *
+ * @key: where to stash the created key
+ * @destructor: function pointer to be called when the thread
+ *              exits
+ *
+ * returns -EAGAIN on error, 0 on success
+ *
+ */
+int
+nk_tls_key_create (nk_tls_key_t * key, void (*destructor)(void*))
+{
+    int i;
+
+    for (i = 0; i < TLS_MAX_KEYS; i++) {
+        unsigned sn = tls_keys[i].seq_num;
+
+        if (TLS_KEY_AVAIL(sn) && TLS_KEY_USABLE(sn) &&
+            atomic_cmpswap(tls_keys[i].seq_num, sn, sn+1) == sn) {
+
+            tls_keys[i].destructor = destructor;
+            *key = i;
+
+            /* we're done */
+            return 0;
+        }
+    }
+
+    return -EAGAIN;
+}
+
+
+/*
+ * nk_tls_key_delete
+ *
+ * @key: the key to delete
+ *
+ * returns -EINVAL on error, 0 on success
+ *
+ */
+int 
+nk_tls_key_delete (nk_tls_key_t key)
+{
+    if (likely(key < TLS_MAX_KEYS)) {
+        unsigned sn = tls_keys[key].seq_num;
+
+        if (likely(!TLS_KEY_AVAIL(sn)) &&
+            atomic_cmpswap(tls_keys[key].seq_num, sn, sn+1) == sn) {
+            return 0;
+        }
+    }
+
+    return -EINVAL;
+}
+
+
+/* 
+ * nk_tls_get
+ *
+ * get the value stored for this key for this
+ * thread
+ *
+ * @key: the key to act as index for value lookup
+ *
+ * returns NULL on error, the value otherwise
+ *
+ */
+void*
+nk_tls_get (nk_tls_key_t key) 
+{
+    nk_thread_t * t;
+
+    if (unlikely(key >= TLS_MAX_KEYS)) {
+        return NULL;
+    }
+
+    t = get_cur_thread();
+    return (void*)t->tls[key];
+}
+
+
+/* 
+ * nk_tls_set
+ *
+ * @key: the key to use for index lookup
+ * @val: the new value to set at this key
+ *
+ * returns -EINVAL on error, 0 on success
+ *
+ */
+int 
+nk_tls_set (nk_tls_key_t key, const void * val)
+{
+    nk_thread_t * t;
+    unsigned sn;
+
+    if (key >= TLS_MAX_KEYS || 
+        TLS_KEY_AVAIL((sn = tls_keys[key].seq_num))) {
+        return -EINVAL;
+    }
+
+    t = get_cur_thread();
+    t->tls[key] = val;
+    return 0;
+}
+
+
+/*
+ * nk_get_tid
+ *
+ * get the opaque thread id for the currently
+ * running thread
+ *
+ */
+nk_thread_id_t
+nk_get_tid (void) 
+{
+    nk_thread_t * t = (nk_thread_t*)get_cur_thread();
+    return (nk_thread_id_t)t;
+}
+
+
+/* 
+ * nk_get_parent_tid
+ *
+ * get this thread's parent tid
+ *
+ */
+nk_thread_id_t
+get_parent_tid (void) 
+{
+    nk_thread_t * t = (nk_thread_t*)get_cur_thread();
+    if (t && t->owner) {
+        return (nk_thread_id_t)t->owner;
+    }
     return NULL;
 }
 
 
 
 
-static void
-thread_cleanup (void)
-{
-    SCHED_DEBUG("Thread (%d) exiting on core %d\n", get_cur_thread()->tid, my_cpu_id());
-    thread_exit(0);
-}
+
+/********** END EXTERNAL INTERFACE **************/
 
 
 
-/*
- * utility function for setting up
- * a thread's stack 
- */
-static inline void
-thread_push (thread_t * t, uint64_t x)
-{
-    t->rsp -= 8;
-    *(uint64_t*)(t->rsp) = x;
-}
-
-
-static void
-thread_setup_init_stack (thread_t * t, thread_fun_t fun, void * arg)
-{
-
-#define RSP_STACK_OFFSET   8
-#define GPR_RDI_OFFSET     48
-#define GPR_SAVE_SIZE      120
-#define STACK_SAVE_SIZE    64
-#define THREAD_SETUP_SIZE  (STACK_SAVE_SIZE + GPR_SAVE_SIZE)
-
-    /*
-     * if this is a thread fork, this part is taken care of
-     * in _thread_fork(). There is no function!
-     */
-    if (fun) {
-        thread_push(t, (uint64_t)&thread_cleanup);
-        thread_push(t, (uint64_t)fun);
-    }
-
-    thread_push(t, (uint64_t)KERNEL_SS);                 // SS
-    thread_push(t, (uint64_t)(t->rsp+RSP_STACK_OFFSET)); // rsp
-    thread_push(t, (uint64_t)0UL);                       // rflags
-    thread_push(t, (uint64_t)KERNEL_CS);
-    thread_push(t, (uint64_t)&thread_entry);
-    thread_push(t, 0xdeadbeef);                          // intr no
-    *(uint64_t*)(t->rsp-GPR_RDI_OFFSET) = (uint64_t)arg; // we overwrite RDI with the input arg
-    t->rsp -= GPR_SAVE_SIZE;                             // account for the GPRS;
-}
 
 
 // push the child stack down by this much just in case
@@ -668,12 +890,12 @@ thread_setup_init_stack (thread_t * t, thread_fun_t fun, void * arg)
  *
  * tid returned in parent, 0 returned to child
  */
-thread_id_t 
-_thread_fork (void)
+nk_thread_id_t 
+__thread_fork (void)
 {
-    thread_t     *t;
-    thread_id_t  tid;
-    stack_size_t size, alloc_size;
+    nk_thread_id_t  tid;
+    nk_thread_t * t;
+    nk_stack_size_t size, alloc_size;
     uint64_t     rbp1_offset_from_ret0_addr;
     void         *child_stack;
 
@@ -697,18 +919,19 @@ _thread_fork (void)
 
     alloc_size = (size > STACK_SIZE_MIN) ? size : STACK_SIZE_MIN;    // at least enough to grow to STACK_SIZE_MIN
 
-    t = thread_create(NULL,        // no function pointer, we'll set rip explicity in just a sec...
-                      NULL,        // no input args, it's not a function
-                      NULL,        // no output args
-                      0,           // this thread's parent will wait on it
-                      alloc_size,  // stack size
-                      &tid,        // give me a thread id
-                      CPU_ANY);    // not bound to any particular CPU
-
-    if (!t) {
+    if (nk_thread_create(NULL,        // no function pointer, we'll set rip explicity in just a sec...
+                         NULL,        // no input args, it's not a function
+                         NULL,        // no output args
+                         0,           // this thread's parent will wait on it
+                         alloc_size,  // stack size
+                         &tid,        // give me a thread id
+                         CPU_ANY)     // not bound to any particular CPU
+            < 0) {
         ERROR_PRINT("Could not fork thread\n");
-        return -1;
+        return 0;
     }
+
+    t = (nk_thread_t*)tid;
 
     child_stack = t->stack;
 
@@ -726,85 +949,18 @@ _thread_fork (void)
     thread_setup_init_stack(t, NULL, NULL); 
 
     // put it on the run queue
-    enqueue_thread_on_runq(t, CPU_ANY);
+    nk_enqueue_thread_on_runq(t, CPU_ANY);
 
     // return child's tid to parent
     return tid;
 }
 
 
-/*
- * thread_destroy
- *
- * destroys a thread and reclaims its memory (its stack page mostly)
- * interrupts should be off
- *
- */
-void 
-thread_destroy (thread_t * t)
+nk_thread_t*
+nk_need_resched (void) 
 {
-    ASSERT(!irqs_enabled());
-
-    dequeue_thread_from_runq(t);
-    dequeue_thread_from_tlist(t);
-
-    /* remove it from any wait queues */
-    dequeue_entry(&(t->wait_node));
-
-    /* remove its own wait queue 
-     * (waiters should already have been notified */
-    thread_queue_destroy(t->waitq);
-
-    free_page((addr_t)t->stack);
-    free(t);
-}
-
-
-/* 
- * thread_start
- *
- * creates a thread and puts it on the specified cpu's run 
- * queue
- *
- * @fun: the function to run
- * @input: the argument to the thread
- * @output: where the thread should store its output
- * @is_detached: true if this thread won't be attached to a parent (it will
- *               die immediately when it exits)
- * @stack_size: size of the thread's stack. 0 => let us decide
- * @tid: thread id of created thread
- * @cpu: cpu on which to bind the thread. CPU_ANY means any CPU 
- *
- */
-thread_t* 
-thread_start (thread_fun_t fun, 
-               void * input,
-               void ** output,
-               uint8_t is_detached,
-               stack_size_t stack_size,
-               thread_id_t * tid,
-               int cpu)
-{
-    thread_t * t = NULL;
-    t = thread_create(fun, input, output, is_detached, stack_size, tid, cpu);
-    if (!t) {
-        ERROR_PRINT("Could not create thread\n");
-        return NULL;
-    }
-
-    thread_setup_init_stack(t, fun, input);
-
-    enqueue_thread_on_runq(t, cpu);
-    DEBUG_PRINT("started thread (%p, tid=%u) on cpu %u\n", t, t->tid, cpu);
-    return t;
-}
-
-
-thread_t*
-need_resched (void) 
-{
-    thread_t * p;
-    thread_t * c;
+    nk_thread_t * p;
+    nk_thread_t * c;
 
     ASSERT(!irqs_enabled());
 
@@ -812,12 +968,12 @@ need_resched (void)
     p = get_runnable_thread_myq();
 
     if (p) {
-        enqueue_thread_on_runq(c, c->bound_cpu);
+        nk_enqueue_thread_on_runq(c, c->bound_cpu);
     }
 
-    //printk("Need resched returning %p (tid=%u) (rsp=%p)\n", (void*)p, p->tid, (void*)p->rsp);
     return p;
 }
+
 
 /* 
  * schedule
@@ -826,9 +982,9 @@ need_resched (void)
  *
  */
 void
-schedule (void) 
+nk_schedule (void) 
 {
-    thread_t * runme = NULL;
+    nk_thread_t * runme = NULL;
 
     ASSERT(!irqs_enabled());
 
@@ -840,7 +996,7 @@ schedule (void)
         return;
     }
 
-    thread_switch(runme);
+    nk_thread_switch(runme);
 }
 
 
@@ -852,9 +1008,9 @@ schedule (void)
  *
  */
 int
-sched_init_ap (void)
+nk_sched_init_ap (void)
 {
-    thread_t * me = NULL;
+    nk_thread_t * me = NULL;
     void * my_stack = NULL;
     cpu_id_t id = my_cpu_id();
     struct cpu * my_cpu = get_cpu();
@@ -864,14 +1020,14 @@ sched_init_ap (void)
 
     SCHED_DEBUG("Initializing CPU %u\n", id);
 
-    my_cpu->run_q = thread_queue_create();
+    my_cpu->run_q = nk_thread_queue_create();
 
     if (!my_cpu->run_q) {
         ERROR_PRINT("Could not create run queue for CPU %u)\n", id);
         goto out_err;
     }
 
-    me = malloc(sizeof(thread_t));
+    me = malloc(sizeof(nk_thread_t));
     if (!me) {
         ERROR_PRINT("Could not allocate thread for CPU (%u)\n", id);
         goto out_err1;
@@ -893,7 +1049,7 @@ sched_init_ap (void)
 
     // start another idle thread
     SCHED_DEBUG("Starting idle thread for cpu %d\n", id);
-    thread_start(idle, NULL, NULL, 0, TSTACK_DEFAULT, NULL, id);
+    nk_thread_start(idle, NULL, NULL, 0, TSTACK_DEFAULT, NULL, id);
 
     irq_enable_restore(flags);
     return 0;
@@ -903,7 +1059,7 @@ out_err3:
 out_err2:
     free(me);
 out_err1:
-    thread_queue_destroy(my_cpu->run_q);
+    nk_thread_queue_destroy(my_cpu->run_q);
 out_err:
     sti();
     return -1;
@@ -917,31 +1073,31 @@ out_err:
  *
  */
 int
-sched_init (void) 
+nk_sched_init (void) 
 {
-    struct sched_state * sched = NULL;
+    struct nk_sched_state * sched = NULL;
     struct cpu * my_cpu = per_cpu_get(system)->cpus[0];
-    thread_t * main = NULL;
+    nk_thread_t * main = NULL;
     int flags;
 
     flags = irq_disable_save();
 
     SCHED_PRINT("Initializing scheduler\n");
 
-    sched = malloc(sizeof(struct sched_state));
+    sched = malloc(sizeof(struct nk_sched_state));
     if (!sched) {
         ERROR_PRINT("Could not allocate scheduler state\n");
         goto out_err0;
     }
-    memset(sched, 0, sizeof(struct sched_state));
+    memset(sched, 0, sizeof(struct nk_sched_state));
 
-    my_cpu->run_q = thread_queue_create();
+    my_cpu->run_q = nk_thread_queue_create();
     if (!my_cpu->run_q) {
         ERROR_PRINT("Could not create run queue\n");
         goto out_err1;
     }
 
-    sched->thread_list = thread_queue_create();
+    sched->thread_list = nk_thread_queue_create();
     if (!sched->thread_list) {
         ERROR_PRINT("Could not create thread list\n");
         goto out_err2;
@@ -950,14 +1106,14 @@ sched_init (void)
 
 
     // first we need to add our current thread as the current thread
-    main  = malloc(sizeof(thread_t));
+    main  = malloc(sizeof(nk_thread_t));
     if (!main) {
         ERROR_PRINT("Could not allocate main thread\n");
         goto out_err3;
     }
 
     thread_init(main, (void*)&boot_stack, 1, my_cpu_id());
-    main->waitq = thread_queue_create();
+    main->waitq = nk_thread_queue_create();
     if (!main->waitq) {
         ERROR_PRINT("Could not create main thread's wait queue\n");
         goto out_err4;
@@ -981,48 +1137,32 @@ out_err1:
     free(sched);
 out_err0:
     sti();
-    return -1;
+    return -EINVAL;
 }
 
 
-thread_id_t
-get_tid (void) 
-{
-    thread_t * t = per_cpu_get(cur_thread);
-    return t->tid;
-}
-
-thread_id_t
-get_parent_tid (void) 
-{
-    thread_t * t = per_cpu_get(cur_thread);
-    if (t && t->owner) {
-        return t->owner->tid;
-    }
-    return -1;
-}
 
 
 static void 
 tls_dummy (void * in, void ** out)
 {
     unsigned i;
-    tls_key_t * keys = NULL;
+    nk_tls_key_t * keys = NULL;
 
     printk("Beginning test of thread local storage...\n");
-    keys = malloc(sizeof(tls_key_t)*TLS_MAX_KEYS);
+    keys = malloc(sizeof(nk_tls_key_t)*TLS_MAX_KEYS);
     if (!keys) {
         ERROR_PRINT("could not allocate keys\n");
         return;
     }
 
     for (i = 0; i < TLS_MAX_KEYS; i++) {
-        if (tls_key_create(&keys[i], NULL) != 0) {
+        if (nk_tls_key_create(&keys[i], NULL) != 0) {
             ERROR_PRINT("Could not create TLS key (%u)\n", i);
             return;
         }
 
-        if (tls_set(keys[i], (const void *)(i + 100L)) != 0) {
+        if (nk_tls_set(keys[i], (const void *)(i + 100L)) != 0) {
             ERROR_PRINT("Could not set TLS key (%u)\n", i);
             return;
         }
@@ -1030,23 +1170,23 @@ tls_dummy (void * in, void ** out)
     }
 
     for (i = 0; i < TLS_MAX_KEYS; i++) {
-        if (tls_get(keys[i]) != (void*)(i + 100L)) {
-            ERROR_PRINT("Mismatched TLS val! Got %p, should be %p\n", tls_get(keys[i]), (void*)(i+100L));
+        if (nk_tls_get(keys[i]) != (void*)(i + 100L)) {
+            ERROR_PRINT("Mismatched TLS val! Got %p, should be %p\n", nk_tls_get(keys[i]), (void*)(i+100L));
             return;
         }
 
-        if (tls_key_delete(keys[i]) != 0) {
+        if (nk_tls_key_delete(keys[i]) != 0) {
             ERROR_PRINT("Could not delete TLS key %u\n", i);
             return;
         }
     }
 
-    if (tls_key_create(&keys[0], NULL) != 0) {
+    if (nk_tls_key_create(&keys[0], NULL) != 0) {
         ERROR_PRINT("2nd key create failed\n");
         return;
     }
     
-    if (tls_key_delete(keys[0]) != 0) {
+    if (nk_tls_key_delete(keys[0]) != 0) {
         ERROR_PRINT("2nd key delete failed\n");
         return;
     }
@@ -1054,10 +1194,11 @@ tls_dummy (void * in, void ** out)
     printk("Thread local storage test succeeded\n");
 }
 
+
 void 
-tls_test (void)
+nk_tls_test (void)
 {
-    thread_start(tls_dummy, NULL, NULL, 1, TSTACK_DEFAULT, NULL, 1);
+    nk_thread_start(tls_dummy, NULL, NULL, 1, TSTACK_DEFAULT, NULL, 1);
 }
 
 

@@ -35,7 +35,7 @@ kbd_handler (excp_entry_t * excp, excp_vec_t vec)
       if (scan == 0xc4) {
           void * ret = NULL;
           IRQ_HANDLER_END();
-          thread_exit(ret);
+          nk_thread_exit(ret);
       }
 #endif
       

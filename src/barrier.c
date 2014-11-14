@@ -9,10 +9,10 @@
 
 
 int 
-barrier_init (barrier_t * barrier, uint32_t count) 
+nk_barrier_init (nk_barrier_t * barrier, uint32_t count) 
 {
     int ret = 0;
-    memset(barrier, 0, sizeof(barrier_t));
+    memset(barrier, 0, sizeof(nk_barrier_t));
     spinlock_init(&barrier->lock);
 
     if (unlikely(count == 0)) {
@@ -28,7 +28,7 @@ barrier_init (barrier_t * barrier, uint32_t count)
 
 
 int 
-barrier_destroy (barrier_t * barrier)
+nk_barrier_destroy (nk_barrier_t * barrier)
 {
     int flags;
     int res;
@@ -52,7 +52,7 @@ barrier_destroy (barrier_t * barrier)
 
 
 int 
-barrier_wait (barrier_t * barrier) 
+nk_barrier_wait (nk_barrier_t * barrier) 
 {
     int res = 0;
     int flags;
@@ -80,8 +80,8 @@ barrier_wait (barrier_t * barrier)
 static void
 barrier_func1 (void * in, void ** out)
 {
-    barrier_t * b = (barrier_t *)in;
-    barrier_wait(b);
+    nk_barrier_t * b = (nk_barrier_t *)in;
+    nk_barrier_wait(b);
 }
 
 
@@ -89,12 +89,12 @@ static void
 barrier_func2 (void * in, void ** out)
 {
     uint64_t n = 100;
-    barrier_t * b = (barrier_t *)in;
+    nk_barrier_t * b = (nk_barrier_t *)in;
     while (--n) {
         io_delay();
     }
 
-    barrier_wait(b);
+    nk_barrier_wait(b);
 }
 
 
@@ -104,23 +104,23 @@ barrier_func2 (void * in, void ** out)
  * the machine
  *
  */
-void barrier_test(void)
+void nk_barrier_test(void)
 {
-    barrier_t * b;
-    b = malloc(sizeof(barrier_t));
+    nk_barrier_t * b;
+    b = malloc(sizeof(nk_barrier_t));
     if (!b) {
         ERROR_PRINT("could not allocate barrier\n");
         return;
     }
 
-    barrier_init(b, 3);
-    thread_start(barrier_func1, b, NULL, 1, TSTACK_DEFAULT, NULL, 1);
-    thread_start(barrier_func2, b, NULL, 1, TSTACK_DEFAULT, NULL, 2);
+    nk_barrier_init(b, 3);
+    nk_thread_start(barrier_func1, b, NULL, 1, TSTACK_DEFAULT, NULL, 1);
+    nk_thread_start(barrier_func2, b, NULL, 1, TSTACK_DEFAULT, NULL, 2);
 
-    barrier_wait(b);
+    nk_barrier_wait(b);
 
     printk("Barrier test successful\n");
-    barrier_destroy(b);
+    nk_barrier_destroy(b);
     free(b);
 }
 

@@ -5,6 +5,149 @@
 extern "C" {
 #endif
 
+#ifndef __ASSEMBLER__
+
+#include <spinlock.h>
+#include <queue.h>
+
+#define CPU_ANY -1
+#define TSTACK_DEFAULT 0
+
+/******** EXTERNAL INTERFACE **********/
+
+// opaque pointer given to users
+typedef void* nk_thread_id_t;
+typedef void (*nk_thread_fun_t)(void * input, void ** output);
+typedef uint64_t nk_stack_size_t;
+
+int
+nk_thread_create (nk_thread_fun_t fun, 
+                 void * input,
+                 void ** output,
+                 uint8_t is_detached,
+                 nk_stack_size_t stack_size,
+                 nk_thread_id_t * tid,
+                 int cpu);
+int
+nk_thread_start (nk_thread_fun_t fun, 
+                 void * input,
+                 void ** output,
+                 uint8_t is_detached,
+                 nk_stack_size_t stack_size,
+                 nk_thread_id_t * tid,
+                 int cpu);
+
+extern nk_thread_id_t thread_fork(void);
+void nk_yield(void);
+void nk_thread_exit(void * retval);
+void nk_thread_destroy(nk_thread_id_t t);
+void nk_wait(nk_thread_id_t t);
+void nk_wake_waiters(void);
+int nk_join(nk_thread_id_t t, void ** retval);
+
+nk_thread_id_t get_tid(void);
+nk_thread_id_t get_parent_tid(void);
+
+/* thread local storage */
+typedef unsigned int nk_tls_key_t; 
+int nk_tls_key_create(nk_tls_key_t * key, void (*destructor)(void*));
+int nk_tls_key_delete(nk_tls_key_t key);
+void* nk_tls_get(nk_tls_key_t key);
+int nk_tls_set(nk_tls_key_t key, const void * val);
+
+
+/********* INTERNALS ***********/
+
+// internal thread representations
+typedef struct nk_thread nk_thread_t;
+typedef struct nk_queue nk_thread_queue_t;
+
+/* FOR TLS */
+#define TLS_MAX_KEYS 256
+#define MIN_DESTRUCT_ITER 4
+#define TLS_KEY_AVAIL(x) (((x) & 1) == 0)
+#define TLS_KEY_USABLE(x) ((unsigned long)(x) < (unsigned long)((x)+2))
+
+
+struct nk_thread {
+    uint64_t rsp; /* KCH: this cannot change */
+    void * stack;
+    nk_stack_size_t stack_size;
+    unsigned long tid;
+
+    nk_queue_entry_t runq_node; // formerly q_node
+    nk_queue_entry_t thr_list_node;
+    struct nk_thread * owner;
+
+    nk_thread_queue_t * waitq;
+    nk_queue_entry_t wait_node;
+    uint8_t waiting;
+
+    nk_thread_queue_t * cur_run_q;
+    void * exit_status;
+
+    /* thread has finished? */
+    uint8_t exited;
+
+    unsigned long refcount;
+    int bound_cpu;
+
+    void * output;
+
+    const void * tls[TLS_MAX_KEYS];
+};
+
+
+struct nk_sched_state {
+    nk_thread_queue_t * thread_list;
+    uint_t num_threads;
+};
+
+
+
+nk_thread_id_t __thread_fork(void);
+nk_thread_t* nk_need_resched(void);
+int nk_sched_init(void);
+int nk_sched_init_ap(void);
+
+void nk_schedule(void);
+
+
+/* thread queues */
+
+nk_thread_queue_t * nk_thread_queue_create (void);
+void nk_thread_queue_destroy(nk_thread_queue_t * q);
+inline void nk_enqueue_thread_on_runq(nk_thread_t * t, int cpu);
+inline nk_thread_t* nk_dequeue_thread_from_runq(nk_thread_t * t);
+int nk_thread_queue_sleep(nk_thread_queue_t * q);
+int nk_thread_queue_wake_one(nk_thread_queue_t * q);
+int nk_thread_queue_wake_all(nk_thread_queue_t * q);
+
+struct nk_tls {
+    unsigned seq_num;
+    void (*destructor)(void*);
+};
+
+void nk_tls_test(void);
+
+#include <percpu.h>
+
+static inline nk_thread_t*
+get_cur_thread (void) 
+{
+    return (nk_thread_t*)per_cpu_get(cur_thread);
+}
+
+static inline void
+put_cur_thread (nk_thread_t * t)
+{
+    per_cpu_put(cur_thread, t);
+}
+
+
+
+#endif /* !__ASSEMBLER */
+
 #define SAVE_GPRS() \
     movq %rax, -8(%rsp); \
     movq %rbx, -16(%rsp); \
@@ -40,135 +183,6 @@ extern "C" {
     movq 104(%rsp), %rbx; \
     movq 112(%rsp), %rax; \
     addq $120, %rsp; 
-
-#ifndef __ASSEMBLER__
-
-#include <spinlock.h>
-#include <queue.h>
-
-#define CPU_ANY -1
-#define TSTACK_DEFAULT 0
-
-
-
-typedef void (*thread_fun_t)(void * input, void ** output);
-typedef uint64_t stack_size_t;
-typedef long thread_id_t;
-typedef struct thread thread_t;
-typedef struct queue thread_queue_t;
-
-
-#define TLS_MAX_KEYS 256
-#define MIN_DESTRUCT_ITER 4
-#define TLS_KEY_AVAIL(x) (((x) & 1) == 0)
-#define TLS_KEY_USABLE(x) ((unsigned long)(x) < (unsigned long)((x)+2))
-
-typedef unsigned int tls_key_t; 
-
-struct tls {
-    unsigned seq_num;
-    void (*destructor)(void*);
-};
-
-struct thread {
-    uint64_t rsp; /* KCH: this cannot change */
-    void * stack;
-    stack_size_t stack_size;
-
-    queue_entry_t runq_node; // formerly q_node
-    queue_entry_t thr_list_node;
-    thread_id_t tid;
-    struct thread * owner;
-
-    thread_queue_t * waitq;
-    queue_entry_t wait_node;
-    uint8_t waiting;
-
-    thread_queue_t * cur_run_q;
-    void * exit_status;
-
-    /* thread has finished? */
-    uint8_t exited;
-
-    unsigned long refcount;
-    int bound_cpu;
-
-    const void * tls[TLS_MAX_KEYS];
-};
-
-
-struct sched_state {
-    thread_queue_t * thread_list;
-    uint_t num_threads;
-};
-
-
-/* the thread interface */
-void yield(void);
-void schedule(void);
-thread_t* need_resched(void);
-int sched_init(void);
-int sched_init_ap(void);
-void thread_exit(void * retval);
-void wait(thread_t * t);
-void wake_waiters(void);
-int join(thread_t * t, void ** retval);
-
-thread_t* 
-thread_create (thread_fun_t fun, 
-               void * input,
-               void ** output,
-               uint8_t is_detached,
-               stack_size_t stack_size,
-               thread_id_t * tid,
-               int cpu);
-thread_t* 
-thread_start (thread_fun_t fun, 
-               void * input,
-               void ** output,
-               uint8_t is_detached,
-               stack_size_t stack_size,
-               thread_id_t * tid,
-               int cpu);
-
-extern thread_id_t thread_fork(void);
-thread_id_t _thread_fork(void);
-
-void thread_destroy(thread_t * t);
-thread_id_t get_tid(void);
-thread_id_t get_parent_tid(void);
-
-thread_queue_t * thread_queue_create (void);
-void thread_queue_destroy(thread_queue_t * q);
-inline void enqueue_thread_on_runq(thread_t * t, int cpu);
-int thread_queue_sleep(thread_queue_t * q);
-int thread_queue_wake_one(thread_queue_t * q);
-int thread_queue_wake_all(thread_queue_t * q);
-
-
-int tls_key_create(tls_key_t * key, void (*destructor)(void*));
-int tls_key_delete(tls_key_t key);
-void* tls_get(tls_key_t key);
-int tls_set(tls_key_t key, const void * val);
-void tls_test(void);
-
-#include <percpu.h>
-
-static inline thread_t*
-get_cur_thread (void) 
-{
-    return (thread_t*)per_cpu_get(cur_thread);
-}
-
-static inline void
-put_cur_thread (thread_t * t)
-{
-    per_cpu_put(cur_thread, t);
-}
-
-
-
-#endif /* !__ASSEMBLER */
 
 #ifdef __cplusplus
 }

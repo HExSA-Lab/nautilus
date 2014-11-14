@@ -18,7 +18,7 @@
 void 
 abort(void) 
 {
-    thread_exit(NULL);
+    nk_thread_exit(NULL);
 }
 
 

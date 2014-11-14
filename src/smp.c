@@ -369,7 +369,7 @@ static int xcall_handler(excp_entry_t * e, excp_vec_t v);
 static int
 smp_xcall_init_queue (struct cpu * core)
 {
-    core->xcall_q = queue_create();
+    core->xcall_q = nk_queue_create();
     if (!core->xcall_q) {
         ERROR_PRINT("Could not allocate xcall queue on cpu %u\n", core->id);
         return -1;
@@ -413,7 +413,7 @@ smp_ap_setup (struct cpu * core)
 
     smp_xcall_init_queue(core);
 
-    sched_init_ap();
+    nk_sched_init_ap();
 
     return 0;
 }
@@ -445,7 +445,7 @@ smp_ap_entry (struct cpu * core)
     printk("SMP: CPU (AP) %u operational)\n", my_cpu->id);
 
     // switch from boot stack to my new stack (allocated in thread_init)
-    thread_t * cur = get_cur_thread();
+    nk_thread_t * cur = get_cur_thread();
 
     /* 
      * we have to call into assembly since GCC 
@@ -467,7 +467,7 @@ smp_ap_entry (struct cpu * core)
 
     ASSERT(irqs_enabled());
     while (1) {
-        yield();
+        nk_yield();
     }
 }
 
@@ -508,16 +508,16 @@ mark_xcall_done (struct xcall * x)
 static int
 xcall_handler (excp_entry_t * e, excp_vec_t v) 
 {
-    queue_t * xcq = per_cpu_get(xcall_q); 
+    nk_queue_t * xcq = per_cpu_get(xcall_q); 
     struct xcall * x = NULL;
-    queue_entry_t * elm = NULL;
+    nk_queue_entry_t * elm = NULL;
 
     if (!xcq) {
         ERROR_PRINT("Badness: no xcall queue on core %u\n", my_cpu_id());
         return -1;
     }
 
-    elm = dequeue_first_atomic(xcq);
+    elm = nk_dequeue_first_atomic(xcq);
     x = container_of(elm, struct xcall, xcall_node);
     if (!x) {
         ERROR_PRINT("No XCALL request found on core %u\n", my_cpu_id());
@@ -558,7 +558,7 @@ smp_xcall (cpu_id_t cpu_id,
            uint8_t wait)
 {
     struct sys_info * sys = per_cpu_get(system);
-    queue_t * xcq  = NULL;
+    nk_queue_t * xcq  = NULL;
     struct xcall x;
     uint8_t flags;
 
@@ -594,13 +594,13 @@ smp_xcall (cpu_id_t cpu_id,
 
         flags = irq_disable_save();
 
-        if (!queue_empty_atomic(xcq)) {
+        if (!nk_queue_empty_atomic(xcq)) {
             ERROR_PRINT("XCALL queue for core %u is not empty, bailing\n", cpu_id);
             irq_enable_restore(flags);
             return -1;
         }
 
-        enqueue_entry_atomic(xcq, &(xc->xcall_node));
+        nk_enqueue_entry_atomic(xcq, &(xc->xcall_node));
 
         irq_enable_restore(flags);
 

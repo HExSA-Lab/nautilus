@@ -18,7 +18,7 @@
  */
 .section .text
 .code64
-ENTRY(thread_switch)
+ENTRY(nk_thread_switch)
     pushq %rax
     movq 8(%rsp), %rax   /* save return address */
     movq %rax, -24(%rsp) /* move ret addr down (past intr state holder) */
@@ -35,7 +35,7 @@ ENTRY(thread_switch)
 
     SAVE_GPRS()
 
-ENTRY(thread_switch_intr_entry)
+ENTRY(nk_thread_switch_intr_entry)
 
     movq %gs:0x0, %rax
     movq %rsp, (%rax)   /* save the current stack pointer */
@@ -52,7 +52,7 @@ ENTRY(thread_switch_intr_entry)
 
     iretq               /* and off we go */
 
-ENTRY(thread_entry) 
+ENTRY(nk_thread_entry) 
     sti
     retq
     
@@ -136,13 +136,13 @@ leaq 8(%rsp), %rsp     ;                     // This instruction must not affect
 
 */	
 
-ENTRY(thread_fork)
+ENTRY(nk_thread_fork)
     cli                         // turn interrupts off
 	REG_SAVE()                  // RBP and RSP will be handled in _thread_fork
 
 	// Note that callee will see us as part of the stack frame
 	// of our caller
-	callq _thread_fork  ;    // goto C code which will return for us
+	callq __thread_fork  ;    // goto C code which will return for us
 
 
 // Both the parent and child will get back here, albeit on

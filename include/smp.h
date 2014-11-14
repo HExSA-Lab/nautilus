@@ -26,14 +26,14 @@ extern "C" {
 
 struct naut_info;
 
-typedef struct queue thread_queue_t;
-typedef struct thread thread_t;
+typedef struct nk_queue nk_thread_queue_t;
+typedef struct nk_thread nk_thread_t;
 typedef void (*xcall_func_t)(void * arg);
 typedef uint32_t cpu_id_t;
 
 
 struct xcall {
-    queue_entry_t xcall_node;
+    nk_queue_entry_t xcall_node;
     void * data;
     xcall_func_t fun;
     uint8_t xcall_done;
@@ -42,7 +42,7 @@ struct xcall {
 
 
 struct cpu {
-    thread_t * cur_thread; /* KCH: this must be first! */
+    nk_thread_t * cur_thread; /* KCH: this must be first! */
 
     cpu_id_t id;
     uint8_t lapic_id;
@@ -59,9 +59,9 @@ struct cpu {
 
     spinlock_t lock;
 
-    thread_queue_t * run_q;
+    nk_thread_queue_t * run_q;
 
-    queue_t * xcall_q;
+    nk_queue_t * xcall_q;
     struct xcall xcall_nowait_info;
 
     ulong_t cpu_khz; 

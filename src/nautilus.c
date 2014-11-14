@@ -51,7 +51,7 @@ static void tfun (void * in, void ** out)
 {
     while (1) {
         printk("thread tfun running (tid=%u)\n", get_tid());
-        yield();
+        nk_yield();
     }
 }
 
@@ -97,7 +97,7 @@ main (unsigned long mbd, unsigned long magic)
 
     pci_init(naut);
 
-    sched_init();
+    nk_sched_init();
 
     smp_setup_xcall_bsp(naut->sys.cpus[0]);
 
@@ -107,7 +107,7 @@ main (unsigned long mbd, unsigned long magic)
 
 #if 0
     // test thread launch
-    thread_start(tfun, 
+    nk_thread_start(tfun, 
                   NULL,
                   NULL,
                   0,
@@ -130,7 +130,7 @@ main (unsigned long mbd, unsigned long magic)
 #endif
 
     // screen saver
-    thread_start(side_screensaver, NULL, NULL, 0, TSTACK_DEFAULT, NULL, 1);
+    nk_thread_start(side_screensaver, NULL, NULL, 0, TSTACK_DEFAULT, NULL, 1);
 
     //smp_xcall(1, xcall_test, (void*)0xdeadbeef, 1);
 
@@ -140,7 +140,7 @@ main (unsigned long mbd, unsigned long magic)
     ipi_begin_test(1);
     ipi_begin_test(8);
     ipi_begin_test(4);
-    tls_test();
+    nk_tls_test();
     */
 #endif
 
@@ -163,7 +163,7 @@ main (unsigned long mbd, unsigned long magic)
 
     printk("nautilus main thread (core 0) yielding\n");
     while (1) {
-        yield();
+        nk_yield();
     }
 }
 

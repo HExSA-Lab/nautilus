@@ -8,30 +8,30 @@ extern "C" {
 #include <spinlock.h>
 #include <list.h>
 
-struct queue {
+struct nk_queue {
     struct list_head queue;
     spinlock_t lock;
 };
 
-struct queue_entry {
+struct nk_queue_entry {
     struct list_head node;
 };
 
-typedef struct queue queue_t;
-typedef struct queue_entry queue_entry_t;
+typedef struct nk_queue nk_queue_t;
+typedef struct nk_queue_entry nk_queue_entry_t;
 
-queue_t* queue_create(void);
-void queue_destroy(queue_t * q, uint8_t free_entries);
+nk_queue_t* nk_queue_create(void);
+void nk_queue_destroy(nk_queue_t * q, uint8_t free_entries);
 
-void enqueue_entry(queue_t * q, queue_entry_t * entry);
-void enqueue_entry_atomic(queue_t * q, queue_entry_t * entry);
-queue_entry_t* dequeue_entry(queue_entry_t * entry);
-queue_entry_t* dequeue_entry_atomic(queue_t * q, queue_entry_t * entry);
-queue_entry_t* dequeue_first(queue_t * q);
-queue_entry_t* dequeue_first_atomic(queue_t * q);
+void nk_enqueue_entry(nk_queue_t * q, nk_queue_entry_t * entry);
+void nk_enqueue_entry_atomic(nk_queue_t * q, nk_queue_entry_t * entry);
+nk_queue_entry_t* nk_dequeue_entry(nk_queue_entry_t * entry);
+nk_queue_entry_t* nk_dequeue_entry_atomic(nk_queue_t * q, nk_queue_entry_t * entry);
+nk_queue_entry_t* nk_dequeue_first(nk_queue_t * q);
+nk_queue_entry_t* nk_dequeue_first_atomic(nk_queue_t * q);
 
-uint8_t queue_empty(queue_t * q);
-uint8_t queue_empty_atomic(queue_t * q);
+uint8_t nk_queue_empty(nk_queue_t * q);
+uint8_t nk_queue_empty_atomic(nk_queue_t * q);
 
 
 

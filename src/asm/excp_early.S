@@ -76,11 +76,11 @@ early_irq_common:
 
     // we're back from the irq handler
     // do we need to switch to someone else?
-    callq need_resched
+    callq nk_need_resched
     testq %rax, %rax
     jz thr_return
     movq %rax, %rdi
-    jmp thread_switch_intr_entry 
+    jmp nk_thread_switch_intr_entry 
 
 thr_return:
     RESTORE_GPRS()

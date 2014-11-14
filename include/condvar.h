@@ -7,18 +7,18 @@ extern "C" {
 
 #include <thread.h>
 
-typedef struct condvar {
+typedef struct nk_condvar {
     spinlock_t lock;
-    thread_queue_t * wait_queue;
+    nk_thread_queue_t * wait_queue;
     unsigned nwaiters;
-} condvar_t;
+} nk_condvar_t;
 
-int condvar_init(condvar_t * c);
-int condvar_destroy(condvar_t * c);
-uint8_t condvar_wait(condvar_t * c, spinlock_t * l, uint8_t flags);
-int condvar_signal(condvar_t * c);
-int condvar_bcast(condvar_t * c);
-void condvar_test(void);
+int nk_condvar_init(nk_condvar_t * c);
+int nk_condvar_destroy(nk_condvar_t * c);
+uint8_t nk_condvar_wait(nk_condvar_t * c, spinlock_t * l, uint8_t flags);
+int nk_condvar_signal(nk_condvar_t * c);
+int nk_condvar_bcast(nk_condvar_t * c);
+void nk_condvar_test(void);
 
 #ifdef __cplusplus
 }
