@@ -463,6 +463,12 @@ thread_queue_wake_one (thread_queue_t * q)
     }
 
     elm = dequeue_first_atomic(q);
+
+    /* no one is sleeping on this queue */
+    if (!elm) {
+        return 0;
+    }
+
     t = container_of(elm, thread_t, wait_node);
 
     enqueue_thread_on_runq(t, t->bound_cpu);
@@ -582,6 +588,7 @@ thread_create (thread_fun_t fun,
         *tid = t->tid;
     }
 
+    DEBUG_PRINT("Thread create creating new thread with t=%p, tid=%u\n", t, t->tid);
     return t;
 
 out_err1:
@@ -788,6 +795,7 @@ thread_start (thread_fun_t fun,
     thread_setup_init_stack(t, fun, input);
 
     enqueue_thread_on_runq(t, cpu);
+    DEBUG_PRINT("started thread (%p, tid=%u) on cpu %u\n", t, t->tid, cpu);
     return t;
 }
 
