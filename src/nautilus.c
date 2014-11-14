@@ -50,7 +50,7 @@ extern void ipi_begin_test(cpu_id_t t);
 static void tfun (void * in, void ** out)
 {
     while (1) {
-        printk("thread tfun running (tid=%u)\n", get_tid());
+        printk("thread tfun running (tid=%u)\n", nk_get_tid());
         nk_yield();
     }
 }

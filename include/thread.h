@@ -38,15 +38,19 @@ nk_thread_start (nk_thread_fun_t fun,
                  int cpu);
 
 extern nk_thread_id_t thread_fork(void);
+
+void nk_set_thread_fork_output(void * result);
 void nk_yield(void);
 void nk_thread_exit(void * retval);
-void nk_thread_destroy(nk_thread_id_t t);
+void nk_thread_destroy(nk_thread_id_t t); /* like thread_kill */
 void nk_wait(nk_thread_id_t t);
+
 void nk_wake_waiters(void);
 int nk_join(nk_thread_id_t t, void ** retval);
+int nk_join_all_children(int (*)(void*));
 
-nk_thread_id_t get_tid(void);
-nk_thread_id_t get_parent_tid(void);
+nk_thread_id_t nk_get_tid(void);
+nk_thread_id_t nk_get_parent_tid(void);
 
 /* thread local storage */
 typedef unsigned int nk_tls_key_t; 
@@ -69,6 +73,15 @@ typedef struct nk_queue nk_thread_queue_t;
 #define TLS_KEY_USABLE(x) ((unsigned long)(x) < (unsigned long)((x)+2))
 
 
+/* thread status */
+typedef enum {
+    NK_THR_INIT,
+    NK_THR_RUNNING, 
+    NK_THR_WAITING,
+    NK_THR_SUSPENDED, 
+    NK_THR_EXITED
+} nk_thread_status_t;
+
 struct nk_thread {
     uint64_t rsp; /* KCH: this cannot change */
     void * stack;
@@ -77,19 +90,21 @@ struct nk_thread {
 
     nk_queue_entry_t runq_node; // formerly q_node
     nk_queue_entry_t thr_list_node;
-    struct nk_thread * owner;
+
+    /* parent/child relationship */
+    struct nk_thread * parent;
+    struct list_head children;
+    struct list_head child_node;
+    unsigned long refcount;
 
     nk_thread_queue_t * waitq;
     nk_queue_entry_t wait_node;
-    uint8_t waiting;
 
     nk_thread_queue_t * cur_run_q;
-    void * exit_status;
 
-    /* thread has finished? */
-    uint8_t exited;
+    /* thread state */
+    nk_thread_status_t status;
 
-    unsigned long refcount;
     int bound_cpu;
 
     void * output;

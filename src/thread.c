@@ -84,6 +84,7 @@ nk_enqueue_thread_on_runq (nk_thread_t * t, int cpu)
     }
 
     t->cur_run_q = q;
+    t->status    = NK_THR_RUNNING;
 
     nk_enqueue_entry_atomic(q, &(t->runq_node));
 }
@@ -93,11 +94,11 @@ static inline void
 enqueue_thread_on_waitq (nk_thread_t * waiter, nk_thread_queue_t * waitq)
 {
     /* are we already waiting on another queue? */
-    if (waiter->waiting) {
+    if (waiter->status == NK_THR_WAITING) {
         ERROR_PRINT("Attempt to put thread on more than one wait queue\n");
         return;
     } else {
-        waiter->waiting = 1;
+        waiter->status = NK_THR_WAITING;
     }
 
     nk_enqueue_entry_atomic(waitq, &(waiter->wait_node));
@@ -107,12 +108,13 @@ enqueue_thread_on_waitq (nk_thread_t * waiter, nk_thread_queue_t * waitq)
 static inline nk_thread_t*
 dequeue_thread_from_waitq (nk_thread_t * waiter, nk_thread_queue_t * waitq)
 {
-    nk_thread_t * t = NULL;
+    nk_thread_t * t        = NULL;
     nk_queue_entry_t * elm = nk_dequeue_entry_atomic(waitq, &(waiter->wait_node));
+
     t = container_of(elm, nk_thread_t, wait_node);
 
     if (t) {
-        t->waiting = 0;
+        t->status = NK_THR_SUSPENDED;
     }
 
     return t;
@@ -135,6 +137,7 @@ nk_dequeue_thread_from_runq (nk_thread_t * t)
     elm = nk_dequeue_entry_atomic(q, &(t->runq_node));
     ret = container_of(elm, nk_thread_t, runq_node);
 
+    t->status    = NK_THR_SUSPENDED;
     t->cur_run_q = NULL;
 
     return ret;
@@ -163,11 +166,23 @@ dequeue_thread_from_tlist (nk_thread_t * t)
 }
 
 
-/* this function assumes interrupts are off */
+/*
+ * thread_detach
+ *
+ * detaches a child from its parent
+ *
+ * assumes interrupts are off
+ *
+ * @t: the thread to detach
+ *
+ */
 static int
 thread_detach (nk_thread_t * t)
 {
     ASSERT(t->refcount > 0);
+
+    /* remove me from my parent's child list */
+    list_del(&(t->child_node));
 
     if (--t->refcount == 0) {
         nk_thread_destroy(t);
@@ -251,19 +266,31 @@ get_runnable_thread_myq (void)
 
 
 static int
-thread_init (nk_thread_t * t, void * stack, uint8_t is_detached, int cpu)
+thread_init (nk_thread_t * t, 
+             void * stack, 
+             uint8_t is_detached, 
+             int cpu, 
+             nk_thread_t * parent)
 {
+
     if (!t) {
         ERROR_PRINT("Given NULL thread pointer...\n");
         return -EINVAL;
     }
 
-    t->stack     = stack;
-    t->rsp       = (uint64_t)stack + t->stack_size;
-    t->tid       = atomic_inc(next_tid) + 1;
-    t->refcount  = is_detached ? 1 : 2; // thread references itself as well
-    t->owner     = get_cur_thread();
-    t->bound_cpu = cpu;
+    t->stack      = stack;
+    t->rsp        = (uint64_t)stack + t->stack_size;
+    t->tid        = atomic_inc(next_tid) + 1;
+    t->refcount   = is_detached ? 1 : 2; // thread references itself as well
+    t->parent     = parent;
+    t->bound_cpu  = cpu;
+
+    INIT_LIST_HEAD(&(t->children));
+
+    /* I go on my parent's child list */
+    if (parent) {
+        list_add_tail(&(t->child_node), &(parent->children));
+    }
 
     t->waitq = nk_thread_queue_create();
     if (!t->waitq) {
@@ -387,10 +414,12 @@ nk_thread_create (nk_thread_fun_t fun,
         goto out_err;
     }
 
-    if (thread_init(t, stack, is_detached, cpu) < 0) {
+    if (thread_init(t, stack, is_detached, cpu, get_cur_thread()) < 0) {
         ERROR_PRINT("Could not initialize thread\n");
         goto out_err1;
     }
+
+    t->status = NK_THR_INIT;
     
     enqueue_thread_on_tlist(t);
 
@@ -449,6 +478,8 @@ nk_thread_start (nk_thread_fun_t fun,
 
     thread_setup_init_stack(newthread, fun, input);
 
+    newthread->status = NK_THR_RUNNING;
+
     nk_enqueue_thread_on_runq(newthread, cpu);
     DEBUG_PRINT("started thread (%p, tid=%u) on cpu %u\n", newthread, newthread->tid, cpu);
     return 0;
@@ -474,10 +505,16 @@ nk_wake_waiters (void)
     }
 
     list_for_each_entry_safe(elm, tmp, &(me->waitq->queue), node) {
-        /* KCH TODO: probably shouldn't be holding lock here... */
+
         nk_thread_t * t = container_of(elm, nk_thread_t, wait_node);
+
+        if (!t) {
+            continue;
+        }
+
         nk_enqueue_thread_on_runq(t, t->bound_cpu);
         nk_dequeue_entry(&(t->wait_node));
+
     }
 
 out:
@@ -506,14 +543,17 @@ nk_thread_exit (void * retval)
         cli();
     }
 
-    me->exited = 1;
-    me->exit_status = retval;
-
     /* clear any thread local storage that may have been allocated */
     tls_exit();
 
     /* wake up everyone who is waiting on me */
     nk_wake_waiters();
+
+    /* wait for my children to finish */
+    nk_join_all_children(NULL);
+
+    me->output      = retval;
+    me->status      = NK_THR_EXITED;
 
     nk_schedule();
 
@@ -534,7 +574,12 @@ nk_thread_exit (void * retval)
 void 
 nk_thread_destroy (nk_thread_id_t t)
 {
+
+
     nk_thread_t * thethread = (nk_thread_t*)t;
+
+    SCHED_DEBUG("Destroying thread (%p, tid=%lu)\n", (void*)thethread, thethread->tid);
+
     ASSERT(!irqs_enabled());
 
     nk_dequeue_thread_from_runq(thethread);
@@ -570,25 +615,69 @@ nk_join (nk_thread_id_t t, void ** retval)
     nk_thread_t *thethread = (nk_thread_t*)t;
 
     ASSERT(irqs_enabled());
-    ASSERT(thethread->owner == get_cur_thread());
+    ASSERT(thethread->parent == get_cur_thread());
     cli();
-    if (thethread->exited == 1) {
-        if (thethread->exit_status) {
-            *retval = thethread->exit_status;
+    if (thethread->status == NK_THR_EXITED) {
+        if (thethread->output) {
+            *retval = thethread->output;
         }
         return 0;
     } else {
-        while (!thethread->exited) {
+        while (thethread->status != NK_THR_EXITED) {
             nk_wait(t);
         }
     }
 
-    *retval = thethread->exit_status;
+    *retval = thethread->output;
 
     thread_detach(thethread);
 
     sti();
     return 0;
+}
+
+
+/* 
+ * nk_join_all_children
+ *
+ * Join all threads that the current thread
+ * has either forked or spawned
+ *
+ * @func: this function will be called with each 
+ *        output value generated by this threads
+ *        children
+ *
+ *  returns -EINVAL on error, 0 on success
+ *
+ */
+int 
+nk_join_all_children (int (*func)(void * res)) 
+{
+    nk_thread_t * elm = NULL;
+    nk_thread_t * tmp = NULL;
+    nk_thread_t * me         = get_cur_thread();
+    void * res               = NULL;
+    int ret                  = 0;
+
+    list_for_each_entry_safe(elm, tmp, &(me->children), child_node) {
+
+        if (nk_join(tmp, &res) < 0) {
+            ERROR_PRINT("Could not join child thread (t=%p)\n", tmp);
+            ret = -1;
+            continue;
+        }
+
+        if (func) {
+            if (func(res) < 0) {
+                ERROR_PRINT("Could not invoke destructo for child thread (t=%p)\n", tmp);
+                ret = -1;
+                continue;
+            }
+        }
+
+    }
+
+    return ret;
 }
 
 
@@ -636,6 +725,20 @@ nk_yield (void)
 }
 
 
+/* 
+ * nk_set_thread_fork_output
+ *
+ * @result: the output to set
+ *
+ */
+void
+nk_set_thread_fork_output (void * result)
+{
+    nk_thread_t* t = get_cur_thread();
+    t->output = result;
+}
+
+
 /*
  * nk_thread_queue_sleep
  *
@@ -648,7 +751,8 @@ int
 nk_thread_queue_sleep (nk_thread_queue_t * q)
 {
     uint8_t flags = irq_disable_save();
-    enqueue_thread_on_waitq(get_cur_thread(), q);
+    nk_thread_t * t = get_cur_thread();
+    enqueue_thread_on_waitq(t, q);
     nk_schedule();
     irq_enable_restore(flags);
     return 0;
@@ -685,8 +789,12 @@ nk_thread_queue_wake_one (nk_thread_queue_t * q)
 
     t = container_of(elm, nk_thread_t, wait_node);
 
+    if (!t) {
+        ERROR_PRINT("Could not get thread from queue element\n");
+        return -EINVAL;
+    }
+
     nk_enqueue_thread_on_runq(t, t->bound_cpu);
-    t->waiting = 0;
 
     return 0;
 }
@@ -715,8 +823,10 @@ nk_thread_queue_wake_all (nk_thread_queue_t * q)
 
     while ((elm = nk_dequeue_first_atomic(q))) {
         t = container_of(elm, nk_thread_t, wait_node);
+        if (!t) {
+            continue;
+        }
         nk_enqueue_thread_on_runq(t, t->bound_cpu);
-        t->waiting = 0;
     }
 
     return 0;
@@ -855,11 +965,11 @@ nk_get_tid (void)
  *
  */
 nk_thread_id_t
-get_parent_tid (void) 
+nk_get_parent_tid (void) 
 {
     nk_thread_t * t = (nk_thread_t*)get_cur_thread();
-    if (t && t->owner) {
-        return (nk_thread_id_t)t->owner;
+    if (t && t->parent) {
+        return (nk_thread_id_t)t->parent;
     }
     return NULL;
 }
@@ -1039,7 +1149,8 @@ nk_sched_init_ap (void)
         goto out_err2;
     }
 
-    if (thread_init(me, my_stack, 1, id) != 0) {
+    /* we have no parent thread... */
+    if (thread_init(me, my_stack, 1, id, NULL) != 0) {
         ERROR_PRINT("Could not init start thread on core %u\n", id);
         goto out_err3;
     }
@@ -1112,7 +1223,8 @@ nk_sched_init (void)
         goto out_err3;
     }
 
-    thread_init(main, (void*)&boot_stack, 1, my_cpu_id());
+    /* we have no parent thread... */
+    thread_init(main, (void*)&boot_stack, 1, my_cpu_id(), NULL);
     main->waitq = nk_thread_queue_create();
     if (!main->waitq) {
         ERROR_PRINT("Could not create main thread's wait queue\n");
