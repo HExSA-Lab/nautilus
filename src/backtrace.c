@@ -9,7 +9,7 @@ __do_backtrace (void ** fp, unsigned depth)
         return;
     }
     
-    printk("[%2u] RIP=%p RBP=%p\n", depth, *(fp+1), *fp);
+    printk("[%2u] RIP: %p RBP: %p\n", depth, *(fp+1), *fp);
 
     __do_backtrace(*fp, depth+1);
 }
@@ -32,7 +32,8 @@ print_gprs (void)
     asm volatile("movq %%rbp, %[m]" : [m] "=m" (reg_vals[6]));
     asm volatile("movq %%rsp, %[m]" : [m] "=m" (reg_vals[7]));
     
+    printk("[-------------- Register Contents --------------]\n");
     for (i = 0; i < 4; i++) {
-        printk("%s=%8p  %s=%8p\n", reg_names[i], reg_vals[i], reg_names[i+1], reg_vals[i+1]);
+        printk("%s: %8p  %s: %8p\n", reg_names[i], reg_vals[i], reg_names[i+1], reg_vals[i+1]);
     }
 }
