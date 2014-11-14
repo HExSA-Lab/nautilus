@@ -1,6 +1,7 @@
 #include <multiboot2.h>
 #include <mb_utils.h>
 #include <nautilus.h>
+#include <naut_types.h>
 #include <paging.h>
 
 
@@ -77,11 +78,18 @@ multiboot_rsv_mem_regions(struct nk_mem_info * mem, ulong_t mbd)
 }
 
 
-void 
+extern void* malloc(size_t);
+
+struct multiboot_info * 
 multiboot_parse (ulong_t mbd, ulong_t magic)
 {
     uint_t size;
     struct multiboot_tag * tag;
+    struct multiboot_info * mb_info = (struct multiboot_info*)malloc(sizeof(struct multiboot_info));
+    if (!mb_info) {
+        ERROR_PRINT("Could not allocate multiboot info struct\n");
+        return NULL;
+    }
 
     if (magic != MULTIBOOT2_BOOTLOADER_MAGIC) {
         panic("ERROR: Not loaded by multiboot compliant bootloader\n");
@@ -101,42 +109,23 @@ multiboot_parse (ulong_t mbd, ulong_t magic)
             tag = (struct multiboot_tag *) ((multiboot_uint8_t*)tag
                 + ((tag->size + 7) & ~7))) {
 
-        
         switch (tag->type) {
             case MULTIBOOT_TAG_TYPE_BOOT_LOADER_NAME:
                 DEBUG_PRINT("Boot loader: %s\n", ((struct multiboot_tag_string*)tag)->string);
                 break;
-            case MULTIBOOT_TAG_TYPE_BASIC_MEMINFO: {
-                ulong_t lo;
-                ulong_t hi;
-
-                lo = ((struct multiboot_tag_basic_meminfo *) tag)->mem_lower;
-                hi = ((struct multiboot_tag_basic_meminfo *) tag)->mem_upper;
-                printk("Total available physical memory: %u KB\n", lo+hi);
-                
+            case MULTIBOOT_TAG_TYPE_ELF_SECTIONS:
+                //mb_info->sec_hdr_addr = 
                 break;
-            }
-            case MULTIBOOT_TAG_TYPE_MMAP: {
-                multiboot_memory_map_t * mmap;
-                DEBUG_PRINT("Memory Map:\n");
-                for (mmap=((struct multiboot_tag_mmap*)tag)->entries;
-                        (multiboot_uint8_t*)mmap < (multiboot_uint8_t*)tag + tag->size;
-                        mmap = (multiboot_memory_map_t*)((ulong_t)mmap + 
-                            ((struct multiboot_tag_mmap*)tag)->entry_size)) {
-
-                    addr_t base_addr = (mmap->addr >> 32) | (mmap->addr & 0xffffffff);
-                    addr_t len       = (mmap->len >> 32) | (mmap->len & 0xffffffff);
-
-                    DEBUG_PRINT(" base_addr = 0x%x,"
-                           " length = 0x%x, type = 0x%x\n", 
-                           base_addr,
-                           len,
-                           (uint_t) mmap->type);
-
-                }
+            case MULTIBOOT_TAG_TYPE_BASIC_MEMINFO: 
+            case MULTIBOOT_TAG_TYPE_MMAP: 
+            case MULTIBOOT_TAG_TYPE_FRAMEBUFFER:
+            case MULTIBOOT_TAG_TYPE_CMDLINE:
+            case MULTIBOOT_TAG_TYPE_MODULE:
+            default:
                 break;
-                                          }
-            }
 
+        }
     }
+
+    return NULL;
 }

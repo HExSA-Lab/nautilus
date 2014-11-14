@@ -3,6 +3,7 @@
 #include <paging.h>
 #include <idt.h>
 #include <spinlock.h>
+#include <mb_utils.h>
 #include <cpu.h>
 #include <msr.h>
 #include <cpuid.h>
@@ -77,6 +78,11 @@ main (unsigned long mbd, unsigned long magic)
     nk_paging_init(&(naut->sys.mem), mbd);
 
     init_liballoc_hooks();
+
+    naut->sys.mb_info = multiboot_parse(mbd, magic);
+    if (!naut->sys.mb_info) {
+        ERROR_PRINT("Problem parsing multiboot header\n");
+    }
 
     disable_8259pic();
 
@@ -165,5 +171,6 @@ main (unsigned long mbd, unsigned long magic)
     while (1) {
         nk_yield();
     }
+
 }
 

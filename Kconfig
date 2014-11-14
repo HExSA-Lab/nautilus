@@ -37,6 +37,13 @@ config THREAD_EXIT_KEYCODE
 
 menu Debugging
 
+    config ENABLE_ASSERTS
+      bool "Enable Runtime Assertions"
+      default n
+      help
+        This will enable runtime assert statements. If this is
+        disabled, they will not be generated
+
     config DEBUG_PAGING
       bool "Debug paging"
       depends on DEBUG_PRINTS

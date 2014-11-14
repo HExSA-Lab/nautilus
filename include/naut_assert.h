@@ -9,6 +9,7 @@ extern void serial_print_redirect(const char * format, ...);
 extern int printk(const char* fmt, ...);
 
 
+#ifdef NAUT_CONFIG_ENABLE_ASSERTS
 #define ASSERT(cond)                   \
 do {                            \
     if (!(cond)) {                  \
@@ -19,6 +20,9 @@ do {                            \
        ;                        \
     }                           \
 } while (0)
+#else 
+#define ASSERT(cond)
+#endif
 
 #ifdef __cplusplus
 }

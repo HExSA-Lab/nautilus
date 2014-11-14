@@ -32,6 +32,7 @@ extern "C" {
 #include <smp.h>
 #include <paging.h>
 #include <limits.h>
+#include <naut_assert.h>
 
 
 struct sys_info {
@@ -52,6 +53,8 @@ struct sys_info {
     struct timer_event * time_events;
 
     struct pci_info * pci;
+
+    struct multiboot_info * mb_info;
 };
 
 struct naut_info {
