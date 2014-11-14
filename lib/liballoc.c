@@ -11,7 +11,7 @@
 #define LIBALLOC_MAGIC	0xc001c0de
 #define MAXCOMPLETE		5
 #define MAXEXP	32
-#define MINEXP	8	
+#define MINEXP  8
 
 #define MODE_BEST			0
 #define MODE_INSTANT		1
@@ -30,14 +30,14 @@ int 				 l_completePages[MAXEXP];	//< Allowing for 2^MAXEXP blocks
 
 
 #ifdef DEBUG
-unsigned int l_allocated = 0;		//< The real amount of memory allocated.
-unsigned int l_inuse = 0;			//< The amount of memory in use (malloc'ed). 
+unsigned long l_allocated = 0;		//< The real amount of memory allocated.
+unsigned long l_inuse = 0;			//< The amount of memory in use (malloc'ed). 
 #endif
 
 
-static int l_initialized = 0;			//< Flag to indicate initialization.	
-static int l_pageSize  = PAGE_SIZE;	    //< Individual page size
-static int l_pageCount = 1;			    //< Minimum number of pages to allocate.
+static unsigned l_initialized = 0;			//< Flag to indicate initialization.	
+static unsigned l_pageSize  = PAGE_SIZE;	    //< Individual page size
+static unsigned l_pageCount = 1;			    //< Minimum number of pages to allocate.
 
 
 // ***********   HELPER FUNCTIONS  *******************************
@@ -46,9 +46,9 @@ static int l_pageCount = 1;			    //< Minimum number of pages to allocate.
  *
  *  Returns n where  2^n <= size < 2^(n+1)
  */
-static inline int getexp( unsigned int size )
+static inline int getexp( unsigned long size )
 {
-	if ( size < (1<<MINEXP) ) 
+	if ( size < (1UL<<MINEXP) ) 
 	{
 		#ifdef DEBUG
 		printf("getexp returns -1 for %u less than MINEXP\n", size );
@@ -59,14 +59,14 @@ static inline int getexp( unsigned int size )
 		
 	int shift = MINEXP;
 
-	while ( shift < MAXEXP )
-	{
-		if ( (1<<shift) > size ) break;
-		shift += 1;
+	while ( shift < MAXEXP ) {
+		if ((1UL << shift++) > size) {
+            break;
+        }
 	}
 
 	#ifdef DEBUG
-	printf("getexp returns %u (%u bytes) for %u size\n", shift - 1, (1<<(shift -1)), size );
+	printf("getexp returns %u (%u bytes) for %u size\n", shift - 1, (1UL<<(shift -1)), size );
 	#endif
 
 	return shift - 1;	
@@ -121,7 +121,8 @@ static void dump_array(void)
 
 		for ( i = 0; i < MAXEXP; i++ )
 		{
-			printf("%.2i(%u): ",i, l_completePages[i] );
+            //printf("l_completePages: %p\n", (void*)(l_completePages + i));
+			printf("%.2i(%d): ",i, l_completePages[i] );
 	
 			tag = l_freePages[ i ];
 			while ( tag != NULL )
@@ -207,9 +208,9 @@ static inline struct boundary_tag* absorb_right( struct boundary_tag *tag )
 	return tag;
 }
 
-static inline struct boundary_tag* split_tag( struct boundary_tag* tag )
+static inline struct boundary_tag* split_tag( struct boundary_tag* tag , int index)
 {
-	unsigned int remainder = tag->real_size - sizeof(struct boundary_tag) - tag->size;
+	unsigned long remainder = tag->real_size - sizeof(struct boundary_tag) - tag->size;
 		
 	struct boundary_tag *new_tag = 
 				   (struct boundary_tag*)((unsigned long)tag + sizeof(struct boundary_tag) + tag->size);	
@@ -223,12 +224,16 @@ static inline struct boundary_tag* split_tag( struct boundary_tag* tag )
 						new_tag->split_left = tag;
 						new_tag->split_right = tag->split_right;
 	
-						if (new_tag->split_right != NULL) new_tag->split_right->split_left = new_tag;
+						if (new_tag->split_right != NULL) {
+                            new_tag->split_right->split_left = new_tag;
+                        }
+
 						tag->split_right = new_tag;
 	
 						tag->real_size -= new_tag->real_size;
 	
-						insert_tag( new_tag, -1 );
+						//insert_tag( new_tag, -1 );
+                        insert_tag(new_tag, index);
 	
 	return new_tag;
 }
@@ -239,10 +244,10 @@ static inline struct boundary_tag* split_tag( struct boundary_tag* tag )
 
 
 
-static struct boundary_tag* allocate_new_tag( unsigned int size )
+static struct boundary_tag* allocate_new_tag( unsigned long size )
 {
-    unsigned int pages;
-    unsigned int usage;
+    unsigned long pages;
+    unsigned long usage;
     struct boundary_tag *tag;
 
     // This is how much space is required.
@@ -250,11 +255,14 @@ static struct boundary_tag* allocate_new_tag( unsigned int size )
 
     // Perfect amount of space
     pages = usage / l_pageSize;
-    if ( (usage % l_pageSize) != 0 ) pages += 1;
+    pages = (usage % l_pageSize) ? pages + 1 : pages;
 
     // Make sure it's >= the minimum size.
     if ( pages < l_pageCount ) pages = l_pageCount;
 
+#ifdef DEBUG
+    printk("Liballoc allocating %u pages (usage=%u) (page_size=%lx)\n", pages, usage, l_pageSize);
+#endif
     tag = (struct boundary_tag*)liballoc_alloc( pages );
 
     if ( tag == NULL )  {
@@ -280,7 +288,7 @@ static struct boundary_tag* allocate_new_tag( unsigned int size )
 
     l_allocated += pages * l_pageSize;
 
-    printf("Total memory usage = %u KB\n",  (int)((l_allocated / (1024))) );
+    printf("Total memory usage = %u KB\n",  (unsigned long)((l_allocated / (1024))) );
 #endif
 
     return tag;
@@ -293,6 +301,10 @@ void *malloc(size_t size)
 	int index;
 	void *ptr;
 	struct boundary_tag *tag = NULL;
+
+#ifdef DEBUG
+    printf("malloc request for %u bytes\n", size);
+#endif
 
 	liballoc_lock();
 
@@ -310,10 +322,18 @@ void *malloc(size_t size)
 		}
 
 		index = getexp( size ) + MODE;
-		if ( index < MINEXP ) index = MINEXP;
+		if (index < MINEXP) { 
+            index = MINEXP;
+#ifdef DEBUG
+            printf("index was < MINEXP, ended up with index of %u\n", MINEXP);
+#endif
+        }
+
 		
 
 		// Find one big enough.
+        // KCH: this is a pretty naive search, no promotions...
+        
 			tag = l_freePages[ index ];				// Start at the front of the list.
 			while ( tag != NULL )
 			{
@@ -339,16 +359,20 @@ void *malloc(size_t size)
 					liballoc_unlock();
 					return NULL;
 				}
-				
-				index = getexp( tag->real_size - sizeof(struct boundary_tag) );
+
+				index = getexp( tag->size - sizeof(struct boundary_tag) );
+                index = (index < MINEXP) ? MINEXP : index;
+				//index = getexp( tag->real_size - sizeof(struct boundary_tag) );
+
+                insert_tag(tag, index);
 			}
-			else
-			{
+			//else
+			//{
 				remove_tag( tag );
 
 				if ( (tag->split_left == NULL) && (tag->split_right == NULL) )
 					l_completePages[ index ] -= 1;
-			}
+			//}
 		
 		// We have a free page.  Remove it from the free pages list.
 	
@@ -357,22 +381,24 @@ void *malloc(size_t size)
 		// Removed... see if we can re-use the excess space.
 
 		#ifdef DEBUG
-		printf("Found tag with %u bytes available (requested %u bytes, leaving %u), which has exponent: %u (%u bytes)\n", tag->real_size - sizeof(struct boundary_tag), size, tag->real_size - size - sizeof(struct boundary_tag), index, 1<<index );
+		printf("Found tag with %lu bytes available (requested %lu bytes, leaving %lu), which has exponent: %u (%lu bytes)\n", tag->real_size - sizeof(struct boundary_tag), size, tag->real_size - size - sizeof(struct boundary_tag), index, 1UL<<index );
 		#endif
 		
-		unsigned int remainder = tag->real_size - size - sizeof( struct boundary_tag ) * 2; // Support a new tag + remainder
+		unsigned long remainder = tag->real_size - size - sizeof( struct boundary_tag ) * 2; // Support a new tag + remainder
 
-		if ( ((int)(remainder) > 0) /*&& ( (tag->real_size - remainder) >= (1<<MINEXP))*/ )
+		if ( ((unsigned long)(remainder) > 0) /*&& ( (tag->real_size - remainder) >= (1<<MINEXP))*/ )
 		{
-			int childIndex = getexp( remainder );
+			//int childIndex = getexp( remainder );
+            // KCH
+            int childIndex = index;
 	
 			if ( childIndex >= 0 )
 			{
 				#ifdef DEBUG
-				printf("Seems to be splittable: %u >= 2^%u .. %u\n", remainder, childIndex, (1<<childIndex) );
+				printf("Seems to be splittable: %u >= 2^%u .. %u\n", remainder, childIndex, (1UL<<childIndex) );
 				#endif
 
-				struct boundary_tag *new_tag = split_tag( tag ); 
+				struct boundary_tag *new_tag = split_tag(tag, childIndex); 
 
 				new_tag = new_tag;	// Get around the compiler warning about unused variables.
 	
@@ -390,7 +416,7 @@ void *malloc(size_t size)
 	
 	#ifdef DEBUG
 	l_inuse += size;
-	printf("malloc: %x,  %u, %u\n", ptr, (int)l_inuse / 1024, (int)l_allocated / 1024 );
+	printf("malloc: %x,  %u, %u\n", ptr, (unsigned long)l_inuse / 1024, (unsigned long)l_allocated / 1024 );
 	dump_array();
 	#endif
 
@@ -425,7 +451,7 @@ void free(void *ptr)
 
 		#ifdef DEBUG
 		l_inuse -= tag->size;
-		printf("free: %x, %u, %u\n", ptr, (int)l_inuse / 1024, (int)l_allocated / 1024 );
+		printf("free: %x, %u, %u\n", ptr, (unsigned long)l_inuse / 1024, (unsigned long)l_allocated / 1024 );
 		#endif
 		
 
@@ -460,7 +486,7 @@ void free(void *ptr)
 			if ( l_completePages[ index ] == MAXCOMPLETE )
 			{
 				// Too many standing by to keep. Free this one.
-				unsigned int pages = tag->real_size / l_pageSize;
+				unsigned long pages = tag->real_size / l_pageSize;
 
 				if ( (tag->real_size % l_pageSize) != 0 ) pages += 1;
 				if ( pages < l_pageCount ) pages = l_pageCount;

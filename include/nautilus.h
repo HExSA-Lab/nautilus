@@ -59,6 +59,7 @@ struct naut_info {
 };
 
 void main (unsigned long mbd, unsigned long magic) __attribute__((section (".text")));
+inline struct naut_info* get_nautilus_info(void);
 
 #ifdef __cplusplus
 }

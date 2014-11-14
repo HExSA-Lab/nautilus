@@ -15,7 +15,7 @@ extern "C" {
 #ifndef _ALLOC_SKIP_DEFINE
 
 #ifndef #define _HAVE_SIZE_T
-typedef	unsigned int	size_t;
+typedef	unsigned long size_t;
 #endif
 
 
@@ -35,8 +35,8 @@ typedef	unsigned int	size_t;
 struct	boundary_tag
 {
 	unsigned int magic;			//< It's a kind of ...
-	unsigned int size; 			//< Requested size.
-	unsigned int real_size;		//< Actual size.
+	unsigned long size; 			//< Requested size.
+	unsigned long real_size;		//< Actual size.
 	int index;					//< Location in the page table.
 
 	struct boundary_tag *split_left;	//< Linked-list info for broken pages.	
@@ -73,7 +73,7 @@ extern int liballoc_unlock(void);
  * \return NULL if the pages were not allocated.
  * \return A pointer to the allocated memory.
  */
-extern void* liballoc_alloc(int);
+extern void* liballoc_alloc(unsigned);
 
 /** This frees previously allocated memory. The void* parameter passed
  * to the function is the exact same value returned from a previous
@@ -83,7 +83,7 @@ extern void* liballoc_alloc(int);
  *
  * \return 0 if the memory was successfully freed.
  */
-extern int liballoc_free(void*,int);
+extern int liballoc_free(void*,unsigned);
 
        
 

@@ -31,6 +31,13 @@ extern void go_c (int argc, char ** argv);
 static struct naut_info nautilus_info;
 extern spinlock_t printk_lock;
 
+
+inline struct naut_info*
+get_nautilus_info (void)
+{
+    return &nautilus_info;
+}
+
 static void xcall_test (void * arg)
 {
     printk("Running xcore test on core %u\n", my_cpu_id());
@@ -74,6 +81,11 @@ main (unsigned long mbd, unsigned long magic)
 
     smp_early_init(naut);
 
+    // setup per-core area for BSP
+    msr_write(MSR_GS_BASE, (uint64_t)naut->sys.cpus[0]);
+
+    /* from this point on, we can use percpu macros (even if the APs aren't up) */
+
     ioapic_init(&(naut->sys));
 
     apic_init(naut);
@@ -83,9 +95,6 @@ main (unsigned long mbd, unsigned long magic)
     timer_init(naut);
 
     pci_init(naut);
-
-    // setup per-core area for BSP
-    msr_write(MSR_GS_BASE, (uint64_t)naut->sys.cpus[0]);
 
     sched_init();
 
@@ -109,19 +118,9 @@ main (unsigned long mbd, unsigned long magic)
 
     char * blah[] = {"test", 0};
     
-    //panic("end\n");
     go_c(1, blah);
+
     /*
-    int ret = thread_fork();
-
-    if (ret == 0) {
-        printk("Nautilus forked child thread yielding on core %u (tid=%u)\n", my_cpu_id(), get_tid());
-    } else {
-        printk("Nautilus main thread yielding on core %d (forked child %u)\n", my_cpu_id(), ret);
-    }
-    */
-
-
     thread_start(tfun, 
                   NULL,
                   NULL,
@@ -129,6 +128,7 @@ main (unsigned long mbd, unsigned long magic)
                   TSTACK_DEFAULT,
                   NULL,
                   0);
+                  */
 
     sti();
 

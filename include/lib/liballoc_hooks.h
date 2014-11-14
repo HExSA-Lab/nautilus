@@ -3,8 +3,8 @@
 
 int liballoc_lock(void);
 int liballoc_unlock(void);
-void * liballoc_alloc(int num);
-int liballoc_free(void * ptr, int num);
+void * liballoc_alloc(unsigned num);
+int liballoc_free(void * ptr, unsigned num);
 
 void init_liballoc_hooks(void);
 

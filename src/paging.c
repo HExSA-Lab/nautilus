@@ -4,6 +4,7 @@
 #include <mb_utils.h>
 #include <idt.h>
 #include <cpu.h>
+#include <naut_assert.h>
 #include <lib/bitmap.h>
 #include <lib/liballoc.h>
 #include <percpu.h>
@@ -14,12 +15,11 @@
 #define DEBUG_PRINT(fmt, args...)
 #endif
 
+
 extern addr_t _loadStart;
 extern addr_t _bssEnd;
 extern ulong_t pml4;
 extern ulong_t pdpt;
-
-static struct mem_info * glob_mem;
 
 /* 
  * KCH BIG NOTE: Most of the following code assumes that we'll
@@ -27,6 +27,18 @@ static struct mem_info * glob_mem;
  * BE CAREFUL WHEN EDITING THIS CODE! 
  */
 
+
+/* TODO: this is dumb */
+static ulong_t
+align_addr (ulong_t addr, ulong_t align) 
+{
+    ulong_t new_addr = addr;
+    while (new_addr % align) {
+        ++new_addr;
+    }
+
+    return new_addr;
+}
 
 /*
 static int 
@@ -208,32 +220,35 @@ map_page_nocache (addr_t paddr, uint64_t flags)
 int
 free_page (addr_t addr) 
 {
-    uint_t pgnum = PADDR_TO_PAGE(addr);
-    bitmap_clear(glob_mem->page_map, pgnum, 1);
-    return 0;
+    return free_pages((void*)addr, 1);
 }
 
 
 /* num must be power of 2 */
 int 
-free_pages (void * addr, int num)
+free_pages (void * addr, unsigned num)
 {
-    uint_t pgnum       = PADDR_TO_PAGE((addr_t)addr);
-    bitmap_release_region(glob_mem->page_map, pgnum, num);
+    struct mem_info * mem = &(get_nautilus_info()->sys.mem);
+    uint_t pgnum          = PADDR_TO_PAGE((addr_t)addr);
+
+    bitmap_release_region(mem->page_map, pgnum, num);
     return 0;
 }
 
 
 /* num must be power of 2 */
 addr_t 
-alloc_pages (int num)
+alloc_pages (unsigned num)
 {
-    int order = get_count_order(num);
-    int p = bitmap_find_free_region(glob_mem->page_map, glob_mem->npages, order);
+    struct mem_info * mem = &(get_nautilus_info()->sys.mem);
+    int order             = get_count_order(num);
+    int p                 = bitmap_find_free_region(mem->page_map, mem->npages, order);
+
     if (p < 0) {
-        ERROR_PRINT("Could not allocate %u pages\n", num);
+        panic("Could not find %u free pages\n", num);
         return (addr_t)NULL;
-    }
+    } 
+
     return PAGE_TO_PADDR(p);
 }
 
@@ -241,13 +256,7 @@ alloc_pages (int num)
 addr_t 
 alloc_page (void) 
 {
-    int order = get_count_order(1);
-    int p = bitmap_find_free_region(glob_mem->page_map, glob_mem->npages, order);
-    if (p < 0) {
-        ERROR_PRINT("Could not allocate page\n");
-        return (addr_t)NULL;
-    }
-    return PAGE_TO_PADDR(p);
+    return alloc_pages(1);
 }
 
 
@@ -258,79 +267,90 @@ pf_handler (excp_entry_t * excp,
 {
     panic("\n+++ Page Fault +++\nRIP: %p    Fault Address: %p \nError Code: 0x%x    (core=%u)\n", (void*)excp->rip, (void*)fault_addr, excp->error_code, my_cpu_id());
 
-    /*
-    if (drill_page_tables(fault_addr, 0, 0) < 0) {
-        ERROR_PRINT("ERROR handling page fault\n");
-        return -1;
-    }
-    */
-
     return 0;
 }
 
 
 int 
-reserve_pages (addr_t paddr, int n)
+reserve_pages (addr_t paddr, unsigned n)
 {
-    bitmap_set(glob_mem->page_map, PADDR_TO_PAGE(paddr), n);
-    return 0;
+    struct mem_info * mem = &(get_nautilus_info()->sys.mem);
+    int order = get_count_order(n);
+    return bitmap_allocate_region(mem->page_map, PADDR_TO_PAGE(paddr), order);
 }
 
 
 int
 reserve_page (addr_t paddr)
 {
-    if (test_bit(PADDR_TO_PAGE(paddr), glob_mem->page_map)) {
-        DEBUG_PRINT("Page is already allocated\n");
-        return -1;
-    }
-
-    bitmap_set(glob_mem->page_map, PADDR_TO_PAGE(paddr), 1);
-    return 0;
+    return reserve_pages(paddr, 1);
 }
 
 
+int 
+reserve_range (addr_t start, addr_t end)
+{
+    int npages = (end - start) / PAGE_SIZE;
+    npages = (end - start) % PAGE_SIZE ? npages + 1 : npages;
+    return reserve_pages(PADDR_TO_PAGE(start), npages);
+}
+
+
+/* TODO: make this account for if we need a new pdpt... */
 static ulong_t
 finish_ident_map (struct mem_info * mem, ulong_t mbd)
 {
     addr_t kernel_end     = (addr_t)&_bssEnd;
     ulong_t * pdpt_start  = (ulong_t*)&pdpt;
     ulong_t * pd_start    = 0;
+    ulong_t * pd_ptr      = 0;
     ulong_t paddr_start   = (ulong_t)MEM_1GB;
     uint_t num_pdes       = 0;
     uint_t num_pds        = 0;
     int i, j;
 
     /* make sure not to overwrite multiboot header */
+    /* NOTE: maybe ceil the mbd pointer */
     if (mbd >= kernel_end) {
         pd_start = (ulong_t*)(mbd + multiboot_get_size(mbd));
     } else {
         pd_start = (ulong_t*)kernel_end;
     }
 
+    // align the address where I'll lay them out to a page boundary
+    pd_start = (ulong_t*)align_addr((ulong_t)pd_start, PAGE_SIZE_4KB);
+
+    pd_ptr = pd_start;
+
     /* we've already mapped the first 1GB with 1 PD, 512 PDEs */
     num_pdes = (mem->phys_mem_avail >> PAGE_SHIFT) - NUM_PD_ENTRIES;
-    num_pds = (num_pdes % NUM_PD_ENTRIES) ? 
+    num_pds  = (num_pdes % NUM_PD_ENTRIES) ? 
         (num_pdes / NUM_PD_ENTRIES) + 1 : 
         (num_pdes / NUM_PD_ENTRIES);
 
-    DEBUG_PRINT("Adding %u page directories, %u new 2MB pages\n", num_pds, num_pdes);
+    for (i = 0; i < num_pds; i++) {
 
-    for (i = 0; i < num_pds; i++, pd_start += NUM_PD_ENTRIES) {
-
-        /* fill in the new page directory */
-        for (j = 0; (i * NUM_PD_ENTRIES + j) < num_pdes; j++, paddr_start += MEM_2MB) {
-            *(pd_start + j) = paddr_start | 
-                              PTE_PRESENT_BIT | 
-                              PTE_WRITABLE_BIT | 
-                              PTE_PAGE_SIZE_BIT;
-        }
+        ASSERT(!((ulong_t)pd_ptr % (ulong_t)PAGE_SIZE_4KB));
 
         /* point pdpte to new page dir (start at second pdpte)*/
-        pdpt_start[i+1] = (ulong_t)pd_start | PTE_PRESENT_BIT | PTE_WRITABLE_BIT;
+        pdpt_start[i+1] = (ulong_t)pd_ptr | PTE_PRESENT_BIT | PTE_WRITABLE_BIT;
+
+        /* fill in the new page directory */
+        for (j = 0; j < NUM_PD_ENTRIES && (i * NUM_PD_ENTRIES + j) < num_pdes; j++) {
+
+            *pd_ptr = paddr_start      | 
+                      PTE_PRESENT_BIT  | 
+                      PTE_WRITABLE_BIT | 
+                      PTE_PAGE_SIZE_BIT;
+
+            paddr_start += MEM_2MB;
+            pd_ptr++;
+
+        }
+
     }
 
-    return (ulong_t)(pd_start + NUM_PD_ENTRIES);
+    return (ulong_t)pd_ptr;
 }
 
 
@@ -356,32 +376,33 @@ paging_init (struct mem_info * mem, ulong_t mbd)
     }
 
     mem->pm_start = (addr_t)page_dir_end;
-
-    mem->page_map       = (ulong_t*)mem->pm_start;
-    mem->npages         = mem->phys_mem_avail >> PAGE_SHIFT;
+    mem->page_map = (ulong_t*)mem->pm_start;
+    mem->npages   = mem->phys_mem_avail >> PAGE_SHIFT;
 
     // layout the bitmap 
-    // we just always include the extra long word
-    mem->pm_end = mem->pm_start + (((mem->npages / BITS_PER_LONG))*sizeof(ulong_t));
+    mem->pm_end = mem->pm_start + (mem->npages / BITS_PER_LONG)*sizeof(long);
+    mem->pm_end = (mem->npages % BITS_PER_LONG) ? mem->pm_end + 1 : mem->pm_end;
+
     memset((void*)mem->pm_start, 0, mem->pm_end - mem->pm_start);
 
     // set kernel memory + page directories + page frame bitmap as reserved
-    printk("Reserving kernel memory (page num %d to %d)\n", PADDR_TO_PAGE(kernel_start), PADDR_TO_PAGE(mem->pm_end-1));
-    mark_range_reserved((uint8_t*)mem->page_map, kernel_start, mem->pm_end-1);
+    printk("Reserving kernel memory %p - %p (page num %d to %d)\n", kernel_start, mem->pm_end-1,PADDR_TO_PAGE(kernel_start), PADDR_TO_PAGE(mem->pm_end-1));
+    reserve_range(kernel_start, mem->pm_end);
     
     DEBUG_PRINT("Setting aside system reserved memory\n");
     multiboot_rsv_mem_regions(mem, mbd);
 
     DEBUG_PRINT("Reserving BDA and Real Mode IVT\n");
-    mark_range_reserved((uint8_t*)mem->page_map, 0x0, 0x4ff);
+    reserve_range((addr_t)0x0, (addr_t)0x4ff);
 
     DEBUG_PRINT("Reserving Video Memory\n");
-    mark_range_reserved((uint8_t*)mem->page_map, 0xa0000, 0xfffff);
+    reserve_range((addr_t)0xa0000, (addr_t)0xfffff);
 
     DEBUG_PRINT("Reserving APIC/IOAPIC\n");
-    mark_range_reserved((uint8_t*)mem->page_map, 0xfec00000, 0xfedfffff);
+    
+    /* TODO: these shouldn't be hardcoded */
+    reserve_range((addr_t)0xfec00000, (addr_t)0xfedfffff);
 
-    glob_mem = mem;
 }
 
 

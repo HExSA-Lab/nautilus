@@ -18,8 +18,8 @@ extern "C" {
 #define PAGE_SIZE_1GB  1073741824UL
 #define PAGE_SIZE      PAGE_SIZE_2MB
 
-#define MEM_1GB        (1024*1024*1024)
-#define MEM_2MB        (1024*1024*2)
+#define MEM_1GB        0x40000000ULL
+#define MEM_2MB        0x200000ULL
 
 #define NUM_PT_ENTRIES    512
 #define NUM_PD_ENTRIES    512
@@ -45,7 +45,7 @@ extern "C" {
 #define PADDR_TO_PD_IDX(x)   ((PD_MASK & (x))   >> PD_SHIFT)
 #define PADDR_TO_PT_IDX(x)   ((PT_MASK & (x))   >> PT_SHIFT)
 
-#define PAGE_TO_PADDR(n) ((n) << PAGE_SHIFT)
+#define PAGE_TO_PADDR(n) ((unsigned long long)(n) << PAGE_SHIFT)
 #define PADDR_TO_PAGE(n) ((n) >> PAGE_SHIFT)
 
 #define PTE_ADDR_MASK (~((1<<12)-1))
@@ -206,12 +206,13 @@ int map_page_nocache (addr_t paddr, uint64_t flags);
 void paging_init(struct mem_info * mem, ulong_t mbd);
 addr_t alloc_page(void);
 int free_page(addr_t addr);
-int reserve_pages(addr_t paddr, int n);
+int reserve_pages(addr_t paddr, unsigned n);
 int reserve_page(addr_t paddr);
+int reserve_range(addr_t start, addr_t end);
 
 /* hooks */
-int free_pages(void * addr, int num);
-addr_t alloc_pages(int num);
+int free_pages(void * addr, unsigned num);
+addr_t alloc_pages(unsigned num);
 
 int pf_handler(excp_entry_t * excp, excp_vec_t vector, addr_t fault_addr);
 
