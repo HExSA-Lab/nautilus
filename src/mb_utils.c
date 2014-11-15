@@ -110,22 +110,42 @@ multiboot_parse (ulong_t mbd, ulong_t magic)
                 + ((tag->size + 7) & ~7))) {
 
         switch (tag->type) {
-            case MULTIBOOT_TAG_TYPE_BOOT_LOADER_NAME:
+            case MULTIBOOT_TAG_TYPE_BOOT_LOADER_NAME: {
+                struct multiboot_tag_string * str = (struct multiboot_tag_string*)tag;
+                mb_info->boot_loader = malloc(str->size);
+                strncpy(mb_info->boot_loader, str->string, str->size);
                 DEBUG_PRINT("Boot loader: %s\n", ((struct multiboot_tag_string*)tag)->string);
                 break;
-            case MULTIBOOT_TAG_TYPE_ELF_SECTIONS:
-                //mb_info->sec_hdr_addr = 
+                                                      }
+            case MULTIBOOT_TAG_TYPE_ELF_SECTIONS: {
+                struct multiboot_tag_elf_sections * elf = (struct multiboot_tag_elf_sections*)tag;
+                DEBUG_PRINT("ELF size=%u, num=%u, entsize=%u, shndx=%u, sechdr=%p\n", 
+                        elf->size,
+                        elf->num,
+                        elf->entsize,
+                        elf->shndx);
                 break;
-            case MULTIBOOT_TAG_TYPE_BASIC_MEMINFO: 
-            case MULTIBOOT_TAG_TYPE_MMAP: 
-            case MULTIBOOT_TAG_TYPE_FRAMEBUFFER:
-            case MULTIBOOT_TAG_TYPE_CMDLINE:
-            case MULTIBOOT_TAG_TYPE_MODULE:
+                                                  }
+            case MULTIBOOT_TAG_TYPE_FRAMEBUFFER: {
+                struct multiboot_tag_framebuffer_common * fb = (struct multiboot_tag_framebuffer_common*)tag;
+                DEBUG_PRINT("fb addr: %p, fb_width: %u, fb_height: %u\n", 
+                        (void*)fb->framebuffer_addr,
+                        fb->framebuffer_width,
+                        fb->framebuffer_height);
+                break;
+                                                 }
+            case MULTIBOOT_TAG_TYPE_CMDLINE: {
+                struct multiboot_tag_string* cmd = (struct multiboot_tag_string*)tag;
+                mb_info->boot_cmd_line = malloc(cmd->size);
+                strncpy(mb_info->boot_cmd_line, cmd->string, cmd->size);
+                DEBUG_PRINT("Cmd line: %s\n", mb_info->boot_cmd_line);
+                break;
+                                             }
             default:
                 break;
 
         }
     }
 
-    return NULL;
+    return mb_info;
 }

@@ -11,7 +11,7 @@ extern "C" {
 
 
 void __do_backtrace(void **, unsigned);
-void print_gprs(void);
+inline void print_gprs(void);
 
 
 #ifdef __cplusplus

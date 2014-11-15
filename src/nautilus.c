@@ -27,7 +27,9 @@
 #include <lib/liballoc_hooks.h>
 #include <lib/liballoc.h>
 
+#ifdef NAUT_CONFIG_NDPC_RT
 #include "ndpc_preempt_threads.h"
+#endif
 
 extern void go_c (int argc, char ** argv);
 
@@ -59,6 +61,7 @@ static void tfun (void * in, void ** out)
 }
 
 
+#ifdef NAUT_CONFIG_NDPC_RT
 void ndpc_test()
 {
     printk("Testing NDPC Library\n");
@@ -70,23 +73,24 @@ void ndpc_test()
     tid = ndpc_fork_preempt_thread();
     
     if (!tid) { 
-	printk("Error in initial fork\n");
-	return -1;
+        printk("Error in initial fork\n");
+        return;
     } 
-    
-    
+
+
     if (tid!=ndpc_my_preempt_thread()) { 
-	printk("Parent!\n");
-	ndpc_join_preempt_thread(tid);
-	printk("Joinend with foo\n");
+        printk("Parent!\n");
+        ndpc_join_preempt_thread(tid);
+        printk("Joinend with foo\n");
     } else {
-	printk("Child!\n");
-	return 0; // will kill thread
+        printk("Child!\n");
+        return;
     }
 
     ndpc_deinit_preempt_threads();
 
 }
+#endif
 void 
 main (unsigned long mbd, unsigned long magic) 
 {

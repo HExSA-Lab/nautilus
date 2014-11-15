@@ -12,6 +12,7 @@ void multiboot_rsv_mem_regions(struct nk_mem_info * mem, ulong_t mbd);
 
 struct multiboot_info {
     char * boot_loader;
+    char * boot_cmd_line;
     void * sec_hdr_start;
 };
 

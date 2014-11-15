@@ -16,7 +16,7 @@ __do_backtrace (void ** fp, unsigned depth)
 
 
 
-void 
+inline void 
 print_gprs (void) 
 {
     int i = 0;
