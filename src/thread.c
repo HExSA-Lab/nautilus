@@ -348,10 +348,20 @@ thread_setup_init_stack (nk_thread_t * t, nk_thread_fun_t fun, void * arg)
     thread_push(t, (uint64_t)KERNEL_CS);
     thread_push(t, (uint64_t)&nk_thread_entry);
     thread_push(t, 0);                                   // intr no
-    *(uint64_t*)(t->rsp-GPR_RDI_OFFSET) = (uint64_t)arg; // we overwrite RDI with the input arg
 
-    /* the child will also get its thread_id_t back */
+    /*
+     * if we have a function, it needs an input argument 
+     * so we overwrite its RDI
+     */  
     if (fun) {
+	*(uint64_t*)(t->rsp-GPR_RDI_OFFSET) = (uint64_t)arg; 
+    }
+
+    /* 
+     * if this is a thread fork, we return the child's thread_id_t
+     * via RAX - note that _fork_return will not restore RAX
+     */
+    if (!fun) {
         *(uint64_t*)(t->rsp-GPR_RAX_OFFSET) = (uint64_t)t;
     }
 
