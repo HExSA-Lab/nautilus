@@ -29,16 +29,22 @@ extern ulong_t pdpt;
  */
 
 
-/* TODO: this is dumb */
+/*
+ * align_addr
+ *
+ * align addr *up* to the nearest align boundary
+ *
+ * @addr: address to align
+ * @align: power of 2 to align to
+ *
+ * returns the aligned address
+ * 
+ */
 static ulong_t
 align_addr (ulong_t addr, ulong_t align) 
 {
-    ulong_t new_addr = addr;
-    while (new_addr % align) {
-        ++new_addr;
-    }
-
-    return new_addr;
+    ASSERT(!(align & (align-1)));
+    return (~(align - 1)) & (addr + align);
 }
 
 /*
