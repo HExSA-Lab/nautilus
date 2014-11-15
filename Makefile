@@ -523,6 +523,11 @@ ifdef NAUT_CONFIG_DEBUG_INFO
 CFLAGS		+= -g
 endif
 
+ifdef NAUT_CONFIG_NDPC_RT
+CFLAGS		+= -I$(NAUT_CONFIG_NDPC_RT_ROOT)
+libs-y          += $(NAUT_CONFIG_NDPC_RT_ROOT)/libndpc.a
+endif
+
 
 include $(srctree)/Makefile.$(ARCH)
 
