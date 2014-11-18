@@ -155,6 +155,8 @@ main (unsigned long mbd, unsigned long magic)
 
     smp_bringup_aps(naut);
 
+    sti();
+
 #ifdef NAUT_CONFIG_NO_RT
 
 #if 0
@@ -213,7 +215,6 @@ main (unsigned long mbd, unsigned long magic)
 
 #endif
 
-    sti();
 
     printk("nautilus main thread (core 0) yielding\n");
     while (1) {
