@@ -62,13 +62,19 @@ static void tfun (void * in, void ** out)
 
 
 #ifdef NAUT_CONFIG_NDPC_RT
-void ndpc_test()
+void ndpc_rt_test()
 {
-    printk("Testing NDPC Library\n");
-    ndpc_init_preempt_threads();
+    printk("Testing NDPC Library and Executable\n");
+
     
+
+#if 1
+    // this function will be linked to nautilus
+    test_ndpc();
+#else
     thread_id_t tid;
     
+    ndpc_init_preempt_threads();
     
     tid = ndpc_fork_preempt_thread();
     
@@ -89,8 +95,13 @@ void ndpc_test()
 
     ndpc_deinit_preempt_threads();
 
+#endif
+
+
 }
 #endif
+
+
 void 
 main (unsigned long mbd, unsigned long magic) 
 {
@@ -194,7 +205,7 @@ main (unsigned long mbd, unsigned long magic)
 
 #ifdef NAUT_CONFIG_NDPC_RT
 
-    ndpc_test();
+    ndpc_rt_test();
 
 #endif
 

@@ -109,6 +109,12 @@ menu "Parallel Run-time Integration""
             help 
               Directory where the intended NDPC run-time is installed
 
+        config NDPC_RT_TEST_OBJ
+            string "NDPC RT Test Object File"
+            depends on NDPC_RT
+            help 
+              File that contains a function test_ndpc()
+
         config NESL_RT
           bool  "NESL RT"
 
