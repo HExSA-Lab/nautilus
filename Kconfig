@@ -73,6 +73,14 @@ menu Debugging
       help
         Turn on debug prints for the scheduler/threads
 
+    config DEBUG_SYNCH
+      bool "Debug synchronization"
+      depends on DEBUG_PRINTS
+      default n
+      help
+        Turns on debug prints for synchronization functions
+        (barrier, rwlock, condvar)
+
     
 endmenu
 

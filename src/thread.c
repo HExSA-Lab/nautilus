@@ -493,13 +493,14 @@ nk_thread_start (nk_thread_fun_t fun,
 
     newthread = (nk_thread_t*)newtid;
 
+    *tid = newtid;
+
     thread_setup_init_stack(newthread, fun, input);
 
     newthread->status = NK_THR_RUNNING;
 
     nk_enqueue_thread_on_runq(newthread, cpu);
-    DEBUG_PRINT("started thread (%p, tid=%u) on cpu %u\n", newthread, newthread->tid, cpu);
-    return 0;
+    DEBUG_PRINT("Started thread (%p, tid=%u) on cpu %u\n", newthread, newthread->tid, cpu); return 0;
 }
 
 
@@ -563,14 +564,18 @@ nk_thread_exit (void * retval)
     /* clear any thread local storage that may have been allocated */
     tls_exit();
 
-    /* wake up everyone who is waiting on me */
-    nk_wake_waiters();
-
     /* wait for my children to finish */
     nk_join_all_children(NULL);
 
+    /* wake up everyone who is waiting on me */
+    nk_wake_waiters();
+
     me->output      = retval;
     me->status      = NK_THR_EXITED;
+
+    me->refcount--;
+
+    SCHED_DEBUG("Thread %p (tid=%u) exiting, joining with children\n", me, me->tid);
 
     nk_schedule();
 
@@ -630,10 +635,13 @@ int
 nk_join (nk_thread_id_t t, void ** retval)
 {
     nk_thread_t *thethread = (nk_thread_t*)t;
+    int flags;
 
-    ASSERT(irqs_enabled());
+    //ASSERT(irqs_enabled());
     ASSERT(thethread->parent == get_cur_thread());
-    cli();
+
+
+    flags = irq_disable_save();
     if (thethread->status == NK_THR_EXITED) {
         if (thethread->output) {
             *retval = thethread->output;
@@ -649,7 +657,7 @@ nk_join (nk_thread_id_t t, void ** retval)
 
     thread_detach(thethread);
 
-    sti();
+    irq_enable_restore(flags);
     return 0;
 }
 
@@ -678,15 +686,15 @@ nk_join_all_children (int (*func)(void * res))
 
     list_for_each_entry_safe(elm, tmp, &(me->children), child_node) {
 
-        if (nk_join(tmp, &res) < 0) {
-            ERROR_PRINT("Could not join child thread (t=%p)\n", tmp);
+        if (nk_join(elm, &res) < 0) {
+            ERROR_PRINT("Could not join child thread (t=%p)\n", elm);
             ret = -1;
             continue;
         }
 
         if (func) {
             if (func(res) < 0) {
-                ERROR_PRINT("Could not invoke destructo for child thread (t=%p)\n", tmp);
+                ERROR_PRINT("Could not invoke destructo for child thread (t=%p)\n", elm);
                 ret = -1;
                 continue;
             }

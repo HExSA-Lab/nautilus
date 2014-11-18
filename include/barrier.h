@@ -7,7 +7,7 @@ extern "C" {
 
 #include <spinlock.h>
 
-#define BARRIER_LAST 1
+#define NK_BARRIER_LAST 1
 
 typedef struct nk_barrier nk_barrier_t;
 
@@ -19,7 +19,7 @@ struct nk_barrier {
 
     uint8_t pad[52];
 
-    /* this is on another cache line */
+    /* this is on another cache line (Assuming 64b) */
     volatile unsigned notify;
 } __attribute__ ((packed));
 

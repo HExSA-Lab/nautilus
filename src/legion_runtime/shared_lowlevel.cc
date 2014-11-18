@@ -77,7 +77,7 @@ using namespace LegionRuntime::Accessor;
 	{					\
 		int ret = (cmd);		\
 		if (ret != 0) {			\
-			fprintf(stderr,"PTHREAD error: %s = %d (%s)\n", #cmd, ret, strerror(ret));	\
+			printk("PTHREAD error: %s = %d (%s)\n", #cmd, ret, strerror(ret));	\
 			assert(false);		\
 		}				\
 	}
@@ -136,7 +136,7 @@ spinlock_t debug_mutex;
 //__thread unsigned local_proc_id;
 //pthread_key_t local_proc_key;
 
-tls_key_t local_proc_key;
+nk_tls_key_t local_proc_key;
 static void thread_proc_free(void *arg)
 {
   assert(arg != NULL);
@@ -230,16 +230,16 @@ namespace LegionRuntime {
       pthread_mutex_t  free_inst_lock;
       */
 
-      rwlock_t         event_lock;
+      nk_rwlock_t         event_lock;
       spinlock_t       free_event_lock;
-      rwlock_t         reservation_lock;
+      nk_rwlock_t         reservation_lock;
       spinlock_t       free_reservation_lock;
-      rwlock_t         proc_group_lock;
-      rwlock_t         metadata_lock;
+      nk_rwlock_t         proc_group_lock;
+      nk_rwlock_t         metadata_lock;
       spinlock_t       free_metas_lock;
-      rwlock_t         allocator_lock;
+      nk_rwlock_t         allocator_lock;
       spinlock_t       free_alloc_lock;
-      rwlock_t         instance_lock;
+      nk_rwlock_t         instance_lock;
       spinlock_t       free_inst_lock;
     };
 
@@ -267,8 +267,8 @@ namespace LegionRuntime {
       std::vector<pthread_t> dma_threads;
       */
       spinlock_t      dma_lock;
-      condvar_t       dma_cond;
-      std::vector<thread_t*> dma_threads;
+      nk_condvar_t       dma_cond;
+      std::vector<nk_thread_id_t> dma_threads;
       std::deque<CopyOperation*> ready_copies;
     };
     
@@ -285,12 +285,12 @@ namespace LegionRuntime {
       {
         /*
         //unsigned *local_proc_id = (unsigned*)pthread_getspecific(local_proc_key);
-        unsigned *local_proc_id = (unsigned*)tls_get(local_proc_key);
+        unsigned *local_proc_id = (unsigned*)nk_tls_get(local_proc_key);
         thread = *local_proc_id; 
         mutex = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
         PTHREAD_SAFE_CALL(pthread_mutex_init(mutex,NULL));
         */
-        unsigned *local_proc_id = (unsigned*)tls_get(local_proc_key);
+        unsigned *local_proc_id = (unsigned*)nk_tls_get(local_proc_key);
         thread = *local_proc_id;
         mutex = (spinlock_t*)malloc(sizeof(spinlock_t));
         spinlock_init(mutex);
@@ -315,7 +315,7 @@ namespace LegionRuntime {
     std::vector<PerThreadTimerData*> timer_data;
     //__thread PerThreadTimerData *thread_timer_data; **commented out by legion devs
     //pthread_key_t thread_timer_key;
-    tls_key_t thread_timer_key;
+    nk_tls_key_t thread_timer_key;
     static void thread_timer_free(void *arg)
     {
       assert(arg != NULL);
@@ -348,7 +348,7 @@ namespace LegionRuntime {
       PerThreadTimerData *thread_timer_data = 
         (PerThreadTimerData*) pthread_getspecific(thread_timer_key);
         */
-      PerThreadTimerData *thread_timer_data = (PerThreadTimerData*)tls_get(thread_timer_key);
+      PerThreadTimerData *thread_timer_data = (PerThreadTimerData*)nk_tls_get(thread_timer_key);
       if (!thread_timer_data)
       {
         //PTHREAD_SAFE_CALL(pthread_mutex_lock(&global_timer_mutex));
@@ -357,7 +357,7 @@ namespace LegionRuntime {
         thread_timer_data = new PerThreadTimerData();
 
         //PTHREAD_SAFE_CALL(pthread_setspecific(thread_timer_key,thread_timer_data));
-        tls_set(thread_timer_key, thread_timer_data);
+        nk_tls_set(thread_timer_key, thread_timer_data);
 
         timer_data.push_back(thread_timer_data);
 
@@ -381,7 +381,7 @@ namespace LegionRuntime {
       PerThreadTimerData *thread_timer_data =
         (PerThreadTimerData*) pthread_getspecific(thread_timer_key);
         */
-        PerThreadTimerData *thread_timer_data = (PerThreadTimerData*)tls_get(thread_timer_key);
+        PerThreadTimerData *thread_timer_data = (PerThreadTimerData*)nk_tls_get(thread_timer_key);
       if (!thread_timer_data)
       {
         //printf("Got pop without initialized thread data !?\n");
@@ -514,13 +514,13 @@ namespace LegionRuntime {
           mutex = (spinlock_t*)malloc(sizeof(spinlock_t));
 
           //wait_cond = (pthread_cond_t*)malloc(sizeof(pthread_cond_t));
-          wait_cond = (condvar_t*)malloc(sizeof(condvar_t));
+          wait_cond = (nk_condvar_t*)malloc(sizeof(nk_condvar_t));
 
 	  //PTHREAD_SAFE_CALL(pthread_mutex_init(mutex,NULL));
       spinlock_init(mutex);
 
 	  //PTHREAD_SAFE_CALL(pthread_cond_init(wait_cond,NULL));
-      condvar_init(wait_cond);
+      nk_condvar_init(wait_cond);
 
 	  if (in_use)
 	  {
@@ -541,7 +541,7 @@ namespace LegionRuntime {
           //PTHREAD_SAFE_CALL(pthread_mutex_destroy(mutex));
           //PTHREAD_SAFE_CALL(pthread_cond_destroy(wait_cond));
           spinlock_deinit(mutex);
-          condvar_destroy(wait_cond);
+          nk_condvar_destroy(wait_cond);
           free(mutex);
           free(wait_cond);
         }
@@ -585,7 +585,7 @@ namespace LegionRuntime {
 	//pthread_mutex_t *mutex;
 	//pthread_cond_t *wait_cond;
     spinlock_t *mutex;
-    condvar_t *wait_cond;
+    nk_condvar_t *wait_cond;
         std::list<TriggerableInfo> triggerables;
     }; 
 
@@ -599,7 +599,7 @@ namespace LegionRuntime {
         
         /*ProcessorImpl(pthread_barrier_t *init, const Processor::TaskIDTable &table, 
                       Processor p, size_t stacksize, bool return_finish = false) */
-        ProcessorImpl(barrier_t *init, const Processor::TaskIDTable &table, 
+        ProcessorImpl(nk_barrier_t *init, const Processor::TaskIDTable &table, 
                       Processor p, size_t stacksize, bool return_finish = false) 
           : init_bar(init), task_table(table), proc(p), 
             proc_kind(Processor::LOC_PROC), utility_proc(this),
@@ -617,7 +617,7 @@ namespace LegionRuntime {
         // For the creation of normal processors when there are utility processors
         /*ProcessorImpl(pthread_barrier_t *init, const Processor::TaskIDTable &table,
                       Processor p, size_t stacksize, ProcessorImpl *util, bool return_finish = false)*/
-        ProcessorImpl(barrier_t *init, const Processor::TaskIDTable &table,
+        ProcessorImpl(nk_barrier_t *init, const Processor::TaskIDTable &table,
                       Processor p, size_t stacksize, ProcessorImpl *util, bool return_finish = false)
           : init_bar(init), task_table(table), proc(p), 
             utility(util->get_utility_processor()), 
@@ -633,7 +633,7 @@ namespace LegionRuntime {
         // For the creation of explicit utility processors
         /*ProcessorImpl(pthread_barrier_t *init, const Processor::TaskIDTable &table,
                       Processor p, size_t stacksize, unsigned num_owners, bool return_finish = false)*/
-        ProcessorImpl(barrier_t *init, const Processor::TaskIDTable &table,
+        ProcessorImpl(nk_barrier_t *init, const Processor::TaskIDTable &table,
                       Processor p, size_t stacksize, unsigned num_owners, bool return_finish = false)
           : init_bar(init), task_table(table), proc(p), 
             proc_kind(Processor::UTIL_PROC), utility_proc(this),
@@ -654,7 +654,7 @@ namespace LegionRuntime {
                 PTHREAD_SAFE_CALL(pthread_attr_destroy(&attr));
                 */
                 spinlock_deinit(mutex);
-                condvar_destroy(wait_cond);
+                nk_condvar_destroy(wait_cond);
 
                 free(mutex);
                 free(wait_cond);
@@ -730,7 +730,7 @@ namespace LegionRuntime {
         //pthread_attr_t attr; // For setting pthread parameters when starting the thread
     protected:
         //pthread_barrier_t *init_bar;
-        barrier_t *init_bar;
+        nk_barrier_t *init_bar;
 	Processor::TaskIDTable task_table;
 	Processor proc;
         Processor utility;
@@ -741,7 +741,7 @@ namespace LegionRuntime {
 	//pthread_mutex_t *mutex;
 	//pthread_cond_t *wait_cond;
     spinlock_t *mutex;
-    condvar_t *wait_cond;
+    nk_condvar_t *wait_cond;
 	// Used for detecting the shutdown condition
 	bool shutdown;
         bool idle_task_enabled;
@@ -918,7 +918,7 @@ namespace LegionRuntime {
             {
                     DetailedTimer::ScopedPush sp(TIME_NONE);
                     //PTHREAD_SAFE_CALL(pthread_cond_wait(wait_cond,mutex));
-                    condvar_wait(wait_cond, mutex, flags);
+                    nk_condvar_wait(wait_cond, mutex, flags);
             }
             //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
             spin_unlock_irq_restore(mutex, flags);
@@ -927,7 +927,7 @@ namespace LegionRuntime {
         {
             // Try preempting the process
             //unsigned *local_proc_id = (unsigned*)pthread_getspecific(local_proc_key);
-            unsigned *local_proc_id = (unsigned*)tls_get(local_proc_key);
+            unsigned *local_proc_id = (unsigned*)nk_tls_get(local_proc_key);
             Processor local = { *local_proc_id };
             ProcessorImpl *impl = Runtime::get_runtime()->get_processor_impl(local);
             // This call will only return once the event has triggered
@@ -1047,7 +1047,7 @@ namespace LegionRuntime {
                 }
                 // Wake up any waiters
 		//PTHREAD_SAFE_CALL(pthread_cond_broadcast(wait_cond));
-        condvar_bcast(wait_cond);
+        nk_condvar_bcast(wait_cond);
 		// Can't be holding the lock when triggering other triggerables
 		//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
         spin_unlock_irq_restore(mutex, flags);
@@ -1865,9 +1865,9 @@ namespace LegionRuntime {
         PTHREAD_SAFE_CALL(pthread_attr_setstacksize(&attr,stacksize));
         */
         mutex = (spinlock_t*)malloc(sizeof(spinlock_t));
-        wait_cond = (condvar_t*)malloc(sizeof(condvar_t));
+        wait_cond = (nk_condvar_t*)malloc(sizeof(nk_condvar_t));
         spinlock_init(mutex);
-        condvar_init(wait_cond);
+        nk_condvar_init(wait_cond);
 
         /* KCH TODO: something with the attr above */
         shutdown = false;
@@ -1912,7 +1912,7 @@ namespace LegionRuntime {
 			// If it wasn't registered, then the event triggered
 			// Notify the processor thread in case it is waiting
 			//PTHREAD_SAFE_CALL(pthread_cond_signal(wait_cond));
-            condvar_signal(wait_cond);
+            nk_condvar_signal(wait_cond);
 		}	
 		else
 		{
@@ -1932,7 +1932,7 @@ namespace LegionRuntime {
                 add_to_ready_queue(task);
 		// Signal the thread there is a task to run in case it is waiting
 		//PTHREAD_SAFE_CALL(pthread_cond_signal(wait_cond));
-                condvar_signal(wait_cond);
+                nk_condvar_signal(wait_cond);
 	}
 	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
     spin_unlock_irq_restore(mutex, flags);
@@ -1983,7 +1983,7 @@ namespace LegionRuntime {
       }
       // Signal in case the utility processor is waiting on work
       //PTHREAD_SAFE_CALL(pthread_cond_signal(wait_cond));
-      condvar_signal(wait_cond);
+      nk_condvar_signal(wait_cond);
       //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
     spin_unlock_irq_restore(mutex, flags);
     }
@@ -2000,7 +2000,7 @@ namespace LegionRuntime {
       util_shutdown = true;
       // send a signal in case the processor was waiting
       //PTHREAD_SAFE_CALL(pthread_cond_signal(wait_cond));
-      condvar_signal(wait_cond);
+      nk_condvar_signal(wait_cond);
 
       //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
       spin_unlock_irq_restore(mutex, flags);
@@ -2032,7 +2032,7 @@ namespace LegionRuntime {
         idle_task_enabled = true;
         // Wake up thread so it can run the idle task
         //PTHREAD_SAFE_CALL(pthread_cond_signal(wait_cond));
-        condvar_signal(wait_cond);
+        nk_condvar_signal(wait_cond);
         //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
         spin_unlock_irq_restore(mutex, flags);
     }
@@ -2054,7 +2054,7 @@ namespace LegionRuntime {
     int flags = spin_lock_irq_save(mutex);
       if (num_idle_tasks == 0)
         //PTHREAD_SAFE_CALL(pthread_cond_signal(wait_cond));
-        condvar_signal(wait_cond);
+        nk_condvar_signal(wait_cond);
       num_idle_tasks++;
       //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
       spin_unlock_irq_restore(mutex, flags);
@@ -2074,6 +2074,7 @@ namespace LegionRuntime {
 
     void ProcessorImpl::run(void)
     {
+        printk("This processor %d\n", proc.id);
         //fprintf(stdout,"This is processor %d\n",proc.id);
         //fflush(stdout);
         // Check to see if there is an initialization task
@@ -2085,16 +2086,18 @@ namespace LegionRuntime {
         // Wait for all the processors to be ready to go
 #ifndef __MACH__
         //int bar_result = pthread_barrier_wait(init_bar);
-        int bar_result = barrier_wait(init_bar);
+        int bar_result = nk_barrier_wait(init_bar);
         //if (bar_result == PTHREAD_BARRIER_SERIAL_THREAD)
-        if (bar_result == BARRIER_LAST)
+        if (bar_result == NK_BARRIER_LAST)
         {
           // Free the barrier
           //PTHREAD_SAFE_CALL(pthread_barrier_destroy(init_bar));
-          barrier_destroy(init_bar);
+          printk("proc %u destroying barrier\n", proc.id);
+          nk_barrier_destroy(init_bar);
 
           free(init_bar);
         }
+        printk("left second barrier (%u)\n", proc.id);
 #if DEBUG_LOW_LEVEL
         else
         {
@@ -2203,7 +2206,7 @@ namespace LegionRuntime {
           if (num_idle_tasks == 0)
           {
             //PTHREAD_SAFE_CALL(pthread_cond_wait(wait_cond,mutex));
-            condvar_wait(wait_cond, mutex, irqs_enabled());
+            nk_condvar_wait(wait_cond, mutex, irqs_enabled());
           }
           //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
           spin_unlock_irq_restore(mutex, flags);
@@ -2231,7 +2234,7 @@ namespace LegionRuntime {
                           DetailedTimer::ScopedPush sp(TIME_NONE);
                           // Wait for our utility processor to indicate that its done
                           //PTHREAD_SAFE_CALL(pthread_cond_wait(wait_cond,mutex));
-                          condvar_wait(wait_cond, mutex, flags);
+                          nk_condvar_wait(wait_cond, mutex, flags);
                         }
                         // unlock the lock, just in case someone else decides they want to tell us something
                         // to do even though we've already exited
@@ -2257,7 +2260,7 @@ namespace LegionRuntime {
                             int flags = spin_lock_irq_save(mutex);
                           while (remaining_stops > 0)
                             //PTHREAD_SAFE_CALL(pthread_cond_wait(wait_cond,mutex));
-                            condvar_wait(wait_cond, mutex, flags);
+                            nk_condvar_wait(wait_cond, mutex, flags);
                           //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
                           spin_unlock_irq_restore(mutex, flags);
                           // Send shutdown messages to all our users that aren't us
@@ -2280,7 +2283,7 @@ namespace LegionRuntime {
                 {
                   DetailedTimer::ScopedPush sp(TIME_NONE);
                   //PTHREAD_SAFE_CALL(pthread_cond_wait(wait_cond,mutex));
-                  condvar_wait(wait_cond, mutex, flags);
+                  nk_condvar_wait(wait_cond, mutex, flags);
                 }
 		//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
         spin_unlock_irq_restore(mutex, flags);
@@ -2366,7 +2369,7 @@ namespace LegionRuntime {
             it++;
         }
 	//PTHREAD_SAFE_CALL(pthread_cond_signal(wait_cond));
-    condvar_signal(wait_cond);
+    nk_condvar_signal(wait_cond);
 	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
     spin_unlock_irq_restore(mutex, flags);
         return false;
@@ -2382,16 +2385,16 @@ namespace LegionRuntime {
           unsigned *thread_id = (unsigned*)malloc(sizeof(unsigned));
           *thread_id = proc->proc.id;
           //PTHREAD_SAFE_CALL( pthread_setspecific(local_proc_key, thread_id) );
-          tls_set(local_proc_key, thread_id);
+          nk_tls_set(local_proc_key, thread_id);
         }
         // Also set the value of thread timer key
         //PTHREAD_SAFE_CALL( pthread_setspecific(thread_timer_key, NULL) );
-        tls_set(thread_timer_key, NULL);
+        nk_tls_set(thread_timer_key, NULL);
 	// Will never return from this call
 	proc->run();
         if (!proc->return_on_finish)
           //pthread_exit(NULL);	
-          thread_exit(NULL);
+          nk_thread_exit(NULL);
         return NULL;
     }
 
@@ -4825,7 +4828,7 @@ namespace LegionRuntime {
       //PTHREAD_SAFE_CALL(pthread_mutex_init(&dma_lock,NULL));
       spinlock_init(&dma_lock);
       //PTHREAD_SAFE_CALL(pthread_cond_init(&dma_cond,NULL));
-      condvar_init(&dma_cond);
+      nk_condvar_init(&dma_cond);
       dma_threads.resize(num_dma_threads);
     }
 
@@ -4839,12 +4842,13 @@ namespace LegionRuntime {
         PTHREAD_SAFE_CALL(pthread_create(&dma_threads[idx], &attr,
                                          DMAQueue::start_dma_thread, (void*)this));
                                          */
-          dma_threads[idx] = thread_start((void (*)(void*,void**))DMAQueue::start_dma_thread, 
+          printk("starting DMA thread %u\n", idx);
+          nk_thread_start((void (*)(void*,void**))DMAQueue::start_dma_thread, 
                                           (void*)this, 
                                           NULL,
                                           0,
                                           TSTACK_DEFAULT,
-                                          NULL,
+                                          &dma_threads[idx],
                                           CPU_ANY);
       }
       //PTHREAD_SAFE_CALL(pthread_attr_destroy(&attr));
@@ -4857,14 +4861,15 @@ namespace LegionRuntime {
       dma_shutdown = true;
       //PTHREAD_SAFE_CALL(pthread_cond_broadcast(&dma_cond));
       //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&dma_lock));
-      condvar_bcast(&dma_cond);
+      nk_condvar_bcast(&dma_cond);
       spin_unlock_irq_restore(&dma_lock, flags);
       // Now join on all the threads
+      printk("joining %u DMA threads\n", num_dma_threads);
       for (unsigned idx = 0; idx < num_dma_threads; idx++)
       {
         void *result;
         //PTHREAD_SAFE_CALL(pthread_join(dma_threads[idx],&result));
-        join(dma_threads[idx], &result);
+        nk_join(dma_threads[idx], &result);
 
       }
     }
@@ -4880,7 +4885,7 @@ namespace LegionRuntime {
         {
           // Go to sleep
           //PTHREAD_SAFE_CALL(pthread_cond_wait(&dma_cond, &dma_lock));
-          condvar_wait(&dma_cond, &dma_lock, flags);
+          nk_condvar_wait(&dma_cond, &dma_lock, flags);
         }
         // When we wake up see if there is anything
         // to do or see if we are done
@@ -4916,7 +4921,7 @@ namespace LegionRuntime {
         int flags = spin_lock_irq_save(&dma_lock);
         ready_copies.push_back(copy);
         //PTHREAD_SAFE_CALL(pthread_cond_signal(&dma_cond));
-        condvar_signal(&dma_cond);
+        nk_condvar_signal(&dma_cond);
         //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&dma_lock));
         spin_unlock_irq_restore(&dma_lock, flags);
       }
@@ -4933,7 +4938,7 @@ namespace LegionRuntime {
       DMAQueue *dma_queue = (DMAQueue*)args;
       dma_queue->run_dma_loop();
       // pthread_exit(NULL);
-      thread_exit(NULL);
+      nk_thread_exit(NULL);
     }
 
 #ifdef LEGION_BACKTRACE
@@ -4991,8 +4996,8 @@ namespace LegionRuntime {
         // Create the pthread keys for thread local data
         //PTHREAD_SAFE_CALL( pthread_key_create(&local_proc_key, thread_proc_free) );
         //PTHREAD_SAFE_CALL( pthread_key_create(&thread_timer_key, thread_timer_free) );
-        tls_key_create(&local_proc_key, thread_proc_free);
-        tls_key_create(&thread_timer_key, thread_timer_free);
+        nk_tls_key_create(&local_proc_key, thread_proc_free);
+        nk_tls_key_create(&thread_timer_key, thread_timer_free);
 
         for (int i=1; i < *argc; i++)
         {
@@ -5033,8 +5038,8 @@ namespace LegionRuntime {
 #ifndef __MACH__
         //pthread_barrier_t *init_barrier = (pthread_barrier_t*)malloc(sizeof(pthread_barrier_t));
         //PTHREAD_SAFE_CALL(pthread_barrier_init(init_barrier,NULL,(num_cpus+num_utility_cpus)));
-        barrier_t *init_barrier = (barrier_t*)malloc(sizeof(barrier_t));
-        barrier_init(init_barrier, num_cpus+num_utility_cpus);
+        nk_barrier_t *init_barrier = (nk_barrier_t*)malloc(sizeof(nk_barrier_t));
+        nk_barrier_init(init_barrier, num_cpus+num_utility_cpus);
 #else
         pthread_barrier_t *init_barrier = new pthread_barrier_t(num_cpus+num_utility_cpus);
 #endif
@@ -5244,8 +5249,8 @@ namespace LegionRuntime {
 	*local_proc_id = 1;
         //PTHREAD_SAFE_CALL( pthread_setspecific(local_proc_key, local_proc_id) );
         //PTHREAD_SAFE_CALL( pthread_setspecific(thread_timer_key, NULL) );
-        tls_set(local_proc_key, local_proc_id);
-        tls_set(thread_timer_key, NULL);
+        nk_tls_set(local_proc_key, local_proc_id);
+        nk_tls_set(thread_timer_key, NULL);
 
 #ifdef LEGION_BACKTRACE
         signal(SIGSEGV, legion_backtrace);
@@ -5301,12 +5306,14 @@ namespace LegionRuntime {
 	PTHREAD_SAFE_CALL( pthread_create(threadp, &attr, &background_run_thread, (void *)margs) );
 	PTHREAD_SAFE_CALL( pthread_attr_destroy(&attr) );
     */
-    thread_t * threadp = thread_start((void (*) (void*, void**))background_run_thread, 
+    printk("KCH: legion runtime starting background thread\n");
+    nk_thread_id_t threadp;
+        nk_thread_start((void (*) (void*, void**))background_run_thread, 
             (void*)margs, 
             NULL,
             0,
             TSTACK_DEFAULT,
-            NULL,
+            &threadp,
             CPU_ANY);
 
         // Save this pointer in the background thread
@@ -5324,17 +5331,18 @@ namespace LegionRuntime {
       }
       // Start the threads for each of the processors (including the utility processors)
       //std::vector<pthread_t> other_threads(Runtime::runtime->processors.size());
-      std::vector<thread_t*> other_threads(Runtime::runtime->processors.size());
+      std::vector<nk_thread_id_t> other_threads(Runtime::runtime->processors.size());
       for (unsigned id=2; id<Runtime::runtime->processors.size(); id++)
       {
+          printk("legion runtime starting %u processors\n", Runtime::runtime->processors.size());
               ProcessorImpl *impl = Runtime::runtime->processors[id];
               //PTHREAD_SAFE_CALL(pthread_create(&(other_threads[id]), &(impl->attr), ProcessorImpl::start, (void*)impl));
-              other_threads[id] = thread_start((void (*)(void*, void**))ProcessorImpl::start,
+              nk_thread_start((void (*)(void*, void**))ProcessorImpl::start,
                       (void*)impl,
                       NULL,
                       0,
                       TSTACK_DEFAULT,
-                      NULL,
+                      &other_threads[id],
                       CPU_ANY);
       }
       Runtime::dma_queue->start();
@@ -5343,19 +5351,22 @@ namespace LegionRuntime {
       ProcessorImpl *impl = Runtime::runtime->processors[1];
       ProcessorImpl::start((void*)impl);
       // When we return join on all the other threads and then exit
+      printk("about to join all (%u) threads\n", other_threads.size()-2);
       for (unsigned id=2; id<other_threads.size(); id++)
       {
           void *result;
           //PTHREAD_SAFE_CALL(pthread_join(other_threads[id],&result));
-          join(other_threads[id], &result);
+          nk_join(other_threads[id], &result);
       }
+      printk("joined %u threads\n", other_threads.size()-2);
       Runtime::dma_queue->shutdown();
 #ifdef ORDERED_LOGGING 
       Logger::finalize();
 #endif
       // Once we're done with this, then we can exit with a successful error code
       //exit(0);
-      abort();
+      //abort();
+      return;
     }
 
     void Machine::shutdown(bool local_request /*= true*/)
@@ -5376,12 +5387,13 @@ namespace LegionRuntime {
       if (background_kthread != NULL)
       {
         //pthread_t *background_thread = (pthread_t*)background_pthread;
-        thread_t *background_thread = (thread_t*)background_kthread;
+        nk_thread_id_t background_thread = (nk_thread_id_t)background_kthread;
         void *result;
         //PTHREAD_SAFE_CALL(pthread_join(*background_thread, &result));
-        join(background_thread, &result);
+        printk("joining background thread\n");
+        nk_join(background_thread, &result);
         //free(background_thread);
-        thread_destroy(background_thread);
+        nk_thread_destroy(background_thread);
         // Set this to null so we don't need to do wait anymore
         //background_pthread = NULL;
         background_kthread = NULL;
@@ -5416,7 +5428,7 @@ namespace LegionRuntime {
     /*static*/ Processor Machine::get_executing_processor(void)
     {
       //unsigned *local_proc_id = (unsigned*)pthread_getspecific(local_proc_key);
-      unsigned *local_proc_id = (unsigned*)tls_get(local_proc_key);
+      unsigned *local_proc_id = (unsigned*)nk_tls_get(local_proc_key);
       Processor local = { *local_proc_id };
       return local;
     }
@@ -5539,16 +5551,16 @@ namespace LegionRuntime {
         */
 
 
-    rwlock_init(&event_lock);
+    nk_rwlock_init(&event_lock);
     spinlock_init(&free_event_lock);
-    rwlock_init(&reservation_lock);
+    nk_rwlock_init(&reservation_lock);
     spinlock_init(&free_reservation_lock);
-    rwlock_init(&proc_group_lock);
-    rwlock_init(&metadata_lock);
+    nk_rwlock_init(&proc_group_lock);
+    nk_rwlock_init(&metadata_lock);
     spinlock_init(&free_metas_lock);
-    rwlock_init(&allocator_lock);
+    nk_rwlock_init(&allocator_lock);
     spinlock_init(&free_alloc_lock);
-    rwlock_init(&instance_lock);
+    nk_rwlock_init(&instance_lock);
     spinlock_init(&free_inst_lock);
 
     }
@@ -5557,14 +5569,14 @@ namespace LegionRuntime {
     {
         EventImpl::EventIndex i = e.id;
         //PTHREAD_SAFE_CALL(pthread_rwlock_rdlock(&event_lock));
-        rwlock_rd_lock(&event_lock);
+        nk_rwlock_rd_lock(&event_lock);
 #ifdef DEBUG_LOW_LEVEL
 	assert(i != 0);
 	assert(i < events.size());
 #endif
         EventImpl *result = events[i];
         //PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&event_lock));
-        rwlock_rd_unlock(&event_lock);
+        nk_rwlock_rd_unlock(&event_lock);
 	return result;
     }
 
@@ -5591,14 +5603,14 @@ namespace LegionRuntime {
     ReservationImpl* Runtime::get_reservation_impl(Reservation r)
     {
         //PTHREAD_SAFE_CALL(pthread_rwlock_rdlock(&reservation_lock));
-        rwlock_rd_lock(&reservation_lock);
+        nk_rwlock_rd_lock(&reservation_lock);
 #ifdef DEBUG_LOW_LEVEL
 	assert(r.id != 0);
 	assert(r.id < reservations.size());
 #endif
         ReservationImpl *result = reservations[r.id];
         //PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&reservation_lock));
-        rwlock_rd_unlock(&reservation_lock);
+        nk_rwlock_rd_unlock(&reservation_lock);
 	return result;
     }
 
@@ -5627,13 +5639,13 @@ namespace LegionRuntime {
       if(p.id >= ProcessorGroup::FIRST_PROC_GROUP_ID) {
 	int id = p.id - ProcessorGroup::FIRST_PROC_GROUP_ID;
         //PTHREAD_SAFE_CALL(pthread_rwlock_rdlock(&proc_group_lock));
-        rwlock_rd_lock(&proc_group_lock);
+        nk_rwlock_rd_lock(&proc_group_lock);
 #ifdef DEBUG_LOW_LEVEL
 	assert(id < proc_groups.size());
 #endif
 	ProcessorGroup *grp = proc_groups[id];
         //PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&proc_group_lock));
-        rwlock_rd_unlock(&proc_group_lock);
+        nk_rwlock_rd_unlock(&proc_group_lock);
 	return grp;
       }
 
@@ -5647,14 +5659,14 @@ namespace LegionRuntime {
     IndexSpace::Impl* Runtime::get_metadata_impl(IndexSpace m)
     {
         //PTHREAD_SAFE_CALL(pthread_rwlock_rdlock(&metadata_lock));
-        rwlock_rd_lock(&metadata_lock);
+        nk_rwlock_rd_lock(&metadata_lock);
 #ifdef DEBUG_LOW_LEVEL
 	assert(m.id != 0);
 	assert(m.id < metadatas.size());
 #endif
         IndexSpace::Impl *result = metadatas[m.id];
         //PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&metadata_lock));
-        rwlock_rd_unlock(&metadata_lock);
+        nk_rwlock_rd_unlock(&metadata_lock);
 	return result;
     }
 
@@ -5670,14 +5682,14 @@ namespace LegionRuntime {
     RegionInstance::Impl* Runtime::get_instance_impl(RegionInstance i)
     {
         //PTHREAD_SAFE_CALL(pthread_rwlock_rdlock(&instance_lock));
-        rwlock_rd_lock(&instance_lock);
+        nk_rwlock_rd_lock(&instance_lock);
 #ifdef DEBUG_LOW_LEVEL
 	assert(i.id != 0);
 	assert(i.id < instances.size());
 #endif
         RegionInstance::Impl *result = instances[i.id];
         //PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&instance_lock));
-        rwlock_rd_unlock(&instance_lock);
+        nk_rwlock_rd_unlock(&instance_lock);
 	return result;
     }
 
@@ -5711,7 +5723,7 @@ namespace LegionRuntime {
         // We weren't able to get a new event, get the writer lock
         // for the vector of event implementations and add some more
         //PTHREAD_SAFE_CALL(pthread_rwlock_wrlock(&event_lock));
-        int flags2 = rwlock_wr_lock_irq_save(&event_lock);
+        int flags2 = nk_rwlock_wr_lock_irq_save(&event_lock);
         unsigned index = events.size();
         EventImpl *result = new EventImpl(index,true);
         events.push_back(result);
@@ -5724,7 +5736,7 @@ namespace LegionRuntime {
         }
         // Release the lock on events
         //PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&event_lock));
-        rwlock_wr_unlock_irq_restore(&event_lock, flags2);
+        nk_rwlock_wr_unlock_irq_restore(&event_lock, flags2);
         // Release the lock on free events
         //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_event_lock));
         spin_unlock_irq_restore(&free_event_lock, flags);
@@ -5749,7 +5761,7 @@ namespace LegionRuntime {
         }
         // We weren't able to get a new event, get the writer lock
 	//PTHREAD_SAFE_CALL(pthread_rwlock_wrlock(&reservation_lock));
-    int flags2 = rwlock_wr_lock_irq_save(&reservation_lock);
+    int flags2 = nk_rwlock_wr_lock_irq_save(&reservation_lock);
 	unsigned index = reservations.size();
 	reservations.push_back(new ReservationImpl(index,true,data_size));
 	ReservationImpl *result = reservations[index];
@@ -5761,7 +5773,7 @@ namespace LegionRuntime {
         }
 	//PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&reservation_lock));	
         //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_reservation_lock));
-        rwlock_wr_unlock_irq_restore(&reservation_lock, flags2);
+        nk_rwlock_wr_unlock_irq_restore(&reservation_lock, flags2);
         spin_unlock_irq_restore(&free_reservation_lock, flags);
 	return result;
     }
@@ -5770,14 +5782,14 @@ namespace LegionRuntime {
     {
       // this adds to the list of proc groups, so take the write lock
       //PTHREAD_SAFE_CALL(pthread_rwlock_wrlock(&proc_group_lock));
-      int flags = rwlock_wr_lock_irq_save(&proc_group_lock);
+      int flags = nk_rwlock_wr_lock_irq_save(&proc_group_lock);
       unsigned index = proc_groups.size();
       Processor p;
       p.id = index + ProcessorGroup::FIRST_PROC_GROUP_ID;
       ProcessorGroup *grp = new ProcessorGroup(p);
       proc_groups.push_back(grp);
       //PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&proc_group_lock));
-      rwlock_wr_unlock_irq_restore(&proc_group_lock, flags);
+      nk_rwlock_wr_unlock_irq_restore(&proc_group_lock, flags);
 
       // we can add the members without holding the lock
       for(std::vector<Processor>::const_iterator it = members.begin();
@@ -5806,7 +5818,7 @@ namespace LegionRuntime {
         }
 	// Otherwise there are no free metadata so make a new one
 	//PTHREAD_SAFE_CALL(pthread_rwlock_wrlock(&metadata_lock));
-    int flags2 = rwlock_wr_lock_irq_save(&metadata_lock);
+    int flags2 = nk_rwlock_wr_lock_irq_save(&metadata_lock);
 	unsigned int index = metadatas.size();
 	metadatas.push_back(new IndexSpace::Impl(index,num_elmts,true));
 	IndexSpace::Impl *result = metadatas[index];
@@ -5818,7 +5830,7 @@ namespace LegionRuntime {
         }
 	//PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&metadata_lock));
         //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_metas_lock));
-        rwlock_wr_unlock_irq_restore(&metadata_lock, flags2);
+        nk_rwlock_wr_unlock_irq_restore(&metadata_lock, flags2);
         spin_unlock_irq_restore(&free_metas_lock, flags);
 	return result;
     }
@@ -5841,7 +5853,7 @@ namespace LegionRuntime {
         }
         // Otherwise there are no free metadata so make a new one
 	//PTHREAD_SAFE_CALL(pthread_rwlock_wrlock(&metadata_lock));
-    int flags2 = rwlock_wr_lock_irq_save(&metadata_lock);
+    int flags2 = nk_rwlock_wr_lock_irq_save(&metadata_lock);
     
 	unsigned int index = metadatas.size();
 	metadatas.push_back(new IndexSpace::Impl(index,0,false));
@@ -5853,7 +5865,7 @@ namespace LegionRuntime {
           free_metas.push_back(metadatas.back());
         }
 	//PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&metadata_lock));
-    rwlock_wr_unlock_irq_restore(&metadata_lock, flags2);
+    nk_rwlock_wr_unlock_irq_restore(&metadata_lock, flags2);
         //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_metas_lock));
         spin_unlock_irq_restore(&free_metas_lock, flags);
         result->activate(mask);
@@ -5878,7 +5890,7 @@ namespace LegionRuntime {
         }
 	// Otherwise there are no free metadata so make a new one
 	//PTHREAD_SAFE_CALL(pthread_rwlock_wrlock(&metadata_lock));
-    int flags2 = rwlock_wr_lock_irq_save(&metadata_lock);
+    int flags2 = nk_rwlock_wr_lock_irq_save(&metadata_lock);
 	unsigned int index = metadatas.size();
 	metadatas.push_back(new IndexSpace::Impl(index,parent,mask,true));
 	IndexSpace::Impl *result = metadatas[index];
@@ -5889,7 +5901,7 @@ namespace LegionRuntime {
           free_metas.push_back(metadatas.back());
         }
 	//PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&metadata_lock));
-    rwlock_wr_unlock_irq_restore(&metadata_lock, flags2);
+    nk_rwlock_wr_unlock_irq_restore(&metadata_lock, flags2);
         //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_metas_lock));
         spin_unlock_irq_restore(&free_metas_lock, flags);
 	return result;
@@ -5922,7 +5934,7 @@ namespace LegionRuntime {
         }
 	// Nothing free so make a new one
 	// PTHREAD_SAFE_CALL(pthread_rwlock_wrlock(&instance_lock));
-    int flags2 = rwlock_wr_lock_irq_save(&instance_lock);
+    int flags2 = nk_rwlock_wr_lock_irq_save(&instance_lock);
 	unsigned int index = instances.size();
 	instances.push_back(new RegionInstance::Impl(index, r, m, num_elmts, alloc_size,
                                                      field_sizes,
@@ -5945,7 +5957,7 @@ namespace LegionRuntime {
           free_instances.push_back(instances.back());
         }
 	//PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&instance_lock));
-    rwlock_wr_unlock_irq_restore(&instance_lock, flags2);
+    nk_rwlock_wr_unlock_irq_restore(&instance_lock, flags2);
         //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_inst_lock));
         spin_unlock_irq_restore(&free_inst_lock, flags);
 	return result;
@@ -5978,7 +5990,7 @@ namespace LegionRuntime {
   {
     char buffer[400];
     //unsigned *local_proc_id = (unsigned*)pthread_getspecific(local_proc_key);
-    unsigned *local_proc_id = (unsigned*)tls_get(local_proc_key);
+    unsigned *local_proc_id = (unsigned*)nk_tls_get(local_proc_key);
     sprintf(buffer, "[%d - %lx] {%s}{%s}: ",
             0, /*pthread_self()*/long(*local_proc_id), Logger::stringify(level), Logger::get_categories_by_id()[category].c_str());
     int len = strlen(buffer);
