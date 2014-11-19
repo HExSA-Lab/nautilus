@@ -514,17 +514,22 @@ xcall_handler (excp_entry_t * e, excp_vec_t v)
 
     if (!xcq) {
         ERROR_PRINT("Badness: no xcall queue on core %u\n", my_cpu_id());
-        return -1;
+        goto out_err;
     }
 
     elm = nk_dequeue_first_atomic(xcq);
     x = container_of(elm, struct xcall, xcall_node);
     if (!x) {
         ERROR_PRINT("No XCALL request found on core %u\n", my_cpu_id());
-        return -1;
+        goto out_err;
     }
 
     if (x->fun) {
+
+        // we ack the IPI before calling the handler funciton,
+        // because it may end up blocking (e.g. core barrier)
+        IRQ_HANDLER_END(); 
+
         x->fun(x->data);
 
         /* we need to notify the waiter we're done */
@@ -534,16 +539,23 @@ xcall_handler (excp_entry_t * e, excp_vec_t v)
 
     } else {
         ERROR_PRINT("No XCALL function found on core %u\n", my_cpu_id());
-        return -1;
+        goto out_err;
     }
 
+
     return 0;
+
+out_err:
+    IRQ_HANDLER_END();
+    return -1;
 }
 
 
 /* 
  * smp_xcall
  *
+ * initiate cross-core call. 
+ * 
  * @cpu_id: the cpu to execute the call on
  * @fun: the function to invoke
  * @arg: the argument to the function
