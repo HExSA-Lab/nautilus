@@ -2,6 +2,7 @@
 #include <barrier.h>
 #include <cpu.h>
 #include <atomic.h>
+#include <errno.h>
 #include <intrinsics.h>
 #include <thread.h>
 
@@ -12,6 +13,31 @@
 #define DEBUG_PRINT(fmt, args...)
 #endif
 
+/* 
+ * this is where cores will come in 
+ * to arrive at a barrier. We're in interrupt
+ * context here, but that's fine since we
+ * wan't interrupts off in the wait anyhow
+ */
+static void
+barrier_xcall_handler (void * arg) 
+{
+    nk_core_barrier_arrive();
+}
+
+
+/*
+ * nk_barrier_init
+ *
+ * initialize a thread barrier. This 
+ * version is more or less a POSIX barrier
+ *
+ * @barrier: the barrier to initialize
+ * @count: the number of participants
+ *
+ * returns 0 on succes, -EINVAL on error
+ *
+ */
 int 
 nk_barrier_init (nk_barrier_t * barrier, uint32_t count) 
 {
@@ -21,7 +47,7 @@ nk_barrier_init (nk_barrier_t * barrier, uint32_t count)
 
     if (unlikely(count == 0)) {
         ERROR_PRINT("Barrier count must be greater than 0\n");
-        return -1;
+        return -EINVAL;
     }
 
 
@@ -33,13 +59,23 @@ nk_barrier_init (nk_barrier_t * barrier, uint32_t count)
 }
 
 
+/*
+ * nk_barrier_destroy
+ *
+ * destroy a thread barrier
+ *
+ * @barrier: the barrier to destroy
+ *
+ * returns 0 on succes, -EINVAL on error
+ *
+ */
 int 
 nk_barrier_destroy (nk_barrier_t * barrier)
 {
     int res;
 
     if (!barrier) {
-        return -1;
+        return -EINVAL;
     }
 
     DEBUG_PRINT("Destroying barrier (%p)\n", (void*)barrier);
@@ -51,7 +87,7 @@ nk_barrier_destroy (nk_barrier_t * barrier)
     } else {
         /* someone is still waiting at the barrier? */
         ERROR_PRINT("Someone still waiting at barrier, cannot destroy\n");
-        res = -1;
+        res = -EINVAL;
     }
     spin_unlock(&barrier->lock);
 
@@ -59,6 +95,19 @@ nk_barrier_destroy (nk_barrier_t * barrier)
 }
 
 
+/*
+ * nk_barrier_wait
+ *
+ * wait at a thread barrier
+ *
+ * @barrier: the barrier to wait at
+ *
+ * returns 0 to all threads but the last. The last thread
+ * out of the barrier will return NK_BARRIER_LAST. This
+ * is useful for having one thread in charge of cleaning 
+ * the barrier up. Again, similar to POSIX
+ *
+ */
 int 
 nk_barrier_wait (nk_barrier_t * barrier) 
 {
@@ -88,6 +137,169 @@ nk_barrier_wait (nk_barrier_t * barrier)
 }
 
 
+/* 
+ * The below functions are for CORES. *NOT* 
+ * threads. The behavior is undefined if 
+ * You use these on two threads running on the same core!
+ * DO NOT DO IT
+ *
+ */
+
+
+/*
+ * nk_core_barrier_raise
+ *
+ * Raises a barrier for all other 
+ * cores in the system. 
+ *
+ * returns 0 on success, -EINVAL on error
+ *
+ */
+int 
+nk_core_barrier_raise (void) 
+{
+    nk_barrier_t * barrier = per_cpu_get(system)->core_barrier;
+    uint8_t iownit = 0;
+    uint8_t flags;
+    unsigned i;
+    int res = 0;
+
+    flags = spin_lock_irq_save(&barrier->lock);
+
+    if (barrier->active == 0) {
+        barrier->active     = 1;
+        barrier->notify     = 0;
+        barrier->remaining  = barrier->init_count; // num cores
+        iownit = 1;
+    }
+
+    spin_unlock_irq_restore(&barrier->lock, flags);
+
+    if (iownit) {
+
+        // we will not wait at the barrier, but we'll
+        // decrement the waiting count
+        atomic_dec(barrier->remaining);
+
+        cpu_id_t me = my_cpu_id();
+
+        // force other cores to wait at the barrier
+        for (i = 0; i < per_cpu_get(system)->num_cpus; i++) {
+
+            if (i == me) {
+                continue;
+            }
+
+            if (smp_xcall(i,
+                        barrier_xcall_handler,
+                        NULL, // no need for args
+                        0)    // blocking would be catastrophic here
+                    != 0) {
+                ERROR_PRINT("Could not force cpu %u to wait at barrier\n", i);
+                return -EINVAL;
+            }
+
+        }
+
+    } else {
+
+        // if someone else raised one already,
+        // we'll just wait on it. This is probably
+        // an error though
+        nk_core_barrier_arrive();
+        res = -EINVAL;
+
+    }
+
+    return res;
+}
+
+
+/*
+ * nk_core_barrier_lower
+ *
+ * lower a barrier, allowing cores waiting at it
+ * to proceed
+ *
+ * returns 0 on success, -EINVAL on error
+ *
+ */
+int
+nk_core_barrier_lower (void)
+{
+    nk_barrier_t * barrier = per_cpu_get(system)->core_barrier;
+
+    if (!barrier->active) {
+        return -EINVAL;
+    }
+
+    while (atomic_cmpswap(barrier->notify, 0, 1) == 0);
+    barrier->active = 0;
+
+    return 0;
+}
+
+
+/* 
+ * nk_core_barrier_wait
+ *
+ * wait for all other cores to arrive
+ * at the core barrier. This should
+ * be called before lowering a barrier
+ *
+ * returns 0 on success, -EINVAL on error
+ */
+int
+nk_core_barrier_wait (void)
+{
+    nk_barrier_t * barrier = per_cpu_get(system)->core_barrier;
+
+    if (!barrier->active) {
+        return -EINVAL;
+    }
+
+    while (barrier->remaining != 0) {
+        nk_yield();
+    }
+
+    return 0;
+}
+
+
+/*
+ * nk_core_barrier_arrive
+ *
+ *
+ * waits at the core barrier. similar to nk_barrier_wait 
+ * but we don't spin, we yield. We will only 
+ * be released when an external agent notifies all
+ * the cores
+ *
+ * returns 0 on success, -EINVAL on error
+ *
+ */
+int 
+nk_core_barrier_arrive (void)
+{
+    nk_barrier_t * barrier = per_cpu_get(system)->core_barrier;
+
+    if (!barrier->active) {
+        return -EINVAL;
+    }
+
+    printk("Nautilus core %u waiting at core barrier\n", my_cpu_id());
+
+    atomic_dec(barrier->remaining);
+
+    while (barrier->notify != 1) {
+        nk_yield();
+    }
+
+    return 0;
+}
+
+/***** BARRIER TESTS ******/
+
 static void
 barrier_func1 (void * in, void ** out)
 {
@@ -111,7 +323,7 @@ barrier_func2 (void * in, void ** out)
 
 /* 
  *
- * NOTE: this assumes that there are at least 3 CPUs on 
+ * NOTE: this test assumes that there are at least 3 CPUs on 
  * the machine
  *
  */

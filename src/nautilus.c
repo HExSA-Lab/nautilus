@@ -13,6 +13,7 @@
 #include <thread.h>
 #include <idle.h>
 #include <percpu.h>
+#include <errno.h>
 
 #include <barrier.h>
 #include <rwlock.h>
@@ -102,6 +103,29 @@ void ndpc_rt_test()
 #endif
 
 
+static int 
+sysinfo_init (struct sys_info * sys)
+{
+    sys->core_barrier = (nk_barrier_t*)malloc(sizeof(nk_barrier_t));
+    if (!sys->core_barrier) {
+        ERROR_PRINT("Could not allocate core barrier\n");
+        return -1;
+    }
+    memset(sys->core_barrier, 0, sizeof(nk_barrier_t));
+
+    if (nk_barrier_init(sys->core_barrier, sys->num_cpus) != 0) {
+        ERROR_PRINT("Could not create core barrier\n");
+        goto out_err;
+    }
+
+    return 0;
+
+out_err:
+    free(sys->core_barrier);
+    return -EINVAL;
+}
+
+
 void 
 main (unsigned long mbd, unsigned long magic) 
 {
@@ -138,6 +162,8 @@ main (unsigned long mbd, unsigned long magic)
     msr_write(MSR_GS_BASE, (uint64_t)naut->sys.cpus[0]);
 
     /* from this point on, we can use percpu macros (even if the APs aren't up) */
+
+    sysinfo_init(&(naut->sys));
 
     ioapic_init(&(naut->sys));
 

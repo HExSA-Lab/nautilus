@@ -33,6 +33,7 @@ extern "C" {
 #include <paging.h>
 #include <limits.h>
 #include <naut_assert.h>
+#include <barrier.h>
 
 
 struct sys_info {
@@ -42,6 +43,8 @@ struct sys_info {
 
     uint32_t num_cpus;
     uint32_t num_ioapics;
+
+    nk_barrier_t * core_barrier;
 
     struct nk_mem_info mem;
 
