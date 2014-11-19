@@ -32,8 +32,6 @@
 #include "ndpc_preempt_threads.h"
 #endif
 
-extern void go_c (int argc, char ** argv);
-
 static struct naut_info nautilus_info;
 extern spinlock_t printk_lock;
 
@@ -225,9 +223,9 @@ main (unsigned long mbd, unsigned long magic)
 #endif
 
 #ifdef NAUT_CONFIG_LEGION_RT
-    char * blah[] = {"test", 0};
-    
-    go_c(1, blah);
+
+    extern void run_legion_tests(void);
+    run_legion_tests();
 
 #endif
 

@@ -18,9 +18,16 @@
 void 
 abort(void) 
 {
+    printk("Thread called abort\n");
     nk_thread_exit(NULL);
 }
 
+void 
+exit(int status)
+{
+    printk("Thread called exit (status=%d)\n", status);
+    nk_thread_exit((void*)(long)status);
+}
 
 int 
 clock_gettime (clockid_t clk_id, struct timespec * tp)
@@ -33,7 +40,11 @@ clock_gettime (clockid_t clk_id, struct timespec * tp)
 void 
 __assert_fail (const char * assertion, const char * file, unsigned line, const char * function)
 {
-    UNDEF_FUN_ERR();
+    panic("%s:%u: %s: Assertion %s failed\n",
+            file,
+            line,
+            function,
+            assertion);
 }
 
 
@@ -304,4 +315,3 @@ GEN_DEF(__strftime_l)
 GEN_DEF(mbsnrtowcs)
 GEN_DEF(pthread_mutex_init)
 GEN_DEF(pthread_mutex_unlock)
-GEN_DEF(exit)

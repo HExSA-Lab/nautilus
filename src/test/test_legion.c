@@ -1,0 +1,54 @@
+#include <nautilus.h>
+#include <thread.h>
+
+void run_legion_tests(void);
+
+/* TODO: this won't work if legion doesn't shut down properly... */
+//extern void go_circuit_c(int argc, char **argv);
+extern void go_hello_c(int argc, char ** argv);
+extern void go_taf_c(int argc, char ** argv);
+
+typedef void (*tfun_t)(int, char**);
+
+#define NUM_TESTS 1
+
+tfun_t tests[NUM_TESTS] = {
+    //go_hello_c,
+    go_taf_c,
+};
+
+static void 
+legion_test_thread_func (void * in, void ** out)
+{
+    tfun_t fun = (tfun_t)in;
+    char * argv[] = {"test", 0};
+
+    if (fun) {
+        fun(1, argv);
+    }
+    
+    printk("legion test finished\n");
+}
+
+
+void 
+run_legion_tests (void) 
+{
+    char * blah[] = {"test", 0};
+    nk_thread_id_t t;
+    unsigned i;
+
+    for (i = 0; i < NUM_TESTS; i++) {
+        printk("starting legion test %u\n", i);
+        nk_thread_start(legion_test_thread_func,
+                (void*)tests[i],
+                NULL,
+                0,
+                TSTACK_DEFAULT,
+                &t,
+                CPU_ANY);
+
+        nk_join(t, NULL);
+    }
+}
+

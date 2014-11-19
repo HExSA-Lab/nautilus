@@ -500,7 +500,13 @@ nk_thread_start (nk_thread_fun_t fun,
     newthread->status = NK_THR_RUNNING;
 
     nk_enqueue_thread_on_runq(newthread, cpu);
-    DEBUG_PRINT("Started thread (%p, tid=%u) on cpu %u\n", newthread, newthread->tid, cpu); return 0;
+    if (cpu == CPU_ANY) {
+        DEBUG_PRINT("Started thread (%p, tid=%u) on [ANY CPU]\n", newthread, newthread->tid); 
+    } else {
+        DEBUG_PRINT("Started thread (%p, tid=%u) on cpu %u\n", newthread, newthread->tid, cpu); 
+    }
+
+    return 0;
 }
 
 

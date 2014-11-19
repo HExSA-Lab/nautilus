@@ -21,7 +21,7 @@
 extern "C" void printk (const char * fmt, ...);
 extern "C" void panic (const char * fmt, ...);
 
-#include "legion_runtime/legion.h"
+#include "../legion_runtime/legion.h"
 
 // All of the important user-level objects live 
 // in the high-level runtime namespace.
@@ -44,11 +44,10 @@ void hello_world_task(const Task *task,
 
 // We have a main function just like a standard C++ program.
 // Once we start the runtime, it will begin running the top-level task.
-int go(int argc, char **argv);
-int go(int argc, char **argv)
+int go_hello(int argc, char **argv);
+int go_hello(int argc, char **argv)
 {
 
-  printk("in legion code...\n");
   // Before starting the Legion runtime, you first have to tell it
   // what the ID is for the top-level task.
   HighLevelRuntime::set_top_level_task_id(HELLO_WORLD_ID);
@@ -70,6 +69,6 @@ int go(int argc, char **argv)
   return HighLevelRuntime::start(argc, argv);
 }
 
-extern "C" void go_c (int argc, char ** argv) {
-    go(argc, argv);
+extern "C" void go_hello_c (int argc, char ** argv) {
+    go_hello(argc, argv);
 }

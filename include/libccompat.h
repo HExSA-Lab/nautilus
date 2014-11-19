@@ -31,6 +31,7 @@ struct pollfd {
 typedef void* locale_t;
 
 void abort(void);
+void exit(int status);
 int clock_gettime(clockid_t, struct timespec*);
 void __assert_fail(const char*, const char*, unsigned, const char*);
 int vfprintf(FILE*, const char*, va_list);
@@ -117,7 +118,6 @@ GEN_HDR(__strftime_l)
 GEN_HDR(mbsnrtowcs)
 GEN_HDR(pthread_mutex_init)
 GEN_HDR(pthread_mutex_unlock)
-GEN_HDR(exit)
 #ifdef __cplusplus
 }
 #endif
