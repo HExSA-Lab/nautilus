@@ -150,7 +150,15 @@ nk_barrier_wait (nk_barrier_t * barrier)
  * nk_core_barrier_raise
  *
  * Raises a barrier for all other 
- * cores in the system. 
+ * cores in the system. The model here is the core calling
+ * this function will *not* wait at the barrier (unless it's
+ * already been rasised) and is instead expected to 
+ * wait() on the other cores to arrive, do some things, 
+ * then lower() the barrier. This core (or some core not
+ * waiting at the barrier) must call barier_lower(). The
+ * cores will *not* automatically be released when they all
+ * arrive at the barrier. This is the main difference 
+ * from the thread barrier above.
  *
  * returns 0 on success, -EINVAL on error
  *
