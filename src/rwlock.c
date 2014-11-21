@@ -5,6 +5,11 @@
 #include <thread.h>
 #include <lib/liballoc.h>
 
+#ifndef NAUT_CONFIG_DEBUG_SYNCH
+#undef DEBUG_PRINT
+#define DEBUG_PRINT(fmt, args...)
+#endif
+
 /*
  *
  * TODO: right now we only support a reader-preferred
@@ -47,6 +52,8 @@ nk_rwlock_rd_unlock (nk_rwlock_t * l)
 int 
 nk_rwlock_wr_lock (nk_rwlock_t * l)
 {
+    DEBUG_PRINT("rwlock_wr_lock\n");
+
     while (1) {
         spin_lock(&l->lock);
 
