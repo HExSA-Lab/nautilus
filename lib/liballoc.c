@@ -301,12 +301,13 @@ void *malloc(size_t size)
 	int index;
 	void *ptr;
 	struct boundary_tag *tag = NULL;
+    int flags;
 
 #ifdef DEBUG
     printf("malloc request for %u bytes\n", size);
 #endif
 
-	liballoc_lock();
+	flags = liballoc_lock();
 
 		if ( l_initialized == 0 )
 		{
@@ -356,7 +357,7 @@ void *malloc(size_t size)
 			{	
 				if ( (tag = allocate_new_tag( size )) == NULL )
 				{
-					liballoc_unlock();
+					liballoc_unlock(flags);
 					return NULL;
 				}
 
@@ -421,7 +422,7 @@ void *malloc(size_t size)
 	#endif
 
 
-	liballoc_unlock();
+	liballoc_unlock(flags);
 	return ptr;
 }
 
@@ -433,17 +434,18 @@ void free(void *ptr)
 {
 	int index;
 	struct boundary_tag *tag;
+    int flags;
 
 	if ( ptr == NULL ) return;
 
-	liballoc_lock();
+	flags = liballoc_lock();
 	
 
 		tag = (struct boundary_tag*)((unsigned long)ptr - sizeof( struct boundary_tag ));
 	
 		if ( tag->magic != LIBALLOC_MAGIC ) 
 		{
-			liballoc_unlock();		// release the lock
+			liballoc_unlock(flags);		// release the lock
 			return;
 		}
 
@@ -499,7 +501,7 @@ void free(void *ptr)
 				dump_array();
 				#endif
 
-				liballoc_unlock();
+				liballoc_unlock(flags);
 				return;
 			}
 
@@ -518,7 +520,7 @@ void free(void *ptr)
 	dump_array();
 	#endif
 
-	liballoc_unlock();
+	liballoc_unlock(flags);
 }
 
 
@@ -545,6 +547,7 @@ void*   realloc(void *p, size_t size)
 	void *ptr;
 	struct boundary_tag *tag;
 	int real_size;
+    int flags;
 	
 	if ( size == 0 )
 	{
@@ -553,10 +556,10 @@ void*   realloc(void *p, size_t size)
 	}
 	if ( p == NULL ) return malloc( size );
 
-	/*if ( liballoc_lock != NULL )*/ liballoc_lock();		// lockit
-		tag = (struct boundary_tag*)((unsigned long)p - sizeof( struct boundary_tag ));
-		real_size = tag->size;
-	/*if ( liballoc_unlock != NULL )*/ liballoc_unlock();
+    flags = liballoc_lock();		// lockit
+    tag = (struct boundary_tag*)((unsigned long)p - sizeof( struct boundary_tag ));
+    real_size = tag->size;
+    liballoc_unlock(flags);
 
 	if ( real_size > size ) real_size = size;
 

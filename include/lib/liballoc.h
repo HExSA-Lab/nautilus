@@ -64,7 +64,7 @@ extern int liballoc_lock(void);
  *
  * \return 0 if the lock was successfully released.
  */
-extern int liballoc_unlock(void);
+extern int liballoc_unlock(int);
 
 /** This is the hook into the local system which allocates pages. It
  * accepts an integer parameter which is the number of pages

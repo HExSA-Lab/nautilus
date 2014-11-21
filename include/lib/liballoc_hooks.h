@@ -2,7 +2,7 @@
 #define __LIBALLOC_HOOKS_H__
 
 int liballoc_lock(void);
-int liballoc_unlock(void);
+int liballoc_unlock(int flags);
 void * liballoc_alloc(unsigned num);
 int liballoc_free(void * ptr, unsigned num);
 

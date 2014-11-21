@@ -16,15 +16,14 @@ init_liballoc_hooks (void)
 int 
 liballoc_lock (void)
 {
-    spin_lock(&mmu_lock);
-    return 0;
+    return spin_lock_irq_save(&mmu_lock);
 }
 
 
 int 
-liballoc_unlock ()
+liballoc_unlock (int flags)
 {
-    spin_unlock(&mmu_lock);
+    spin_unlock_irq_restore(&mmu_lock, flags);
     return 0;
 }
 
