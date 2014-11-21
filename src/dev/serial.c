@@ -41,6 +41,11 @@ serial_irq_handler (excp_entry_t * excp,
       reboot();
       //machine_real_restart();
     }
+
+    if (rcv_byte == 'p') {
+      serial_print("Manually invoking panic\n");
+      panic();
+    }
       
   }
 
