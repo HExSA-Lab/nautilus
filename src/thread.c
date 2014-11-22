@@ -444,7 +444,7 @@ nk_thread_create (nk_thread_fun_t fun,
         *tid = (nk_thread_id_t)t;
     }
 
-    DEBUG_PRINT("Thread create creating new thread with t=%p, tid=%lu\n", t, t->tid);
+    SCHED_DEBUG("Thread create creating new thread with t=%p, tid=%lu\n", t, t->tid);
 
     return 0;
 
@@ -501,9 +501,9 @@ nk_thread_start (nk_thread_fun_t fun,
 
     nk_enqueue_thread_on_runq(newthread, cpu);
     if (cpu == CPU_ANY) {
-        DEBUG_PRINT("Started thread (%p, tid=%u) on [ANY CPU]\n", newthread, newthread->tid); 
+        SCHED_DEBUG("Started thread (%p, tid=%u) on [ANY CPU]\n", newthread, newthread->tid); 
     } else {
-        DEBUG_PRINT("Started thread (%p, tid=%u) on cpu %u\n", newthread, newthread->tid, cpu); 
+        SCHED_DEBUG("Started thread (%p, tid=%u) on cpu %u\n", newthread, newthread->tid, cpu); 
     }
 
     return 0;
@@ -806,6 +806,8 @@ nk_thread_queue_wake_one (nk_thread_queue_t * q)
     nk_queue_entry_t * elm = NULL;
     nk_thread_t * t = NULL;
 
+    SCHED_DEBUG("Thread queue wake one (q=%p)\n", (void*)q);
+
     if (!q) {
         ERROR_PRINT("Attempt to wake up thread on non-existant thread queue\n");
         return -EINVAL;
@@ -824,6 +826,8 @@ nk_thread_queue_wake_one (nk_thread_queue_t * q)
         ERROR_PRINT("Could not get thread from queue element\n");
         return -EINVAL;
     }
+
+    ASSERT(t->status == NK_THR_WAITING);
 
     nk_enqueue_thread_on_runq(t, t->bound_cpu);
 
@@ -847,6 +851,8 @@ nk_thread_queue_wake_all (nk_thread_queue_t * q)
     nk_queue_entry_t * elm = NULL;
     nk_thread_t * t = NULL;
 
+    SCHED_DEBUG("Waking all waiters on thread queue (q=%p)\n", (void*)q);
+
     if (!q) {
         ERROR_PRINT("Attempt to wake up thread on non-existant thread queue\n");
         return -EINVAL;
@@ -857,6 +863,9 @@ nk_thread_queue_wake_all (nk_thread_queue_t * q)
         if (!t) {
             continue;
         }
+
+        ASSERT(t->status == NK_THR_WAITING);
+
         nk_enqueue_thread_on_runq(t, t->bound_cpu);
     }
 
@@ -1076,7 +1085,7 @@ __thread_fork (void)
 
     child_stack = t->stack;
 
-    // first push our cleanup function so we get an exit hook
+    // this is at the top of the stack, just in case something goes wrong
     thread_push(t, (uint64_t)&thread_cleanup);
 
     // Copy stack frames of caller and up to stack max
@@ -1084,6 +1093,15 @@ __thread_fork (void)
     // notice that leaves ret
     memcpy(child_stack + alloc_size - size, ret0_addr, size - LAUNCHPAD);
     t->rsp = (uint64_t)(child_stack + alloc_size - size);
+
+    void **rbp2_ptr = (void**)(t->rsp + rbp1_offset_from_ret0_addr);
+    void **ret2_ptr = rbp2_ptr+1;
+
+    // rbp2 we don't care about
+    *rbp2_ptr = 0x0ULL;
+
+    // fix up the return address to point to our thread cleanup function
+    *ret2_ptr = &thread_cleanup;
 
     // now we need to setup the interrupt stack etc.
     // we provide null for thread func to indicate this is a fork
