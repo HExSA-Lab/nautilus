@@ -8,10 +8,16 @@
 
 #include <lib/liballoc.h>
 
+#ifndef NAUT_CONFIG_DEBUG_SYNCH
+#undef DEBUG_PRINT
+#define DEBUG_PRINT(fmt, args...)
+#endif
 
 int
 nk_condvar_init (nk_condvar_t * c)
 {
+    DEBUG_PRINT("Condvar init\n");
+
     c->wait_queue = nk_thread_queue_create();
     if (!c->wait_queue) {
         ERROR_PRINT("Could not create wait queue for cond var\n");
@@ -28,6 +34,8 @@ nk_condvar_init (nk_condvar_t * c)
 int
 nk_condvar_destroy (nk_condvar_t * c)
 {
+    DEBUG_PRINT("Destroying condvar (%p)\n", (void*)c);
+
     int flags = spin_lock_irq_save(&c->lock);
     if (c->nwaiters != 0) {
         spin_unlock_irq_restore(&c->lock, flags);
@@ -44,6 +52,7 @@ nk_condvar_destroy (nk_condvar_t * c)
 uint8_t
 nk_condvar_wait (nk_condvar_t * c, spinlock_t * l, uint8_t flags)
 {
+    DEBUG_PRINT("Condvar wait on (%p) mutex=%p\n", (void*)c, (void*)l);
 
     /* we're about to modify shared condvar state, lock it */
     uint8_t cflags = spin_lock_irq_save(&c->lock);
@@ -67,6 +76,7 @@ nk_condvar_wait (nk_condvar_t * c, spinlock_t * l, uint8_t flags)
 int 
 nk_condvar_signal (nk_condvar_t * c)
 {
+    DEBUG_PRINT("Condvar signaling on (%p)\n", (void*)c);
     nk_thread_queue_wake_one(c->wait_queue);
     return 0;
 }
@@ -75,6 +85,7 @@ nk_condvar_signal (nk_condvar_t * c)
 int
 nk_condvar_bcast (nk_condvar_t * c)
 {
+    DEBUG_PRINT("Condvar broadcasting on (%p)\n", (void*)c);
     nk_thread_queue_wake_all(c->wait_queue);
     return 0;
 }
