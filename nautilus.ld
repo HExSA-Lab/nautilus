@@ -30,10 +30,25 @@ SECTIONS
         *(.gnu.linkonce.t*)
     }
 
-    .init_array ALIGN(0x1000) : AT(ADDR(.text) + SIZEOF(.text))
+    .init ALIGN(0x1000) : AT(ADDR(.text) + SIZEOF(.text))
     {
+        *(.init)
+        *(.gnu.linkonce.init)
+    }
+
+    .fini ALIGN(0x1000) : AT(ADDR(.init) + SIZEOF(.init))
+    {
+        *(.fini)
+        *(.gnu.linkonce.fini)
+    }
+
+    .init_array ALIGN(0x1000) : AT(ADDR(.fini) + SIZEOF(.fini))
+    {
+        _init_array_start = .;
         *(.init_array*)
+        _init_array_end = .;
         *(.gnu.linkonce.init_array*)
+
     }
 
 

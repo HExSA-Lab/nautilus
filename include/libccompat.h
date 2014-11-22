@@ -63,6 +63,7 @@ char * bindtextdomain (const char * domainname, const char * dirname);
 char * textdomain (const char * domainname);
 locale_t __newlocale(int category_mask, const char *locale,locale_t base);
 char *__nl_langinfo_l(nl_item item, locale_t locale);
+char * gettext(const char * msgid);
 
 
 #define GEN_HDR(x) int x (void);
@@ -100,7 +101,6 @@ GEN_HDR(__stack_chk_fail)
 GEN_HDR(__wcsxfrm_l)
 GEN_HDR(wcscmp)
 GEN_HDR(wcsnrtombs)
-GEN_HDR(gettext)
 GEN_HDR(__strcoll_l)
 GEN_HDR(stdout)
 GEN_HDR(btowc)

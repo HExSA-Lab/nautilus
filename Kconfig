@@ -27,6 +27,13 @@ config MAX_CPUS
 	  Specifies the maximum number of hardware CPUs supported by Nautilus 
 	  For uniprocessor environments, set this to 1
 
+config CXX_SUPPORT
+    bool "Enable C++ support"
+    default n
+    help
+        Compiles the Nautilus kernel with C++ support. Necessary for,
+        e.g. Legion integration
+
 config THREAD_EXIT_KEYCODE
     int "Thread exit keycode"
     range 1 255
@@ -84,7 +91,7 @@ menu Debugging
     
 endmenu
 
-menu "Parallel Run-time Integration""
+menu "Parallel Run-time Integration"
 
     choice 
         prompt "Selection of Parallel Run-time"
@@ -92,6 +99,7 @@ menu "Parallel Run-time Integration""
 
         config LEGION_RT
           bool "Legion RT"
+          depends on CXX_SUPPORT
           
         
         config LEGION_RT_ROOT
@@ -102,6 +110,7 @@ menu "Parallel Run-time Integration""
 
         config NDPC_RT
           bool  "NDPC RT"
+          depends on CXX_SUPPORT
 
         config NDPC_RT_ROOT
             string "NDPC RT Root"

@@ -25,7 +25,8 @@ obj-y += \
 	libccompat.o 
 
 
-obj-$(NAUT_CONFIG_LEGION_RT) += cxxglue.o legion_runtime/
-obj-$(NAUT_CONFIG_NDPC_RT) += cxxglue.o
+obj-$(NAUT_CONFIG_CXX_SUPPORT) += cxxglue.o
+obj-$(NAUT_CONFIG_LEGION_RT) += legion_runtime/
+obj-$(NAUT_CONFIG_NDPC_RT) +=
 obj-$(NAUT_CONFIG_NESL_RT) += 
 obj-$(NAUT_CONFIG_NESL_RT) += 

@@ -35,6 +35,26 @@
 static struct naut_info nautilus_info;
 extern spinlock_t printk_lock;
 
+#ifdef NAUT_CONFIG_CXX_SUPPORT
+/* for global constructors */
+extern void (*_init_array_start []) (void) __attribute__((weak));
+extern void (*_init_array_end []) (void) __attribute__((weak));
+
+static void do_ctors_init (void) {
+    void (**p)(void) = NULL;
+    printk("do_ctors_init\n");
+
+
+    for (p = _init_array_start; p < _init_array_end; p++) {
+        if (*p) {
+            printk("Calling static constructor (%p)\n", (void*)(*p));
+            (*p)();
+        }
+    }
+}
+
+#endif /* !NAUT_CONFIG_CXX_SUPPORT */
+
 
 inline struct naut_info*
 nk_get_nautilus_info (void)
@@ -42,10 +62,12 @@ nk_get_nautilus_info (void)
     return &nautilus_info;
 }
 
+
 static void xcall_test (void * arg)
 {
     printk("Running xcore test on core %u\n", my_cpu_id());
 }
+
 
 extern void ipi_test_setup(void);
 extern void ipi_begin_test(cpu_id_t t);
@@ -94,11 +116,11 @@ void ndpc_rt_test()
 
     ndpc_deinit_preempt_threads();
 
-#endif
+#endif 
 
 
 }
-#endif
+#endif /* !NAUT_CONFIG_NDPC_RT */
 
 
 static int 
@@ -179,47 +201,19 @@ main (unsigned long mbd, unsigned long magic)
 
     smp_bringup_aps(naut);
 
+#ifdef NAUT_CONFIG_CXX_SUPPORT
+    // We can assume that we won't encounter any
+    // C++ before this point, invoke the constructors now
+    do_ctors_init();
+#endif
+
     sti();
 
 #ifdef NAUT_CONFIG_NO_RT
 
-#if 0
-    // test thread launch
-    nk_thread_start(tfun, 
-                  NULL,
-                  NULL,
-                  0,
-                  TSTACK_DEFAULT,
-                  NULL,
-                  0);
-
-    // test thread fork
-    /*
-    int ret = thread_fork();
-
-    if (ret == 0) {
-        printk("Nautilus forked child thread yielding on core %u (tid=%u)\n", my_cpu_id(), get_tid());
-    } else {
-        printk("Nautilus main thread yielding on core %d (forked child %u)\n", my_cpu_id(), ret);
-    }
-    */
-
-
-#endif
-
     // screen saver
     nk_thread_start(side_screensaver, NULL, NULL, 0, TSTACK_DEFAULT, NULL, 1);
 
-    //smp_xcall(1, xcall_test, (void*)0xdeadbeef, 1);
-
-    /*
-    ipi_test_setup();
-
-    ipi_begin_test(1);
-    ipi_begin_test(8);
-    ipi_begin_test(4);
-    nk_tls_test();
-    */
 #endif
 
 #ifdef NAUT_CONFIG_LEGION_RT
@@ -240,7 +234,7 @@ main (unsigned long mbd, unsigned long magic)
 #endif
 
 
-    printk("nautilus main thread (core 0) yielding\n");
+    printk("Nautilus main thread (core 0) yielding\n");
     while (1) {
         nk_yield();
     }

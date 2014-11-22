@@ -333,7 +333,9 @@ CFLAGS:=   -O2 \
 		   #-Wstrict-prototypes \
 
 
-#--whole-archive was in below
+# NOTE: We MUST have max-page-size set to this here. Otherwise things
+# go off the rails for the Grub multiboot setup because the linker
+# does strange things...
 LDFLAGS         := -z max-page-size=0x1000 
 
 ifeq ($(call cc-option-yn, -fgnu89-inline),y)
@@ -458,8 +460,7 @@ scripts_basic: include/autoconf.h
 
 # Objects we will link into Nautilus / subdirs we need to visit
 core-y          := src/
-libs-y		:= lib/ 
-
+libs-y		    := lib/ 
 
 
 ifeq ($(dot-config),1)
@@ -490,7 +491,7 @@ endif
 
 
 #
-# Update libs, etc based on NAUT_CONFIG_TOOL_ROOT 
+# Update libs, etc based on NAUT_CONFIG_TOOLCHAIN_ROOT 
 #
 #
 ifeq ($(NAUT_CONFIG_TOOLCHAIN_ROOT)a,a)
@@ -551,10 +552,8 @@ export KBUILD_IMAGE ?= nautilus
 export	INSTALL_PATH ?= /build
 
 
-
 nautilus-dirs	:= $(patsubst %/,%,$(filter %/,  \
 		     $(core-y) $(libs-y)))
-
 
 nautilus-cleandirs := $(sort $(nautilus-dirs) $(patsubst %/,%,$(filter %/, \
 		     	$(core-n) $(core-) $(libs-n) $(libs-))))
@@ -577,15 +576,16 @@ libs-y		:= $(patsubst %/, %/built-in.o, $(libs-y))
 #   |    +--< src/built-in.o  + more
 #
 
-nautilus := $(core-y) $(libs-y)
+
+nautilus := $(core-y) $(libs-y) 
+
 
 # Rule to link nautilus - also used during CONFIG_CONFIGKALLSYMS
 # May be overridden by /Makefile.$(ARCH)
 quiet_cmd_nautilus__ ?= LD      $@
       cmd_nautilus__ ?= $(LD) $(LDFLAGS) $(LDFLAGS_vmlinux) -o $@ \
-      -T $(LD_SCRIPT) $(core-y)                          \
-      --start-group $(libs-y) --end-group                  \
-
+      -T $(LD_SCRIPT) $(core-y)  \
+      --start-group $(libs-y) --end-group
 
 # Generate new nautilus version
 quiet_cmd_nautilus_version = GEN     .version
