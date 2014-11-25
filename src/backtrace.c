@@ -1,11 +1,13 @@
 #include <intrinsics.h>
+#include <nautilus.h>
 
 extern int printk (const char * fmt, ...);
+
 
 void __attribute__((noinline))
 __do_backtrace (void ** fp, unsigned depth)
 {
-    if (!fp) {
+    if (!fp || fp >= nk_get_nautilus_info()->sys.mem.phys_mem_avail) {
         return;
     }
     
