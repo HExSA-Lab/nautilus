@@ -86,11 +86,6 @@ nk_enqueue_thread_on_runq (nk_thread_t * t, int cpu)
     t->cur_run_q = q;
     t->status    = NK_THR_RUNNING;
 
-    SCHED_DEBUG("Enqueueing thread (%p, tid=%u) on CPU %u's run queue\n",
-            t,
-            t->tid,
-            cpu == CPU_ANY ? 0 : cpu);
-
     nk_enqueue_entry_atomic(q, &(t->runq_node));
 }
 
