@@ -118,6 +118,7 @@ GEN_HDR(__strftime_l)
 GEN_HDR(mbsnrtowcs)
 GEN_HDR(pthread_mutex_init)
 GEN_HDR(pthread_mutex_unlock)
+GEN_HDR(pthread_mutex_lock)
 #ifdef __cplusplus
 }
 #endif

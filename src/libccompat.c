@@ -7,6 +7,10 @@
 #include <nautilus.h>
 #include <libccompat.h>
 #include <thread.h>
+#include <errno.h>
+
+static uint64_t compat_nsec;
+static uint64_t compat_sec;
 
 #define GEN_DEF(x) \
     int x (void) { \
@@ -32,8 +36,16 @@ exit(int status)
 int 
 clock_gettime (clockid_t clk_id, struct timespec * tp)
 {
-    UNDEF_FUN_ERR();
-    return -1;
+    /* ignore clk_id */
+
+    if (!tp) {
+        return -EINVAL;
+    }
+
+    tp->tv_nsec = compat_nsec++;
+    tp->tv_sec  = compat_sec++;
+
+    return 0;
 }
 
 
@@ -322,4 +334,5 @@ GEN_DEF(__uselocale)
 GEN_DEF(__strftime_l)
 GEN_DEF(mbsnrtowcs)
 GEN_DEF(pthread_mutex_init)
+GEN_DEF(pthread_mutex_lock)
 GEN_DEF(pthread_mutex_unlock)
