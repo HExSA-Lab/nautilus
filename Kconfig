@@ -101,12 +101,18 @@ menu "Parallel Run-time Integration"
           bool "Legion RT"
           depends on CXX_SUPPORT
           
-        
         config LEGION_RT_ROOT
             string "Legion RT Root"
             depends on LEGION_RT
             help 
               Directory where the intended Legion run-time is installed
+
+        config LEGION_RT_DEBUG
+            bool "Legion RT Deep Debugging"
+            default n
+            depends on LEGION_RT
+            help
+              Turns on deep debugging prints for legion runtime in Nautilus
 
         config NDPC_RT
           bool  "NDPC RT"
