@@ -21,7 +21,7 @@ check_apic_avail (void)
     cpuid_ret_t cp;
     struct cpuid_feature_flags * flags;
 
-    cp    = cpuid(CPUID_FEATURE_INFO);
+    cpuid(CPUID_FEATURE_INFO, &cp);
     flags = (struct cpuid_feature_flags *)&cp.c;
 
     return flags->edx.apic;

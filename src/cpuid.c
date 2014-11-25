@@ -9,7 +9,7 @@ detect_cpu (void)
     cpuid_ret_t id;
     char branding[16];
 
-    id = cpuid(CPUID_LEAF_BASIC_INFO0);
+    cpuid(CPUID_LEAF_BASIC_INFO0, &id);
 
     memcpy(&branding[0], &id.b, 4);
     memcpy(&branding[4], &id.d, 4);

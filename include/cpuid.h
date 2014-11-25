@@ -132,26 +132,25 @@ typedef struct cpuid_ret {
 } cpuid_ret_t; 
 
 
-static inline cpuid_ret_t 
-cpuid (uint32_t func)
+static int
+cpuid (uint32_t func, cpuid_ret_t * ret)
 {
-    cpuid_ret_t ret;
-
     asm volatile ("cpuid" : 
-                  "=a"(ret.a), "=b"(ret.b), "=c"(ret.c), "=d"(ret.d) : 
+                  "=a"(ret->a), "=b"(ret->b), "=c"(ret->c), "=d"(ret->d) : 
                   "0"(func));
-    return ret;
+
+    return 0;
 }
 
 
-static inline cpuid_ret_t
-cpuid_sub (uint32_t func, uint32_t sub_func)
+static int
+cpuid_sub (uint32_t func, uint32_t sub_func, cpuid_ret_t * ret)
 {
-    cpuid_ret_t ret;
     asm volatile ("cpuid" : 
-                  "=a"(ret.a), "=b"(ret.b), "=c"(ret.c), "=d"(ret.d) : 
+                  "=a"(ret->a), "=b"(ret->b), "=c"(ret->c), "=d"(ret->d) : 
                   "0"(func), "2"(sub_func));
-    return ret;
+
+    return 0;
 }
 
 void detect_cpu(void);
