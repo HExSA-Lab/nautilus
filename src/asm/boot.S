@@ -56,7 +56,7 @@ nautilus_entry:
     movl $0x10, %eax
     movw %ax, %ds
     movw %ax, %ss
-    movl $boot_stack, %esp
+    movl $boot_stack_end, %esp
 
     call paging_longmode_setup
 
@@ -73,7 +73,7 @@ nautilus_entry:
     movw %ax, %es
     movw %ax, %ss
 
-    movq $boot_stack, %rsp
+    movq $boot_stack_end, %rsp
 
     /* multiboot info is still in rdi and rsi */
     movq $main, %rax

@@ -10,8 +10,12 @@ extern "C" {
 #include <spinlock.h>
 #include <queue.h>
 
-#define CPU_ANY -1
-#define TSTACK_DEFAULT 0
+#define CPU_ANY       -1
+
+/* common thread stack sizes */
+#define TSTACK_DEFAULT 0  // will be 4K
+#define TSTACK_1MB     0x100000
+#define TSTACK_2MB     0x200000
 
 /******** EXTERNAL INTERFACE **********/
 
@@ -49,7 +53,9 @@ void nk_wake_waiters(void);
 int nk_join(nk_thread_id_t t, void ** retval);
 int nk_join_all_children(int (*)(void*));
 
+#ifndef __LEGION__
 nk_thread_id_t nk_get_tid(void);
+#endif
 nk_thread_id_t nk_get_parent_tid(void);
 
 /* thread local storage */
@@ -110,7 +116,7 @@ struct nk_thread {
     void * output;
 
     const void * tls[TLS_MAX_KEYS];
-};
+} __packed;
 
 
 struct nk_sched_state {

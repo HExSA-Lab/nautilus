@@ -17,10 +17,13 @@ SECTIONS
         pd = .;
         . += 0x1000; 
 
-        /* stack */
-        . += 0x4000;
-        boot_stack = .;
-        . += 0x1000; /* TODO: remove this, for now to be safe... */
+        . += 0x1000; /* buffer zone */
+
+        boot_stack_start = .;
+        . += 0x200000;  /* we start out with a 2MB stack */
+        boot_stack_end = .;
+
+        . += 0x1000; /* buffer zone */
     }
 
 

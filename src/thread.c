@@ -23,7 +23,7 @@
 static unsigned long next_tid = 0;
 static nk_thread_queue_t * global_thread_list;
 
-extern addr_t boot_stack;
+extern addr_t boot_stack_start;
 extern void nk_thread_switch(nk_thread_t*);
 extern void nk_thread_entry(void *);
 static struct nk_tls tls_keys[TLS_MAX_KEYS];
@@ -86,6 +86,11 @@ nk_enqueue_thread_on_runq (nk_thread_t * t, int cpu)
     t->cur_run_q = q;
     t->status    = NK_THR_RUNNING;
 
+    SCHED_DEBUG("Enqueueing thread (%p, tid=%u) on CPU %u's run queue\n",
+            t,
+            t->tid,
+            cpu == CPU_ANY ? 0 : cpu);
+
     nk_enqueue_entry_atomic(q, &(t->runq_node));
 }
 
@@ -95,8 +100,8 @@ enqueue_thread_on_waitq (nk_thread_t * waiter, nk_thread_queue_t * waitq)
 {
     /* are we already waiting on another queue? */
     if (waiter->status == NK_THR_WAITING) {
-        ERROR_PRINT("Attempt to put thread on more than one wait queue\n");
-        return;
+        panic("Attempt to put thread on more than one wait queue\n");
+        //return;
     } else {
         waiter->status = NK_THR_WAITING;
     }
@@ -817,6 +822,7 @@ nk_thread_queue_wake_one (nk_thread_queue_t * q)
 
     /* no one is sleeping on this queue */
     if (!elm) {
+        SCHED_DEBUG("No waiters on wait queue\n");
         return 0;
     }
 
@@ -1155,6 +1161,21 @@ nk_schedule (void)
         return;
     }
 
+    // KCH TEMPORARY before we switch, make sure we're not
+    // stomping around past our given stack...
+    nk_thread_t * me  = get_cur_thread();
+
+    // we've overrun our stack...
+    if (me->rsp <= (uint64_t)(me->stack)) {
+        panic("This thread (%p, tid=%u) has run off the end of its stack! (start=%p, rsp=%p, start size=%lx)\n", 
+                (void*)me,
+                me->tid,
+                me->stack,
+                (void*)me->rsp,
+                me->stack_size);
+    }
+
+
     nk_thread_switch(runme);
 }
 
@@ -1272,8 +1293,21 @@ nk_sched_init (void)
         goto out_err3;
     }
 
-    /* we have no parent thread... */
-    thread_init(main, (void*)&boot_stack, 1, my_cpu_id(), NULL);
+
+    /* 
+     * some important notes:
+     * 1. The actual stack size is really set in the linker
+     *    script (nautilus.ld). It defaults to 2MB
+     * 2. boot_stack_start is the *bottom* of the stack.
+     * 3. We're setting rsp to the wrong value here in thread_init, but that's
+     *    okay because it will be overwritten in thread_lowlevel.S 
+     *    when we switch from it to the first spawned thread
+     *
+     * 4. TODO: currently, the boot thread is bound to CPU 0. I will change this
+     *
+     */
+    main->stack_size = TSTACK_2MB;
+    thread_init(main, (void*)&boot_stack_start, 1, my_cpu_id(), NULL);
     main->waitq = nk_thread_queue_create();
     if (!main->waitq) {
         ERROR_PRINT("Could not create main thread's wait queue\n");
