@@ -422,6 +422,8 @@ void *malloc(size_t size)
 	#endif
 
 
+    liballoc_memset(ptr, 0, tag->size);
+
 	liballoc_unlock(flags);
 	return ptr;
 }
@@ -432,6 +434,8 @@ void *malloc(size_t size)
 
 void free(void *ptr)
 {
+    return;
+#if 0
 	int index;
 	struct boundary_tag *tag;
     int flags;
@@ -521,6 +525,7 @@ void free(void *ptr)
 	#endif
 
 	liballoc_unlock(flags);
+#endif
 }
 
 
