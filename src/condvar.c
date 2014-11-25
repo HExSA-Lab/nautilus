@@ -77,7 +77,10 @@ int
 nk_condvar_signal (nk_condvar_t * c)
 {
     DEBUG_PRINT("Condvar signaling on (%p)\n", (void*)c);
-    nk_thread_queue_wake_one(c->wait_queue);
+    if (nk_thread_queue_wake_one(c->wait_queue) != 0) {
+        ERROR_PRINT("Could not signal on condvar\n");
+        return -1;
+    }
     return 0;
 }
 
@@ -86,7 +89,10 @@ int
 nk_condvar_bcast (nk_condvar_t * c)
 {
     DEBUG_PRINT("Condvar broadcasting on (%p)\n", (void*)c);
-    nk_thread_queue_wake_all(c->wait_queue);
+    if (nk_thread_queue_wake_all(c->wait_queue) != 0) {
+        ERROR_PRINT("Could not broadcast on condvar\n");
+        return -1;
+    }
     return 0;
 }
 
