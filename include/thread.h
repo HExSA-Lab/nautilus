@@ -9,6 +9,7 @@ extern "C" {
 
 #include <spinlock.h>
 #include <queue.h>
+#include <intrinsics.h>
 
 #define CPU_ANY       -1
 
@@ -68,6 +69,8 @@ int nk_tls_set(nk_tls_key_t key, const void * val);
 
 /********* INTERNALS ***********/
 
+#define FXSAVE_SIZE 512
+
 // internal thread representations
 typedef struct nk_thread nk_thread_t;
 typedef struct nk_queue nk_thread_queue_t;
@@ -89,8 +92,10 @@ typedef enum {
 } nk_thread_status_t;
 
 struct nk_thread {
-    uint64_t rsp; /* KCH: this cannot change */
-    void * stack;
+    uint64_t rsp; /* SHOULD NOT CHANGE POSITION */
+    void * stack; /* SHOULD NOT CHANGE POSITION */
+    uint16_t fpu_state_offset; /* SHOULD NOT CHANGE POSITION */
+
     nk_stack_size_t stack_size;
     unsigned long tid;
 
@@ -116,6 +121,8 @@ struct nk_thread {
     void * output;
 
     const void * tls[TLS_MAX_KEYS];
+
+    uint8_t fpu_state[FXSAVE_SIZE] __align(16);
 } __packed;
 
 

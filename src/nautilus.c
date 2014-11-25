@@ -14,6 +14,7 @@
 #include <idle.h>
 #include <percpu.h>
 #include <errno.h>
+#include <fpu.h>
 
 #include <barrier.h>
 #include <rwlock.h>
@@ -188,6 +189,8 @@ main (unsigned long mbd, unsigned long magic)
     ioapic_init(&(naut->sys));
 
     apic_init(naut);
+
+    fpu_init(naut);
 
     kbd_init(naut);
 

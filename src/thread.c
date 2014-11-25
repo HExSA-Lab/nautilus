@@ -289,6 +289,7 @@ thread_init (nk_thread_t * t,
     t->refcount   = is_detached ? 1 : 2; // thread references itself as well
     t->parent     = parent;
     t->bound_cpu  = cpu;
+    t->fpu_state_offset = offsetof(struct nk_thread, fpu_state);
 
     INIT_LIST_HEAD(&(t->children));
 

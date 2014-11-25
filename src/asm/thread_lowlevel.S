@@ -40,11 +40,19 @@ ENTRY(nk_thread_switch_intr_entry)
     movq %gs:0x0, %rax
     movq %rsp, (%rax)   /* save the current stack pointer */
 
-    /* this is where we would save FPRs */
+    /* Save the FPRs */
+    movzwq 16(%rax), %rbx
+    movq (%rax, %rbx, 1), %rbx
+    fxsave (%rbx)
 
     movq %rdi, %rax     /* load up pointer to the next thread */
     movq %rax, %gs:0x0  /* make it the new current thread */
     movq (%rax), %rsp   /* load its stack pointer */
+
+    /* Restore the FPRs */
+    movzwq 16(%rax), %rbx
+    movq (%rax, %rbx, 1), %rbx
+    fxrstor (%rbx)
 
     RESTORE_GPRS()      /* load the new thread's GPRs */
 
@@ -52,8 +60,11 @@ ENTRY(nk_thread_switch_intr_entry)
 
     iretq               /* and off we go */
 
+
+
+
 ENTRY(nk_thread_entry) 
-/* test and see if we've overrun our stack */
+    /* test and see if we've overrun our stack */
     pushq %rax
     pushq %rbx
     movq %gs:0x0, %rax

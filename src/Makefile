@@ -10,6 +10,7 @@ obj-y += \
 	naut_string.o \
 	msr.o \
 	cpuid.o \
+	fpu.o \
 	spinlock.o \
 	rwlock.o \
 	condvar.o \

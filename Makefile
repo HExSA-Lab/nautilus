@@ -307,7 +307,16 @@ NAUT_INCLUDE      := -Iinclude \
 
 CPPFLAGS        := $(NAUT_INCLUDE) -D__NAUTILUS__
 
-CXXFLAGS := -fno-exceptions -fno-omit-frame-pointer -fno-rtti -ffreestanding
+CXXFLAGS := -fno-exceptions \
+            -fno-omit-frame-pointer \
+			-fno-rtti \
+			-ffreestanding \
+			-mno-3dnow
+			#-mno-sse \
+			#-mno-sse2 \
+			#-mno-sse3 \
+			#-mno-mmx \
+
 #CFLAGS 		:=  -fno-stack-protector -Wall -Werror  -mno-red-zone -fno-common 
 CFLAGS:=   -O2 \
 		   -Wall \
@@ -317,7 +326,6 @@ CFLAGS:=   -O2 \
 		   -fno-stack-protector \
 		   -fno-omit-frame-pointer \
 		   -fno-common \
-		   -fno-exceptions \
 		   -fno-reorder-functions \
 		   -mcmodel=large \
 		   -mno-red-zone \
@@ -331,6 +339,7 @@ CFLAGS:=   -O2 \
 		   #-Werror \
 		   #-Wmissing-prototypes \
 		   #-Wstrict-prototypes \
+		   # -fno-exceptions \
 
 
 # NOTE: We MUST have max-page-size set to this here. Otherwise things
