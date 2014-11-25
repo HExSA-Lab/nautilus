@@ -433,6 +433,8 @@ namespace LegionRuntime {
     public:
       static const Predicate TRUE_PRED;
       static const Predicate FALSE_PRED;
+      //static Predicate TRUE_PRED;
+      //static Predicate FALSE_PRED;
     public:
       Predicate(void);
       Predicate(const Predicate &p);

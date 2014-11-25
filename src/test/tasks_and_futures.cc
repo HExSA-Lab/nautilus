@@ -75,7 +75,7 @@ void top_level_task(const Task *task,
     // not actually copied until 'execute_task' is called.  The buffer 
     // should remain live until the launcher goes out of scope.
     TaskLauncher launcher(FIBONACCI_TASK_ID, TaskArgument(&i,sizeof(i)),
-            Predicate(true),
+            Predicate::TRUE_PRED,
             0,
             0);
     // To launch a task, a TaskLauncher object is passed to the runtime
@@ -138,8 +138,9 @@ int fibonacci_task(const Task *task,
   // we encourage programmers to check that they are getting
   // what they expect in their values.
   assert(task->arglen == sizeof(int));
-  printk("in fibonacci task\n");
+  printk("in fibonacci task (task=%p)\n", task);
   int fib_num = *(const int*)task->args; 
+  printk("fib_num = %d\n", fib_num);
   // Fibonacci base cases
   // Note that tasks return values the same as C functions.
   // If a task is running remotely from its parent task then
@@ -191,7 +192,10 @@ int sum_task(const Task *task,
              const std::vector<PhysicalRegion> &regions,
              Context ctx, HighLevelRuntime *runtime)
 {
-  assert(task->futures.size() == 2);
+  //assert(task->futures.size() == 2);
+  if (task->futures.size() != 2) {
+      printk("error task future size is %d\n", task->futures.size());
+  }
   // Note that even though it looks like we are performing
   // blocking calls to get these future results, the
   // Legion runtime is smart enough to not run this task
@@ -210,6 +214,8 @@ int go_taf(int argc, char **argv)
 {
 
     printk("starting fibonacci test...\n");
+    //Predicate::TRUE_PRED = Predicate(true);
+    //Predicate::FALSE_PRED = Predicate(false);
   HighLevelRuntime::set_top_level_task_id(TOP_LEVEL_TASK_ID);
   HighLevelRuntime::register_legion_task<top_level_task>(TOP_LEVEL_TASK_ID,
       Processor::LOC_PROC, true/*single*/, false/*index*/);

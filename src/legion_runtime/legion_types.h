@@ -33,6 +33,8 @@
 #include <deque>
 #include <vector>
 
+#include "naut_debug.h"
+
 // If we enable field tree acceleration
 // then enable it for both the logical and
 // physical tree analyses.

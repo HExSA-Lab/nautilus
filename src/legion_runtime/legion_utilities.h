@@ -26,9 +26,11 @@
 #include "legion_profiling.h"
 #include "garbage_collection.h"
 
+#include "naut_debug.h"
+
 // Apple can go screw itself
 #ifndef __MACH__
-#include <x86intrin.h>
+//#include <x86intrin.h>
 #else
 #ifdef __SSE2__
 #include <emmintrin.h>
@@ -37,6 +39,7 @@
 #include <immintrin.h>
 #endif
 #endif
+
 #ifdef DYNAMIC_FIELD_MASKS
 #include <malloc.h>
 #endif
@@ -209,6 +212,7 @@ namespace LegionRuntime {
         : is_low(true), low_lock(r)
       {
         Event lock_event = r.acquire(mode,exclusive,wait_on);
+        NAUTILUS_DEEP_DEBUG("acquired res in autolock constructor\n");
         if (lock_event.exists())
         {
 #ifdef LEGION_PROF
@@ -219,10 +223,12 @@ namespace LegionRuntime {
           LegionProf::register_event(0, PROF_END_WAIT);
 #endif
         }
+        NAUTILUS_DEEP_DEBUG("leaving AutoLock constructor\n");
       }
       AutoLock(ImmovableLock l)
         : is_low(false), immov_lock(l)
       {
+          NAUTILUS_DEEP_DEBUG("autolock locking PANIC PANIC PANIC!\n");
         l.lock();
       }
     public:
@@ -2583,6 +2589,7 @@ namespace LegionRuntime {
     SSEBitMask<MAX>::SSEBitMask(uint64_t init /*= 0*/)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING SSE INTRINS\n");
       LEGION_STATIC_ASSERT((MAX % 128) == 0);
       for (unsigned idx = 0; idx < BIT_ELMTS; idx++)
       {
@@ -2595,6 +2602,7 @@ namespace LegionRuntime {
     SSEBitMask<MAX>::SSEBitMask(const SSEBitMask &rhs)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING SSE INTRINS\n");
       LEGION_STATIC_ASSERT((MAX % 128) == 0);
       for (unsigned idx = 0; idx < SSE_ELMTS; idx++)
       {
@@ -2607,6 +2615,7 @@ namespace LegionRuntime {
     SSEBitMask<MAX>::~SSEBitMask(void)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING SSE INTRINS\n");
     }
 
     //-------------------------------------------------------------------------
@@ -2614,6 +2623,7 @@ namespace LegionRuntime {
     inline void SSEBitMask<MAX>::set_bit(unsigned bit)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING SSE INTRINS\n");
 #ifdef DEBUG_HIGH_LEVEL
       assert(bit < MAX);
 #endif
@@ -3693,6 +3703,7 @@ namespace LegionRuntime {
     inline const uint64_t* SSETLBitMask<MAX>::base(void) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       return bits.bit_vector;
     }
 
@@ -3701,6 +3712,7 @@ namespace LegionRuntime {
     inline void SSETLBitMask<MAX>::serialize(Serializer &rez) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       rez.serialize(sum_mask);
       rez.serialize(bits.bit_vector, (MAX/8));
     }
@@ -3710,6 +3722,7 @@ namespace LegionRuntime {
     inline void SSETLBitMask<MAX>::deserialize(Deserializer &derez)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       derez.deserialize(sum_mask);
       derez.deserialize(bits.bit_vector, (MAX/8));
     }
@@ -3719,6 +3732,7 @@ namespace LegionRuntime {
     inline char* SSETLBitMask<MAX>::to_string(void) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       char *result = (char*)malloc((MAX+1)*sizeof(char));
       for (int idx = (BIT_ELMTS-1); idx >= 0; idx--)
       {
@@ -3740,6 +3754,7 @@ namespace LegionRuntime {
                                                  const SSETLBitMask<MAX> &mask)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       int result = 0;
 #ifndef VALGRIND
       for (int idx = 0; idx < BIT_ELMTS; idx++)
@@ -3761,6 +3776,7 @@ namespace LegionRuntime {
     /*static*/ inline uint64_t SSETLBitMask<MAX>::extract_mask(__m128i value)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       uint64_t left, right;
       right = _mm_cvtsi128_si32(value);
       left = _mm_cvtsi128_si32(_mm_shuffle_epi32(value, 1));
@@ -3782,6 +3798,7 @@ namespace LegionRuntime {
     AVXBitMask<MAX>::AVXBitMask(uint64_t init /*= 0*/)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       LEGION_STATIC_ASSERT((MAX % 256) == 0);
 #ifdef DYNAMIC_FIELD_MASKS
       bits.bit_vector = (uint64_t*)memalign(32, (MAX/8));
@@ -3800,6 +3817,7 @@ namespace LegionRuntime {
     AVXBitMask<MAX>::AVXBitMask(const AVXBitMask &rhs)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       LEGION_STATIC_ASSERT((MAX % 256) == 0);
 #ifdef DYNAMIC_FIELD_MASKS
       bits.bit_vector = (uint64_t*)memalign(32, (MAX/8));
@@ -3818,6 +3836,7 @@ namespace LegionRuntime {
     AVXBitMask<MAX>::~AVXBitMask(void)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
 #ifdef DYNAMIC_FIELD_MASKS
 #ifdef DEBUG_HIGH_LEVEL
       assert(bits.bit_vector != NULL);
@@ -3832,6 +3851,7 @@ namespace LegionRuntime {
     inline void AVXBitMask<MAX>::set_bit(unsigned bit)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
 #ifdef DEBUG_HIGH_LEVEL
       assert(bit < MAX);
 #endif
@@ -3844,6 +3864,7 @@ namespace LegionRuntime {
     inline void AVXBitMask<MAX>::unset_bit(unsigned bit)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
 #ifdef DEBUG_HIGH_LEVEL
       assert(bit < MAX);
 #endif
@@ -3856,6 +3877,7 @@ namespace LegionRuntime {
     inline void AVXBitMask<MAX>::assign_bit(unsigned bit, bool val)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       if (val)
         set_bit(bit);
       else
@@ -3867,6 +3889,7 @@ namespace LegionRuntime {
     inline bool AVXBitMask<MAX>::is_set(unsigned bit) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
 #ifdef DEBUG_HIGH_LEVEL
       assert(bit < MAX);
 #endif
@@ -3879,6 +3902,7 @@ namespace LegionRuntime {
     inline int AVXBitMask<MAX>::find_first_set(void) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       for (unsigned idx = 0; idx < BIT_ELMTS; idx++)
       {
         if (bits.bit_vector[idx])
@@ -3901,6 +3925,7 @@ namespace LegionRuntime {
                                                  const unsigned int &idx) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
 #ifdef DYNAMIC_FIELD_MASKS
 #ifdef DEBUG_HIGH_LEVEL
       assert(bits.avx_vector != NULL);
@@ -3914,6 +3939,7 @@ namespace LegionRuntime {
     inline __m256i& AVXBitMask<MAX>::operator()(const unsigned int &idx)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
 #ifdef DYNAMIC_FIELD_MASKS
 #ifdef DEBUG_HIGH_LEVEL
       assert(bits.avx_vector != NULL);
@@ -3928,6 +3954,7 @@ namespace LegionRuntime {
                                                  const unsigned int &idx) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
 #ifdef DYNAMIC_FIELD_MASKS
 #ifdef DEBUG_HIGH_LEVEL
       assert(bits.bit_vector != NULL);
@@ -3941,6 +3968,7 @@ namespace LegionRuntime {
     inline uint64_t& AVXBitMask<MAX>::operator[](const unsigned int &idx) 
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
 #ifdef DYNAMIC_FIELD_MASKS
 #ifdef DEBUG_HIGH_LEVEL
       assert(bits.bit_vector != NULL);
@@ -3954,6 +3982,7 @@ namespace LegionRuntime {
     inline const __m256d& AVXBitMask<MAX>::elem(const unsigned int &idx) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
 #ifdef DYNAMIC_FIELD_MASKS
 #ifdef DEBUG_HIGH_LEVEL
       assert(bits.avx_double != NULL);
@@ -3967,6 +3996,7 @@ namespace LegionRuntime {
     inline __m256d& AVXBitMask<MAX>::elem(const unsigned int &idx)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
 #ifdef DYNAMIC_FIELD_MASKS
 #ifdef DEBUG_HIGH_LEVEL
       assert(bits.avx_double != NULL);
@@ -3980,6 +4010,7 @@ namespace LegionRuntime {
     inline bool AVXBitMask<MAX>::operator==(const AVXBitMask &rhs) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       for (unsigned idx = 0; idx < BIT_ELMTS; idx++)
       {
         if (bits.bit_vector[idx] != rhs[idx]) 
@@ -3993,6 +4024,7 @@ namespace LegionRuntime {
     inline bool AVXBitMask<MAX>::operator<(const AVXBitMask &rhs) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       // Only be less than if the bits are a subset of the rhs bits
       for (unsigned idx = 0; idx < BIT_ELMTS; idx++)
       {
@@ -4010,6 +4042,7 @@ namespace LegionRuntime {
     inline bool AVXBitMask<MAX>::operator!=(const AVXBitMask &rhs) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       return !(*this == rhs);
     }
 
@@ -4018,6 +4051,7 @@ namespace LegionRuntime {
     inline AVXBitMask<MAX>& AVXBitMask<MAX>::operator=(const AVXBitMask &rhs)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       for (unsigned idx = 0; idx < AVX_ELMTS; idx++)
       {
         bits.avx_vector[idx] = rhs(idx);
@@ -4030,6 +4064,7 @@ namespace LegionRuntime {
     inline AVXBitMask<MAX> AVXBitMask<MAX>::operator~(void) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       AVXBitMask<MAX> result;
       for (unsigned idx = 0; idx < BIT_ELMTS; idx++)
       {
@@ -4044,6 +4079,7 @@ namespace LegionRuntime {
                                                    const AVXBitMask &rhs) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       AVXBitMask<MAX> result;
 #ifdef __AVX2__
       // If we have this instruction use it because it has higher throughput
@@ -4068,6 +4104,7 @@ namespace LegionRuntime {
                                                    const AVXBitMask &rhs) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       AVXBitMask<MAX> result;
 #ifdef __AVX2__
       for (unsigned idx = 0; idx < AVX_ELMTS; idx++)
@@ -4091,6 +4128,7 @@ namespace LegionRuntime {
                                                    const AVXBitMask &rhs) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       AVXBitMask<MAX> result;
 #ifdef __AVX2__
       for (unsigned idx = 0; idx < AVX_ELMTS; idx++)
@@ -4113,6 +4151,7 @@ namespace LegionRuntime {
     inline AVXBitMask<MAX>& AVXBitMask<MAX>::operator|=(const AVXBitMask &rhs) 
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
 #ifdef __AVX2__
       for (unsigned idx = 0; idx < AVX_ELMTS; idx++)
       {
@@ -4133,6 +4172,7 @@ namespace LegionRuntime {
     inline AVXBitMask<MAX>& AVXBitMask<MAX>::operator&=(const AVXBitMask &rhs)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
 #ifdef __AVX2__
       for (unsigned idx = 0; idx < AVX_ELMTS; idx++)
       {
@@ -4154,6 +4194,7 @@ namespace LegionRuntime {
     inline AVXBitMask<MAX>& AVXBitMask<MAX>::operator^=(const AVXBitMask &rhs)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
 #ifdef __AVX2__
       for (unsigned idx = 0; idx < AVX_ELMTS; idx++)
       {
@@ -4175,6 +4216,7 @@ namespace LegionRuntime {
     inline bool AVXBitMask<MAX>::operator*(const AVXBitMask &rhs) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       for (unsigned idx = 0; idx < BIT_ELMTS; idx++)
       {
         if (bits.bit_vector[idx] & rhs[idx])
@@ -4189,6 +4231,7 @@ namespace LegionRuntime {
                                                    const AVXBitMask &rhs) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       AVXBitMask<MAX> result;
 #ifdef __AVX2__
       for (unsigned idx = 0; idx < AVX_ELMTS; idx++)
@@ -4211,6 +4254,7 @@ namespace LegionRuntime {
     inline AVXBitMask<MAX>& AVXBitMask<MAX>::operator-=(const AVXBitMask &rhs)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
 #ifdef __AVX2__
       for (unsigned idx = 0; idx < AVX_ELMTS; idx++)
       {
@@ -4233,6 +4277,7 @@ namespace LegionRuntime {
     inline bool AVXBitMask<MAX>::operator!(void) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       for (unsigned idx = 0; idx < BIT_ELMTS; idx++)
       {
         if (bits.bit_vector[idx] != 0)
@@ -4246,6 +4291,7 @@ namespace LegionRuntime {
     inline AVXBitMask<MAX> AVXBitMask<MAX>::operator<<(unsigned shift) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       // Find the range
       unsigned range = shift >> 6;
       unsigned local = shift & 0x3F;
@@ -4284,6 +4330,7 @@ namespace LegionRuntime {
     inline AVXBitMask<MAX> AVXBitMask<MAX>::operator>>(unsigned shift) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       unsigned range = shift >> 6;
       unsigned local = shift & 0x3F;
       AVXBitMask<MAX> result;
@@ -4321,6 +4368,7 @@ namespace LegionRuntime {
     inline AVXBitMask<MAX>& AVXBitMask<MAX>::operator<<=(unsigned shift)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       // Find the range
       unsigned range = shift >> 6;
       unsigned local = shift & 0x3F;
@@ -4358,6 +4406,7 @@ namespace LegionRuntime {
     inline AVXBitMask<MAX>& AVXBitMask<MAX>::operator>>=(unsigned shift)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       unsigned range = shift >> 6;
       unsigned local = shift & 0x3F;
       if (!local)
@@ -4398,6 +4447,7 @@ namespace LegionRuntime {
     inline uint64_t AVXBitMask<MAX>::get_hash_key(void) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       uint64_t result = 0;
       for (int idx = 0; idx < BIT_ELMTS; idx++)
       {
@@ -4411,6 +4461,7 @@ namespace LegionRuntime {
     inline const uint64_t* AVXBitMask<MAX>::base(void) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
 #ifdef DYNAMIC_FIELD_MASKS
 #ifdef DEBUG_HIGH_LEVEL
       assert(bits.bit_vector != NULL); 
@@ -4424,6 +4475,7 @@ namespace LegionRuntime {
     inline void AVXBitMask<MAX>::serialize(Serializer &rez) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       rez.serialize(bits.bit_vector, (MAX/8));
     }
 
@@ -4432,6 +4484,7 @@ namespace LegionRuntime {
     inline void AVXBitMask<MAX>::deserialize(Deserializer &derez)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       derez.deserialize(bits.bit_vector, (MAX/8));
     }
 
@@ -4440,6 +4493,7 @@ namespace LegionRuntime {
     inline char* AVXBitMask<MAX>::to_string(void) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       char *result = (char*)malloc((MAX+1)*sizeof(char));
       for (int idx = (BIT_ELMTS-1); idx >= 0; idx--)
       {
@@ -4461,6 +4515,7 @@ namespace LegionRuntime {
                                                    const AVXBitMask<MAX> &mask)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       int result = 0;
 #ifndef VALGRIND
       for (int idx = 0; idx < BIT_ELMTS; idx++)
@@ -4483,6 +4538,7 @@ namespace LegionRuntime {
       : sum_mask(init)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       LEGION_STATIC_ASSERT((MAX % 256) == 0);
 #ifdef DYNAMIC_FIELD_MASKS
       bits.bit_vector = (uint64_t*)memalign(32, (MAX/8));
@@ -4502,6 +4558,7 @@ namespace LegionRuntime {
       : sum_mask(rhs.sum_mask)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       LEGION_STATIC_ASSERT((MAX % 256) == 0);
 #ifdef DYNAMIC_FIELD_MASKS
       bits.bit_vector = (uint64_t*)memalign(32, (MAX/8));
@@ -4520,6 +4577,7 @@ namespace LegionRuntime {
     AVXTLBitMask<MAX>::~AVXTLBitMask(void)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
 #ifdef DYNAMIC_FIELD_MASKS
 #ifdef DEBUG_HIGH_LEVEL
       assert(bits.bit_vector != NULL);
@@ -4534,6 +4592,7 @@ namespace LegionRuntime {
     inline void AVXTLBitMask<MAX>::set_bit(unsigned bit)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
 #ifdef DEBUG_HIGH_LEVEL
       assert(bit < MAX);
 #endif
@@ -4548,6 +4607,7 @@ namespace LegionRuntime {
     inline void AVXTLBitMask<MAX>::unset_bit(unsigned bit)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
 #ifdef DEBUG_HIGH_LEVEL
       assert(bit < MAX);
 #endif
@@ -4566,6 +4626,7 @@ namespace LegionRuntime {
     inline void AVXTLBitMask<MAX>::assign_bit(unsigned bit, bool val)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       if (val)
         set_bit(bit);
       else
@@ -4577,6 +4638,7 @@ namespace LegionRuntime {
     inline bool AVXTLBitMask<MAX>::is_set(unsigned bit) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
 #ifdef DEBUG_HIGH_LEVEL
       assert(bit < MAX);
 #endif
@@ -4589,6 +4651,7 @@ namespace LegionRuntime {
     inline int AVXTLBitMask<MAX>::find_first_set(void) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       for (unsigned idx = 0; idx < BIT_ELMTS; idx++)
       {
         if (bits.bit_vector[idx])
@@ -4611,6 +4674,7 @@ namespace LegionRuntime {
                                                  const unsigned int &idx) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
 #ifdef DYNAMIC_FIELD_MASKS
 #ifdef DEBUG_HIGH_LEVEL
       assert(bits.avx_vector != NULL);
@@ -4624,6 +4688,7 @@ namespace LegionRuntime {
     inline __m256i& AVXTLBitMask<MAX>::operator()(const unsigned int &idx)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
 #ifdef DYNAMIC_FIELD_MASKS
 #ifdef DEBUG_HIGH_LEVEL
       assert(bits.avx_vector != NULL);
@@ -4638,6 +4703,7 @@ namespace LegionRuntime {
                                                  const unsigned int &idx) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
 #ifdef DYNAMIC_FIELD_MASKS
 #ifdef DEBUG_HIGH_LEVEL
       assert(bits.bit_vector != NULL);
@@ -4651,6 +4717,7 @@ namespace LegionRuntime {
     inline uint64_t& AVXTLBitMask<MAX>::operator[](const unsigned int &idx) 
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
 #ifdef DYNAMIC_FIELD_MASKS
 #ifdef DEBUG_HIGH_LEVEL
       assert(bits.bit_vector != NULL);
@@ -4664,6 +4731,7 @@ namespace LegionRuntime {
     inline const __m256d& AVXTLBitMask<MAX>::elem(const unsigned &idx) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
 #ifdef DYNAMIC_FIELD_MASKS
 #ifdef DEBUG_HIGH_LEVEL
       assert(bits.avx_double != NULL);
@@ -4677,6 +4745,7 @@ namespace LegionRuntime {
     inline __m256d& AVXTLBitMask<MAX>::elem(const unsigned &idx)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
 #ifdef DYNAMIC_FIELD_MASKS
 #ifdef DEBUG_HIGH_LEVEL
       assert(bits.avx_double != NULL);
@@ -4690,6 +4759,7 @@ namespace LegionRuntime {
     inline bool AVXTLBitMask<MAX>::operator==(const AVXTLBitMask &rhs) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       if (sum_mask != rhs.sum_mask)
         return false;
       for (unsigned idx = 0; idx < BIT_ELMTS; idx++)
@@ -4705,6 +4775,7 @@ namespace LegionRuntime {
     inline bool AVXTLBitMask<MAX>::operator<(const AVXTLBitMask &rhs) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       // Only be less than if the bits are a subset of the rhs bits
       for (unsigned idx = 0; idx < BIT_ELMTS; idx++)
       {
@@ -4722,6 +4793,7 @@ namespace LegionRuntime {
     inline bool AVXTLBitMask<MAX>::operator!=(const AVXTLBitMask &rhs) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       return !(*this == rhs);
     }
 
@@ -4731,6 +4803,7 @@ namespace LegionRuntime {
                                                        const AVXTLBitMask &rhs)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       sum_mask = rhs.sum_mask;
       for (unsigned idx = 0; idx < AVX_ELMTS; idx++)
       {
@@ -4744,6 +4817,7 @@ namespace LegionRuntime {
     inline AVXTLBitMask<MAX> AVXTLBitMask<MAX>::operator~(void) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       AVXTLBitMask<MAX> result;
       for (unsigned idx = 0; idx < BIT_ELMTS; idx++)
       {
@@ -4759,6 +4833,7 @@ namespace LegionRuntime {
                                                  const AVXTLBitMask &rhs) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       AVXTLBitMask<MAX> result;
       result.sum_mask = sum_mask | rhs.sum_mask;
 #ifdef __AVX2__
@@ -4782,6 +4857,7 @@ namespace LegionRuntime {
                                                  const AVXTLBitMask &rhs) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       AVXTLBitMask<MAX> result;
       // If they are independent then we are done
       if (sum_mask & rhs.sum_mask)
@@ -4813,6 +4889,7 @@ namespace LegionRuntime {
                                                  const AVXTLBitMask &rhs) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       AVXTLBitMask<MAX> result;
 #ifdef __AVX2__
       __m256i temp_sum = _mm256_set1_epi32(0);
@@ -4840,6 +4917,7 @@ namespace LegionRuntime {
                                                        const AVXTLBitMask &rhs)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       sum_mask |= rhs.sum_mask;
 #ifdef __AVX2__
       for (unsigned idx = 0; idx < AVX_ELMTS; idx++)
@@ -4862,6 +4940,7 @@ namespace LegionRuntime {
                                                        const AVXTLBitMask &rhs)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       if (sum_mask & rhs.sum_mask)
       {
 #ifdef __AVX2__
@@ -4899,6 +4978,7 @@ namespace LegionRuntime {
                                                        const AVXTLBitMask &rhs)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
 #ifdef __AVX2__
       __m256i temp_sum = _mm_set1_epi32(0);
       for (unsigned idx = 0; idx < SSE_ELMTS; idx++)
@@ -4925,6 +5005,7 @@ namespace LegionRuntime {
     inline bool AVXTLBitMask<MAX>::operator*(const AVXTLBitMask &rhs) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       if (sum_mask & rhs.sum_mask)
       {
         for (unsigned idx = 0; idx < BIT_ELMTS; idx++)
@@ -4942,6 +5023,7 @@ namespace LegionRuntime {
                                                  const AVXTLBitMask &rhs) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       AVXTLBitMask<MAX> result;
 #ifdef __AVX2__
       __m128i temp_sum = _mm_set1_epi32(0);
@@ -4969,6 +5051,7 @@ namespace LegionRuntime {
                                                        const AVXTLBitMask &rhs)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
 #ifdef __AVX2__
       __m128i temp_sum = _mm_set1_epi32(0);
       for (unsigned idx = 0; idx < AVX_ELMTS; idx++)
@@ -4996,6 +5079,7 @@ namespace LegionRuntime {
     inline bool AVXTLBitMask<MAX>::operator!(void) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       // A great reason to have a summary mask
       return (sum_mask == 0);
     }
@@ -5006,6 +5090,7 @@ namespace LegionRuntime {
                                                           unsigned shift) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       // Find the range
       unsigned range = shift >> 6;
       unsigned local = shift & 0x3F;
@@ -5048,6 +5133,7 @@ namespace LegionRuntime {
                                                           unsigned shift) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       unsigned range = shift >> 6;
       unsigned local = shift & 0x3F;
       AVXTLBitMask<MAX> result;
@@ -5088,6 +5174,7 @@ namespace LegionRuntime {
     inline AVXTLBitMask<MAX>& AVXTLBitMask<MAX>::operator<<=(unsigned shift)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       // Find the range
       unsigned range = shift >> 6;
       unsigned local = shift & 0x3F;
@@ -5129,6 +5216,7 @@ namespace LegionRuntime {
     inline AVXTLBitMask<MAX>& AVXTLBitMask<MAX>::operator>>=(unsigned shift)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       unsigned range = shift >> 6;
       unsigned local = shift & 0x3F;
       sum_mask = 0;
@@ -5173,6 +5261,7 @@ namespace LegionRuntime {
     inline uint64_t AVXTLBitMask<MAX>::get_hash_key(void) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       return sum_mask;
     }
 
@@ -5181,6 +5270,7 @@ namespace LegionRuntime {
     inline const uint64_t* AVXTLBitMask<MAX>::base(void) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
 #ifdef DYNAMIC_FIELD_MASKS
 #ifdef DEBUG_HIGH_LEVEL
       assert(bits.bit_vector != NULL);
@@ -5194,6 +5284,7 @@ namespace LegionRuntime {
     inline void AVXTLBitMask<MAX>::serialize(Serializer &rez) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       rez.serialize(sum_mask);
       rez.serialize(bits.bit_vector, (MAX/8));
     }
@@ -5203,6 +5294,7 @@ namespace LegionRuntime {
     inline void AVXTLBitMask<MAX>::deserialize(Deserializer &derez)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       derez.deserialize(sum_mask);
       derez.deserialize(bits.bit_vector, (MAX/8));
     }
@@ -5212,6 +5304,7 @@ namespace LegionRuntime {
     inline char* AVXTLBitMask<MAX>::to_string(void) const
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       char *result = (char*)malloc((MAX+1)*sizeof(char));
       for (int idx = (BIT_ELMTS-1); idx >= 0; idx--)
       {
@@ -5233,6 +5326,7 @@ namespace LegionRuntime {
                                                  const AVXTLBitMask<MAX> &mask)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       int result = 0;
 #ifndef VALGRIND
       for (int idx = 0; idx < BIT_ELMTS; idx++)
@@ -5254,6 +5348,7 @@ namespace LegionRuntime {
     /*static*/ inline uint64_t AVXTLBitMask<MAX>::extract_mask(__m256i value)
     //-------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       __m128i left, right;
       right = _mm256_extractf128_si256(value, 0);
       left = _mm256_extractf128_si256(value, 1);
@@ -5269,6 +5364,8 @@ namespace LegionRuntime {
     /*static*/ inline uint64_t AVXTLBitMask<MAX>::extract_mask(__m256d value)
     //-------------------------------------------------------------------------
     {
+
+        NAUTILUS_DEEP_DEBUG("PANIC PANIC USING MM INTRINS\n");
       __m256i temp = _mm256_castpd_si256(value);
       return extract_mask(temp);
     }

@@ -130,24 +130,32 @@ namespace LegionRuntime {
       task->map_locally = false; 
       task->profile_task = !profiler.profiling_complete(task);
       task->task_priority = 0; // No prioritization
+      NAUTILUS_DEEP_DEBUG("select task options\n");
       // For selecting a target processor see if we have finished profiling
       // the given task otherwise send it to a processor of the right kind
       if (profiler.profiling_complete(task))
       {
+          NAUTILUS_DEEP_DEBUG("profiling complete\n");
         Processor::Kind best_kind = profiler.best_processor_kind(task);
+        NAUTILUS_DEEP_DEBUG("selected best processor kind\n");
         // If our local processor is the right kind then do that
-        if (best_kind == local_kind)
+        if (best_kind == local_kind) {
+            NAUTILUS_DEEP_DEBUG("Setting target proc to local proc\n");
           task->target_proc = local_proc;
+        }
         else
         {
           // Otherwise select a random processor of the right kind
           const std::set<Processor> &all_procs = machine->get_all_processors();
+          NAUTILUS_DEEP_DEBUG("selecting random processor for task\n");
           task->target_proc = select_random_processor(all_procs, best_kind, 
                                                       machine);
+          NAUTILUS_DEEP_DEBUG("selected processor kind (pid = %u)\n", task->target_proc.id);
         }
       }
       else
       {
+          NAUTILUS_DEEP_DEBUG("still profiling, getting proc kind\n");
         // Get the next kind to find
         Processor::Kind next_kind = profiler.next_processor_kind(task);
         if (next_kind == local_kind)
@@ -155,10 +163,12 @@ namespace LegionRuntime {
         else
         {
           const std::set<Processor> &all_procs = machine->get_all_processors();
+          NAUTILUS_DEEP_DEBUG("selecting random processor\n");
           task->target_proc = select_random_processor(all_procs, 
                                                       next_kind, machine);
         }
       }
+      NAUTILUS_DEEP_DEBUG("leave select task options\n");
     }
 
     //--------------------------------------------------------------------------

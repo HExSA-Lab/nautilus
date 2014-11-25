@@ -23,6 +23,8 @@
 #include "legion_logging.h"
 #include "legion_profiling.h"
 
+#include "naut_debug.h"
+
 namespace LegionRuntime {
   namespace HighLevel {
 
@@ -218,13 +220,21 @@ namespace LegionRuntime {
       assert(ctx != NULL);
       assert(completion_event.exists());
 #endif
+      NAUTILUS_DEEP_DEBUG("in initialize operation\n");
       parent_ctx = ctx;
       track_parent = track;
       children_mapped = child_event;
-      if (track_parent)
+      NAUTILUS_DEEP_DEBUG("track parent: %u\n", track_parent);
+      if (track_parent) {
+          NAUTILUS_DEEP_DEBUG("register child operation\n");
         parent_ctx->register_child_operation(this);
-      for (unsigned idx = 0; idx < regs; idx++)
+      }
+      for (unsigned idx = 0; idx < regs; idx++) {
+          NAUTILUS_DEEP_DEBUG("unverified regions insert %u\n", idx);
         unverified_regions.insert(idx);
+      }
+
+      NAUTILUS_DEEP_DEBUG("initialize operation\n");
     }
 
     //--------------------------------------------------------------------------
@@ -901,12 +911,15 @@ namespace LegionRuntime {
     void Operation::add_mapping_reference(GenerationID our_gen)
     //--------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("add mapping ref\n");
       AutoLock o_lock(op_lock);
 #ifdef DEBUG_HIGH_LEVEL
       assert(our_gen <= gen); // better not be ahead of where we are now
 #endif
       if (our_gen == gen)
         outstanding_mapping_references++;
+
+      NAUTILUS_DEEP_DEBUG("leave add mapping ref\n");
     }
 
     //--------------------------------------------------------------------------
@@ -1248,9 +1261,12 @@ namespace LegionRuntime {
                                                const Predicate &p)
     //--------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("in specop:init spec (pred=%u)\n", p.const_value);
       initialize_operation(ctx, track, child_event, regions);
+      NAUTILUS_DEEP_DEBUG("checking predicate\n");
       if (p == Predicate::TRUE_PRED)
       {
+          NAUTILUS_DEEP_DEBUG("true pred\n");
         speculation_state = RESOLVE_TRUE_STATE;
         predicate = NULL;
       }
@@ -1261,10 +1277,12 @@ namespace LegionRuntime {
       }
       else
       {
+          NAUTILUS_DEEP_DEBUG("in else\n");
         speculation_state = PENDING_MAP_STATE;
         predicate = p.impl;
         predicate->add_predicate_reference();
       }
+      NAUTILUS_DEEP_DEBUG("leaving init_spec\n");
     }
 
     //--------------------------------------------------------------------------

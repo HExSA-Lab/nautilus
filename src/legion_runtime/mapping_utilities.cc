@@ -627,23 +627,29 @@ namespace LegionRuntime {
                                                         const Task *task) const
       //------------------------------------------------------------------------
       {
+          NAUTILUS_DEEP_DEBUG("finding best processor kind\n");
         bool best_set = false;
         float best_time = 0.f;
         Processor::Kind best_kind;
         TaskMap::const_iterator finder = task_profiles.find(task->task_id);
         assert(finder != task_profiles.end());
+        NAUTILUS_DEEP_DEBUG("looping through finder\n");
         for (VariantMap::const_iterator it = finder->second.begin();
               it != finder->second.end(); it++)
         {
+            NAUTILUS_DEEP_DEBUG("for loop it (%p)\n", it);
           if (!best_set)
           {
+              NAUTILUS_DEEP_DEBUG("best not set\n");
             best_time = float(it->second.total_time)/
                         float(it->second.execution_times.size());
+              NAUTILUS_DEEP_DEBUG("setting it: %f\n", best_time);
             best_kind = it->first;
             best_set = true;
           }
           else
           {
+              NAUTILUS_DEEP_DEBUG("best set is set\n");
             float time = float(it->second.total_time)/
                          float(it->second.execution_times.size());
             if (time < best_time)
@@ -654,6 +660,7 @@ namespace LegionRuntime {
           }
         }
         assert(best_set);
+        NAUTILUS_DEEP_DEBUG("returning best proc kind: %u\n", best_kind);
         return best_kind;
       }
 

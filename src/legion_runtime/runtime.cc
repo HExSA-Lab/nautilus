@@ -30,6 +30,9 @@
 #include <execinfo.h>
 #endif
 
+// KCH: added
+#include "naut_debug.h"
+
 namespace LegionRuntime {
 
 #if defined(PRIVILEGE_CHECKS) || defined(BOUNDS_CHECKS)
@@ -392,6 +395,7 @@ namespace LegionRuntime {
         result_size(0), empty(true), sampled(false)
     //--------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("In future constructor\n");
       if (register_future)
         runtime->register_future(did, this);
       if (task != NULL)
@@ -1494,17 +1498,20 @@ namespace LegionRuntime {
     //--------------------------------------------------------------------------
     {
       AutoLock g_lock(grant_lock);
+      NAUTILUS_DEEP_DEBUG("acquiring grant\n");
       if (!acquired)
       {
         grant_event = Event::NO_EVENT;
         for (std::vector<ReservationRequest>::const_iterator it = 
               requests.begin(); it != requests.end(); it++)
         {
+            NAUTILUS_DEEP_DEBUG("acquiring grant event\n");
           grant_event = it->reservation.acquire(it->mode, 
                                                 it->exclusive, grant_event);
         }
         acquired = true;
       }
+      NAUTILUS_DEEP_DEBUG("Grant acquired\n");
       return grant_event;
     }
 
@@ -1526,6 +1533,7 @@ namespace LegionRuntime {
     //--------------------------------------------------------------------------
     {
       Event pack_event = acquire_grant();
+      NAUTILUS_DEEP_DEBUG("acquired grant, about to serialize\n");
       rez.serialize(pack_event);
     }
 
@@ -1820,6 +1828,7 @@ namespace LegionRuntime {
     void ProcessorManager::invoke_mapper_set_task_options(TaskOp *task)
     //--------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("inside invok_mapper\n");
 #ifdef DEBUG_HIGH_LEVEL
       assert(task->map_id < mapper_objects.size());
       assert(mapper_objects[task->map_id] != NULL);
@@ -1839,6 +1848,8 @@ namespace LegionRuntime {
       }
       if (!messages.empty())
         send_mapper_messages(task->map_id, messages);
+
+      NAUTILUS_DEEP_DEBUG("leaving invoke_mapper_set\n");
     }
 
     //--------------------------------------------------------------------------
@@ -2730,6 +2741,7 @@ namespace LegionRuntime {
           std::list<TaskOp*> &rqueue = ready_queues[map_id];
           AutoLock q_lock(queue_lock);
           unsigned gen_idx = 0;
+          NAUTILUS_DEEP_DEBUG("iterating over TaskOps\n");
           for (std::list<TaskOp*>::iterator vis_it = visible_tasks.begin(); 
                 vis_it != visible_tasks.end(); gen_idx++)
           {
@@ -2780,6 +2792,7 @@ namespace LegionRuntime {
           if (!rqueue.empty())
             mappers_with_work.push_back(map_id);
         }
+        NAUTILUS_DEEP_DEBUG("Issuing Mapping analysis calls\n");
         // Now that we've removed them from the queue, issue the
         // mapping analysis calls
         TriggerTaskArgs args;
@@ -2824,6 +2837,7 @@ namespace LegionRuntime {
           ContextID ctx_id = (*vis_it)->get_parent()->get_context_id();
           ContextState &state = context_states[ctx_id];
           AutoLock q_lock(queue_lock);
+          NAUTILUS_DEEP_DEBUG("accessing ready queues\n");
           ready_queues[map_id].push_front(*vis_it);
           if (state.active && (state.owned_tasks == 0))
             increment_active_contexts();
@@ -6403,8 +6417,11 @@ namespace LegionRuntime {
     //--------------------------------------------------------------------------
     { 
       // Quick out for predicate false
+      NAUTILUS_DEEP_DEBUG("execute task predicate is %u\n", launcher.predicate.const_value);
+      //if (0)
       if (launcher.predicate == Predicate::FALSE_PRED)
       {
+          NAUTILUS_DEEP_DEBUG("found false pred...wtf?\n");
         if (launcher.predicate_false_future.impl != NULL)
         {
 #ifdef INORDER_EXECUTION
@@ -6427,14 +6444,24 @@ namespace LegionRuntime {
             get_variant_collection(launcher.task_id);
           if (variants->return_size > 0)
           {
-            log_run(LEVEL_ERROR,"Predicated task launch for task %s "
+            //log_run(LEVEL_ERROR,"Predicated task launch for task %s "
+                                //"in parent task %s (UID %lld) has non-void "
+                                //"return type but no default value for its "
+                                //"future if the task predicate evaluates to "
+                                //"false.  Please set either the "
+                                //"'predicate_false_result' or "
+                                //"'predicate_false_future' fields of the "
+                                //"TaskLauncher struct.",
+                                //variants->name, ctx->variants->name,
+                                //ctx->get_unique_task_id());
+            NAUTILUS_DEEP_DEBUG("Predicated task launch for task %s "
                                 "in parent task %s (UID %lld) has non-void "
                                 "return type but no default value for its "
                                 "future if the task predicate evaluates to "
                                 "false.  Please set either the "
                                 "'predicate_false_result' or "
                                 "'predicate_false_future' fields of the "
-                                "TaskLauncher struct.",
+                                "TaskLauncher struct.\n",
                                 variants->name, ctx->variants->name,
                                 ctx->get_unique_task_id());
 #ifdef DEBUG_HIGH_LEVEL
@@ -6445,12 +6472,15 @@ namespace LegionRuntime {
         }
         // Now we can fix the future result
         result->complete_future();
+        NAUTILUS_DEEP_DEBUG("return Future(result)\n");
         return Future(result);
       }
       IndividualTask *task = get_available_individual_task();
+      NAUTILUS_DEEP_DEBUG("KCH: checking for leaf ctx\n");
 #ifdef DEBUG_HIGH_LEVEL
       if (ctx->is_leaf())
       {
+          NAUTILUS_DEEP_DEBUG("KCH: is leaf\n");
         log_task(LEVEL_ERROR,"Illegal execute task call performed in leaf "
                              "task %s (ID %lld)",
                              ctx->variants->name, ctx->get_unique_task_id());
@@ -6458,15 +6488,22 @@ namespace LegionRuntime {
         exit(ERROR_LEAF_TASK_VIOLATION);
       }
       Future result = task->initialize_task(ctx, launcher, check_privileges);
-      log_task(LEVEL_DEBUG,"Registering new single task with unique id %lld "
+      NAUTILUS_DEEP_DEBUG("Registering new single task with unique id %lld "
                       "and task %s (ID %lld) with high level runtime in "
-                      "addresss space %d",
+                      "addresss space %d\n",
                       task->get_unique_task_id(), task->variants->name, 
                       task->get_unique_task_id(), address_space);
+      //log_task(LEVEL_DEBUG,"Registering new single task with unique id %lld "
+                      //"and task %s (ID %lld) with high level runtime in "
+                      //"addresss space %d",
+                      //task->get_unique_task_id(), task->variants->name, 
+                      //task->get_unique_task_id(), address_space);
 #else
+
       Future result = task->initialize_task(ctx, launcher,
                                             false/*check privileges*/);
 #endif
+      NAUTILUS_DEEP_DEBUG("KCH: execute task launch\n");
       execute_task_launch(ctx, task);
 #ifdef INORDER_EXECUTION
       if (program_order_execution)
@@ -9373,6 +9410,7 @@ namespace LegionRuntime {
 #ifdef DEBUG_HIGH_LEVEL
       assert(proc_managers.find(proc) != proc_managers.end());
 #endif
+      NAUTILUS_DEEP_DEBUG("looking up in proc_managers\n");
       ProcessorManager *manager = proc_managers[proc];
       // First ask the mapper to set the options for the task
       manager->invoke_mapper_set_task_options(task);
@@ -9380,6 +9418,7 @@ namespace LegionRuntime {
       // a normal asynchronous task launch
       if (task->inline_task)
       {
+          NAUTILUS_DEEP_DEBUG("Inline Task\n");
         ctx->inline_child_task(task);
         // After we're done we can deactivate it since we
         // know that it will never be used again
@@ -9387,6 +9426,7 @@ namespace LegionRuntime {
       }
       else
       {
+          NAUTILUS_DEEP_DEBUG("Normal task launch\n");
         // Normal task launch, iterate over the context task's
         // regions and see if we need to unmap any of them
         std::vector<PhysicalRegion> unmapped_regions;
@@ -9447,6 +9487,7 @@ namespace LegionRuntime {
 #endif
         }
       }
+      NAUTILUS_DEEP_DEBUG("execute task launch complete\n");
     }
 
     //--------------------------------------------------------------------------
@@ -9945,11 +9986,13 @@ namespace LegionRuntime {
     void Runtime::register_future(DistributedID did, Future::Impl *impl)
     //--------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("locking autolock\n");
       AutoLock f_lock(future_lock);
 #ifdef DEBUG_HIGH_LEVEL
       assert(local_futures.find(did) == local_futures.end());
 #endif
       local_futures[did] = impl;
+      NAUTILUS_DEEP_DEBUG("leaving register_future\n");
     }
 
     //--------------------------------------------------------------------------
@@ -11462,10 +11505,12 @@ namespace LegionRuntime {
       // their values as they might be changed by GASNet or MPI or whatever.
       // Note that the logger isn't initialized until after this call returns 
       // which means any logging that occurs before this has undefined behavior.
+      NAUTILUS_DEEP_DEBUG("constructing machine\n");
       Machine *m = new Machine(&argc, &argv, 
                       Runtime::get_task_table(true/*add runtime tasks*/), 
 		      Runtime::get_reduction_table(), false/*cps style*/);
       // Parse any inputs for the high level runtime
+      NAUTILUS_DEEP_DEBUG("machine constructed\n");
       {
 #define INT_ARG(argname, varname) do { \
         if(!strcmp((argv)[i], argname)) {		\
@@ -11578,6 +11623,7 @@ namespace LegionRuntime {
 #ifdef HANG_TRACE
       signal(SIGTERM, catch_hang); 
 #endif
+      NAUTILUS_DEEP_DEBUG("kicking off the low-level machine\n");
       // Kick off the low-level machine
       m->run(0, Machine::ONE_TASK_ONLY, 0, 0, background);
       // We should only make it here if the machine thread is backgrounded
@@ -12129,7 +12175,8 @@ namespace LegionRuntime {
       {
         if (table.find(idx) != table.end())
         {
-          log_run(LEVEL_ERROR,"Task ID %d is reserved for high-level runtime "
+          //log_run(LEVEL_ERROR,"Task ID %d is reserved for high-level runtime "
+          NAUTILUS_DEEP_DEBUG("Task ID %d is reserved for high-level runtime "
                               "tasks",idx);
 #ifdef DEBUG_HIGH_LEVEL
           assert(false);
@@ -12475,6 +12522,7 @@ namespace LegionRuntime {
                                   const void *args, size_t arglen, Processor p)
     //--------------------------------------------------------------------------
     {
+        NAUTILUS_DEEP_DEBUG("Shutting down runtime\n");
       if (separate_runtime_instances)
         delete get_runtime(p);
       else

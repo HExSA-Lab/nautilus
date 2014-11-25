@@ -22,6 +22,7 @@
 #include "atomics.h" // for __sync_fetch_and_add
 #endif
 
+extern "C" void __do_backtrace(void*, unsigned);
 using namespace LegionRuntime::Accessor;
 
 #include <cstring>
@@ -46,6 +47,7 @@ using namespace LegionRuntime::Accessor;
 
 #define __LEGION__
 
+
 /* KCH: NAUTILUS */
 #include <thread.h>
 #include <condvar.h>
@@ -53,6 +55,8 @@ using namespace LegionRuntime::Accessor;
 #include <spinlock.h>
 #include <barrier.h>
 #include <irq.h>
+
+#include "naut_debug.h"
 //#include <libccompat.h>
 //#include <atomic.h>
 
@@ -63,7 +67,8 @@ using namespace LegionRuntime::Accessor;
 #define BASE_INSTANCES	  64
 
 // The number of threads for this version
-#define NUM_PROCS	4
+//#define NUM_PROCS	4
+#define NUM_PROCS	1
 #define NUM_UTIL_PROCS  1
 #define NUM_DMA_THREADS 1
 // Maximum memory in global
@@ -71,6 +76,7 @@ using namespace LegionRuntime::Accessor;
 #define LOCAL_MEM       16384  // (KB)
 // Default Pthreads stack size
 #define STACK_SIZE      2      // (MB) 
+
 
 #ifdef DEBUG_LOW_LEVEL
 #define PTHREAD_SAFE_CALL(cmd)			\
@@ -91,39 +97,44 @@ using namespace LegionRuntime::Accessor;
         //
         //
 // KCH
+#ifdef NAUT_CONFIG_LEGION_RT_DEBUG
 #undef DEBUG_PRINT
+#define DEBUG_PRINT 1
+#endif
+
 #ifdef DEBUG_PRINT
+
 #define DPRINT1(str,arg)						\
 	{								\
 		int flags = spin_lock_irq_save(&debug_mutex); \
-		fprintf(stderr,str,arg);				\
-		fflush(stderr);						\
+		printk(str,arg);				\
 		spin_unlock_irq_restore(&debug_mutex, flags); \
 	}
+		//fflush(stderr);						\
 
 #define DPRINT2(str,arg1,arg2)						\
 	{								\
 		int flags = spin_lock_irq_save(&debug_mutex); \
-		fprintf(stderr,str,arg1,arg2);				\
-		fflush(stderr);						\
+		printk(str,arg1,arg2);				\
 		spin_unlock_irq_restore(&debug_mutex, flags); \
 	}
+		//fflush(stderr);						\
 
 #define DPRINT3(str,arg1,arg2,arg3)					\
 	{								\
 		int flags = spin_lock_irq_save(&debug_mutex); \
-		fprintf(stderr,str,arg1,arg2,arg3);			\
-		fflush(stderr);						\
+		printk(str,arg1,arg2,arg3);			\
 		spin_unlock_irq_restore(&debug_mutex, flags); \
 	}
+		//fflush(stderr);						\
 
 #define DPRINT4(str,arg1,arg2,arg3,arg4)				\
 	{								\
 		int flags = spin_lock_irq_save(&debug_mutex); \
-		fprintf(stderr,str,arg1,arg2,arg3,arg4);		\
-		fflush(stderr);						\
+		printk(str,arg1,arg2,arg3,arg4);		\
 		spin_unlock_irq_restore(&debug_mutex, flags); \
 	}
+		//fflush(stderr);						\
 
 // Declration for the debug mutex
 //pthread_mutex_t debug_mutex;
@@ -520,6 +531,7 @@ namespace LegionRuntime {
       spinlock_init(mutex);
 
 	  //PTHREAD_SAFE_CALL(pthread_cond_init(wait_cond,NULL));
+      //printk("eventimpl condvar init\n");
       nk_condvar_init(wait_cond);
 
 	  if (in_use)
@@ -1000,6 +1012,7 @@ namespace LegionRuntime {
 
     bool EventImpl::trigger(unsigned count, TriggerHandle handle)
     {
+        NAUTILUS_DEEP_DEBUG("Triggering event\n");
 	// Update the generation
 	//PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
     int flags = spin_lock_irq_save(mutex);
@@ -1011,6 +1024,7 @@ namespace LegionRuntime {
         bool finished = false;
 	if (sources == 0)
 	{
+        NAUTILUS_DEEP_DEBUG("Sources == 0\n");
 #ifdef DEBUG_PRINT
 		//DPRINT2("Event %u triggered for generation %u\n",index,generation);
 #endif
@@ -1025,6 +1039,7 @@ namespace LegionRuntime {
                 for (std::list<TriggerableInfo>::iterator it = triggerables.begin();
                       it != triggerables.end(); /*nothing*/)
                 {
+                    NAUTILUS_DEEP_DEBUG("Trigger loop looking at %p\n", (*it));
                   if (it->needed == generation)
                   {
                     to_trigger.push_back(*it);
@@ -1051,24 +1066,32 @@ namespace LegionRuntime {
 		// Can't be holding the lock when triggering other triggerables
 		//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
         spin_unlock_irq_restore(mutex, flags);
+        NAUTILUS_DEEP_DEBUG("Triggering other events\n");
 		// Trigger any dependent events for this generation
                 for (std::vector<TriggerableInfo>::const_iterator it = 
                       to_trigger.begin(); it != to_trigger.end(); it++)
                 {
+                    NAUTILUS_DEEP_DEBUG("other trigger\n");
                   bool nuke = it->target->trigger(1, it->handle);
-                  if (nuke)
-                    delete it->target;
+                  if (nuke) {
+                      NAUTILUS_DEEP_DEBUG("nuking it\n");
+                      delete it->target;
+                  }
                 }
+        NAUTILUS_DEEP_DEBUG("Other events triggered\n");
         }
         else
         {
+            NAUTILUS_DEEP_DEBUG("Sources !=0\n");
           // Not done so release the lock
           //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));	
           spin_unlock_irq_restore(mutex, flags);
         }
         // tell the runtime that we're free
-        if (finished)
+        if (finished) {
+            NAUTILUS_DEEP_DEBUG("freeing event\n");
           Runtime::get_runtime()->free_event(this);
+        }
         // Don't delete
         return false;
     }
@@ -1220,13 +1243,16 @@ namespace LegionRuntime {
 
     void UserEvent::trigger(Event wait_on /*= NO_EVENT*/) const
     {
+        NAUTILUS_DEEP_DEBUG("User event trigger1\n");
       DetailedTimer::ScopedPush sp(TIME_LOW_LEVEL);
       if (!id) return;
       EventImpl *impl = Runtime::get_runtime()->get_event_impl(*this);
       if (wait_on.exists())
         impl->defer_trigger(wait_on);
-      else
+      else {
+          NAUTILUS_DEEP_DEBUG("User event trigger\n");
         impl->trigger();
+      }
     }
 
     ////////////////////////////////////////////////////////
@@ -1284,8 +1310,11 @@ namespace LegionRuntime {
         for (unsigned idx = 0; idx < count; idx++)
           impl->defer_trigger(wait_on);
       }
-      else
+      else {
+
+          NAUTILUS_DEEP_DEBUG("Impl trigger\n");
         impl->trigger(count);
+      }
     }
 
     ////////////////////////////////////////////////////////
@@ -1392,6 +1421,7 @@ namespace LegionRuntime {
     {
         DetailedTimer::ScopedPush sp(TIME_LOW_LEVEL);
 	ReservationImpl *l = Runtime::get_runtime()->get_reservation_impl(*this);
+    NAUTILUS_DEEP_DEBUG("leaving acquire\n");
 	return l->acquire(mode,exclusive, wait_on);
     }
 
@@ -1487,12 +1517,13 @@ namespace LegionRuntime {
                   mode = m;
                   holders = 1;
 #ifdef DEBUG_PRINT
-                  DPRINT3("Granting reservation %d in mode %d with exclusive %d\n",index,mode,exclusive);
+                  NAUTILUS_DEEP_DEBUG("Granting reservation %d in mode %d with exclusive %d\n",index,mode,exclusive);
 #endif
           }
         }
 	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
     spin_unlock_irq_restore(mutex, flags);
+    NAUTILUS_DEEP_DEBUG("leaving acquire (res=%p)\n", result);
 	return result;
     }
 
@@ -1548,6 +1579,7 @@ namespace LegionRuntime {
         for (std::set<EventImpl*>::const_iterator it = to_trigger.begin();
               it != to_trigger.end(); it++)
         {
+            NAUTILUS_DEEP_DEBUG("Nuke trigger 1\n");
           bool nuke = (*it)->trigger();
           if (nuke)
             delete (*it);
@@ -1587,6 +1619,7 @@ namespace LegionRuntime {
                 {
                   holders++;
                   // Trigger the event saying we have the reservation 
+                  NAUTILUS_DEEP_DEBUG("inserting a trigger\n");
                   to_trigger.insert(Runtime::get_runtime()->get_event_impl(it->event));
                   // Remove the request
                   requests.erase(it);
@@ -1608,26 +1641,31 @@ namespace LegionRuntime {
                 // Remove this request
                 requests.erase(it);
 #ifdef DEBUG_PRINT
-                  DPRINT3("Granting reservation %d in mode %d with exclusive %d\n",index,mode,exclusive);
+                  NAUTILUS_DEEP_DEBUG("Granting reservation %d in mode %d with exclusive %d\n",index,mode,exclusive);
 #endif
               }
+              NAUTILUS_DEEP_DEBUG("breaking from trigger loop\n");
               break;
             }
           }
+          NAUTILUS_DEEP_DEBUG("for loop in trigger() over\n");
 #ifdef DEBUG_LOW_LEVEL
           assert(found);
 #endif
         }
 	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
     spin_unlock_irq_restore(mutex, flags);
+    NAUTILUS_DEEP_DEBUG("iterating triggers\n");
         // Don't perform any triggers while holding the reservation's mutex 
         for (std::set<EventImpl*>::const_iterator it = to_trigger.begin();
               it != to_trigger.end(); it++)
         {
+            NAUTILUS_DEEP_DEBUG("nuke trigger\n");
           bool nuke = (*it)->trigger();
           if (nuke)
             delete (*it);
         }
+        NAUTILUS_DEEP_DEBUG("returning false from trigger()\n");
         return false;
     }
 
@@ -1867,6 +1905,7 @@ namespace LegionRuntime {
         mutex = (spinlock_t*)malloc(sizeof(spinlock_t));
         wait_cond = (nk_condvar_t*)malloc(sizeof(nk_condvar_t));
         spinlock_init(mutex);
+        printk("processor init state condvar init\n");
         nk_condvar_init(wait_cond);
 
         /* KCH TODO: something with the attr above */
@@ -1905,7 +1944,7 @@ namespace LegionRuntime {
 		if (!wait_impl->register_dependent(this, task->wait.gen, task->wait.id))
 		{
 #ifdef DEBUG_PRINT
-			DPRINT2("Registering task %d on processor %d ready queue\n",func_id,proc.id);
+			DPRINT2("Registering task %d on processor %d ready queue\n",task->func_id,proc.id);
 #endif
 			// Failed to register which means it is ready to execute
                         add_to_ready_queue(task);
@@ -1917,7 +1956,7 @@ namespace LegionRuntime {
 		else
 		{
 #ifdef DEBUG_PRINT
-			DPRINT2("Registering task %d on processor %d waiting queue\n",func_id,proc.id);
+			DPRINT2("Registering task %d on processor %d waiting queue\n",task->func_id,proc.id);
 #endif
 			// Successfully registered, put the task on the waiting queue
 			waiting_queue.push_back(task);
@@ -1926,7 +1965,7 @@ namespace LegionRuntime {
 	else
 	{
 #ifdef DEBUG_PRINT
-		DPRINT2("Putting task %d on processor %d ready queue\n",func_id,proc.id);
+		DPRINT2("Putting task %d on processor %d ready queue\n",task->func_id,proc.id);
 #endif
 		// Put it on the ready queue
                 add_to_ready_queue(task);
@@ -1942,6 +1981,7 @@ namespace LegionRuntime {
     {
       // Better already hold the lock when calling this method
       // Common case
+      // KCH:
       if (ready_queue.empty() || (ready_queue.back()->priority >= task->priority))
         ready_queue.push_back(task);
       else
@@ -2074,7 +2114,7 @@ namespace LegionRuntime {
 
     void ProcessorImpl::run(void)
     {
-        printk("This processor %d\n", proc.id);
+        printk("This processor starting ProcessorImpl::run (%d)\n", proc.id);
         //fprintf(stdout,"This is processor %d\n",proc.id);
         //fflush(stdout);
         // Check to see if there is an initialization task
@@ -2092,12 +2132,10 @@ namespace LegionRuntime {
         {
           // Free the barrier
           //PTHREAD_SAFE_CALL(pthread_barrier_destroy(init_bar));
-          printk("proc %u destroying barrier\n", proc.id);
           nk_barrier_destroy(init_bar);
 
           free(init_bar);
         }
-        printk("left second barrier (%u)\n", proc.id);
 #if DEBUG_LOW_LEVEL
         else
         {
@@ -2119,9 +2157,12 @@ namespace LegionRuntime {
 		//PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
     int flags = spin_lock_irq_save(mutex);
 		// This task will perform the unlock
+        NAUTILUS_DEEP_DEBUG("calling execute task from proc run\n");
 		bool quit = execute_task(true, flags);
+        NAUTILUS_DEEP_DEBUG("task executed,looping\n");
 		if(quit) break;
 	}
+    NAUTILUS_DEEP_DEBUG("Processor quitting\n");
     }
 
     void ProcessorImpl::preempt(EventImpl *event, EventImpl::EventGeneration needed)
@@ -2142,7 +2183,9 @@ namespace LegionRuntime {
 	while (!(event->has_triggered(needed)))
 	{
                 // Don't permit shutdowns since there is still a task waiting
+                NAUTILUS_DEEP_DEBUG("starting execute task\n");
 		execute_task(false, flags);
+        NAUTILUS_DEEP_DEBUG("coming out of execute task\n");
                 // Relock the task for our next attempt
 		//PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
     int flags = spin_lock_irq_save(mutex);
@@ -2154,9 +2197,10 @@ namespace LegionRuntime {
     bool ProcessorImpl::perform_scheduling(bool need_lock)
     {
         int flags;
-      if (need_lock)
+      if (need_lock) {
         //PTHREAD_SAFE_CALL(pthread_mutex_lock(mutex));
           flags = spin_lock_irq_save(mutex);
+      }
       // See if we should invoke the scheduler
       if (has_scheduler && idle_task_enabled && !scheduler_invoked
           && !shutdown && ready_queue.empty())
@@ -2196,6 +2240,7 @@ namespace LegionRuntime {
         // running the idle task for each of our constituents.
         if (ready_queue.empty() && perform_scheduling(false/*need lock*/))
         {
+            NAUTILUS_DEEP_DEBUG("ready queue empty\n");
           // If we return true then we've release the lock so we
           // have to go back around the loop when we're done
           // Now we need to return since we no longer hold the lock
@@ -2205,6 +2250,7 @@ namespace LegionRuntime {
         {
           if (num_idle_tasks == 0)
           {
+            NAUTILUS_DEEP_DEBUG("No idle tasks, waiting on condvar\n");
             //PTHREAD_SAFE_CALL(pthread_cond_wait(wait_cond,mutex));
             nk_condvar_wait(wait_cond, mutex, irqs_enabled());
           }
@@ -2212,6 +2258,7 @@ namespace LegionRuntime {
           spin_unlock_irq_restore(mutex, flags);
           // Note we don't need the lock to read these
           // since they don't change after the constructor is called
+          NAUTILUS_DEEP_DEBUG("Iterating over constituents\n");
           for (std::vector<ProcessorImpl*>::const_iterator it = constituents.begin();
                 it != constituents.end(); it++)
           {
@@ -2226,6 +2273,7 @@ namespace LegionRuntime {
         }
 	if (ready_queue.empty())
 	{	
+        NAUTILUS_DEEP_DEBUG("ready queue empty 2\n");
 		if (shutdown && permit_shutdown && waiting_queue.empty())
 		{
                         // Check to see if we have to wait for our utility processor to finish
@@ -2252,6 +2300,7 @@ namespace LegionRuntime {
                         if (util_users.empty() || 
                             ((util_users.size() == 1) && (util_users.find(proc) != util_users.end())))
                         {
+                            NAUTILUS_DEEP_DEBUG("shutdown trigger\n");
                           shutdown_trigger->trigger();
                         }
                         else
@@ -2290,6 +2339,7 @@ namespace LegionRuntime {
 	}
         else if (scheduler_invoked)
         {
+            NAUTILUS_DEEP_DEBUG("scheduler invoked\n");
                 // Don't allow other tasks to be run while running the idle task
                 //PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
                 spin_unlock_irq_restore(mutex, flags);
@@ -2298,18 +2348,27 @@ namespace LegionRuntime {
 	else
 	{
 		// Pop a task off the queue and run it
+        NAUTILUS_DEEP_DEBUG("TaskDesc list length: %u\n", ready_queue.size());
+        for (std::list<TaskDesc*>::const_iterator it=ready_queue.begin(); it != ready_queue.end(); ++it) {
+            NAUTILUS_DEEP_DEBUG("TaskDesc func id = %u\n", (*it)->func_id);
+        }
 		TaskDesc *task = ready_queue.front();
+        NAUTILUS_DEEP_DEBUG("executing default block (got taskdesc %p, arglen=%u)\n", task, task->arglen);
 		ready_queue.pop_front();
+        NAUTILUS_DEEP_DEBUG("arglen after q pop: %u\n", task->arglen);
 		//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));	
         spin_unlock_irq_restore(mutex, flags);
                 // See if we need to run it or if has already been done
+                NAUTILUS_DEEP_DEBUG("atomic add start_arrivals\n");
                 int start_count = __sync_fetch_and_add(&(task->start_arrivals),1);
                 // If we are the first one to do arrival at this task do it
                 if (start_count == 0)
                 {
+                    NAUTILUS_DEEP_DEBUG("start count == 0, checking for shutdown\n");
                   // Check for the shutdown function
                   if (task->func_id == 0)
                   {
+                      NAUTILUS_DEEP_DEBUG("task func id == 0\n");
                           shutdown = true;
                           shutdown_trigger = task->complete;
                           // Check to see if we have a utility processor, if so mark that we're done
@@ -2329,20 +2388,38 @@ namespace LegionRuntime {
                   }
                   else
                   {
+                      NAUTILUS_DEEP_DEBUG("func id != 0 (%u)\n", task->func_id);
 #ifdef DEBUG_LOW_LEVEL
                           assert(task_table.find(task->func_id) != task_table.end());
 #endif
                           Processor::TaskFuncPtr func = task_table[task->func_id];	
+
+                          for (std::map<Processor::TaskFuncID, Processor::TaskFuncPtr>::iterator it = task_table.begin(); it != task_table.end(); ++it) {
+                               NAUTILUS_DEEP_DEBUG("task = (%u, %p)\n", (*it).first, (*it).second);
+                          }
+
+                          __do_backtrace(__builtin_frame_address(0), 0);
+
+
+                          NAUTILUS_DEEP_DEBUG("invoking func :%p\n", func);
                           func(task->args, task->arglen, proc);
                           // Trigger the event indicating that the task has been run
+                          NAUTILUS_DEEP_DEBUG("triggering in execute task: %p\n", task);
+                          if (!task || !task->complete) {
+                              NAUTILUS_DEEP_DEBUG("null pointer task: %p\n", task);
+                          }
                           task->complete->trigger();
                   }
                 }
+                NAUTILUS_DEEP_DEBUG("out of start_count block\n");
                 // Now see if we need to delete it
                 int expected_finish = task->expected;
                 int finish_count = __sync_add_and_fetch(&(task->finish_arrivals),1);
-                if (finish_count == expected_finish)
+                if (finish_count == expected_finish) {
+                    NAUTILUS_DEEP_DEBUG("deleting task\n");
                     delete task;
+                    NAUTILUS_DEEP_DEBUG("task deleted\n");
+                }
 	}
 	return false;
     }
@@ -2369,7 +2446,9 @@ namespace LegionRuntime {
             it++;
         }
 	//PTHREAD_SAFE_CALL(pthread_cond_signal(wait_cond));
+    NAUTILUS_DEEP_DEBUG("about to signal condvar\n");
     nk_condvar_signal(wait_cond);
+    NAUTILUS_DEEP_DEBUG("signaleld condvar\n");
 	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
     spin_unlock_irq_restore(mutex, flags);
         return false;
@@ -2392,9 +2471,11 @@ namespace LegionRuntime {
         nk_tls_set(thread_timer_key, NULL);
 	// Will never return from this call
 	proc->run();
-        if (!proc->return_on_finish)
+    printk("KCH: got back from run!\n");
+        if (!proc->return_on_finish) {
           //pthread_exit(NULL);	
           nk_thread_exit(NULL);
+        }
         return NULL;
     }
 
@@ -3505,6 +3586,7 @@ namespace LegionRuntime {
 	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
     spin_unlock_irq_restore(mutex, flags);
         // Trigger the event saying we're done while not holding the lock!
+        NAUTILUS_DEEP_DEBUG("complete trigger\n");
         complete->trigger();
         return false;
     }
@@ -4784,6 +4866,7 @@ namespace LegionRuntime {
                                       done_event->get_event(), COPY_END);
 #endif
       // Trigger the event indicating that we are done
+      NAUTILUS_DEEP_DEBUG("Done event trigger\n");
       done_event->trigger();
     }
 
@@ -4828,6 +4911,7 @@ namespace LegionRuntime {
       //PTHREAD_SAFE_CALL(pthread_mutex_init(&dma_lock,NULL));
       spinlock_init(&dma_lock);
       //PTHREAD_SAFE_CALL(pthread_cond_init(&dma_cond,NULL));
+      printk("dmaqueue condvar init\n");
       nk_condvar_init(&dma_cond);
       dma_threads.resize(num_dma_threads);
     }
@@ -4842,12 +4926,11 @@ namespace LegionRuntime {
         PTHREAD_SAFE_CALL(pthread_create(&dma_threads[idx], &attr,
                                          DMAQueue::start_dma_thread, (void*)this));
                                          */
-          printk("starting DMA thread %u\n", idx);
           nk_thread_start((void (*)(void*,void**))DMAQueue::start_dma_thread, 
                                           (void*)this, 
                                           NULL,
                                           0,
-                                          TSTACK_DEFAULT,
+                                          TSTACK_2MB,
                                           &dma_threads[idx],
                                           CPU_ANY);
       }
@@ -5312,7 +5395,7 @@ namespace LegionRuntime {
             (void*)margs, 
             NULL,
             0,
-            TSTACK_DEFAULT,
+            TSTACK_2MB,
             &threadp,
             CPU_ANY);
 
@@ -5332,41 +5415,40 @@ namespace LegionRuntime {
       // Start the threads for each of the processors (including the utility processors)
       //std::vector<pthread_t> other_threads(Runtime::runtime->processors.size());
       std::vector<nk_thread_id_t> other_threads(Runtime::runtime->processors.size());
+      printk("legion runtime starting %u processors\n", Runtime::runtime->processors.size());
       for (unsigned id=2; id<Runtime::runtime->processors.size(); id++)
       {
-          printk("legion runtime starting %u processors\n", Runtime::runtime->processors.size());
               ProcessorImpl *impl = Runtime::runtime->processors[id];
               //PTHREAD_SAFE_CALL(pthread_create(&(other_threads[id]), &(impl->attr), ProcessorImpl::start, (void*)impl));
               nk_thread_start((void (*)(void*, void**))ProcessorImpl::start,
                       (void*)impl,
                       NULL,
                       0,
-                      TSTACK_DEFAULT,
+                      TSTACK_2MB,
                       &other_threads[id],
                       CPU_ANY);
       }
+      /* NOTE: check */
       Runtime::dma_queue->start();
 
       // Now run the scheduler
       ProcessorImpl *impl = Runtime::runtime->processors[1];
       ProcessorImpl::start((void*)impl);
       // When we return join on all the other threads and then exit
-      printk("about to join all (%u) threads\n", other_threads.size()-2);
       for (unsigned id=2; id<other_threads.size(); id++)
       {
           void *result;
           //PTHREAD_SAFE_CALL(pthread_join(other_threads[id],&result));
           nk_join(other_threads[id], &result);
       }
-      printk("joined %u threads\n", other_threads.size()-2);
       Runtime::dma_queue->shutdown();
 #ifdef ORDERED_LOGGING 
       Logger::finalize();
 #endif
       // Once we're done with this, then we can exit with a successful error code
-      //exit(0);
+      exit(0);
       //abort();
-      return;
+      //return;
     }
 
     void Machine::shutdown(bool local_request /*= true*/)
@@ -5499,6 +5581,7 @@ namespace LegionRuntime {
     {
 	for (unsigned i=0; i<BASE_EVENTS; i++)
         {
+            //printk("allocating new event (%u/%u)...\n", i, BASE_EVENTS);
             EventImpl *event = new EventImpl(i);
             events.push_back(event);
             if (i != 0) // Don't hand out the NO_EVENT event
@@ -5574,7 +5657,9 @@ namespace LegionRuntime {
 	assert(i != 0);
 	assert(i < events.size());
 #endif
-        EventImpl *result = events[i];
+        printk("getting event at impl %d\n", i);
+        //EventImpl *result = events[i];
+        EventImpl *result = events.at(i);
         //PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&event_lock));
         nk_rwlock_rd_unlock(&event_lock);
 	return result;
@@ -5585,7 +5670,9 @@ namespace LegionRuntime {
       // Put this event back on the list of free events
       //PTHREAD_SAFE_CALL(pthread_mutex_lock(&free_event_lock));
       int flags = spin_lock_irq_save(&free_event_lock);
+      NAUTILUS_DEEP_DEBUG("Inside free event, about to push back\n");
       free_events.push_back(e);
+      NAUTILUS_DEEP_DEBUG("Inside free event, pushed back\n");
       //PTHREAD_SAFE_CALL(pthread_mutex_unlock(&free_event_lock));
       spin_unlock_irq_restore(&free_event_lock, flags);
     }
@@ -5608,7 +5695,9 @@ namespace LegionRuntime {
 	assert(r.id != 0);
 	assert(r.id < reservations.size());
 #endif
-        ReservationImpl *result = reservations[r.id];
+        // KCH: edit
+        //ReservationImpl *result = reservations[r.id];
+        ReservationImpl *result = reservations.at(r.id);
         //PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&reservation_lock));
         nk_rwlock_rd_unlock(&reservation_lock);
 	return result;

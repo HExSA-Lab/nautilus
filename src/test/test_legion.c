@@ -7,6 +7,15 @@ void run_legion_tests(void);
 //extern void go_circuit_c(int argc, char **argv);
 extern void go_hello_c(int argc, char ** argv);
 extern void go_taf_c(int argc, char ** argv);
+extern void go_index_task_c(int argc, char ** argv);
+extern void go_global_vars_c(int argc, char ** argv);
+extern void go_log_regs_c(int argc, char ** argv);
+extern void go_phys_regs_c(int argc, char ** argv);
+extern void go_privileges_c(int argc, char **argv);
+extern void go_partit_c(int argc, char **argv);
+extern void go_multi_c(int argc, char **argv);
+extern void go_custom_c(int argc, char **argv);
+extern void go_circuit_c(int argc, char ** argv);
 
 typedef void (*tfun_t)(int, char**);
 
@@ -14,7 +23,16 @@ typedef void (*tfun_t)(int, char**);
 
 tfun_t tests[NUM_TESTS] = {
     //go_hello_c,
-    go_taf_c,
+    //go_taf_c,
+    //go_index_task_c,
+    //go_global_vars_c,
+    //go_log_regs_c,
+    //go_phys_regs_c,
+    //go_privileges_c,
+    //go_multi_c,
+    //go_custom_c,
+    //go_circuit_c,
+    go_partit_c,
 };
 
 static void 
@@ -44,7 +62,7 @@ run_legion_tests (void)
                 (void*)tests[i],
                 NULL,
                 0,
-                TSTACK_DEFAULT,
+                TSTACK_2MB,
                 &t,
                 CPU_ANY);
 

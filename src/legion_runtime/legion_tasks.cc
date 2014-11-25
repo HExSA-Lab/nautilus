@@ -21,6 +21,9 @@
 #include "legion_profiling.h"
 #include <algorithm>
 
+#include "naut_debug.h"
+
+
 #define PRINT_REG(reg) (reg).index_space.id,(reg).field_space.id, (reg).tree_id
 
 namespace LegionRuntime {
@@ -401,15 +404,18 @@ namespace LegionRuntime {
     //-------------------------------------------------------------------------- 
     {
       all_children_mapped = UserEvent::create_user_event();
+      NAUTILUS_DEEP_DEBUG("base_task: init spec\n");
       initialize_speculation(ctx, track, 
                              all_children_mapped, regions.size(), p);
       // Fill in default values for all of the Task fields
+      NAUTILUS_DEEP_DEBUG("base_task: get_exec_proc\n");
       orig_proc = ctx->get_executing_processor();
       current_proc = orig_proc;
       steal_count = 0;
       depth = parent_ctx->depth+1;
       speculated = false;
       premapped = false;
+      NAUTILUS_DEEP_DEBUG("base_task: get variant\n");
       variants = Runtime::get_variant_collection(tid);
       selected_variant = 0;
       target_proc = orig_proc;
@@ -420,6 +426,7 @@ namespace LegionRuntime {
       task_priority = 0;
       start_time = 0;
       stop_time = 0;
+      NAUTILUS_DEEP_DEBUG("base_task: done\n");
     }
 
     //--------------------------------------------------------------------------
@@ -4519,12 +4526,14 @@ namespace LegionRuntime {
               atomic_locks.begin(); it != atomic_locks.end(); it++)
         {
           Event next = Event::NO_EVENT;
-          if (it->second)
+          NAUTILUS_DEEP_DEBUG("doing some acquisition\n");
+          if (it->second) {
             next = it->first.acquire(0, true/*exclusive*/,
                                          start_condition);
-          else
+          } else {
             next = it->first.acquire(1, false/*exclusive*/,
                                          start_condition);
+          }
 #if defined(LEGION_LOGGING) || defined(LEGION_SPY)
           if (!next.exists())
           {
@@ -5583,6 +5592,7 @@ namespace LegionRuntime {
       grants = launcher.grants;
       update_grants(launcher.grants);
       wait_barriers = launcher.wait_barriers;
+      NAUTILUS_DEEP_DEBUG("update arrival barriers\n");
       update_arrival_barriers(launcher.arrive_barriers);
       arglen = launcher.argument.get_size();
       if (arglen > 0)
@@ -5594,9 +5604,11 @@ namespace LegionRuntime {
       tag = launcher.tag;
       index_point = launcher.point;
       is_index_space = false;
+      NAUTILUS_DEEP_DEBUG("init base task\n");
       initialize_base_task(ctx, track, launcher.predicate, task_id);
       if (launcher.predicate != Predicate::TRUE_PRED)
       {
+          NAUTILUS_DEEP_DEBUG(" true pred...wtf?\n");
         if (launcher.predicate_false_future.impl != NULL)
           predicate_false_future = launcher.predicate_false_future;
         else
@@ -5649,20 +5661,27 @@ namespace LegionRuntime {
           }
         }
       }
+      NAUTILUS_DEEP_DEBUG("check priv\n");
       if (check_privileges)
         perform_privilege_checks();
+      NAUTILUS_DEEP_DEBUG("init physical context\n");
       initialize_physical_contexts();
       remote_contexts = enclosing_physical_contexts;
+      NAUTILUS_DEEP_DEBUG("find outermost\n");
       remote_outermost_context = 
         find_outermost_physical_context()->get_context();
+
 #ifdef DEBUG_HIGH_LEVEL
       assert(remote_outermost_context.exists());
 #endif
+      NAUTILUS_DEEP_DEBUG("init paths\n");
       initialize_paths(); 
       // Get a future from the parent context to use as the result
+      NAUTILUS_DEEP_DEBUG("getting future\n");
       result = Future(legion_new<Future::Impl>(runtime, true/*register*/, 
             runtime->get_available_distributed_id(), runtime->address_space,
             runtime->address_space, this));
+      NAUTILUS_DEEP_DEBUG("check empty field req\n");
       check_empty_field_requirements();
 #ifdef LEGION_LOGGING
       LegionLogging::log_individual_task(parent_ctx->get_executing_processor(),
@@ -5684,6 +5703,7 @@ namespace LegionRuntime {
         log_requirement(unique_op_id, idx, regions[idx]);
       }
 #endif
+      NAUTILUS_DEEP_DEBUG("return res\n");
       return result;
     }
 

@@ -451,6 +451,8 @@ namespace LegionRuntime {
     // Predicate 
     /////////////////////////////////////////////////////////////
 
+    //Predicate Predicate::TRUE_PRED = Predicate(true);
+    //Predicate Predicate::FALSE_PRED = Predicate(false);
     const Predicate Predicate::TRUE_PRED = Predicate(true);
     const Predicate Predicate::FALSE_PRED = Predicate(false);
 
