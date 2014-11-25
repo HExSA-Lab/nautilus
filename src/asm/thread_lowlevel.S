@@ -22,10 +22,10 @@ ENTRY(nk_thread_switch)
     pushq %rax
     movq 8(%rsp), %rax   /* save return address */
     movq %rax, -24(%rsp) /* move ret addr down (past intr state holder) */
-    addq $16, %rsp
+    leaq 16(%rsp), %rsp  /* we don't want to modify RFLAGS inadvertenly, hence the lea */
     movq %rsp, -16(%rsp) /* save RSP */
     pushq $KERNEL_SS     /* save SS */
-    subq $8, %rsp        
+    leaq -8(%rsp), %rsp
     pushfq               /* save RFLAGS */
     movq -8(%rsp), %rax  /* restore rax */
     pushq $KERNEL_CS     /* push CS seg sel */
@@ -48,13 +48,31 @@ ENTRY(nk_thread_switch_intr_entry)
 
     RESTORE_GPRS()      /* load the new thread's GPRs */
 
-    addq $8, %rsp       /* pop off the irq number */
+    leaq 8(%rsp), %rsp  /* pop off the irq number */
 
     iretq               /* and off we go */
 
 ENTRY(nk_thread_entry) 
+/* test and see if we've overrun our stack */
+    pushq %rax
+    pushq %rbx
+    movq %gs:0x0, %rax
+    movq (%rax), %rbx // RSP
+    movq 8(%rax), %rax // stack start
+    cmpq %rax, %rbx
+    jle bad
+    popq %rbx
+    popq %rax
+
     sti
     retq
+
+bad:
+    movq $panic_str, %rdi
+    callq panic
+loop:
+    hlt
+    jmp loop
     
 // RBP and RSP are intentionally not saved here
 // 15 quadwords (14 regs + flags)
@@ -152,3 +170,6 @@ ENTRY(_fork_return)
     sti                         // turn interrupts back on (this is actually unnecessary in the child but oh well)
 	retq                        // and back we go
 
+
+panic_str:
+.ascii "Stack corruption detected\12\0"
