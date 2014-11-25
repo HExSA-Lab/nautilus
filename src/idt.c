@@ -5,6 +5,7 @@
 #include <paging.h>
 #include <percpu.h>
 #include <cpu.h>
+#include <thread.h>
 
 extern ulong_t handler_table[NUM_IDT_ENTRIES];
 
@@ -54,12 +55,12 @@ null_excp_handler (excp_entry_t * excp,
 {
     printk("\n+++ UNHANDLED EXCEPTION +++\n");
     if (vector >= 0 && vector < 32) {
-        printk("[%s] <%s>\n    RIP=%p    fault addr=%p    (core=%u)\n", 
+        printk("[%s] <%s>\n    RIP=%p    fault addr=%p    (core=%u, thread=%u)\n", 
                 excp_codes[vector][EXCP_NAME],
                 excp_codes[vector][EXCP_MNEMONIC],
                 (void*)excp->rip, 
                 (void*)fault_addr, 
-                my_cpu_id());
+                my_cpu_id(), get_cur_thread()->tid);
     } else {
         printk("[Unknown Exception] (vector=0x%x)\n    RIP=(%p)    fault addr=%p    (core=%u)\n", 
                 vector,
