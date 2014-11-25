@@ -20,4 +20,8 @@
 #define likely(c)   __builtin_expect((c), 1)
 #endif
 
+#ifndef __align
+#define __align(x) __attribute__ ((aligned (x)))
+#endif
+
 #endif
