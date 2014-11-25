@@ -21,6 +21,35 @@ extern "C" {
 #define RFLAGS_VIF  (1 << 19)
 #define RFLAGS_VIP  (1 << 20)
 
+#define CR0_PE 1
+#define CR0_MP 2
+#define CR0_EM (1<<2)
+#define CR0_TS (1<<3)
+#define CR0_NE (1<<5)
+#define CR0_WP (1<<16)
+#define CR0_AM (1<<18)
+#define CR0_NW (1<<29)
+#define CR0_CD (1<<30)
+#define CR0_PG (1<<31)
+
+#define CR4_VME        1
+#define CR4_PVI        2
+#define CR4_TSD        (1<<2)
+#define CR4_DE         (1<<3)
+#define CR4_PSE        (1<<4)
+#define CR4_PAE        (1<<5)
+#define CR4_MCE        (1<<6)
+#define CR4_PGE        (1<<7)
+#define CR4_PCE        (1<<8)
+#define CR4_OSFXSR     (1<<9)
+#define CR4_OSXMMEXCPT (1<<10)
+#define CR4_VMXE       (1<<13)
+#define CR4_XMXE       (1<<14)
+#define CR4_FSGSBASE   (1<<16)
+#define CR4_PCIDE      (1<<17)
+#define CR4_OSXSAVE    (1<<18)
+#define CR4_SMEP       (1<<20)
+
 
 #define PAUSE_WHILE(x) \
     while ((x)) { \
