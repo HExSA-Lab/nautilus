@@ -172,6 +172,8 @@ nk_core_barrier_raise (void)
     unsigned i;
     int res = 0;
 
+    DEBUG_PRINT("Core %u raising core barrier\n", my_cpu_id());
+
     flags = spin_lock_irq_save(&barrier->lock);
 
     if (barrier->active == 0) {
@@ -237,6 +239,8 @@ nk_core_barrier_lower (void)
 {
     nk_barrier_t * barrier = per_cpu_get(system)->core_barrier;
 
+    DEBUG_PRINT("Core %u lowering barrier\n", my_cpu_id());
+
     if (!barrier->active) {
         return -EINVAL;
     }
@@ -261,6 +265,8 @@ int
 nk_core_barrier_wait (void)
 {
     nk_barrier_t * barrier = per_cpu_get(system)->core_barrier;
+
+    DEBUG_PRINT("Core %u waiting on other cores to arrive at core barrier\n", my_cpu_id());
 
     if (!barrier->active) {
         return -EINVAL;
@@ -295,7 +301,7 @@ nk_core_barrier_arrive (void)
         return -EINVAL;
     }
 
-    printk("Nautilus core %u waiting at core barrier\n", my_cpu_id());
+    DEBUG_PRINT("Core %u arriving at core barrier\n", my_cpu_id());
 
     atomic_dec(barrier->remaining);
 

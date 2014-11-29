@@ -22,6 +22,7 @@ extern void nk_yield(void);
 int
 nk_rwlock_init (nk_rwlock_t * l)
 {
+    DEBUG_PRINT("rwlock init (%p)\n", (void*)l);
     l->readers = 0;
     spinlock_init(&l->lock);
     return 0;
@@ -31,6 +32,7 @@ nk_rwlock_init (nk_rwlock_t * l)
 int 
 nk_rwlock_rd_lock (nk_rwlock_t * l)
 {
+    DEBUG_PRINT("rwlock read lock: %p\n", (void*)l);
     int flags = spin_lock_irq_save(&l->lock);
     ++l->readers;
     spin_unlock_irq_restore(&l->lock, flags);
@@ -41,6 +43,7 @@ nk_rwlock_rd_lock (nk_rwlock_t * l)
 int 
 nk_rwlock_rd_unlock (nk_rwlock_t * l) 
 {
+    DEBUG_PRINT("rwlock read unlock: %p\n", (void*)l);
     int flags = spin_lock_irq_save(&l->lock);
     /* TODO: cond_signal/broadcast */
     --l->readers;
@@ -52,7 +55,7 @@ nk_rwlock_rd_unlock (nk_rwlock_t * l)
 int 
 nk_rwlock_wr_lock (nk_rwlock_t * l)
 {
-    DEBUG_PRINT("rwlock_wr_lock\n");
+    DEBUG_PRINT("rwlock write lock: %p\n", (void*)l);
 
     while (1) {
         spin_lock(&l->lock);
@@ -73,6 +76,7 @@ nk_rwlock_wr_lock (nk_rwlock_t * l)
 int 
 nk_rwlock_wr_unlock (nk_rwlock_t * l)
 {
+    DEBUG_PRINT("rwlock write unlock: %p\n", (void*)l);
     spin_unlock(&l->lock);
     return 0;
 }
@@ -82,6 +86,7 @@ uint8_t
 nk_rwlock_wr_lock_irq_save (nk_rwlock_t * l)
 {
     int flags;
+    DEBUG_PRINT("rwlock write lock (irq): %p\n", (void*)l);
 
     while (1) {
         flags = spin_lock_irq_save(&l->lock);
@@ -102,6 +107,7 @@ nk_rwlock_wr_lock_irq_save (nk_rwlock_t * l)
 int 
 nk_rwlock_wr_unlock_irq_restore (nk_rwlock_t * l, uint8_t flags)
 {
+    DEBUG_PRINT("rwlock write unlock (irq): %p\n", (void*)l);
     spin_unlock_irq_restore(&l->lock, flags);
     return 0;
 }
