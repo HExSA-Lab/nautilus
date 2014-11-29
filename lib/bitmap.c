@@ -6,7 +6,7 @@
  * Version 2.  See the file COPYING for more details.
  */
 #include <lib/bitmap.h>
-#include <naut_types.h>
+#include <nautilus/naut_types.h>
 
 #define BITOP_WORD(nr)		((nr) / BITS_PER_LONG)
 

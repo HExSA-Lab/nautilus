@@ -1,5 +1,5 @@
-#include <idt.h>
-#include <thread.h>
+#include <nautilus/idt.h>
+#include <nautilus/thread.h>
 
 .code64
 .align 8

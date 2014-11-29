@@ -1,11 +1,11 @@
-#include <cpu.h>
-#include <cpuid.h>
-#include <msr.h>
-#include <irq.h>
-#include <paging.h>
-#include <nautilus.h>
-#include <percpu.h>
-#include <intrinsics.h>
+#include <nautilus/cpu.h>
+#include <nautilus/cpuid.h>
+#include <nautilus/msr.h>
+#include <nautilus/irq.h>
+#include <nautilus/paging.h>
+#include <nautilus/nautilus.h>
+#include <nautilus/percpu.h>
+#include <nautilus/intrinsics.h>
 #include <dev/apic.h>
 #include <lib/liballoc.h>
 

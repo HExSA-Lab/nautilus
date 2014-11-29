@@ -1,7 +1,7 @@
 #ifndef __PCI_H__
 #define __PCI_H__
 
-#include <list.h>
+#include <nautilus/list.h>
 
 #define PCI_CFG_ADDR_PORT 0xcf8
 #define PCI_CFG_DATA_PORT 0xcfc

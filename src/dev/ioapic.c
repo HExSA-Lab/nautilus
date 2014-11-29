@@ -1,7 +1,7 @@
-#include <nautilus.h>
-#include <paging.h>
+#include <nautilus/nautilus.h>
+#include <nautilus/paging.h>
 #include <dev/ioapic.h>
-#include <irq.h>
+#include <nautilus/irq.h>
 
 #ifndef NAUT_CONFIG_DEBUG_IOAPIC
 #undef DEBUG_PRINT

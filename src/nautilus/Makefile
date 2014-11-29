@@ -1,0 +1,23 @@
+obj-y += \
+	fmtout.o \
+	printk.o \
+	doprnt.o \
+	idt.o \
+	queue.o \
+	irq.o \
+	mb_utils.o \
+	paging.o \
+	naut_string.o \
+	msr.o \
+	cpuid.o \
+	fpu.o \
+	spinlock.o \
+	rwlock.o \
+	condvar.o \
+	smp.o \
+	idle.o \
+	thread.o \
+	barrier.o \
+	backtrace.o \
+	nautilus.o \
+	libccompat.o 

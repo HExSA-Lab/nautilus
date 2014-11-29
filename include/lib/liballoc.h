@@ -1,7 +1,7 @@
 #ifndef _LIBALLOC_H
 #define _LIBALLOC_H
 
-#include <naut_types.h>
+#include <nautilus/naut_types.h>
 
 #ifdef __cplusplus
 extern "C" {

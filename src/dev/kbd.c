@@ -1,6 +1,6 @@
-#include <nautilus.h>
-#include <irq.h>
-#include <thread.h>
+#include <nautilus/nautilus.h>
+#include <nautilus/irq.h>
+#include <nautilus/thread.h>
 #include <dev/kbd.h>
 
 #ifndef NAUT_CONFIG_DEBUG_KBD

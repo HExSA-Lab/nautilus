@@ -1,7 +1,7 @@
-#include <nautilus.h>
+#include <nautilus/nautilus.h>
 #include <dev/pci.h>
-#include <cpu.h>
-#include <intrinsics.h>
+#include <nautilus/cpu.h>
+#include <nautilus/intrinsics.h>
 #include <lib/liballoc.h>
 
 #ifndef NAUT_CONFIG_DEBUG_PCI

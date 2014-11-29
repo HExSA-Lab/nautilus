@@ -1,5 +1,5 @@
-#include <nautilus.h>
-#include <thread.h>
+#include <nautilus/nautilus.h>
+#include <nautilus/thread.h>
 
 void run_legion_tests(void);
 

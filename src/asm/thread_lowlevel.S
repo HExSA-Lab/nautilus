@@ -1,6 +1,6 @@
 #include <asm/lowlevel.h>
-#include <gdt.h>
-#include <thread.h>
+#include <nautilus/gdt.h>
+#include <nautilus/thread.h>
 
 /* NOTE: the below offsets and constants are VERY fragile
  * make sure to check assumptions elsewhere when changing them

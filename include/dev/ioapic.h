@@ -1,8 +1,8 @@
 #ifndef __IOAPIC_H__
 #define __IOAPIC_H__
 
-#include <naut_types.h>
-#include <intrinsics.h>
+#include <nautilus/naut_types.h>
+#include <nautilus/intrinsics.h>
 
 #define MAX_IOAPICS 32
 

@@ -3,9 +3,9 @@
 
 #ifndef __ASSEMBLER__
 
-#include <naut_types.h>
+#include <nautilus/naut_types.h>
 #include <lib/bitops.h>
-#include <naut_string.h>
+#include <nautilus/naut_string.h>
 
 extern int __bitmap_empty(const unsigned long *bitmap, int bits);
 extern int __bitmap_full(const unsigned long *bitmap, int bits);

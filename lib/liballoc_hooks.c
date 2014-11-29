@@ -1,5 +1,5 @@
-#include <paging.h>
-#include <spinlock.h>
+#include <nautilus/paging.h>
+#include <nautilus/spinlock.h>
 
 #include <lib/liballoc_hooks.h>
 

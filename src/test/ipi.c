@@ -1,11 +1,11 @@
-#include <nautilus.h>
+#include <nautilus/nautilus.h>
 #include <dev/apic.h>
-#include <irq.h>
-#include <cpu.h>
-#include <percpu.h>
-#include <atomic.h>
-#include <math.h>
-#include <naut_assert.h>
+#include <nautilus/irq.h>
+#include <nautilus/cpu.h>
+#include <nautilus/percpu.h>
+#include <nautilus/atomic.h>
+#include <nautilus/math.h>
+#include <nautilus/naut_assert.h>
 
 #define PING_VEC 0xf0
 #define PONG_VEC 0xf1

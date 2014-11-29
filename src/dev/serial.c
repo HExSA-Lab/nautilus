@@ -1,9 +1,9 @@
-#include <nautilus.h>
-#include <serial.h>
-#include <fmtout.h>
-#include <idt.h>
-#include <irq.h>
-#include <cpu.h>
+#include <nautilus/nautilus.h>
+#include <nautilus/fmtout.h>
+#include <nautilus/idt.h>
+#include <nautilus/irq.h>
+#include <nautilus/cpu.h>
+#include <dev/serial.h>
 
 
 extern int vprintk(const char * fmt, va_list args);

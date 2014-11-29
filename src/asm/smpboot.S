@@ -1,6 +1,6 @@
 #include <asm/lowlevel.h>
-#include <smp.h>
-#include <gdt.h>
+#include <nautilus/smp.h>
+#include <nautilus/gdt.h>
 
 .section .text
 .code16

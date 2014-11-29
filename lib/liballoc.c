@@ -1,6 +1,6 @@
 #include <lib/liballoc.h>
-#include <naut_types.h>
-#include <paging.h>
+#include <nautilus/naut_types.h>
+#include <nautilus/paging.h>
 
 /**  Durand's Ridiculously Amazing Super Duper Memory functions.  */
 

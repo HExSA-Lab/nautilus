@@ -1,8 +1,8 @@
-#include <nautilus.h>
-#include <cga.h>
-#include <naut_string.h>
-#include <spinlock.h>
-#include <cpu.h>
+#include <nautilus/nautilus.h>
+#include <nautilus/cga.h>
+#include <nautilus/naut_string.h>
+#include <nautilus/spinlock.h>
+#include <nautilus/cpu.h>
 
 static struct term_info {
     size_t    row;

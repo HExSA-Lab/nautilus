@@ -1,8 +1,8 @@
-#include <nautilus.h>
-#include <irq.h>
-#include <cpu.h>
-#include <percpu.h>
-#include <math.h>
+#include <nautilus/nautilus.h>
+#include <nautilus/irq.h>
+#include <nautilus/cpu.h>
+#include <nautilus/percpu.h>
+#include <nautilus/math.h>
 
 #include <stddef.h>
 

@@ -12,7 +12,7 @@
 #error only <lib/bitops.h> can be included directly
 #endif
 
-#include <intrinsics.h>
+#include <nautilus/intrinsics.h>
 
 
 #define BIT_64(n)			(U64_C(1) << (n))

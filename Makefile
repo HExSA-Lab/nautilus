@@ -5,7 +5,7 @@ EXTRAVERSION = Nautilus
 NAME=Nautilus
 
 ISO_NAME:=nautilus.iso
-LD_SCRIPT:=nautilus.ld
+LD_SCRIPT:=link/nautilus.ld
 BIN_NAME:=nautilus.bin
 
 

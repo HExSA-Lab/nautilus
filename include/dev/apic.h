@@ -1,7 +1,7 @@
 #ifndef __APIC_H__
 #define __APIC_H__
 
-#include <naut_types.h>
+#include <nautilus/naut_types.h>
 
 #ifdef __cplusplus 
 extern "C" {
