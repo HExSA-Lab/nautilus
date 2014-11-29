@@ -17,6 +17,42 @@ __do_backtrace (void ** fp, unsigned depth)
 }
 
 
+/*
+ * dump memory in 16 byte chunks
+ */
+void 
+nk_dump_mem (void * addr, ulong_t n)
+{
+    int i, j;
+    ulong_t new = (n % 16 == 0) ? n : ((n+16) & ~0xf);
+
+    for (i = 0; i < new/(sizeof(void*)); i+=2) {
+        printk("%p: %08p  %08p  ", ((void**)addr + i), *((void**)addr + i), *((void**)addr + i + 1));
+        for (j = 0; j < 16; j++) {
+            char tmp = *((char*)addr + j);
+            printk("%c", (tmp < 0x7f && tmp > 0x1f) ? tmp : '.');
+        }
+
+        printk("\n");
+    }
+}
+
+
+void 
+nk_stack_dump (ulong_t n)
+{
+    void * rsp = NULL;
+    asm volatile ("movq %%rsp, %[_r]" : [_r] "=r" (rsp));
+
+    if (!rsp) {
+        return;
+    }
+
+    printk("Stack Dump:\n");
+
+    nk_dump_mem(rsp, n);
+}
+
 
 inline void 
 print_gprs (void) 

@@ -11,6 +11,8 @@ extern "C" {
 
 
 void __do_backtrace(void **, unsigned);
+void nk_dump_mem(void *, ulong_t);
+void nk_stack_dump(ulong_t);
 inline void print_gprs(void);
 
 
