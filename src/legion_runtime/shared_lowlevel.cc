@@ -49,12 +49,12 @@ using namespace LegionRuntime::Accessor;
 
 
 /* KCH: NAUTILUS */
-#include <thread.h>
-#include <condvar.h>
-#include <rwlock.h>
-#include <spinlock.h>
-#include <barrier.h>
-#include <irq.h>
+#include <nautilus/thread.h>
+#include <nautilus/condvar.h>
+#include <nautilus/rwlock.h>
+#include <nautilus/spinlock.h>
+#include <nautilus/barrier.h>
+#include <nautilus/irq.h>
 
 #include "naut_debug.h"
 //#include <libccompat.h>

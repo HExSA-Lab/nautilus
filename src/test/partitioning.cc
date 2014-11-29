@@ -21,6 +21,8 @@
 using namespace LegionRuntime::HighLevel;
 using namespace LegionRuntime::Accessor;
 
+extern "C" int printk(const char * , ...);
+
 // Legion has a separate namespace which contains
 // some useful abstractions for operations on arrays.
 // Unsurprisingly it is called the Arrays namespace.

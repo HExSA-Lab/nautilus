@@ -20,7 +20,7 @@
 
 #ifdef DEBUG
 //#include <stdio.h>
-#include <printk.h>
+#include <nautilus/printk.h>
 #define printf(fmt, args...) printk(fmt, ##args)
 #endif
 

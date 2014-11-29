@@ -18,7 +18,7 @@
 //#include <nautilus.h>
 //#include <naut_string.h>
 //
-//extern "C" void printk (const char * fmt, ...);
+extern "C" int printk (const char * fmt, ...);
 extern "C" void panic (const char * fmt, ...);
 
 #include "../legion_runtime/legion.h"

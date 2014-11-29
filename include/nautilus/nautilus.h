@@ -11,7 +11,7 @@ extern "C" {
 
 
 #ifdef NAUT_CONFIG_SERIAL_REDIRECT
-#include <serial.h>
+#include <dev/serial.h>
 #define DEBUG_PRINT(fmt, args...)   serial_print_redirect("DEBUG: " fmt, ##args)
 #define ERROR_PRINT(fmt, args...)   serial_print_redirect("ERROR at %s(%d): " fmt, __FILE__, __LINE__, ##args)
 #else
