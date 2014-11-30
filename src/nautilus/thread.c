@@ -1075,7 +1075,7 @@ __thread_fork (void)
                          NULL,        // no input args, it's not a function
                          NULL,        // no output args
                          0,           // this thread's parent will wait on it
-                         alloc_size,  // stack size
+                         TSTACK_2MB,  // stack size
                          &tid,        // give me a thread id
                          CPU_ANY)     // not bound to any particular CPU
             < 0) {
