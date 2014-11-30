@@ -1209,13 +1209,14 @@ nk_sched_init_ap (void)
         goto out_err1;
     }
 
-    my_stack = malloc(PAGE_SIZE);
-    if (!my_stack) {
+    my_stack = malloc(PAGE_SIZE); if (!my_stack) {
         ERROR_PRINT("Couldn't allocate new stack for CPU (%u)\n", id);
         goto out_err2;
     }
 
     /* we have no parent thread... */
+
+    me->stack_size = PAGE_SIZE;
     if (thread_init(me, my_stack, 1, id, NULL) != 0) {
         ERROR_PRINT("Could not init start thread on core %u\n", id);
         goto out_err3;
@@ -1223,6 +1224,8 @@ nk_sched_init_ap (void)
 
     // set my current thread
     put_cur_thread(me);
+
+    enqueue_thread_on_tlist(me);
 
     // start another idle thread
     SCHED_DEBUG("Starting idle thread for cpu %d\n", id);
