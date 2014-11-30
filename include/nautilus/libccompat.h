@@ -65,6 +65,7 @@ locale_t __newlocale(int category_mask, const char *locale,locale_t base);
 char *__nl_langinfo_l(nl_item item, locale_t locale);
 char * gettext(const char * msgid);
 
+int printf(const char *, ...);
 
 #define GEN_HDR(x) int x (void);
 
@@ -112,7 +113,6 @@ GEN_HDR(setvbuf)
 GEN_HDR(__popcountdi2)
 GEN_HDR(__wctype_l)
 GEN_HDR(__towupper_l)
-GEN_HDR(printf)
 GEN_HDR(__uselocale)
 GEN_HDR(__strftime_l)
 GEN_HDR(mbsnrtowcs)

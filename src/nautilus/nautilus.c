@@ -234,6 +234,8 @@ main (unsigned long mbd, unsigned long magic)
 
 #ifdef NAUT_CONFIG_NESL_RT
 
+    nesl_nautilus_main();
+
 #endif
 
 

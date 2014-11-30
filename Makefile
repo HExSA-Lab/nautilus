@@ -330,10 +330,10 @@ CFLAGS:=   -O2 \
 		   -fno-reorder-functions \
 		   -mcmodel=large \
 		   -mno-red-zone \
-		   -mno-mmx \
-		   -mno-sse \
-		   -mno-sse2 \
-		   -mno-sse3 \
+		   #-mno-mmx \
+		   #-mno-sse \
+		   #-mno-sse2 \
+		   #-mno-sse3 \
 		   -mno-3dnow \
 		    $(call cc-option, -Wno-unused-but-set-variable,)
 		   #-std=gnu99 \
@@ -537,6 +537,12 @@ endif
 ifdef NAUT_CONFIG_NDPC_RT
 CFLAGS		+= -I$(NAUT_CONFIG_NDPC_RT_ROOT)
 libs-y          += $(NAUT_CONFIG_NDPC_RT_TEST_OBJ) $(NAUT_CONFIG_NDPC_RT_ROOT)/libndpc.a
+endif
+
+ifdef NAUT_CONFIG_NESL_RT
+CFLAGS		+= -I$(NAUT_CONFIG_NESL_RT_ROOT)
+libs-y          += $(NAUT_CONFIG_NESL_RT_ROOT)/lib/libvinterp.a $(NAUT_CONFIG_NESL_RT_ROOT)/lib/libcvl-serial.a /usr/lib64/libl.a /usr/lib64/libm.a  $(NAUT_CONFIG_NESL_NDPC_RT_ROOT)/libndpc.a 
+#--unresolved-symbols=ignore-all
 endif
 
 

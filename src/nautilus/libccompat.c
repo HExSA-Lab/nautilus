@@ -128,10 +128,38 @@ fflush (FILE * f)
 int 
 fprintf (FILE * f, const char * s, ...)
 {
+#if 0
     UNDEF_FUN_ERR();
     return -1;
+#else
+    va_list arg;
+    va_start(arg,s);
+#ifdef NAUT_CONFIG_SERIAL_REDIRECT
+    __serial_print(s, arg);
+#else
+    vprintk(s, arg);
+#endif
+    va_end(arg);
+#endif
 }
 
+int 
+printf (const char * s, ...)
+{
+#if 0
+    UNDEF_FUN_ERR();
+    return -1;
+#else
+    va_list arg;
+    va_start(arg,s);
+#ifdef NAUT_CONFIG_SERIAL_REDIRECT
+    __serial_print(s, arg);
+#else
+    vprintk(s, arg);
+#endif
+    va_end(arg);
+#endif
+}
 
 int 
 fputc (int c, FILE * f) 
@@ -329,7 +357,6 @@ GEN_DEF(setvbuf)
 GEN_DEF(__popcountdi2)
 GEN_DEF(__wctype_l)
 GEN_DEF(__towupper_l)
-GEN_DEF(printf)
 GEN_DEF(__uselocale)
 GEN_DEF(__strftime_l)
 GEN_DEF(mbsnrtowcs)

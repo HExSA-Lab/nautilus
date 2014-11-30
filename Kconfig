@@ -139,6 +139,12 @@ menu "Parallel Run-time Integration"
             help 
               Directory where the intended NESL run-time is installed
 
+        config NESL_NDPC_RT_ROOT
+            string "NESL NDPC RT Root"
+            depends on NESL_RT
+            help 
+              Directory where the intended NDPC run-time is installed
+
         config NO_RT
           bool "No parallel run-time"
           
