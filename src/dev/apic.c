@@ -14,8 +14,20 @@
 #define DEBUG_PRINT(fmt, args...)
 #endif
 
+static int
+spur_int_handler (excp_entry_t * excp, excp_vec_t v)
+{
+    DEBUG_PRINT("Received Spurious Interrupt\n");
 
-int 
+    struct apic_dev * a = per_cpu_get(apic);
+    a->spur_int_cnt++;
+
+    /* we don't need to EOI here */
+    return 0;
+}
+
+
+static uint8_t
 check_apic_avail (void)
 {
     cpuid_ret_t cp;
@@ -28,7 +40,7 @@ check_apic_avail (void)
 }
 
 
-static int 
+static uint8_t
 apic_is_bsp (struct apic_dev * apic)
 {
     uint64_t data;
@@ -37,7 +49,7 @@ apic_is_bsp (struct apic_dev * apic)
 }
 
 
-static int
+static void
 apic_sw_enable (struct apic_dev * apic)
 {
     uint32_t val;
@@ -45,11 +57,10 @@ apic_sw_enable (struct apic_dev * apic)
     val = apic_read(apic, APIC_REG_SPIV);
     apic_write(apic, APIC_REG_SPIV, val | APIC_SPIV_SW_ENABLE);
     irq_enable_restore(flags);
-    return 0;
 }
 
 
-static int
+static void
 apic_sw_disable (struct apic_dev * apic)
 {
     uint32_t val;
@@ -57,15 +68,15 @@ apic_sw_disable (struct apic_dev * apic)
     val = apic_read(apic, APIC_REG_SPIV);
     apic_write(apic, APIC_REG_SPIV, val & ~APIC_SPIV_SW_ENABLE);
     irq_enable_restore(flags);
-    return 0;
 }
 
 
 static void
-assign_spiv (uint8_t spiv_vec)
+apic_assign_spiv (struct apic_dev * apic, uint8_t spiv_vec)
 {
-    /* TODO: fill in */
-
+    apic_write(apic, 
+            APIC_REG_SPIV,
+            apic_read(apic, APIC_REG_SPIV) | spiv_vec);
 }
 
 
@@ -248,7 +259,13 @@ ap_apic_setup (struct cpu * core)
     /* set spurious interrupt vector to 0xff, disable CPU core focusing */
     apic_write(core->apic, 
                APIC_REG_SPIV,
-               ((apic_read(core->apic, APIC_REG_SPIV) & APIC_DISABLE_FOCUS) | 0xff));
+               apic_read(core->apic, APIC_REG_SPIV) & APIC_DISABLE_FOCUS);
+
+    apic_assign_spiv(core->apic, 0xffu);
+
+    if (register_int_handler(0xff, spur_int_handler, core->apic) != 0) {
+        ERROR_PRINT("Could not register handler for spurious interrupt\n");
+    }
             
     /* Setup TPR (Task-priority register) to disable softwareinterrupts */
     apic_write(core->apic, APIC_REG_TPR, 0x20);
@@ -321,20 +338,30 @@ apic_init (struct naut_info * naut)
         panic("Unsupported APIC version (0x%1x)\n", (unsigned)apic->version);
     }
 
-    /* TODO: these shouldn't be hard-coded! */
-    apic_write(apic, APIC_REG_TPR, 0x20);       // inhibit softint delivery
-    apic_write(apic, APIC_REG_LVTT, 0x10000);   // disable timer interrupts
-    apic_write(apic, APIC_REG_LVTPC, 0x10000);  // disable perf cntr interrupts
+    apic_write(apic, APIC_REG_TPR, 0x20);        // inhibit softint delivery
+    apic_write(apic, APIC_REG_LVTT, 0x10000);    // disable timer interrupts intially
+    apic_write(apic, APIC_REG_LVTPC, 0x10000);   // disable perf cntr interrupts
     apic_write(apic, APIC_REG_LVTTHMR, 0x10000); // disable thermal interrupts
-    apic_write(apic, APIC_REG_LVT0, 0x08700);   // enable normal external interrupts
-    apic_write(apic, APIC_REG_LVT1, 0x00400);   // enable normal NMI processing
-    apic_write(apic, APIC_REG_LVTERR, 0x10000); // disable error interrupts
-    apic_write(apic, APIC_REG_SPIV, 0x3ff);     // SPUR int is 0xff
+    apic_write(apic, APIC_REG_LVT0, 0x08700);    // enable normal external interrupts
+    apic_write(apic, APIC_REG_LVT1, 0x00400);    // enable normal NMI processing
+    apic_write(apic, APIC_REG_LVTERR, 0x10000);  // disable error interrupts
+
+    /* disable core focusing */
+    apic_write(apic, 
+               APIC_REG_SPIV,
+               apic_read(apic, APIC_REG_SPIV) & APIC_DISABLE_FOCUS);
+
+    /* spurious interrupt vector is FF */
+    apic_assign_spiv(apic, 0xffu);
+
+    if (register_int_handler(0xff, spur_int_handler, apic) != 0) {
+        ERROR_PRINT("Could not register spurious interrupt handler\n");
+    }
 
     apic_enable(apic); // This will also set S/W enable bit in SPIV
 
     apic_write(apic, APIC_REG_LVT0, 0x08700);  // BAM BAM BAM
-    apic_write(apic, APIC_REG_SPIV, 0x3ff); 
+    //apic_write(apic, APIC_REG_SPIV, 0x3ff); 
 
     naut->sys.cpus[0]->apic = apic;
 }
