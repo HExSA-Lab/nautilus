@@ -52,7 +52,7 @@ parse_mptable_cpu (struct sys_info * sys, struct mp_table_entry_cpu * cpu)
     struct cpu * new_cpu = NULL;
     DEBUG_PRINT("parse_mptable_cpu found cpu\n");
 
-    if (sys->num_cpus == MAX_CPUS) {
+    if (sys->num_cpus == NAUT_CONFIG_MAX_CPUS) {
         panic("too many CPUs!\n");
     }
 
@@ -483,7 +483,7 @@ smp_ap_entry (struct cpu * core)
 
 
 uint32_t
-get_num_cpus (void)
+nk_get_num_cpus (void)
 {
     struct sys_info * sys = per_cpu_get(system);
     return sys->num_cpus;
@@ -586,7 +586,7 @@ smp_xcall (cpu_id_t cpu_id,
 
     DEBUG_PRINT("Initiating SMP XCALL from core %u to core %u\n", my_cpu_id(), cpu_id);
 
-    if (cpu_id > get_num_cpus()) {
+    if (cpu_id > nk_get_num_cpus()) {
         ERROR_PRINT("Attempt to execute xcall on invalid cpu (%u)\n", cpu_id);
         return -1;
     }

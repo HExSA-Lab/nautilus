@@ -1,24 +1,20 @@
 #ifndef __SMP_H__
 #define __SMP_H__
 
+#ifndef __ASSEMBLER__ 
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define MAX_CPUS 128
 
-#define AP_TRAMPOLINE_ADDR 0xf000 
-#define AP_BOOT_STACK_ADDR 0x1000
-#define AP_INFO_AREA       0x2000
+/******* EXTERNAL INTERFACE *********/
 
-#define BASE_MEM_LAST_KILO 0x9fc00
-#define BIOS_ROM_BASE      0xf0000
-#define BIOS_ROM_END       0xfffff
+uint32_t nk_get_num_cpus (void);
 
-#define MSR_FS_BASE 0xc0000100
-#define MSR_GS_BASE 0xc0000101
+/******* !EXTERNAL INTERFACE! *********/
 
-#ifndef __ASSEMBLER__ 
+
 
 #include <dev/apic.h>
 #include <nautilus/spinlock.h>
@@ -91,7 +87,6 @@ int smp_bringup_aps(struct naut_info * naut);
 int smp_xcall(cpu_id_t cpu_id, nk_xcall_func_t fun, void * arg, uint8_t wait);
 void smp_ap_entry (struct cpu * core);
 int smp_setup_xcall_bsp (struct cpu * core);
-uint32_t get_num_cpus (void);
 
 
 
@@ -99,6 +94,17 @@ uint32_t get_num_cpus (void);
 }
 #endif
 
-
 #endif /* !__ASSEMBLER__ */
+
+#define AP_TRAMPOLINE_ADDR 0xf000 
+#define AP_BOOT_STACK_ADDR 0x1000
+#define AP_INFO_AREA       0x2000
+
+#define BASE_MEM_LAST_KILO 0x9fc00
+#define BIOS_ROM_BASE      0xf0000
+#define BIOS_ROM_END       0xfffff
+
+#define MSR_FS_BASE 0xc0000100
+#define MSR_GS_BASE 0xc0000101
+
 #endif
