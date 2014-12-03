@@ -14,6 +14,7 @@ obj-y += \
 	spinlock.o \
 	rwlock.o \
 	condvar.o \
+	hashtable.o \
 	smp.o \
 	idle.o \
 	thread.o \
