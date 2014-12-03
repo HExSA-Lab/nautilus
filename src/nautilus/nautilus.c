@@ -193,8 +193,7 @@ main (unsigned long mbd, unsigned long magic)
 
     nk_timer_init(naut);
 
-
-    apic_init(naut);
+    apic_init(naut->sys.cpus[0]);
 
     fpu_init(naut);
 

@@ -409,9 +409,7 @@ smp_ap_setup (struct cpu * core)
     // set GS base (for per-cpu state)
     msr_write(MSR_GS_BASE, (uint64_t)core_addr);
     
-    ap_apic_setup(core);
-
-    ap_apic_final_init(core);
+    apic_init(core);
 
     if (smp_xcall_init_queue(core) != 0) {
         ERROR_PRINT("Could not setup xcall for core %u\n", core->id);

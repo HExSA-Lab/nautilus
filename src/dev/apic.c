@@ -312,6 +312,7 @@ apic_timer_setup (struct apic_dev * apic, uint32_t quantum)
 }
 
 
+#if 0
 void
 ap_apic_setup (struct cpu * core)
 {
@@ -378,34 +379,37 @@ ap_apic_final_init(struct cpu * core)
     apic_write(core->apic, APIC_REG_LVT0, 0x8700); /* BAM BAM */
 }
 
+#endif
 
-/* TODO: make this work for APs as well */
 void
-apic_init (struct naut_info * naut)
+apic_init (struct cpu * core)
 {
     struct apic_dev * apic = NULL;
 
     apic = (struct apic_dev*)malloc(sizeof(struct apic_dev));
     if (!apic) {
-        panic("could not allocate apic struct\n");
+        panic("Could not allocate apic struct\n");
     }
     memset(apic, 0, sizeof(struct apic_dev));
 
     if (!check_apic_avail()) {
-        panic("no APIC found, dying\n");
+        panic("No APIC found on core %u, dying\n", core->id);
     } 
 
     apic->base_addr = apic_get_base_addr();
-    DEBUG_PRINT("apic base addr: %p\n", apic->base_addr);
+    DEBUG_PRINT("APIC base addr: %p\n", apic->base_addr);
 
-    DEBUG_PRINT("Reserving APIC address space\n");
-    if (nk_reserve_page(apic->base_addr) < 0) {
-        DEBUG_PRINT("LAPIC mem region already reserved\n");
-    }
-    
-    /* map in the lapic as uncacheable */
-    if (nk_map_page_nocache(apic->base_addr, PTE_PRESENT_BIT|PTE_WRITABLE_BIT) == -1) {
-        panic("Could not map APIC\n");
+    if (core->is_bsp) {
+
+        DEBUG_PRINT("Reserving APIC address space\n");
+        if (nk_reserve_page(apic->base_addr) < 0) {
+            DEBUG_PRINT("LAPIC mem region already reserved\n");
+        }
+
+        /* map in the lapic as uncacheable */
+        if (nk_map_page_nocache(apic->base_addr, PTE_PRESENT_BIT|PTE_WRITABLE_BIT) == -1) {
+            panic("Could not map APIC\n");
+        }
     }
 
     apic->version   = apic_get_version(apic);
@@ -431,9 +435,9 @@ apic_init (struct naut_info * naut)
                apic_read(apic, APIC_REG_SPIV) & APIC_DISABLE_FOCUS);
 
     /* spurious interrupt vector is FF */
-    apic_assign_spiv(apic, 0xffu);
+    apic_assign_spiv(apic, APIC_SPUR_INT_VEC);
 
-    if (register_int_handler(0xffu, spur_int_handler, apic) != 0) {
+    if (register_int_handler(APIC_SPUR_INT_VEC, spur_int_handler, apic) != 0) {
         ERROR_PRINT("Could not register spurious interrupt handler\n");
     }
 
@@ -443,6 +447,6 @@ apic_init (struct naut_info * naut)
 
     apic_timer_setup(apic, (NAUT_CONFIG_HZ * 100 / 1000));
 
-    naut->sys.cpus[0]->apic = apic;
+    core->apic = apic;
 }
 

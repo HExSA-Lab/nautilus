@@ -7,6 +7,7 @@
 extern "C" {
 #endif
 
+#define APIC_SPUR_INT_VEC  0xff
 #define APIC_TIMER_INT_VEC 0xed
 #define APIC_TIMER_DIV     16
 #define APIC_TIMER_DIVCODE 0x03
@@ -114,11 +115,9 @@ void apic_send_sipi(struct apic_dev * apic, uint32_t remote_id, uint8_t target);
 void apic_bcast_iipi(struct apic_dev * apic);
 void apic_bcast_deinit_iipi(struct apic_dev * apic);
 void apic_bcast_sipi(struct apic_dev * apic, uint8_t target);
-void apic_init(struct naut_info * naut);
 
 struct cpu;
-void ap_apic_setup(struct cpu * cpu);
-void ap_apic_final_init(struct cpu * cpu);
+void apic_init(struct cpu * core);
 
 int apic_get_maxlvt(struct apic_dev * apic);
 uint32_t apic_wait_for_send(struct apic_dev* apic);
