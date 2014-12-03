@@ -19,5 +19,6 @@ obj-y += \
 	thread.o \
 	barrier.o \
 	backtrace.o \
+	cpu.o \
 	nautilus.o \
 	libccompat.o 

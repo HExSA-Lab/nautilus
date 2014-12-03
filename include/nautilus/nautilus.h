@@ -53,7 +53,7 @@ struct sys_info {
     uint8_t pic_mode_enabled;
 
     uint_t num_tevents;
-    struct timer_event * time_events;
+    struct nk_timer_event * time_events;
 
     struct pci_info * pci;
 

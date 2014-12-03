@@ -1,7 +1,6 @@
 #ifndef __TIMER_H__
 #define __TIMER_H__
 
-#define TIMER_IRQ 0
 #define NUM_TIMERS 1
 
 #define TEVENT_WAITING 0
@@ -9,14 +8,15 @@
 
 struct naut_info;
 
-struct timer_event {
+struct nk_timer_event {
     uint8_t active;
     uint32_t ticks;
     volatile uint8_t event_flag;
 };
 
-
-int timer_init (struct naut_info * naut);
-void sleep (uint_t msec);
+#include <nautilus/idt.h>
+int nk_timer_handler(excp_entry_t *, excp_vec_t);
+int nk_timer_init (struct naut_info * naut);
+void nk_sleep (uint_t msec);
 
 #endif

@@ -397,7 +397,6 @@ smp_setup_xcall_bsp (struct cpu * core)
 static int
 smp_ap_setup (struct cpu * core)
 {
-    /* TODO: check for errors */
     // setup IDT
     lidt(&idt_descriptor);
 
@@ -411,18 +410,29 @@ smp_ap_setup (struct cpu * core)
     
     ap_apic_setup(core);
 
-    smp_xcall_init_queue(core);
+    ap_apic_final_init(core);
 
-    nk_sched_init_ap();
+    if (smp_xcall_init_queue(core) != 0) {
+        ERROR_PRINT("Could not setup xcall for core %u\n", core->id);
+        return -1;
+    }
+
+    if (nk_sched_init_ap() != 0) {
+        ERROR_PRINT("Could not setup scheduling for core %u\n", core->id);
+        return -1;
+    }
 
     return 0;
 }
 
 
+extern void fpu_init(void);
+
 static void
 smp_ap_finish (struct cpu * core)
 {
-    ap_apic_final_init(core);
+    //ap_apic_final_init(core);
+    fpu_init();
     DEBUG_PRINT("smp: core %u ready, enabling interrupts\n", core->id);
     sti();
 }

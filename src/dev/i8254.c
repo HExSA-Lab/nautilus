@@ -1,0 +1,111 @@
+#include <nautilus/nautilus.h>
+#include <nautilus/cpu.h>
+#include <nautilus/math.h>
+#include <nautilus/irq.h>
+#include <dev/i8254.h>
+#include <dev/timer.h>
+
+
+#ifndef NAUT_CONFIG_DEBUG_PIT
+#undef DEBUG_PRINT
+#define DEBUG_PRINT(fmt, args...) 
+#endif
+
+
+static void 
+i8254_disable (void)
+{
+    /* disable the PIT on setup */
+    outb(0x30, PIT_CMD_REG);
+    outb(0, PIT_CHAN0_DATA);
+    outb(0, PIT_CHAN0_DATA);
+}
+
+
+ulong_t
+i8254_calib_tsc (void)
+{
+    uint32_t latch = LATCH;
+    uint64_t tsc, t1, t2, delta;
+    ulong_t ms = MS;
+	ulong_t tscmin, tscmax;
+    int loopmin = LOOPS;
+	int pitcnt;
+
+	/* Set the Gate high, disable speaker */
+	outb((inb(0x61) & ~0x02) | 0x01, 0x61);
+
+	/*
+	 * Setup CTC channel 2* for mode 0, (interrupt on terminal
+	 * count mode), binary count. Set the latch register to 50ms
+	 * (LSB then MSB) to begin countdown.
+	 */
+	outb(0xb0, 0x43);
+	outb(latch & 0xff, 0x42);
+	outb(latch >> 8, 0x42);
+
+	tsc = t1 = t2 = rdtsc();
+
+	pitcnt = 0;
+	tscmax = 0;
+	tscmin = ULONG_MAX;
+	while ((inb(0x61) & 0x20) == 0) {
+		t2 = rdtsc();
+		delta = t2 - tsc;
+		tsc = t2;
+		if ((unsigned long) delta < tscmin)
+			tscmin = (unsigned int) delta;
+		if ((unsigned long) delta > tscmax)
+			tscmax = (unsigned int) delta;
+		pitcnt++;
+	}
+
+	/*
+	 * Sanity checks:
+	 *
+	 * If we were not able to read the PIT more than loopmin
+	 * times, then we have been hit by a massive SMI
+	 *
+	 * If the maximum is 10 times larger than the minimum,
+	 * then we got hit by an SMI as well.
+	 */
+	if (pitcnt < loopmin) {
+        return ULONG_MAX;
+    }
+        
+    /*
+    if (tscmax > 10 * tscmin) {
+        return ULONG_MAX;
+    }
+    */
+
+	/* Calculate the PIT value */
+	delta = t2 - t1;
+	return delta / ms;
+}
+
+
+static int 
+pit_irq_handler (excp_entry_t * excp, excp_vec_t vec)
+{
+    DEBUG_PRINT("Received PIT Timer interrupt\n");
+    IRQ_HANDLER_END();
+    return 0;
+}
+
+
+int 
+i8254_init (struct naut_info * naut)
+{
+    printk("Initializing i8254 PIT\n");
+
+    DEBUG_PRINT("Gating PIT channel 0\n");
+    i8254_disable();
+
+    if (register_irq_handler(PIT_TIMER_IRQ, pit_irq_handler, NULL) < 0) {
+        ERROR_PRINT("Could not register timer interrupt handler\n");
+        return -1;
+    }
+
+    return 0;
+}

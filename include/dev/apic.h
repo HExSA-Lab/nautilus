@@ -7,6 +7,10 @@
 extern "C" {
 #endif
 
+#define APIC_TIMER_INT_VEC 0xed
+#define APIC_TIMER_DIV     16
+#define APIC_TIMER_DIVCODE 0x03
+
 #define IA32_APIC_BASE_MSR        0x1b
 #define IA32_APIC_BASE_MSR_BSP    0x100 
 #define IA32_APIC_BASE_MSR_ENABLE 0x800
@@ -67,6 +71,9 @@ extern "C" {
 #define APIC_REG_SELF_IPI 0x3f0
 
 #define APIC_DISABLE_FOCUS (~(1U<<9))
+
+#define APIC_TIMER_DISABLE  0x10000
+#define APIC_TIMER_PERIODIC 0x20000
 
 
 #define IPI_VEC_XCALL 0xf3

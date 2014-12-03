@@ -7,6 +7,8 @@
 #include <nautilus/percpu.h>
 #include <nautilus/intrinsics.h>
 #include <dev/apic.h>
+#include <dev/i8254.h>
+#include <dev/timer.h>
 #include <lib/liballoc.h>
 
 #ifndef NAUT_CONFIG_DEBUG_APIC
@@ -118,6 +120,7 @@ void
 apic_do_eoi (void)
 {
     struct apic_dev * apic = (struct apic_dev*)per_cpu_get(apic);
+    ASSERT(apic);
     apic_write(apic, APIC_REG_EOR, 0);
 }
 
@@ -244,28 +247,92 @@ apic_bcast_sipi (struct apic_dev * apic, uint8_t target)
 
 
 void
+apic_timer_setup (struct apic_dev * apic, uint32_t quantum)
+{
+    uint32_t busfreq;
+    uint32_t tmp;
+    uint8_t  tmp2;
+
+    /* TODO: check for constant tick */
+
+    DEBUG_PRINT("Setting up Local APIC timer for core %u\n", apic->id);
+
+    if (register_int_handler(APIC_TIMER_INT_VEC,
+            nk_timer_handler,
+            NULL) != 0) {
+        panic("Could not register APIC timer handler\n");
+    }
+
+    /* first we set up the APIC for one-shot  */
+    apic_write(apic, APIC_REG_LVTT, APIC_TIMER_INT_VEC);
+
+    /* set up the divider */
+    apic_write(apic, APIC_REG_TMDCR, APIC_TIMER_DIVCODE);
+
+    /* set PIT channel 2 to "out" mode */
+    outb((inb(KB_CTRL_PORT_B) & 0xfd) | 0x1, 
+          KB_CTRL_PORT_B);
+
+    /* configure the PIT channel 2 for one-shot */
+    outb(PIT_MODE(PIT_MODE_ONESHOT) |
+         PIT_CHAN(PIT_CHAN_SEL_2)   |
+         PIT_ACC_MODE(PIT_ACC_MODE_BOTH),
+         PIT_CMD_REG);
+
+    /* LSB  (PIT rate) */
+    outb((PIT_RATE/NAUT_CONFIG_HZ) & 0xff,
+         PIT_CHAN2_DATA);
+    inb(KB_CTRL_DATA_OUT);
+
+    /* MSB */
+    outb((uint8_t)((PIT_RATE/NAUT_CONFIG_HZ)>>8),
+                PIT_CHAN2_DATA);
+
+    /* clear and reset bit 0 of kbd ctrl port to reload
+     * current cnt on chan 2 with the new value */
+    tmp2 = inb(KB_CTRL_PORT_B) & 0xfe;
+    outb(tmp2, KB_CTRL_PORT_B);
+    outb(tmp2 | 1, KB_CTRL_PORT_B);
+
+    /* our count down value */
+    apic_write(apic, APIC_REG_TMICT, 0xffffffff);
+
+    while (!(inb(KB_CTRL_PORT_B) & 0x20));
+
+    apic_write(apic, APIC_REG_LVTT, APIC_TIMER_DISABLE);
+
+    busfreq = APIC_TIMER_DIV * NAUT_CONFIG_HZ*(0xffffffff - apic_read(apic, APIC_REG_TMCCT) + 1);
+    DEBUG_PRINT("Detected CPU %u bus frequency as %u KHz\n", apic->id, busfreq/1000);
+    tmp = busfreq/quantum/APIC_TIMER_DIV;
+
+    DEBUG_PRINT("Writing APIC timer counter as %u\n", tmp);
+    apic_write(apic, APIC_REG_TMICT, (tmp < APIC_TIMER_DIV) ? APIC_TIMER_DIV : tmp);
+    apic_write(apic, APIC_REG_TMDCR, APIC_TIMER_DIVCODE);
+    apic_write(apic, APIC_REG_LVTT, APIC_TIMER_INT_VEC | APIC_TIMER_PERIODIC);
+}
+
+
+void
 ap_apic_setup (struct cpu * core)
 {
-    core->apic->base_addr = apic_get_base_addr();
-    core->apic->version   = apic_get_version(core->apic);
-    core->apic->id        = apic_get_id(core->apic);
+    struct apic_dev * a = malloc(sizeof(struct apic_dev));
+    if (!a) {
+        ERROR_PRINT("Could not allocate APIC struct for core %u\n", core->id);
+        return;
+    }
+    memset(a, 0, sizeof(struct apic_dev));
+    core->apic = a;
+
+    core->apic->base_addr    = apic_get_base_addr();
+    core->apic->version      = apic_get_version(core->apic);
+    core->apic->id           = apic_get_id(core->apic);
+    core->apic->spur_int_cnt = 0;
 
     if (core->apic->version < 0x10 || core->apic->version > 0x15) {
         panic("Unsupported APIC version (0x%x) in core %u\n", core->apic->version, core->id);
     }
 
     DEBUG_PRINT("Configuring CPU %u LAPIC (id=0x%x)\n", core->id, core->apic->id);
-
-    /* set spurious interrupt vector to 0xff, disable CPU core focusing */
-    apic_write(core->apic, 
-               APIC_REG_SPIV,
-               apic_read(core->apic, APIC_REG_SPIV) & APIC_DISABLE_FOCUS);
-
-    apic_assign_spiv(core->apic, 0xffu);
-
-    if (register_int_handler(0xff, spur_int_handler, core->apic) != 0) {
-        ERROR_PRINT("Could not register handler for spurious interrupt\n");
-    }
             
     /* Setup TPR (Task-priority register) to disable softwareinterrupts */
     apic_write(core->apic, APIC_REG_TPR, 0x20);
@@ -287,6 +354,18 @@ ap_apic_setup (struct cpu * core)
     
     /* disable error interrupts */
     apic_write(core->apic, APIC_REG_LVTERR, (1<<16));
+
+    /* set spurious interrupt vector to 0xff, disable CPU core focusing */
+    apic_write(core->apic, 
+               APIC_REG_SPIV,
+               apic_read(core->apic, APIC_REG_SPIV) & APIC_DISABLE_FOCUS);
+
+    apic_assign_spiv(core->apic, 0xffu);
+
+    if (register_int_handler(0xff, spur_int_handler, core->apic) != 0) {
+        ERROR_PRINT("Could not register handler for spurious interrupt\n");
+    }
+
 }
 
 
@@ -295,12 +374,12 @@ ap_apic_final_init(struct cpu * core)
 {
     apic_enable(core->apic);
 
-    /* just to be safe */
-    apic_write(core->apic, APIC_REG_LVT0, 0x8700);
-    apic_write(core->apic, APIC_REG_SPIV, 0x3ff);
+    apic_timer_setup(core->apic, (NAUT_CONFIG_HZ * 100 / 1000));
+    apic_write(core->apic, APIC_REG_LVT0, 0x8700); /* BAM BAM */
 }
 
 
+/* TODO: make this work for APs as well */
 void
 apic_init (struct naut_info * naut)
 {
@@ -354,14 +433,15 @@ apic_init (struct naut_info * naut)
     /* spurious interrupt vector is FF */
     apic_assign_spiv(apic, 0xffu);
 
-    if (register_int_handler(0xff, spur_int_handler, apic) != 0) {
+    if (register_int_handler(0xffu, spur_int_handler, apic) != 0) {
         ERROR_PRINT("Could not register spurious interrupt handler\n");
     }
 
     apic_enable(apic); // This will also set S/W enable bit in SPIV
 
     apic_write(apic, APIC_REG_LVT0, 0x08700);  // BAM BAM BAM
-    //apic_write(apic, APIC_REG_SPIV, 0x3ff); 
+
+    apic_timer_setup(apic, (NAUT_CONFIG_HZ * 100 / 1000));
 
     naut->sys.cpus[0]->apic = apic;
 }

@@ -4,6 +4,29 @@
 #include <nautilus/cpu.h>
 
 
+/* NOTE: the APIC organizes interrupt priorities as follows:
+ * class 0: interrupt vectors 0-15
+ * class 1: interrupt vectors 16-31
+ * .
+ * .
+ * .
+ * class 15: interrupt vectors 0x1f - 0xff
+ *
+ * The upper 4 bits indicate the priority class
+ * and the lower 4 represent the int number within
+ * that class
+ *
+ * higher class = higher priority
+ *
+ * higher vector = higher priority within the class
+ *
+ * Because x86 needs the vectors 0-31, the first
+ * two classes are reserved
+ *
+ * In short, we use vectors above 31, with increasing
+ * priority with increasing vector number
+ *
+ */
 static uint8_t irq_to_vec_map[NUM_EXT_IRQS] = {
     0xec,  // IRQ 0 (timer)
     0xe4,  // IRQ 1

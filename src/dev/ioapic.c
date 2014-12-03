@@ -64,13 +64,12 @@ ioapic_assign_irq (struct ioapic * ioapic,
 {
     ioapic_write_irq_entry(ioapic, irq, 
                            vector                             |
-                           //(DELMODE_LOWEST << DEL_MODE_SHIFT) |
                            (DELMODE_FIXED << DEL_MODE_SHIFT) |
                            (polarity << INTPOL_SHIFT)         | 
                            (trigger_mode << TRIG_MODE_SHIFT));
 
 
-    DEBUG_PRINT("just wrote to IOAPIC reg %d (=0x%lx)\n", irq, ioapic_read_irq_entry(ioapic, irq));
+    DEBUG_PRINT("Wrote IOAPIC reg %d (=0x%lx)\n", irq, ioapic_read_irq_entry(ioapic, irq));
 }
 
 

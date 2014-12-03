@@ -23,6 +23,7 @@
 #include <dev/pci.h>
 #include <dev/ioapic.h>
 #include <dev/timer.h>
+#include <dev/i8254.h>
 #include <dev/kbd.h>
 #include <dev/serial.h>
 
@@ -188,13 +189,15 @@ main (unsigned long mbd, unsigned long magic)
 
     ioapic_init(&(naut->sys));
 
+    nk_timer_init(naut);
+
+    i8254_init(naut);
+
     apic_init(naut);
 
     fpu_init(naut);
 
     kbd_init(naut);
-
-    timer_init(naut);
 
     pci_init(naut);
 
