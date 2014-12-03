@@ -69,6 +69,7 @@ parse_mptable_cpu (struct sys_info * sys, struct mp_table_entry_cpu * cpu)
     new_cpu->cpu_sig    = cpu->sig;
     new_cpu->feat_flags = cpu->feat_flags;
     new_cpu->system     = sys;
+    new_cpu->cpu_khz    = nk_detect_cpu_freq(new_cpu->id);
 
     spinlock_init(&new_cpu->lock);
 

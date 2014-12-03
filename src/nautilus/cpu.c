@@ -15,7 +15,7 @@
  *
  */
 ulong_t
-nk_detect_cpu_freq (void) 
+nk_detect_cpu_freq (uint32_t cpu) 
 {
     uint8_t flags = irq_disable_save();
     ulong_t khz = i8254_calib_tsc();
@@ -25,7 +25,7 @@ nk_detect_cpu_freq (void)
     }
 
     printk("CPU %u frequency detected as %lu.%03lu MHz\n", 
-            my_cpu_id(),
+            cpu,
             (ulong_t)khz / 1000, 
             (ulong_t)khz % 1000);
 

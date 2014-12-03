@@ -178,6 +178,8 @@ main (unsigned long mbd, unsigned long magic)
 
     disable_8259pic();
 
+    i8254_init(naut);
+
     smp_early_init(naut);
 
     // setup per-core area for BSP
@@ -191,7 +193,6 @@ main (unsigned long mbd, unsigned long magic)
 
     nk_timer_init(naut);
 
-    i8254_init(naut);
 
     apic_init(naut);
 
