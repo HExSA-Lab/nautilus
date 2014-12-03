@@ -330,17 +330,21 @@ CFLAGS:=   -O2 \
 		   -fno-reorder-functions \
 		   -mcmodel=large \
 		   -mno-red-zone \
-		   #-mno-mmx \
-		   #-mno-sse \
-		   #-mno-sse2 \
-		   #-mno-sse3 \
-		   -mno-3dnow \
 		    $(call cc-option, -Wno-unused-but-set-variable,)
 		   #-std=gnu99 \
 		   #-Werror \
 		   #-Wmissing-prototypes \
 		   #-Wstrict-prototypes \
 		   # -fno-exceptions \
+		   
+ifdef NAUT_CONFIG_NESL_RT
+CFLAGS += \
+		  -mno-mmx \
+		  -mno-sse \
+		  -mno-sse2 \
+		  -mno-sse3 \
+		  -mno-3dnow 
+endif
 
 
 # NOTE: We MUST have max-page-size set to this here. Otherwise things

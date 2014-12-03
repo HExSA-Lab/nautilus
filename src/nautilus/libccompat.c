@@ -140,6 +140,7 @@ fprintf (FILE * f, const char * s, ...)
     vprintk(s, arg);
 #endif
     va_end(arg);
+    return 0;
 #endif
 }
 
@@ -158,6 +159,7 @@ printf (const char * s, ...)
     vprintk(s, arg);
 #endif
     va_end(arg);
+    return 0;
 #endif
 }
 
