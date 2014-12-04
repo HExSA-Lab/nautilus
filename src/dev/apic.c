@@ -432,9 +432,8 @@ apic_init (struct cpu * core)
     /* disable core focusing */
     apic_write(apic, 
                APIC_REG_SPIV,
-               apic_read(apic, APIC_REG_SPIV) & APIC_DISABLE_FOCUS);
+               apic_read(apic, APIC_REG_SPIV) | APIC_DISABLE_FOCUS);
 
-    /* spurious interrupt vector is FF */
     apic_assign_spiv(apic, APIC_SPUR_INT_VEC);
 
     if (register_int_handler(APIC_SPUR_INT_VEC, spur_int_handler, apic) != 0) {

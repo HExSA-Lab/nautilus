@@ -71,7 +71,7 @@ extern "C" {
 #define APIC_REG_TMDCR    0x3e0
 #define APIC_REG_SELF_IPI 0x3f0
 
-#define APIC_DISABLE_FOCUS (~(1U<<9))
+#define APIC_DISABLE_FOCUS (1U << 9)
 
 #define APIC_TIMER_DISABLE  0x10000
 #define APIC_TIMER_PERIODIC 0x20000
