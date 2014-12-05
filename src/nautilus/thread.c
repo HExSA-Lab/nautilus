@@ -1157,7 +1157,8 @@ nk_schedule (void)
         return;
     }
 
-    // KCH TEMPORARY before we switch, make sure we're not
+#ifdef NAUT_CONFIG_ENABLE_STACK_CHECK
+    // before we switch, make sure we're not
     // stomping around past our given stack...
     nk_thread_t * me  = get_cur_thread();
 
@@ -1170,6 +1171,7 @@ nk_schedule (void)
                 (void*)me->rsp,
                 me->stack_size);
     }
+#endif /* !NAUT_CONFIG_ENABLE_STACK_CHECK */
 
 
     nk_thread_switch(runme);

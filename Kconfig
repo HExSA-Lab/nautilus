@@ -51,6 +51,14 @@ menu Debugging
         This will enable runtime assert statements. If this is
         disabled, they will not be generated
 
+    config ENABLE_STACK_CHECK
+    bool "Enable Runtime Stack Overrun Checking"
+    default n
+    help
+      This checks the stack pointer on every thread switch to
+      make sure that a thread hasn't overrun its allocated 
+      stack
+
     config DEBUG_PAGING
       bool "Debug paging"
       depends on DEBUG_PRINTS

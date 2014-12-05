@@ -64,6 +64,8 @@ ENTRY(nk_thread_switch_intr_entry)
 
 
 ENTRY(nk_thread_entry) 
+
+#ifdef NAUT_CONFIG_ENABLE_STACK_CHECK
     /* test and see if we've overrun our stack */
     pushq %rax
     pushq %rbx
@@ -74,16 +76,19 @@ ENTRY(nk_thread_entry)
     jle bad
     popq %rbx
     popq %rax
+#endif
 
     sti
     retq
 
+#ifdef NAUT_CONFIG_ENABLE_STACK_CHECK
 bad:
     movq $panic_str, %rdi
     callq panic
 loop:
     hlt
     jmp loop
+#endif
     
 // RBP and RSP are intentionally not saved here
 // 15 quadwords (14 regs + flags)
