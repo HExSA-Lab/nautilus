@@ -5,6 +5,7 @@
 #include <nautilus/naut_types.h>
 
 #define CPUID_FEATURE_INFO       0x1
+#define CPUID_AMD_FEATURE_INFO   0x80000001
 
 #define CPUID_HAS_FEATURE_ECX(flags, feat) ((flags).ecx.##feat)
 #define CPUID_HAS_FEATURE_EDX(flags, feat) ((flags).edx.##feat)
@@ -114,6 +115,77 @@ struct cpuid_edx_flags {
             uint8_t tm       : 1; // thermal monitor
             uint8_t rsvd2    : 1; 
             uint8_t pbe      : 1; //pending break enable
+        } __packed;
+    } __packed;
+} __packed;
+
+/* AMD CPUID Specification Rev 2.34 Sept 2010, pp. 20--22 */
+struct cpuid_amd_ecx_flags {
+    union {
+        uint32_t val;
+        struct { 
+            uint8_t lahfsahf    : 1; // LAHF & SAHF instr support in long mode
+            uint8_t cmplegacy   : 1; // core multi-processing legacy mode
+            uint8_t svm         : 1; // secure virtual machine
+            uint8_t extapicspace: 1; // extended APIC space
+            uint8_t altmovcr8   : 1; // LOCK MOV CR0 means MOV CR8
+            uint8_t abm         : 1; // advanced bit manipulation (LZCNT instr)
+            uint8_t sse4a       : 1; // EXTRQ, INSERTQ, MOVNTSS, & MOVNTSD
+            uint8_t misalignsse : 1; // misaligned SSE mode
+            uint8_t prefetch3d  : 1; // PREFETCH and PREFETCHW instrs
+            uint8_t osvw        : 1; // OS visible workaround
+            uint8_t ibs         : 1; // instruction based sampling
+            uint8_t xop         : 1; // extended operation support
+            uint8_t skinit      : 1; // SKINIT and STGI are supported
+            uint8_t wdt         : 1; // watch dog timer support
+            uint8_t rsvd0       : 1; 
+            uint8_t lwp         : 1; // lighweight profiling support
+            uint8_t fma4        : 1; // 4-operand FMA instruction support
+            uint8_t rsvd1       : 2; 
+            uint8_t nodeid      : 1; // Indicates support for MSRC001_100C [NodeID, NodesPerProcessor]
+            uint8_t rsvd2       : 1; 
+            uint8_t tbm         : 1; // trailing bit manipulation instr support
+            uint8_t topext      : 1; // Topology extensions support
+            uint8_t rsvd3          ; 
+        } __packed;
+    } __packed;
+} __packed;
+            
+struct cpuid_amd_edx_flags {
+    union {
+        uint32_t val;
+        struct {
+            uint8_t fpu         : 1; // x87 floating-point unit on-chip
+            uint8_t vme         : 1; // virtual-mode enhancements
+            uint8_t de          : 1; // debugging extensions
+            uint8_t pse         : 1; // page-size extensions
+            uint8_t tsc         : 1; // time stamp counter
+            uint8_t msr         : 1; // AMD model-specific registers
+            uint8_t pae         : 1; // physical-address extensions
+            uint8_t mce         : 1; // machine check exception
+            uint8_t cmpxchg8b   : 1; // CMPXCHG8B instruction
+            uint8_t apic        : 1; // APIC support
+            uint8_t rsvd0       : 1; 
+            uint8_t syscall     : 1; // SYSCALL & SYSRET instructions
+            uint8_t mtrr        : 1; // memory-type range registers
+            uint8_t pge         : 1; // page global extensions
+            uint8_t mca         : 1; // machine check architecture
+            uint8_t cmov        : 1; // conditional move instruction
+            uint8_t pat         : 1; // page attribute table
+            uint8_t pse36       : 1; // page-size extensions
+            uint8_t rsvd1       : 2; 
+            uint8_t nx          : 1; // no-execute page protection
+            uint8_t rsvd2       : 1; 
+            uint8_t mmx_ext     : 1; // AMD extensions to MMX instructions
+            uint8_t mmx         : 1; // MMX instructions
+            uint8_t fxsr        : 1; // FXSAVE & FXSTOR instructions
+            uint8_t ffxsr       : 1; // FXSAVE & FXSTOR instr optimizations
+            uint8_t pg1gb       : 1; // 1GB page support
+            uint8_t rdtscp      : 1; // RDTSCP instruction
+            uint8_t rsvd3       : 1;
+            uint8_t lm          : 1; // Long Mode
+            uint8_t amd3dnowext : 1; // 3DNow AMD extensions 
+            uint8_t amd3dnow    : 1; // 3DNow instructions 
         } __packed;
     } __packed;
 } __packed;

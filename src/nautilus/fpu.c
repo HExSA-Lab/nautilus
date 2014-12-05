@@ -6,7 +6,7 @@
 #include <nautilus/msr.h>
 #include <nautilus/cga.h>
 
-#define _FPU_FEAT_QUERY(r, feat)  \
+#define _INTEL_FPU_FEAT_QUERY(r, feat)  \
     ({ \
      cpuid_ret_t ret; \
      struct cpuid_e ## r ## x_flags f; \
@@ -14,9 +14,26 @@
      f.val = ret.r; \
      f.feat; \
      })
+
+#define _AMD_FPU_FEAT_QUERY(r, feat)  \
+    ({ \
+     cpuid_ret_t ret; \
+     struct cpuid_amd_e ## r ## x_flags f; \
+     cpuid(CPUID_AMD_FEATURE_INFO, &ret); \
+     f.val = ret.r; \
+     f.feat; \
+     })
      
-#define FPU_ECX_FEAT_QUERY(feat) _FPU_FEAT_QUERY(c, feat)
-#define FPU_EDX_FEAT_QUERY(feat) _FPU_FEAT_QUERY(d, feat)
+#define FPU_ECX_FEAT_QUERY(feat) _INTEL_FPU_FEAT_QUERY(c, feat)
+#define FPU_EDX_FEAT_QUERY(feat) _INTEL_FPU_FEAT_QUERY(d, feat)
+
+#define AMD_FPU_ECX_FEAT_QUERY(feat) _AMD_FPU_FEAT_QUERY(c, feat)
+#define AMD_FPU_EDX_FEAT_QUERY(feat) _AMD_FPU_FEAT_QUERY(d, feat)
+
+#define DEFAULT_FUN_CHECK(fun, str) \
+    if (fun()) { \
+        printk("\t[" #str "]\n"); \
+    }
 
 static uint8_t 
 has_x87 (void)
@@ -48,6 +65,24 @@ static uint8_t
 has_mmx (void)
 {
     return FPU_EDX_FEAT_QUERY(mmx);
+}
+
+static uint8_t
+amd_has_mmx_ext (void)
+{
+    return AMD_FPU_EDX_FEAT_QUERY(mmx_ext);
+}
+
+static uint8_t
+amd_has_3dnow (void)
+{
+    return AMD_FPU_EDX_FEAT_QUERY(amd3dnow);
+}
+
+static uint8_t 
+amd_has_3dnow_ext (void)
+{
+    return AMD_FPU_EDX_FEAT_QUERY(amd3dnowext);
 }
 
 static uint8_t
@@ -86,6 +121,24 @@ has_sse4d2 (void)
     return FPU_ECX_FEAT_QUERY(sse4dot2);
 }
 
+static uint8_t
+amd_has_sse4a (void)
+{
+    return AMD_FPU_ECX_FEAT_QUERY(sse4a);
+}
+
+static uint8_t
+amd_has_prefetch (void)
+{
+    return AMD_FPU_ECX_FEAT_QUERY(prefetch3d);
+}
+
+static uint8_t
+amd_has_misal_sse (void)
+{
+    return AMD_FPU_ECX_FEAT_QUERY(misalignsse);
+}
+
 static void
 enable_sse (void)
 {
@@ -113,6 +166,12 @@ static uint8_t
 has_fma4 (void)
 {
     return FPU_ECX_FEAT_QUERY(fma);
+}
+
+static uint8_t
+amd_has_fma4 (void)
+{
+    return AMD_FPU_ECX_FEAT_QUERY(fma4);
 }
 
 static uint8_t
@@ -165,21 +224,35 @@ set_osxsave (void)
     write_cr4(r);
 }
 
-/* 
- * this just ensures that we have
- * SSE and SSE2. Pretty sure that long mode
- * requires them so chances are if we make it
- * to this point then we do...
- *
- */
-void
-fpu_init (struct naut_info * naut)
+static void 
+amd_fpu_init (struct naut_info * naut)
+{
+    printk("Probing for AMD-specific FPU/SIMD extensions\n");
+    DEFAULT_FUN_CHECK(amd_has_fma4, FMA4)
+    DEFAULT_FUN_CHECK(amd_has_mmx_ext, AMDMMXEXT)
+    DEFAULT_FUN_CHECK(amd_has_sse4a, SSE4A)
+    DEFAULT_FUN_CHECK(amd_has_3dnow, 3DNOW)
+    DEFAULT_FUN_CHECK(amd_has_3dnow_ext, 3DNOWEXT)
+    DEFAULT_FUN_CHECK(amd_has_prefetch, PREFETCHW)
+    DEFAULT_FUN_CHECK(amd_has_misal_sse, MISALSSE)
+}
+
+static void 
+intel_fpu_init (struct naut_info * naut)
+{
+    printk("Probing for Intel specific FPU/SIMD extensions\n");
+    DEFAULT_FUN_CHECK(has_cx16, CX16)
+    DEFAULT_FUN_CHECK(has_cvt16, CVT16)
+    DEFAULT_FUN_CHECK(has_fma4, FMA4)
+    DEFAULT_FUN_CHECK(has_ssse3, SSSE3)
+}
+
+static void
+fpu_init_common (struct naut_info * naut)
 {
     uint8_t x87_ready = 0;
     uint8_t sse_ready = 0;
 
-    printk("Probing for Floating Point/SIMD extensions...\n");
-    
     if (has_x87()) {
         printk("\t[x87]\n");
         x87_ready = 1;
@@ -192,15 +265,11 @@ fpu_init (struct naut_info * naut)
 
     if (has_clflush()) {
         ++sse_ready;
+        printk("\t[CLFLUSH]\n");
     }
 
-    if (has_sse2()) {
-        printk("\t[SSE2]\n");
-    }
-
-    if (has_sse3()) {
-        printk("\t[SSE3]\n");
-    }
+    DEFAULT_FUN_CHECK(has_sse2, SSE2)
+    DEFAULT_FUN_CHECK(has_sse2, SSE2)
 
     if (has_fxsr()) {
         ++sse_ready;
@@ -209,41 +278,11 @@ fpu_init (struct naut_info * naut)
         panic("No FXSAVE/RESTORE support. Thread switching will be broken\n");
     }
 
-    if (has_xsave()) {
-        printk("\t[XSAVE/RESTORE]\n");
-    }
-
-    if (has_ssse3()) {
-        printk("\t[SSSE3]\n");
-    }
-
-    if (has_sse4d1()) {
-        printk("\t[SSE4.1]\n");
-    }
-
-    if (has_sse4d2()) {
-        printk("\t[SSE4.2]\n");
-    }
-
-    if (has_mmx()) {
-        printk("\t[MMX]\n");
-    }
-
-    if (has_avx()) {
-        printk("\t[AVX]\n");
-    }
-
-    if (has_cx16()) {
-        printk("\t[CX16]\n");
-    }
-
-    if (has_cvt16()) {
-        printk("\t[CVT16]\n");
-    }
-
-    if (has_fma4()) {
-        printk("\t[FMA4]\n");
-    }
+    DEFAULT_FUN_CHECK(has_xsave, XSAVE/RESTORE)
+    DEFAULT_FUN_CHECK(has_sse4d1, SSE4.1)
+    DEFAULT_FUN_CHECK(has_sse4d2, SSE4.2)
+    DEFAULT_FUN_CHECK(has_mmx, MMX)
+    DEFAULT_FUN_CHECK(has_avx, AVX)
 
     /* should we turn on x87? */
     if (x87_ready) {
@@ -255,5 +294,29 @@ fpu_init (struct naut_info * naut)
     if (sse_ready >= 3) {
         printk("\tInitializing SSE extensions\n");
         enable_sse();
+    }
+}
+
+/* 
+ * this just ensures that we have
+ * SSE and SSE2. Pretty sure that long mode
+ * requires them so chances are if we make it
+ * to this point then we do...
+ *
+ */
+void
+fpu_init (struct naut_info * naut)
+{
+    printk("Probing for Floating Point/SIMD extensions...\n");
+
+    fpu_init_common(naut);
+
+    if (nk_is_amd()) {
+        amd_fpu_init(naut);
+    } else if (nk_is_intel()) {
+        intel_fpu_init(naut);
+    } else {
+        ERROR_PRINT("Unsupported processor type!\n");
+        return;
     }
 }

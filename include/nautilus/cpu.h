@@ -8,6 +8,8 @@ extern "C" {
 #include <nautilus/naut_types.h>
 
 ulong_t nk_detect_cpu_freq(uint32_t);
+uint8_t nk_is_amd(void);
+uint8_t nk_is_intel(void);
 
 #define RFLAGS_CF   (1 << 0)
 #define RFLAGS_PF   (1 << 2)
