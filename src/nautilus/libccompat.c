@@ -52,11 +52,12 @@ clock_gettime (clockid_t clk_id, struct timespec * tp)
 void 
 __assert_fail (const char * assertion, const char * file, unsigned line, const char * function)
 {
-    panic("%s:%u: %s: Assertion %s failed\n",
+    panic("Failed assertion in %s: %s at %s, line %d, RA=%lx\n",
+            function,
+            assertion,
             file,
             line,
-            function,
-            assertion);
+            __builtin_return_address(0));
 }
 
 
