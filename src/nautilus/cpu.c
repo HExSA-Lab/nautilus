@@ -21,7 +21,7 @@ nk_detect_cpu_freq (uint32_t cpu)
     ulong_t khz = i8254_calib_tsc();
     if (khz == ULONG_MAX) {
         ERROR_PRINT("Unable to detect CPU frequency\n");
-        goto out;
+        goto out_err;
     }
 
     printk("CPU %u frequency detected as %lu.%03lu MHz\n", 
@@ -31,7 +31,7 @@ nk_detect_cpu_freq (uint32_t cpu)
 
     return khz;
 
-out:
+out_err:
     irq_enable_restore(flags);
-    return 0;
+    return -1;
 }
