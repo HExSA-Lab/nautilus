@@ -49,7 +49,7 @@ static void do_ctors_init (void) {
 
     for (p = _init_array_start; p < _init_array_end; p++) {
         if (*p) {
-            printk("Calling static constructor (%p)\n", (void*)(*p));
+            DEBUG_PRINT("Calling static constructor (%p)\n", (void*)(*p));
             (*p)();
         }
     }
