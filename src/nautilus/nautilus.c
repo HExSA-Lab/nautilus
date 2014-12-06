@@ -44,8 +44,6 @@ extern void (*_init_array_end []) (void) __attribute__((weak));
 
 static void do_ctors_init (void) {
     void (**p)(void) = NULL;
-    printk("do_ctors_init\n");
-
 
     for (p = _init_array_start; p < _init_array_end; p++) {
         if (*p) {
