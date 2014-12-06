@@ -94,6 +94,46 @@ parse_mptable_ioapic (struct sys_info * sys, struct mp_table_entry_ioapic * ioap
     sys->num_ioapics++; 
 }
 
+static void
+parse_mptable_lint (struct sys_info * sys, struct mp_table_entry_lint * lint)
+{
+    char * type_map[4] = {"[INT]", "[NMI]", "[SMI]", "[ExtINT]"};
+    char * po_map[4] = {"[BUS]", "[ActHi]", "[Rsvd]", "[ActLo]"};
+    char * el_map[4] = {"[BUS]", "[Edge]", "[Rsvd]", "[Level]"};
+    DEBUG_PRINT("MPTABLE_PARSE: found LINT entry\n");
+    DEBUG_PRINT("\tInt Type=%s\n", type_map[lint->int_type]);
+    DEBUG_PRINT("\tPolarity=%s\n", po_map[lint->po]);
+    DEBUG_PRINT("\tTrigger Mode=%s\n", el_map[lint->el]);
+    DEBUG_PRINT("\tSrc Bus ID=%02x\n", lint->src_bus_id);
+    DEBUG_PRINT("\tSrc Bus IRQ=%02x\n", lint->src_bus_irq);
+    DEBUG_PRINT("\tDst LAPIC ID=%02x\n", lint->dst_lapic_id);
+    DEBUG_PRINT("\tDst LAPIC LINTIN=%02x\n", lint->dst_lapic_lintin);
+}
+
+static void
+parse_mptable_ioint (struct sys_info * sys, struct mp_table_entry_ioint * ioint)
+{
+    char * type_map[4] = {"[INT]", "[NMI]", "[SMI]", "[ExtINT]"};
+    char * po_map[4] = {"[BUS]", "[ActHi]", "[Rsvd]", "[ActLo]"};
+    char * el_map[4] = {"[BUS]", "[Edge]", "[Rsvd]", "[Level]"};
+    DEBUG_PRINT("MPTABLE_PARSE: found IOINT entry\n");
+    DEBUG_PRINT("\tType=%s\n", type_map[ioint->int_type]);
+    DEBUG_PRINT("\tPolarity=%s\n", po_map[ioint->po]);
+    DEBUG_PRINT("\tTrigger Mode=%s\n", el_map[ioint->el]);
+    DEBUG_PRINT("\tSrc Bus ID=%02x\n", ioint->src_bus_id);
+    DEBUG_PRINT("\tSrc Bus IRQ=%02x\n", ioint->src_bus_irq);
+    DEBUG_PRINT("\tDst IOAPIC ID=%02x\n", ioint->dst_ioapic_id);
+    DEBUG_PRINT("\tDst IOAPIC INT Pin=%02x\n", ioint->dst_ioapic_intin);
+}
+
+static void
+parse_mptable_bus (struct sys_info * sys, struct mp_table_entry_bus * bus)
+{
+    DEBUG_PRINT("MPTABLE_PARSE: found BUS entry\n");
+    DEBUG_PRINT("\tBus ID: %02x\n", bus->bus_id);
+    DEBUG_PRINT("\tType: %s\n", bus->bus_type_string);
+}
+
 
 static int
 parse_mp_table (struct sys_info * sys, struct mp_table * mp)
@@ -122,8 +162,13 @@ parse_mp_table (struct sys_info * sys, struct mp_table * mp)
                 parse_mptable_ioapic(sys, (struct mp_table_entry_ioapic*)mp_entry);
                 break;
             case MP_TAB_TYPE_IO_INT:
+                parse_mptable_ioint(sys, (struct mp_table_entry_ioint*)mp_entry);
+                break;
             case MP_TAB_TYPE_BUS:
+                parse_mptable_bus(sys, (struct mp_table_entry_bus*)mp_entry);
+                break;
             case MP_TAB_TYPE_LINT:
+                parse_mptable_lint(sys, (struct mp_table_entry_lint*)mp_entry);
                 break;
             default:
                 ERROR_PRINT("Unexpected MP Table Entry (type=%d)\n", type);
@@ -233,7 +278,7 @@ smp_wait_for_ap (struct naut_info * naut, unsigned int core_num)
     struct cpu * core = naut->sys.cpus[core_num];
     BARRIER_WHILE(!core->booted);
 
-    /*
+#if 0
     while (1) {
         uint8_t flags;
         flags = spin_lock_irq_save(&(naut->sys.cpus[core_num]->lock));
@@ -244,7 +289,7 @@ smp_wait_for_ap (struct naut_info * naut, unsigned int core_num)
         spin_unlock_irq_restore(&(naut->sys.cpus[core_num]->lock), flags);
         asm volatile ("pause");
     }
-    */
+#endif
 }
 
 
@@ -432,7 +477,15 @@ smp_ap_finish (struct cpu * core)
 {
     //ap_apic_final_init(core);
     fpu_init();
-    DEBUG_PRINT("smp: core %u ready, enabling interrupts\n", core->id);
+
+    PAUSE_WHILE(atomic_cmpswap(core->booted, 0, 1) != 0);
+
+    atomic_inc(smp_core_count);
+
+    /* wait on all the other cores to boot up */
+    BARRIER_WHILE(smp_core_count != core->system->num_cpus);
+
+    DEBUG_PRINT("SMP: Core %u ready, enabling interrupts\n", core->id);
     sti();
 }
 
@@ -464,15 +517,8 @@ smp_ap_entry (struct cpu * core)
      */
     my_cpu = smp_ap_stack_switch(cur->rsp, cur->rsp, my_cpu);
 
-    PAUSE_WHILE(atomic_cmpswap(my_cpu->booted, 0, 1) != 0);
-
-    atomic_inc(smp_core_count);
-
-    // turns interrupts on
+    // wait for the other cores and turn on interrupts
     smp_ap_finish(my_cpu);
-
-    /* wait on all the other cores to boot up */
-    BARRIER_WHILE(smp_core_count != core->system->num_cpus);
 
     ASSERT(irqs_enabled());
     while (1) {
