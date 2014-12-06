@@ -76,6 +76,8 @@ extern "C" {
 #define APIC_TIMER_DISABLE  0x10000
 #define APIC_TIMER_PERIODIC 0x20000
 
+#define APIC_LVT_DISABLED 0x10000
+
 
 #define IPI_VEC_XCALL 0xf3
 
@@ -120,6 +122,7 @@ struct cpu;
 void apic_init(struct cpu * core);
 
 int apic_get_maxlvt(struct apic_dev * apic);
+int apic_read_timer(struct apic_dev * apic);
 uint32_t apic_wait_for_send(struct apic_dev* apic);
 
 

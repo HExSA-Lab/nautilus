@@ -165,6 +165,12 @@ apic_get_maxlvt (struct apic_dev * apic)
     return ((v >> 16) & 0xffu);
 }
 
+int
+apic_read_timer (struct apic_dev * apic)
+{
+    return apic_read(apic, APIC_REG_TMCCT);
+}
+
 
 inline void __always_inline
 apic_ipi (struct apic_dev * apic, 
@@ -258,7 +264,7 @@ apic_timer_setup (struct apic_dev * apic, uint32_t quantum)
 
     cpuid(0x6, &ret);
     if (ret.a & 0x4) {
-        printk("\t[Supports Constant Tick Rate]\n");
+        printk("\t[APIC Supports Constant Tick Rate]\n");
     }
 
     if (register_int_handler(APIC_TIMER_INT_VEC,
@@ -306,13 +312,13 @@ apic_timer_setup (struct apic_dev * apic, uint32_t quantum)
     apic_write(apic, APIC_REG_LVTT, APIC_TIMER_DISABLE);
 
     busfreq = APIC_TIMER_DIV * NAUT_CONFIG_HZ*(0xffffffff - apic_read(apic, APIC_REG_TMCCT) + 1);
-    DEBUG_PRINT("Detected CPU %u bus frequency as %u KHz\n", apic->id, busfreq/1000);
+    printk("Detected CPU %u bus frequency as %u KHz\n", apic->id, busfreq/1000);
     tmp = busfreq/quantum/APIC_TIMER_DIV;
 
     DEBUG_PRINT("Writing APIC timer counter as %u\n", tmp);
     apic_write(apic, APIC_REG_TMICT, (tmp < APIC_TIMER_DIV) ? APIC_TIMER_DIV : tmp);
-    apic_write(apic, APIC_REG_TMDCR, APIC_TIMER_DIVCODE);
     apic_write(apic, APIC_REG_LVTT, APIC_TIMER_INT_VEC | APIC_TIMER_PERIODIC);
+    apic_write(apic, APIC_REG_TMDCR, APIC_TIMER_DIVCODE);
 }
 
 
@@ -425,18 +431,33 @@ apic_init (struct cpu * core)
         panic("Unsupported APIC version (0x%1x)\n", (unsigned)apic->version);
     }
 
-    apic_write(apic, APIC_REG_TPR, 0x20);        // inhibit softint delivery
-    apic_write(apic, APIC_REG_LVTT, 0x10000);    // disable timer interrupts intially
-    apic_write(apic, APIC_REG_LVTPC, 0x10000);   // disable perf cntr interrupts
-    apic_write(apic, APIC_REG_LVTTHMR, 0x10000); // disable thermal interrupts
-    apic_write(apic, APIC_REG_LVT0, 0x08700);    // enable normal external interrupts
-    apic_write(apic, APIC_REG_LVT1, 0x00400);    // enable normal NMI processing
-    apic_write(apic, APIC_REG_LVTERR, 0x10000);  // disable error interrupts
+    apic_write(apic, APIC_REG_TPR, apic_read(apic, APIC_REG_TPR) & 0xfffffff00);        // accept all interrupts
+    apic_write(apic, APIC_REG_LVTT, APIC_LVT_DISABLED);    // disable timer interrupts intially
+    apic_write(apic, APIC_REG_LVTPC, APIC_LVT_DISABLED);   // disable perf cntr interrupts
+    apic_write(apic, APIC_REG_LVTTHMR, APIC_LVT_DISABLED); // disable thermal interrupts
+
+    /* Only the BSP takes External interrupts */
+    if (core->is_bsp && !(apic_read(apic, APIC_REG_LVT0) & APIC_LVT_DISABLED)) {
+        apic_write(apic, APIC_REG_LVT0, 0x700);
+        printk("Enabling ExtInt on core %u\n", my_cpu_id());
+    } else {
+        apic_write(apic, APIC_REG_LVT0, 0x700 | APIC_LVT_DISABLED); 
+        printk("Masking ExtInt on core %u\n", my_cpu_id());
+    }
+
+    /* only BSP takes NMI interrupts */
+    if (core->is_bsp) {
+        apic_write(apic, APIC_REG_LVT1, 0x400);
+    } else {
+        apic_write(apic, APIC_REG_LVT1, 0x400 | APIC_LVT_DISABLED);
+    }
+
+    apic_write(apic, APIC_REG_LVTERR, (apic_read(apic, APIC_REG_LVTERR) & 0xffffff00) | 0xfe);  // error interrupt maps to vector fe
 
     /* disable core focusing */
     apic_write(apic, 
                APIC_REG_SPIV,
-               apic_read(apic, APIC_REG_SPIV) | APIC_DISABLE_FOCUS);
+               APIC_DISABLE_FOCUS);
 
     apic_assign_spiv(apic, APIC_SPUR_INT_VEC);
 
@@ -445,8 +466,6 @@ apic_init (struct cpu * core)
     }
 
     apic_enable(apic); // This will also set S/W enable bit in SPIV
-
-    apic_write(apic, APIC_REG_LVT0, 0x08700);  // BAM BAM BAM
 
     apic_timer_setup(apic, (NAUT_CONFIG_HZ * 100 / 1000));
 
