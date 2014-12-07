@@ -3,6 +3,8 @@
 #include <nautilus/fpu.h>
 #include <nautilus/cpu.h>
 #include <nautilus/cpuid.h>
+#include <nautilus/idt.h>
+#include <nautilus/irq.h>
 #include <nautilus/msr.h>
 #include <nautilus/cga.h>
 
@@ -34,6 +36,28 @@
     if (fun()) { \
         printk("\t[" #str "]\n"); \
     }
+
+
+
+int mf_handler (excp_entry_t * excp, excp_vec_t vec);
+int 
+mf_handler (excp_entry_t * excp, excp_vec_t vec)
+{
+    panic("x86 Floating Point Exception\n");
+    return 0;
+}
+
+
+int xm_handler (excp_entry_t * excp, excp_vec_t vec);
+int
+xm_handler (excp_entry_t * excp, excp_vec_t vec)
+{
+    uint32_t m;
+    asm volatile ("stmxcsr %[_m]" : [_m] "=m" (m) : : "memory");
+    printk("SIMD Floating point exception (MXCSR=0x%x)\n", m);
+    return 0;
+}
+
 
 static uint8_t 
 has_x87 (void)
@@ -143,7 +167,7 @@ static void
 enable_sse (void)
 {
     ulong_t r = read_cr4();
-    uint32_t m = MXCSR_ZM;
+    uint32_t m;
 
     /* NOTE: assuming EM and MP bit in CR0 are already set */
 
@@ -157,7 +181,7 @@ enable_sse (void)
     r &= ~(EFER_FFXSR);
     msr_write(IA32_MSR_EFER, r);
 
-    // Enable div by zero exceptions
+    m = 0x00001f80; // mask all FPU exceptions, no denormals are zero
     asm volatile ("ldmxcsr %[_m]" :: [_m] "m" (m) : "memory");
 }
 
@@ -206,7 +230,6 @@ has_xsave (void)
 {
     return FPU_ECX_FEAT_QUERY(xsave);
 }
-
 
 static uint32_t 
 get_xsave_features (void)
@@ -319,4 +342,15 @@ fpu_init (struct naut_info * naut)
         ERROR_PRINT("Unsupported processor type!\n");
         return;
     }
+
+    if (register_int_handler(XM_EXCP, xm_handler, NULL) != 0) {
+        ERROR_PRINT("Could not register excp handler for XM\n");
+        return;
+    }
+
+    if (register_int_handler(MF_EXCP, mf_handler, NULL) != 0) {
+        ERROR_PRINT("Could not register excp handler for MF\n");
+        return;
+    }
+
 }
