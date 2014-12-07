@@ -36,6 +36,14 @@ const char * excp_codes[NUM_EXCEPTIONS][2] = {
     {"SIMD FP Exception",        "#XM"},
     {"Virtualization Exception", "#VE"},
     {"Reserved",                 "N/A"},
+    {"Reserved",                 "N/A"},
+    {"Reserved",                 "N/A"},
+    {"Reserved",                 "N/A"},
+    {"Reserved",                 "N/A"},
+    {"Reserved",                 "N/A"},
+    {"Reserved",                 "N/A"},
+    {"Reserved",                 "N/A"},
+    {"Reserved",                 "N/A"},
     {"Security Exception",       "#SX"},
     {"Reserved",                 "N/A"},
 };
@@ -74,7 +82,6 @@ null_excp_handler (excp_entry_t * excp,
 }
 
 
-/* TODO: differentiate these!!! */
 int
 null_irq_handler (excp_entry_t * excp,
                   excp_vec_t vector)

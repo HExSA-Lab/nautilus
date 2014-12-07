@@ -25,11 +25,12 @@ extern "C" {
 #define SS_EXCP 12 /* stack-segment fault */
 #define GP_EXCP 13 /* GPF */
 #define PF_EXCP 14 /* page fault */
-#define MF_EXCP 15 /* FPU error */
-#define AC_EXCP 16 /* alignment check */
-#define MC_EXCP 17 /* machine check exception */
-#define XM_EXCP 18 /* SIMD FPU exception */
-#define VE_EXCP 19 /* virtualization exception */
+#define MF_EXCP 16 /* FPU error */
+#define AC_EXCP 17 /* alignment check */
+#define MC_EXCP 18 /* machine check exception */
+#define XM_EXCP 19 /* SIMD FPU exception */
+#define VE_EXCP 20 /* virtualization exception */
+#define SE_EXCP 30 /* Security exception */
 
 
 /* 0s for exceptions that push an error code on the stack */
