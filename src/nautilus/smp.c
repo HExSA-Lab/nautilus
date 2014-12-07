@@ -32,11 +32,6 @@ static volatile unsigned smp_core_count = 1; // assume BSP is booted
 extern addr_t init_smp_boot;
 extern addr_t end_smp_boot;
 
-/* TODO: compute checksum on MPTable */
-/* TODO: print out MP Table info (we'll eventually get some of this 
- * stuff from ACPI 
- */
-
 static uint8_t mp_entry_lengths[5] = {
     MP_TAB_CPU_LEN,
     MP_TAB_BUS_LEN,
@@ -50,16 +45,14 @@ static void
 parse_mptable_cpu (struct sys_info * sys, struct mp_table_entry_cpu * cpu)
 {
     struct cpu * new_cpu = NULL;
-    DEBUG_PRINT("parse_mptable_cpu found cpu\n");
 
     if (sys->num_cpus == NAUT_CONFIG_MAX_CPUS) {
-        panic("too many CPUs!\n");
+        panic("CPU count exceeded max (check your .config)\n");
     }
 
     if(!(new_cpu = malloc(sizeof(struct cpu)))) {
         panic("Couldn't allocate CPU struct\n");
     } 
-    DEBUG_PRINT("allocated new CPU struct at %p\n", (void*)new_cpu);
     memset(new_cpu, 0, sizeof(struct cpu));
 
     new_cpu->id         = sys->num_cpus;
@@ -71,6 +64,15 @@ parse_mptable_cpu (struct sys_info * sys, struct mp_table_entry_cpu * cpu)
     new_cpu->system     = sys;
     new_cpu->cpu_khz    = nk_detect_cpu_freq(new_cpu->id);
 
+    SMP_DEBUG("CPU entry:\n");
+    SMP_DEBUG("\tSystem ID=0x%x\n", new_cpu->id);
+    SMP_DEBUG("\tLAPIC_ID=0x%x\n", new_cpu->lapic_id);
+    SMP_DEBUG("\tEnabled?=%01d\n", new_cpu->enabled);
+    SMP_DEBUG("\tBSP?=%01d\n", new_cpu->is_bsp);
+    SMP_DEBUG("\tSignature=0x%x\n", new_cpu->cpu_sig);
+    SMP_DEBUG("\tFeature Flags=0x%x\n", new_cpu->feat_flags);
+    SMP_DEBUG("\tFreq=%lu.%03lu MHz\n", new_cpu->cpu_khz/1000, new_cpu->cpu_khz%1000);
+
     spinlock_init(&new_cpu->lock);
 
     sys->cpus[sys->num_cpus] = new_cpu;
@@ -79,20 +81,34 @@ parse_mptable_cpu (struct sys_info * sys, struct mp_table_entry_cpu * cpu)
 }
 
 
-/* TODO: change ioapics to pointers! */
 static void
 parse_mptable_ioapic (struct sys_info * sys, struct mp_table_entry_ioapic * ioapic)
 {
-    DEBUG_PRINT("MPTABLE_PARSE: found IOAPIC %d (located at %p)\n", sys->num_ioapics, (void*)&sys->ioapics[sys->num_ioapics]);
-    DEBUG_PRINT("IOAPIC INFO: id=%x, ver=%x, enabled=%x, addr=%lx\n", ioapic->id, ioapic->version, ioapic->enabled, ioapic->addr);
+    struct ioapic * ioa = NULL;
+    if (sys->num_ioapics == NAUT_CONFIG_MAX_IOAPICS) {
+        panic("IOAPIC count exceeded max (change it in .config)\n");
+    }
 
+    if (!(ioa = malloc(sizeof(struct ioapic)))) {
+        panic("Couldn't allocate IOAPIC struct\n");
+    }
+    memset(ioa, 0, sizeof(struct ioapic));
 
-    sys->ioapics[sys->num_ioapics].id      = ioapic->id;
-    sys->ioapics[sys->num_ioapics].version = ioapic->version;
-    sys->ioapics[sys->num_ioapics].usable  = ioapic->enabled;
-    sys->ioapics[sys->num_ioapics].base    = (addr_t)ioapic->addr;
+    SMP_DEBUG("IOAPIC entry:\n");
+    SMP_DEBUG("\tID=0x%x\n", ioapic->id);
+    SMP_DEBUG("\tVersion=0x%x\n", ioapic->version);
+    SMP_DEBUG("\tEnabled?=%01d\n", ioapic->enabled);
+    SMP_DEBUG("\tBase Addr=0x%lx\n", ioapic->addr);
+
+    ioa->id      = ioapic->id;
+    ioa->version = ioapic->version;
+    ioa->usable  = ioapic->enabled;
+    ioa->base    = (addr_t)ioapic->addr;
+
+    sys->ioapics[sys->num_ioapics] = ioa;
     sys->num_ioapics++; 
 }
+
 
 static void
 parse_mptable_lint (struct sys_info * sys, struct mp_table_entry_lint * lint)
@@ -100,14 +116,14 @@ parse_mptable_lint (struct sys_info * sys, struct mp_table_entry_lint * lint)
     char * type_map[4] = {"[INT]", "[NMI]", "[SMI]", "[ExtINT]"};
     char * po_map[4] = {"[BUS]", "[ActHi]", "[Rsvd]", "[ActLo]"};
     char * el_map[4] = {"[BUS]", "[Edge]", "[Rsvd]", "[Level]"};
-    DEBUG_PRINT("MPTABLE_PARSE: found LINT entry\n");
-    DEBUG_PRINT("\tInt Type=%s\n", type_map[lint->int_type]);
-    DEBUG_PRINT("\tPolarity=%s\n", po_map[lint->po]);
-    DEBUG_PRINT("\tTrigger Mode=%s\n", el_map[lint->el]);
-    DEBUG_PRINT("\tSrc Bus ID=%02x\n", lint->src_bus_id);
-    DEBUG_PRINT("\tSrc Bus IRQ=%02x\n", lint->src_bus_irq);
-    DEBUG_PRINT("\tDst LAPIC ID=%02x\n", lint->dst_lapic_id);
-    DEBUG_PRINT("\tDst LAPIC LINTIN=%02x\n", lint->dst_lapic_lintin);
+    SMP_DEBUG("LINT entry\n");
+    SMP_DEBUG("\tInt Type=%s\n", type_map[lint->int_type]);
+    SMP_DEBUG("\tPolarity=%s\n", po_map[lint->po]);
+    SMP_DEBUG("\tTrigger Mode=%s\n", el_map[lint->el]);
+    SMP_DEBUG("\tSrc Bus ID=0x%02x\n", lint->src_bus_id);
+    SMP_DEBUG("\tSrc Bus IRQ=0x%02x\n", lint->src_bus_irq);
+    SMP_DEBUG("\tDst LAPIC ID=0x%02x\n", lint->dst_lapic_id);
+    SMP_DEBUG("\tDst LAPIC LINTIN=0x%02x\n", lint->dst_lapic_lintin);
 }
 
 static void
@@ -116,22 +132,34 @@ parse_mptable_ioint (struct sys_info * sys, struct mp_table_entry_ioint * ioint)
     char * type_map[4] = {"[INT]", "[NMI]", "[SMI]", "[ExtINT]"};
     char * po_map[4] = {"[BUS]", "[ActHi]", "[Rsvd]", "[ActLo]"};
     char * el_map[4] = {"[BUS]", "[Edge]", "[Rsvd]", "[Level]"};
-    DEBUG_PRINT("MPTABLE_PARSE: found IOINT entry\n");
-    DEBUG_PRINT("\tType=%s\n", type_map[ioint->int_type]);
-    DEBUG_PRINT("\tPolarity=%s\n", po_map[ioint->po]);
-    DEBUG_PRINT("\tTrigger Mode=%s\n", el_map[ioint->el]);
-    DEBUG_PRINT("\tSrc Bus ID=%02x\n", ioint->src_bus_id);
-    DEBUG_PRINT("\tSrc Bus IRQ=%02x\n", ioint->src_bus_irq);
-    DEBUG_PRINT("\tDst IOAPIC ID=%02x\n", ioint->dst_ioapic_id);
-    DEBUG_PRINT("\tDst IOAPIC INT Pin=%02x\n", ioint->dst_ioapic_intin);
+    SMP_DEBUG("IOINT entry\n");
+    SMP_DEBUG("\tType=%s\n", type_map[ioint->int_type]);
+    SMP_DEBUG("\tPolarity=%s\n", po_map[ioint->po]);
+    SMP_DEBUG("\tTrigger Mode=%s\n", el_map[ioint->el]);
+    SMP_DEBUG("\tSrc Bus ID=0x%02x\n", ioint->src_bus_id);
+    SMP_DEBUG("\tSrc Bus IRQ=0x%02x\n", ioint->src_bus_irq);
+    SMP_DEBUG("\tDst IOAPIC ID=0x%02x\n", ioint->dst_ioapic_id);
+    SMP_DEBUG("\tDst IOAPIC INT Pin=0x%02x\n", ioint->dst_ioapic_intin);
 }
 
 static void
 parse_mptable_bus (struct sys_info * sys, struct mp_table_entry_bus * bus)
 {
-    DEBUG_PRINT("MPTABLE_PARSE: found BUS entry\n");
-    DEBUG_PRINT("\tBus ID: %02x\n", bus->bus_id);
-    DEBUG_PRINT("\tType: %s\n", bus->bus_type_string);
+    SMP_DEBUG("Bus entry\n");
+    SMP_DEBUG("\tBus ID: 0x%02x\n", bus->bus_id);
+    SMP_DEBUG("\tType: %s\n", bus->bus_type_string);
+}
+
+static uint8_t 
+blk_cksum_ok (uint8_t * mp, unsigned len)
+{
+    unsigned sum = 0;
+
+    while (len--) {
+        sum += *mp++;
+    }
+
+    return ((sum & 0xff) == 0);
 }
 
 
@@ -141,14 +169,22 @@ parse_mp_table (struct sys_info * sys, struct mp_table * mp)
     int count = mp->entry_cnt;
     uint8_t * mp_entry;
 
-
     /* make sure everything is as expected */
     if (strncmp((char*)&mp->sig, "PCMP", 4) != 0) {
         ERROR_PRINT("MP Table unexpected format\n");
     }
 
     mp_entry = (uint8_t*)&mp->entries;
-    DEBUG_PRINT("MP table entry count: %d\n", mp->entry_cnt);
+    SMP_PRINT("Parsing MP Table (entry count=%u)\n", mp->entry_cnt);
+
+
+    SMP_PRINT("Verifying MP Table integrity...");
+    if (!blk_cksum_ok((uint8_t*)mp, mp->len)) {
+        printk("FAIL\n");
+        ERROR_PRINT("Corrupt MP Table detected\n");
+    } else {
+        printk("OK\n");
+    }
 
     while (count--) {
 
@@ -194,7 +230,6 @@ find_mp_pointer (void)
     while (cursor != (char*)(BASE_MEM_LAST_KILO+PAGE_SIZE)) {
 
         if (strncmp(cursor, "_MP_", 4) == 0) {
-            DEBUG_PRINT("\n");
             return (struct mp_float_ptr_struct*)cursor;
         }
 
@@ -216,6 +251,8 @@ find_mp_pointer (void)
 }
 
 
+
+
 int
 smp_early_init (struct naut_info * naut)
 {
@@ -230,10 +267,17 @@ smp_early_init (struct naut_info * naut)
 
     naut->sys.pic_mode_enabled = mp_ptr->mp_feat2 & PIC_MODE_ON;
 
-    DEBUG_PRINT("Parsing MP Table\n");
+    SMP_PRINT("Verifying MP Floating Ptr Struct integrity...");
+    if (!blk_cksum_ok((uint8_t*)mp_ptr, 16)) {
+        printk("FAIL\n");
+        ERROR_PRINT("Corrupt MP Floating Ptr Struct detected\n");
+    } else {
+        printk("OK\n");
+    }
+
     parse_mp_table(&(naut->sys), (struct mp_table*)(uint64_t)mp_ptr->mp_cfg_ptr);
 
-    printk("SMP: Detected %d CPUs\n", naut->sys.num_cpus);
+    SMP_PRINT("Detected %u CPUs\n", naut->sys.num_cpus);
 
     return 0;
 }
@@ -314,7 +358,7 @@ smp_bringup_aps (struct naut_info * naut)
 
     maxlvt = apic_get_maxlvt(apic);
 
-    DEBUG_PRINT("passing target page num %x to SIPI\n", target_vec);
+    SMP_DEBUG("Passing target page num %x to SIPI\n", target_vec);
 
     /* clear APIC errors */
     if (maxlvt > 3) {
@@ -322,14 +366,14 @@ smp_bringup_aps (struct naut_info * naut)
     }
     apic_read(apic, APIC_REG_ESR);
 
-    DEBUG_PRINT("copying in page for SMP boot code at (%p)...\n", (void*)ap_trampoline);
+    SMP_DEBUG("Copying in page for SMP boot code at (%p)...\n", (void*)ap_trampoline);
     memcpy((void*)ap_trampoline, (void*)boot_target, smp_code_sz);
 
     /* create an info area for APs */
     /* initialize AP info area (stack pointer, GDT info, etc) */
     ap_area = (struct ap_init_area*)AP_INFO_AREA;
 
-    DEBUG_PRINT("passing ap area at %p\n", (void*)ap_area);
+    SMP_DEBUG("Passing AP area at %p\n", (void*)ap_area);
 
     /* START BOOTING AP CORES */
     
@@ -337,7 +381,7 @@ smp_bringup_aps (struct naut_info * naut)
     for (i = 1; i < naut->sys.num_cpus; i++) {
         int ret;
 
-        DEBUG_PRINT("Booting secondary CPU %u\n", i);
+        SMP_DEBUG("Booting secondary CPU %u\n", i);
 
         ret = init_ap_area(ap_area, naut, i);
         if (ret == -1) {
@@ -347,7 +391,7 @@ smp_bringup_aps (struct naut_info * naut)
 
 
         /* Send the INIT sequence */
-        DEBUG_PRINT("sending INIT to remote APIC (%u)\n", naut->sys.cpus[i]->lapic_id);
+        SMP_DEBUG("sending INIT to remote APIC (%u)\n", naut->sys.cpus[i]->lapic_id);
         apic_send_iipi(apic, naut->sys.cpus[i]->lapic_id);
 
         /* wait for status to update */
@@ -367,7 +411,7 @@ smp_bringup_aps (struct naut_info * naut)
             }
             apic_read(apic, APIC_REG_ESR);
 
-            DEBUG_PRINT("sending SIPI %u to core %u (vec=%x)\n", j, i, target_vec);
+            SMP_DEBUG("Sending SIPI %u to core %u (vec=%x)\n", j, i, target_vec);
 
             /* send the startup signal */
             apic_send_sipi(apic, naut->sys.cpus[i]->lapic_id, target_vec);
@@ -397,7 +441,7 @@ smp_bringup_aps (struct naut_info * naut)
         /* wait for AP to set its boot flag */
         smp_wait_for_ap(naut, i);
 
-        DEBUG_PRINT("Bringup for core %u done.\n", i);
+        SMP_DEBUG("Bringup for core %u done.\n", i);
     }
 
     BARRIER_WHILE(smp_core_count != naut->sys.num_cpus);
@@ -428,7 +472,7 @@ smp_xcall_init_queue (struct cpu * core)
 int
 smp_setup_xcall_bsp (struct cpu * core)
 {
-    printk("Setting up cross-core IPI event queue\n");
+    SMP_PRINT("Setting up cross-core IPI event queue\n");
     smp_xcall_init_queue(core);
 
     if (register_int_handler(IPI_VEC_XCALL, xcall_handler, NULL) != 0) {
@@ -475,7 +519,6 @@ extern void fpu_init(void);
 static void
 smp_ap_finish (struct cpu * core)
 {
-    //ap_apic_final_init(core);
     fpu_init();
 
     PAUSE_WHILE(atomic_cmpswap(core->booted, 0, 1) != 0);
@@ -485,7 +528,7 @@ smp_ap_finish (struct cpu * core)
     /* wait on all the other cores to boot up */
     BARRIER_WHILE(smp_core_count != core->system->num_cpus);
 
-    DEBUG_PRINT("SMP: Core %u ready, enabling interrupts\n", core->id);
+    SMP_DEBUG("Core %u ready, enabling interrupts\n", core->id);
     sti();
 }
 
@@ -494,7 +537,7 @@ void
 smp_ap_entry (struct cpu * core) 
 { 
     struct cpu * my_cpu;
-    DEBUG_PRINT("smp: core %u starting up\n", core->id);
+    SMP_DEBUG("Core %u starting up\n", core->id);
     if (smp_ap_setup(core) < 0) {
         panic("Error setting up AP!\n");
     }
@@ -504,7 +547,7 @@ smp_ap_entry (struct cpu * core)
      * for the next CPU boot! 
      */
     my_cpu = get_cpu();
-    printk("SMP: CPU (AP) %u operational)\n", my_cpu->id);
+    SMP_PRINT("CPU (AP) %u operational)\n", my_cpu->id);
 
     // switch from boot stack to my new stack (allocated in thread_init)
     nk_thread_t * cur = get_cur_thread();
@@ -629,7 +672,7 @@ smp_xcall (cpu_id_t cpu_id,
     struct nk_xcall x;
     uint8_t flags;
 
-    DEBUG_PRINT("Initiating SMP XCALL from core %u to core %u\n", my_cpu_id(), cpu_id);
+    SMP_DEBUG("Initiating SMP XCALL from core %u to core %u\n", my_cpu_id(), cpu_id);
 
     if (cpu_id > nk_get_num_cpus()) {
         ERROR_PRINT("Attempt to execute xcall on invalid cpu (%u)\n", cpu_id);

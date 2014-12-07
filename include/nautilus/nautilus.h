@@ -39,7 +39,7 @@ extern "C" {
 struct sys_info {
 
     struct cpu * cpus[NAUT_CONFIG_MAX_CPUS];
-    struct ioapic ioapics[MAX_IOAPICS];
+    struct ioapic * ioapics[NAUT_CONFIG_MAX_IOAPICS];
 
     uint32_t num_cpus;
     uint32_t num_ioapics;

@@ -54,7 +54,6 @@ ioapic_unmask_irq (struct ioapic * ioapic, uint8_t irq)
 }
 
 
-/* TODO: break this down more */
 static void 
 ioapic_assign_irq (struct ioapic * ioapic,
                    uint8_t irq, 
@@ -100,30 +99,23 @@ __ioapic_init (struct ioapic * ioapic)
         return -1;
     }
 
-    DEBUG_PRINT("Initializing IOAPIC, id: %d\n", ioapic_get_id(ioapic));
-    DEBUG_PRINT("version: %x\n", ioapic_get_version(ioapic));
-    DEBUG_PRINT("Mapping IOAPIC at %p\n", (void*)ioapic->base);
-
-    DEBUG_PRINT("Assigning IO vectors\n");
+    DEBUG_PRINT("Initializing IOAPIC (ID=0x%x)\n", ioapic_get_id(ioapic));
+    DEBUG_PRINT("\tVersion=0x%x\n", ioapic_get_version(ioapic));
+    DEBUG_PRINT("\tMapping at %p\n", (void*)ioapic->base);
 
     for (i = 0; i < MAX_IRQ_NUM; i++) {
         ioapic_assign_irq(ioapic, i, irq_to_vec(i), PIN_POLARITY_HI, TRIGGER_MODE_EDGE);  
     }
 
+    DEBUG_PRINT("Masking IOAPIC IRQs 16-23\n");
     ioapic_mask_irq(ioapic, 16);
     ioapic_mask_irq(ioapic, 17);
     ioapic_mask_irq(ioapic, 18);
     ioapic_mask_irq(ioapic, 19);
-
-    /* disable IRQ 2 */
-    //ioapic_mask_irq(ioapic, 2);
-
-    /* disable IRQ 20..23 */
     ioapic_mask_irq(ioapic, 20);
     ioapic_mask_irq(ioapic, 21);
     ioapic_mask_irq(ioapic, 22);
     ioapic_mask_irq(ioapic, 23);
-
 
     return 0;
 }
@@ -134,13 +126,11 @@ ioapic_init (struct sys_info * sys)
 {
     int i = 0;
     for (i = 0; i < sys->num_ioapics; i++) {
-        if (__ioapic_init(&(sys->ioapics[i])) < 0) {
+        if (__ioapic_init(sys->ioapics[i]) < 0) {
             ERROR_PRINT("Couldn't initialize IOAPIC\n");
             return -1;
         }
     }
-
-    /* TODO: assign unique ids to IOAPICs */
 
     if (sys->pic_mode_enabled) {
         DEBUG_PRINT("Disabling PIC mode\n");

@@ -27,6 +27,13 @@ config MAX_CPUS
 	  Specifies the maximum number of hardware CPUs supported by Nautilus 
 	  For uniprocessor environments, set this to 1
 
+config MAX_IOAPICS
+    int "Maximum number of IOAPICS"
+    range 1 255
+    default "16"
+    help
+      Specifies the maximum number of IOAPICS supported by Nautilus
+
 config CXX_SUPPORT
     bool "Enable C++ support"
     default n

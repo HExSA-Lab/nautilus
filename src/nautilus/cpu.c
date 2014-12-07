@@ -55,11 +55,6 @@ nk_detect_cpu_freq (uint32_t cpu)
         goto out_err;
     }
 
-    printk("CPU %u frequency detected as %lu.%03lu MHz\n", 
-            cpu,
-            (ulong_t)khz / 1000, 
-            (ulong_t)khz % 1000);
-
     return khz;
 
 out_err:
