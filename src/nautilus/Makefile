@@ -22,5 +22,6 @@ obj-y += \
 	barrier.o \
 	backtrace.o \
 	cpu.o \
+	mwait.o \
 	nautilus.o \
 	libccompat.o 
