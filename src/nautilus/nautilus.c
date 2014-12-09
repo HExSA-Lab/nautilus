@@ -14,6 +14,7 @@
 #include <nautilus/percpu.h>
 #include <nautilus/errno.h>
 #include <nautilus/fpu.h>
+#include <nautilus/numa.h>
 
 #include <nautilus/barrier.h>
 #include <nautilus/rwlock.h>
@@ -203,7 +204,13 @@ main (unsigned long mbd, unsigned long magic)
 
     smp_setup_xcall_bsp(naut->sys.cpus[0]);
 
+    /* NUMA */
+    nk_topo_setup(naut);
+
+    nk_cpu_topo_discover(naut->sys.cpus[0]);
+
     smp_bringup_aps(naut);
+
 
 #ifdef NAUT_CONFIG_CXX_SUPPORT
     // We can assume that we won't encounter any

@@ -23,5 +23,6 @@ obj-y += \
 	backtrace.o \
 	cpu.o \
 	mwait.o \
+	numa.o \
 	nautilus.o \
 	libccompat.o 

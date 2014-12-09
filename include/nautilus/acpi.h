@@ -111,4 +111,95 @@ struct mp_table {
 
 } __packed;
 
+
+struct acpi_header {
+    char     sig[ACPI_NAME_LEN];
+    uint32_t len;
+    uint8_t  rev;
+    uint8_t  cksum;
+    char     oem_id[ACPI_OEM_ID_LEN];
+    char     oem_tbl_id[ACPI_OEM_TABLE_ID_LEN];
+    uint32_t oem_rev;
+    char     asl_comp_id[ACPI_NAME_LEN];
+    uint32_t asl_comp_rev;
+} __packed;
+
+struct acpi_slit {
+    struct acpi_header hdr;
+    uint64_t locality_count;
+    uint8_t entry[1];
+} __packed;
+    
+
+struct acpi_srat {
+    struct   acpi_header hdr;
+    uint32_t tbl_rev;
+    uint64_t rsvd;
+} __packed;
+
+
+struct acpi_subtable_hdr {
+    uint8_t type;
+    uint8_t len;
+} __packed;
+
+enum acpi_srat_type {
+    ACPI_SRAT_TYPE_CPU_AFFINITY = 0,
+    ACPI_SRAT_TYPE_MEMORY_AFFINITY = 1,
+    ACPI_SRAT_TYPE_X2APIC_CPU_AFFINITY = 2,
+    ACPI_SRAT_TYPE_RESERVED = 3 /* 3 and greater are reserved */
+};
+
+/* 0: Processor Local APIC/SAPIC Affinity */
+
+struct acpi_srat_cpu_affinity {
+    struct   acpi_subtable_header header;
+    uint8_t  proximity_domain_lo;
+    uint8_t  apic_id;
+    uint32_t flags;
+    uint8_t  local_sapic_eid;
+    uint8_t  proximity_domain_hi[3];
+    uint32_t clk_domain;
+} __packed;
+
+/* Flags */
+
+#define ACPI_SRAT_CPU_USE_AFFINITY  (1) /* 00: Use affinity structure */
+
+/* 1: Memory Affinity */
+
+struct acpi_srat_mem_affinity {
+    struct acpi_subtable_header header;
+    uint32_t proximity_domain;
+    uint16_t reserved;       /* Reserved, must be zero */
+    uint64_t base_address;
+    uint64_t length;
+    uint32_t reserved1;
+    uint32_t flags;
+    uint64_t reserved2;          /* Reserved, must be zero */
+} __packed;
+
+/* Flags */
+
+#define ACPI_SRAT_MEM_ENABLED       (1) /* 00: Use affinity structure */
+#define ACPI_SRAT_MEM_HOT_PLUGGABLE (1<<1)  /* 01: Memory region is hot pluggable */
+#define ACPI_SRAT_MEM_NON_VOLATILE  (1<<2)  /* 02: Memory region is non-volatile */
+
+/* 2: Processor Local X2_APIC Affinity (ACPI 4.0) */
+
+struct acpi_srat_x2apic_cpu_affinity {
+    struct acpi_subtable_header header;
+    uint16_t reserved;       /* Reserved, must be zero */
+    uint32_t proximity_domain;
+    uint32_t apic_id;
+    uint32_t flags;
+    uint32_t clock_domain;
+    uint32_t reserved2;
+} __packed;
+
+/* Flags for struct acpi_srat_cpu_affinity and struct acpi_srat_x2apic_cpu_affinity */
+
+#define ACPI_SRAT_CPU_ENABLED       (1) /* 00: Use affinity structure */
+    
+
 #endif

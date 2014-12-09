@@ -108,6 +108,8 @@ apic_read (struct apic_dev * apic, uint_t reg)
 
 struct naut_info;
 
+
+uint32_t apic_get_id(struct apic_dev * apic);
 void apic_do_eoi(void);
 inline void apic_ipi(struct apic_dev * apic, uint_t remote_id, uint_t vector);
 void apic_self_ipi (struct apic_dev * apic, uint_t vector);

@@ -21,6 +21,8 @@ uint32_t nk_get_num_cpus (void);
 #include <nautilus/queue.h>
 
 struct naut_info;
+struct nk_topo_params;
+struct nk_cpu_coords;
 
 typedef struct nk_queue nk_thread_queue_t;
 typedef struct nk_thread nk_thread_t;
@@ -61,6 +63,10 @@ struct cpu {
     struct nk_xcall xcall_nowait_info;
 
     ulong_t cpu_khz; 
+    
+    /* NUMA info */
+    struct nk_topo_params * tp;
+    struct nk_cpu_coords * coord;
 };
 
 

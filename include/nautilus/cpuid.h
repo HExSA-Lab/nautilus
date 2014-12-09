@@ -4,7 +4,10 @@
 #include <nautilus/intrinsics.h>
 #include <nautilus/naut_types.h>
 
+uint8_t cpuid_leaf_max(void);
+
 #define CPUID_FEATURE_INFO       0x1
+#define CPUID_AMD_BASIC_INFO     0x80000000
 #define CPUID_AMD_FEATURE_INFO   0x80000001
 
 #define CPUID_HAS_FEATURE_ECX(flags, feat) ((flags).ecx.##feat)
@@ -189,6 +192,32 @@ struct cpuid_amd_edx_flags {
         } __packed;
     } __packed;
 } __packed;
+
+
+struct cpuid_ext_feat_flags_ebx {
+    union {
+        uint32_t val;
+        struct {
+            uint8_t fsgsbase            : 1;
+            uint8_t rsvd0               : 2;
+            uint8_t bmi1                : 1;
+            uint8_t hle                 : 1;
+            uint8_t avx2                : 1;
+            uint8_t smep                : 1; 
+            uint8_t rsvd1               : 1;
+            uint8_t bmi2                : 1;
+            uint8_t erms                : 1;
+            uint8_t invpcid             : 1;
+            uint8_t rtm                 : 1;
+            uint8_t rsvd2               : 4;
+            uint16_t rsvd3;
+        } __packed;
+    } __packed;
+} __packed;
+
+
+
+
 
 
 struct cpuid_feature_flags {

@@ -125,7 +125,7 @@ apic_do_eoi (void)
 }
 
 
-static uint32_t
+uint32_t
 apic_get_id (struct apic_dev * apic)
 {
     return apic_read(apic, APIC_REG_ID) >> APIC_ID_SHIFT;

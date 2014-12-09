@@ -3,6 +3,15 @@
 #include <nautilus/naut_string.h>
 
 
+uint8_t
+cpuid_leaf_max (void)
+{
+    cpuid_ret_t ret;
+    cpuid(0, &ret);
+    return ret.a & 0xff;
+}
+
+
 void 
 detect_cpu (void)
 {

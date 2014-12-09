@@ -11,6 +11,7 @@
 #include <nautilus/queue.h>
 #include <nautilus/idle.h>
 #include <nautilus/atomic.h>
+#include <nautilus/numa.h>
 #include <nautilus/percpu.h>
 #include <dev/ioapic.h>
 #include <dev/apic.h>
@@ -520,6 +521,8 @@ static void
 smp_ap_finish (struct cpu * core)
 {
     fpu_init();
+
+    nk_cpu_topo_discover(core);
 
     PAUSE_WHILE(atomic_cmpswap(core->booted, 0, 1) != 0);
 

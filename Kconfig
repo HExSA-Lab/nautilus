@@ -103,6 +103,13 @@ menu Debugging
         Turns on debug prints for synchronization functions
         (barrier, rwlock, condvar)
 
+    config DEBUG_NUMA
+      bool "Debug NUMA code"
+      depends on DEBUG_PRINTS
+      default n
+      help
+        Turns on debug prints for NUMA code
+
     
 endmenu
 

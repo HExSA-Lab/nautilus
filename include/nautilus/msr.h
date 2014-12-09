@@ -9,6 +9,7 @@ extern "C" {
 
 
 #define IA32_MSR_EFER 0xc0000080
+#define IA32_MISC_ENABLES 0x1a0
 
 #define EFER_SCE    1      // System Call Extensions (SYSCALL)
 #define EFER_LME   (1<<8)  // Long Mode Enable
