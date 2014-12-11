@@ -90,7 +90,7 @@ acpi_os_map_memory(acpi_physical_address phys, acpi_size size)
     if (phys < nk_get_nautilus_info()->sys.mem.phys_mem_avail) {
         return (void*)phys;
     } else {
-        printk("mapping page for %p\n", (void*)phys);
+        //printk("mapping page for %p\n", (void*)phys);
         void * addr = (void*)(phys & ~((1ULL<<PAGE_SHIFT)-1));
         ASSERT(((void*)phys + size) < (addr+PAGE_SIZE));
         nk_map_page_nocache((addr_t)addr, PTE_WRITABLE_BIT|PTE_PRESENT_BIT);

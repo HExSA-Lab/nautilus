@@ -262,30 +262,27 @@ acpi_table_parse_entries(char *id,
  * run @handler on it.  Return 0 if table found, return on if not.
  */
 int 
-acpi_table_parse (char *id, acpi_table_handler handler)
+acpi_table_parse (char *id, acpi_table_handler handler, void * arg)
 {
 	struct acpi_table_header *table = NULL;
 	acpi_size tbl_size;
 
 	if (acpi_disabled) {
-        printk("ACPI DISABLED\n");
+        //printk("[ACPI DISABLED]\n");
 		return -ENODEV;
     }
 
 	if (!handler) {
-        printk("NO HANDLER\n");
 		return -EINVAL;
     }
 
 	acpi_get_table_with_size(id, 0, &table, &tbl_size);
 
 	if (table) {
-        printk("calling handler\n");
-		handler(table);
+		handler(table, arg);
 		//early_acpi_os_unmap_memory(table, tbl_size);
 		return 0;
 	} else {
-        printk("no table returned...\n");
 		return 1;
     }
 }

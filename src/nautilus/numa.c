@@ -335,14 +335,14 @@ acpi_parse_memory_affinity(struct acpi_subtable_header * header,
 }
 
 static int
-acpi_parse_srat (struct acpi_table_header * hdr)
+acpi_parse_srat (struct acpi_table_header * hdr, void * arg)
 {
     NUMA_DEBUG("Parsing SRAT...\n");
 
     return 0;
 }
 
-static int acpi_parse_slit(struct acpi_table_header *table)
+static int acpi_parse_slit(struct acpi_table_header *table, void * arg)
 {
     //acpi_numa_slit_init((struct acpi_table_slit *)table);
 
@@ -360,7 +360,7 @@ nk_numa_init (void)
     NUMA_DEBUG("Parsing NUMA structures\n");
 
  /* SRAT: Static Resource Affinity Table */
-    if (!acpi_table_parse(ACPI_SIG_SRAT, acpi_parse_srat)) {
+    if (!acpi_table_parse(ACPI_SIG_SRAT, acpi_parse_srat, NULL)) {
         NUMA_PRINT("Parsing SRAT_TYPE_X2APIC_CPU_AFFINITY table...\n");
 
         acpi_table_parse_srat(ACPI_SRAT_TYPE_X2APIC_CPU_AFFINITY,
@@ -383,7 +383,7 @@ nk_numa_init (void)
     }
 
     /* SLIT: System Locality Information Table */
-    acpi_table_parse(ACPI_SIG_SLIT, acpi_parse_slit);
+    acpi_table_parse(ACPI_SIG_SLIT, acpi_parse_slit, NULL);
 
     return 0;
 }

@@ -601,6 +601,7 @@ acpi_tb_parse_root_table(acpi_physical_address rsdp_address)
 
 			status = acpi_tb_resize_root_table_list();
 			if (ACPI_FAILURE(status)) {
+                printk("Truncating entries!\n");
 				ACPI_WARNING((AE_INFO,
 					      "Truncating %u table entries!",
 					      (unsigned) (table_count -

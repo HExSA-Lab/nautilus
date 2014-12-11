@@ -152,7 +152,7 @@ typedef int (*acpi_madt_entry_handler) (struct acpi_subtable_header *header,
 
 /* Table Handlers */
 
-typedef int (*acpi_table_handler) (struct acpi_table_header *table);
+typedef int (*acpi_table_handler) (struct acpi_table_header *table, void * arg);
 
 typedef int (*acpi_table_entry_handler) (struct acpi_subtable_header *header, const unsigned long end);
 
@@ -170,7 +170,7 @@ int acpi_parse_madt (void);
 //int acpi_numa_init (void);
 
 int acpi_table_init (void);
-int acpi_table_parse (char *id, acpi_table_handler handler);
+int acpi_table_parse (char *id, acpi_table_handler handler, void * arg);
 int acpi_table_parse_entries(char *id, unsigned long table_size,
 	int entry_id, acpi_table_entry_handler handler, unsigned int max_entries);
 int acpi_table_parse_madt (enum acpi_madt_type id, acpi_table_entry_handler handler, unsigned int max_entries);
