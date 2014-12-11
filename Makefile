@@ -302,7 +302,7 @@ AFLAGS_KERNEL	=
 
 # Use NAUT_INCLUDE when you must reference the include/ directory.
 # Needed to be compatible with the O= option
-NAUT_INCLUDE      := -Iinclude \
+NAUT_INCLUDE      := -D__NAUTILUS__ -Iinclude \
                    $(if $(KBUILD_SRC),-I$(srctree)/include) \
 		   -include include/autoconf.h
 

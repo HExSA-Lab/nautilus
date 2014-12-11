@@ -3,9 +3,16 @@
 #include <nautilus/cpu.h>
 #include <nautilus/msr.h>
 #include <nautilus/numa.h>
+#include <nautilus/errno.h>
+#include <nautilus/acpi.h>
 #include <nautilus/percpu.h>
 #include <dev/apic.h>
 #include <lib/liballoc.h>
+
+#define u8  uint8_t
+#define u16 uint16_t
+#define u32 uint32_t
+#define u64 uint64_t
 
 
 #ifndef NAUT_CONFIG_DEBUG_NUMA
@@ -14,6 +21,8 @@
 #endif
 #define NUMA_PRINT(fmt, args...) printk("NUMA: " fmt, ##args)
 #define NUMA_DEBUG(fmt, args...) DEBUG_PRINT("NUMA: " fmt, ##args)
+
+static int srat_rev;
 
 static inline uint32_t 
 next_pow2 (uint32_t v)
@@ -196,14 +205,149 @@ nk_cpu_topo_discover (struct cpu * me)
     return 0;
 }
 
+void acpi_table_print_srat_entry(struct acpi_subtable_header * header)
+{
 
-static void
-parse_srat (struct naut_info * naut)
+    ACPI_FUNCTION_NAME("acpi_table_print_srat_entry");
+
+    if (!header)
+        return;
+
+    switch (header->type) {
+
+    case ACPI_SRAT_TYPE_CPU_AFFINITY:
+        {
+            struct acpi_srat_cpu_affinity *p =
+                container_of(header, struct acpi_srat_cpu_affinity, header);
+            u32 proximity_domain = p->proximity_domain_lo;
+
+            if (srat_rev >= 2) {
+                proximity_domain |= p->proximity_domain_hi[0] << 8;
+                proximity_domain |= p->proximity_domain_hi[1] << 16;
+                proximity_domain |= p->proximity_domain_hi[2] << 24;
+            }
+            NUMA_PRINT("SRAT Processor (id[0x%02x] eid[0x%02x]) in proximity domain %d %s\n",
+                      p->apic_id, p->local_sapic_eid,
+                      proximity_domain,
+                      p->flags & ACPI_SRAT_CPU_ENABLED
+                      ? "enabled" : "disabled");
+        }
+        break;
+
+    case ACPI_SRAT_TYPE_MEMORY_AFFINITY:
+        {
+            struct acpi_srat_mem_affinity *p =
+                container_of(header, struct acpi_srat_mem_affinity, header);
+            u32 proximity_domain = p->proximity_domain;
+
+            if (srat_rev < 2)
+                proximity_domain &= 0xff;
+            NUMA_PRINT("SRAT Memory (0x%016llx length 0x%016llx type 0x%x) in proximity domain %d %s%s\n",
+                      p->base_address, p->length,
+                      p->memory_type, proximity_domain,
+                      p->flags & ACPI_SRAT_MEM_ENABLED
+                      ? "enabled" : "disabled",
+                      p->flags & ACPI_SRAT_MEM_HOT_PLUGGABLE
+                      ? " hot-pluggable" : "");
+        }
+        break;
+
+    case ACPI_SRAT_TYPE_X2APIC_CPU_AFFINITY:
+        {
+            struct acpi_srat_x2apic_cpu_affinity *p =
+                (struct acpi_srat_x2apic_cpu_affinity *)header;
+            NUMA_PRINT("SRAT Processor (x2apicid[0x%08x]) in"
+                      " proximity domain %d %s\n",
+                      p->apic_id,
+                      p->proximity_domain,
+                      (p->flags & ACPI_SRAT_CPU_ENABLED) ?
+                      "enabled" : "disabled");
+        }
+        break;
+    default:
+        NUMA_PRINT("Found unsupported SRAT entry (type = 0x%x)\n",
+               header->type);
+        break;
+    }
+}
+
+static int 
+acpi_parse_x2apic_affinity(struct acpi_subtable_header *header,
+               const unsigned long end)
+{
+    struct acpi_srat_x2apic_cpu_affinity *processor_affinity;
+
+    processor_affinity = (struct acpi_srat_x2apic_cpu_affinity *)header;
+    if (!processor_affinity)
+        return -EINVAL;
+
+    acpi_table_print_srat_entry(header);
+
+    /* let architecture-dependent part to do it */
+    //acpi_numa_x2apic_affinity_init(processor_affinity);
+
+    return 0;
+}
+
+static int 
+acpi_table_parse_srat(enum acpi_srat_entry_id id,
+              acpi_madt_entry_handler handler, unsigned int max_entries)
+{
+    return acpi_table_parse_entries(ACPI_SIG_SRAT,
+                    sizeof(struct acpi_table_srat), id,
+                    handler, max_entries);
+}
+
+static int 
+acpi_parse_processor_affinity(struct acpi_subtable_header * header,
+                  const unsigned long end)
+{
+    struct acpi_srat_cpu_affinity *processor_affinity
+        = container_of(header, struct acpi_srat_cpu_affinity, header);
+
+    if (!processor_affinity)
+        return -EINVAL;
+
+    acpi_table_print_srat_entry(header);
+
+    /* let architecture-dependent part to do it */
+    //acpi_numa_processor_affinity_init(processor_affinity);
+
+    return 0;
+}
+
+static int 
+acpi_parse_memory_affinity(struct acpi_subtable_header * header,
+               const unsigned long end)
+{
+    struct acpi_srat_mem_affinity *memory_affinity
+        = container_of(header, struct acpi_srat_mem_affinity, header);
+
+    if (!memory_affinity)
+        return -EINVAL;
+
+    acpi_table_print_srat_entry(header);
+
+    /* let architecture-dependent part to do it */
+    //acpi_numa_memory_affinity_init(memory_affinity);
+
+    return 0;
+}
+
+static int
+acpi_parse_srat (struct acpi_table_header * hdr)
 {
     NUMA_DEBUG("Parsing SRAT...\n");
 
+    return 0;
 }
 
+static int acpi_parse_slit(struct acpi_table_header *table)
+{
+    //acpi_numa_slit_init((struct acpi_table_slit *)table);
+
+    return 0;
+}
 
 /*
  *
@@ -211,10 +355,36 @@ parse_srat (struct naut_info * naut)
  *
  */
 int
-nk_topo_setup (struct naut_info * naut)
+nk_numa_init (void)
 {
-    NUMA_DEBUG("Parsing NUMA-related structures\n");
-    parse_srat(naut);
+    NUMA_DEBUG("Parsing NUMA structures\n");
+
+ /* SRAT: Static Resource Affinity Table */
+    if (!acpi_table_parse(ACPI_SIG_SRAT, acpi_parse_srat)) {
+        NUMA_PRINT("Parsing SRAT_TYPE_X2APIC_CPU_AFFINITY table...\n");
+
+        acpi_table_parse_srat(ACPI_SRAT_TYPE_X2APIC_CPU_AFFINITY,
+                           acpi_parse_x2apic_affinity, NAUT_CONFIG_MAX_CPUS);
+        NUMA_PRINT("DONE.\n\n");
+
+        NUMA_PRINT("Parsing SRAT_PROCESSOR_AFFINITY table...\n");
+
+        acpi_table_parse_srat(ACPI_SRAT_PROCESSOR_AFFINITY,
+                           acpi_parse_processor_affinity,
+                           NAUT_CONFIG_MAX_CPUS);
+        NUMA_PRINT("DONE.\n\n");
+
+        NUMA_PRINT("Parsing SRAT_MEMORY_AFFINITY table...\n");
+
+        acpi_table_parse_srat(ACPI_SRAT_MEMORY_AFFINITY,
+                acpi_parse_memory_affinity, NAUT_CONFIG_MAX_CPUS * 2);
+
+        NUMA_PRINT("DONE.\n\n");
+    }
+
+    /* SLIT: System Locality Information Table */
+    acpi_table_parse(ACPI_SIG_SLIT, acpi_parse_slit);
+
     return 0;
 }
 

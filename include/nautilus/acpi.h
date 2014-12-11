@@ -1,7 +1,9 @@
-#ifndef __ACPI_H__
-#define __ACPI_H__
+#ifndef __NAUT_ACPI_H__
+#define __NAUT_ACPI_H__
 
+#include <acpi/acpi.h>
 #include <nautilus/intrinsics.h>
+#include <nautilus/acpi-x86_64.h>
 
 #define MP_TAB_TYPE_CPU    0
 #define MP_TAB_TYPE_BUS    1
@@ -112,94 +114,201 @@ struct mp_table {
 } __packed;
 
 
-struct acpi_header {
-    char     sig[ACPI_NAME_LEN];
-    uint32_t len;
-    uint8_t  rev;
-    uint8_t  cksum;
-    char     oem_id[ACPI_OEM_ID_LEN];
-    char     oem_tbl_id[ACPI_OEM_TABLE_ID_LEN];
-    uint32_t oem_rev;
-    char     asl_comp_id[ACPI_NAME_LEN];
-    uint32_t asl_comp_rev;
-} __packed;
-
-struct acpi_slit {
-    struct acpi_header hdr;
-    uint64_t locality_count;
-    uint8_t entry[1];
-} __packed;
-    
-
-struct acpi_srat {
-    struct   acpi_header hdr;
-    uint32_t tbl_rev;
-    uint64_t rsvd;
-} __packed;
-
-
-struct acpi_subtable_hdr {
-    uint8_t type;
-    uint8_t len;
-} __packed;
-
-enum acpi_srat_type {
-    ACPI_SRAT_TYPE_CPU_AFFINITY = 0,
-    ACPI_SRAT_TYPE_MEMORY_AFFINITY = 1,
-    ACPI_SRAT_TYPE_X2APIC_CPU_AFFINITY = 2,
-    ACPI_SRAT_TYPE_RESERVED = 3 /* 3 and greater are reserved */
+enum acpi_irq_model_id {
+	ACPI_IRQ_MODEL_PIC = 0,
+	ACPI_IRQ_MODEL_IOAPIC,
+	ACPI_IRQ_MODEL_IOSAPIC,
+	ACPI_IRQ_MODEL_PLATFORM,
+	ACPI_IRQ_MODEL_COUNT
 };
 
-/* 0: Processor Local APIC/SAPIC Affinity */
+extern enum acpi_irq_model_id	acpi_irq_model;
 
-struct acpi_srat_cpu_affinity {
-    struct   acpi_subtable_header header;
-    uint8_t  proximity_domain_lo;
-    uint8_t  apic_id;
-    uint32_t flags;
-    uint8_t  local_sapic_eid;
-    uint8_t  proximity_domain_hi[3];
-    uint32_t clk_domain;
-} __packed;
+enum acpi_interrupt_id {
+	ACPI_INTERRUPT_PMI	= 1,
+	ACPI_INTERRUPT_INIT,
+	ACPI_INTERRUPT_CPEI,
+	ACPI_INTERRUPT_COUNT
+};
 
-/* Flags */
+#define	ACPI_SPACE_MEM		0
 
-#define ACPI_SRAT_CPU_USE_AFFINITY  (1) /* 00: Use affinity structure */
+enum acpi_srat_entry_id {
+	ACPI_SRAT_PROCESSOR_AFFINITY = 0,
+	ACPI_SRAT_MEMORY_AFFINITY,
+	ACPI_SRAT_ENTRY_COUNT
+};
 
-/* 1: Memory Affinity */
+enum acpi_address_range_id {
+	ACPI_ADDRESS_RANGE_MEMORY = 1,
+	ACPI_ADDRESS_RANGE_RESERVED = 2,
+	ACPI_ADDRESS_RANGE_ACPI = 3,
+	ACPI_ADDRESS_RANGE_NVS	= 4,
+	ACPI_ADDRESS_RANGE_COUNT
+};
 
-struct acpi_srat_mem_affinity {
-    struct acpi_subtable_header header;
-    uint32_t proximity_domain;
-    uint16_t reserved;       /* Reserved, must be zero */
-    uint64_t base_address;
-    uint64_t length;
-    uint32_t reserved1;
-    uint32_t flags;
-    uint64_t reserved2;          /* Reserved, must be zero */
-} __packed;
+typedef int (*acpi_madt_entry_handler) (struct acpi_subtable_header *header,
+		        const unsigned long end);
 
-/* Flags */
+/* Table Handlers */
 
-#define ACPI_SRAT_MEM_ENABLED       (1) /* 00: Use affinity structure */
-#define ACPI_SRAT_MEM_HOT_PLUGGABLE (1<<1)  /* 01: Memory region is hot pluggable */
-#define ACPI_SRAT_MEM_NON_VOLATILE  (1<<2)  /* 02: Memory region is non-volatile */
+typedef int (*acpi_table_handler) (struct acpi_table_header *table);
 
-/* 2: Processor Local X2_APIC Affinity (ACPI 4.0) */
+typedef int (*acpi_table_entry_handler) (struct acpi_subtable_header *header, const unsigned long end);
 
-struct acpi_srat_x2apic_cpu_affinity {
-    struct acpi_subtable_header header;
-    uint16_t reserved;       /* Reserved, must be zero */
-    uint32_t proximity_domain;
-    uint32_t apic_id;
-    uint32_t flags;
-    uint32_t clock_domain;
-    uint32_t reserved2;
-} __packed;
+#define BAD_MADT_ENTRY(entry, end) (					    \
+		(!entry) || (unsigned long)entry + sizeof(*entry) > end ||  \
+		((struct acpi_subtable_header *)entry)->length < sizeof(*entry))
 
-/* Flags for struct acpi_srat_cpu_affinity and struct acpi_srat_x2apic_cpu_affinity */
+char * __acpi_map_table (unsigned long phys_addr, unsigned long size);
+void __acpi_unmap_table(char *map, unsigned long size);
+int early_acpi_boot_init(void);
+int acpi_boot_init (void);
+void nk_acpi_init (void);
+int acpi_mps_check (void);
+int acpi_parse_madt (void);
+//int acpi_numa_init (void);
 
-#define ACPI_SRAT_CPU_ENABLED       (1) /* 00: Use affinity structure */
+int acpi_table_init (void);
+int acpi_table_parse (char *id, acpi_table_handler handler);
+int acpi_table_parse_entries(char *id, unsigned long table_size,
+	int entry_id, acpi_table_entry_handler handler, unsigned int max_entries);
+int acpi_table_parse_madt (enum acpi_madt_type id, acpi_table_entry_handler handler, unsigned int max_entries);
+int acpi_parse_mcfg (struct acpi_table_header *header);
+void acpi_table_print_madt_entry (struct acpi_subtable_header *madt);
+
+/* the following four functions are architecture-dependent */
+void acpi_numa_slit_init (struct acpi_table_slit *slit);
+void acpi_numa_processor_affinity_init (struct acpi_srat_cpu_affinity *pa);
+void acpi_numa_x2apic_affinity_init(struct acpi_srat_x2apic_cpu_affinity *pa);
+void acpi_numa_memory_affinity_init (struct acpi_srat_mem_affinity *ma);
+void acpi_numa_arch_fixup(void);
+void acpi_set_pmem_numa_info(void);
+
+int acpi_register_ioapic(acpi_handle handle, uint64_t phys_addr, uint32_t gsi_base);
+int acpi_unregister_ioapic(acpi_handle handle, uint32_t gsi_base);
+void acpi_irq_stats_init(void);
+extern uint32_t acpi_irq_handled;
+extern uint32_t acpi_irq_not_handled;
+
+extern int sbf_port;
+extern unsigned long acpi_realmode_flags;
+
+#ifdef CONFIG_X86_IO_APIC
+extern int acpi_get_override_irq(uint32_t gsi, int *trigger, int *polarity);
+#else
+#define acpi_get_override_irq(gsi, trigger, polarity) (-1)
+#endif
+/*
+ * This function undoes the effect of one call to acpi_register_gsi().
+ * If this matches the last registration, any IRQ resources for gsi
+ * are freed.
+ */
+void acpi_unregister_gsi (uint32_t gsi);
+
+struct pci_dev;
+
+int acpi_pci_irq_enable (struct pci_dev *dev);
+void acpi_penalize_isa_irq(int irq, int active);
+
+void acpi_pci_irq_disable (struct pci_dev *dev);
+
+struct acpi_pci_driver {
+	struct acpi_pci_driver *next;
+	int (*add)(acpi_handle handle);
+	void (*remove)(acpi_handle handle);
+};
+
+int acpi_pci_register_driver(struct acpi_pci_driver *driver);
+void acpi_pci_unregister_driver(struct acpi_pci_driver *driver);
+
+extern int ec_read(uint8_t addr, uint8_t *val);
+extern int ec_write(uint8_t addr, uint8_t val);
+extern int ec_transaction(uint8_t command,
+                          const uint8_t *wdata, unsigned wdata_len,
+                          uint8_t *rdata, unsigned rdata_len);
+
+#define ACPI_VIDEO_OUTPUT_SWITCHING			0x0001
+#define ACPI_VIDEO_DEVICE_POSTING			0x0002
+#define ACPI_VIDEO_ROM_AVAILABLE			0x0004
+#define ACPI_VIDEO_BACKLIGHT				0x0008
+#define ACPI_VIDEO_BACKLIGHT_FORCE_VENDOR		0x0010
+#define ACPI_VIDEO_BACKLIGHT_FORCE_VIDEO		0x0020
+#define ACPI_VIDEO_OUTPUT_SWITCHING_FORCE_VENDOR	0x0040
+#define ACPI_VIDEO_OUTPUT_SWITCHING_FORCE_VIDEO		0x0080
+#define ACPI_VIDEO_BACKLIGHT_DMI_VENDOR			0x0100
+#define ACPI_VIDEO_BACKLIGHT_DMI_VIDEO			0x0200
+#define ACPI_VIDEO_OUTPUT_SWITCHING_DMI_VENDOR		0x0400
+#define ACPI_VIDEO_OUTPUT_SWITCHING_DMI_VIDEO		0x0800
+
+int acpi_get_pxm(acpi_handle handle);
+int acpi_get_node(acpi_handle *handle);
+extern int acpi_paddr_to_node(uint64_t start_addr, uint64_t size);
+
+extern int pnpacpi_disabled;
+
+#define PXM_INVAL	(-1)
+#define NID_INVAL	(-1)
+
+struct acpi_osc_context {
+	char *uuid_str; /* uuid string */
+	int rev;
+	struct acpi_buffer cap; /* arg2/arg3 */
+	struct acpi_buffer ret; /* free by caller if success */
+};
+
+#define OSC_QUERY_TYPE			0
+#define OSC_SUPPORT_TYPE 		1
+#define OSC_CONTROL_TYPE		2
+
+/* _OSC DW0 Definition */
+#define OSC_QUERY_ENABLE		1
+#define OSC_REQUEST_ERROR		2
+#define OSC_INVALID_UUID_ERROR		4
+#define OSC_INVALID_REVISION_ERROR	8
+#define OSC_CAPABILITIES_MASK_ERROR	16
+
+acpi_status acpi_run_osc(acpi_handle handle, struct acpi_osc_context *context);
+
+/* platform-wide _OSC bits */
+#define OSC_SB_PAD_SUPPORT		1
+#define OSC_SB_PPC_OST_SUPPORT		2
+#define OSC_SB_PR3_SUPPORT		4
+#define OSC_SB_CPUHP_OST_SUPPORT	8
+#define OSC_SB_APEI_SUPPORT		16
+
+/* PCI defined _OSC bits */
+/* _OSC DW1 Definition (OS Support Fields) */
+#define OSC_EXT_PCI_CONFIG_SUPPORT		1
+#define OSC_ACTIVE_STATE_PWR_SUPPORT 		2
+#define OSC_CLOCK_PWR_CAPABILITY_SUPPORT	4
+#define OSC_PCI_SEGMENT_GROUPS_SUPPORT		8
+#define OSC_MSI_SUPPORT				16
+#define OSC_PCI_SUPPORT_MASKS			0x1f
+
+/* _OSC DW1 Definition (OS Control Fields) */
+#define OSC_PCI_EXPRESS_NATIVE_HP_CONTROL	1
+#define OSC_SHPC_NATIVE_HP_CONTROL 		2
+#define OSC_PCI_EXPRESS_PME_CONTROL		4
+#define OSC_PCI_EXPRESS_AER_CONTROL		8
+#define OSC_PCI_EXPRESS_CAP_STRUCTURE_CONTROL	16
+
+#define OSC_PCI_CONTROL_MASKS 	(OSC_PCI_EXPRESS_NATIVE_HP_CONTROL | 	\
+				OSC_SHPC_NATIVE_HP_CONTROL | 		\
+				OSC_PCI_EXPRESS_PME_CONTROL |		\
+				OSC_PCI_EXPRESS_AER_CONTROL |		\
+				OSC_PCI_EXPRESS_CAP_STRUCTURE_CONTROL)
+extern acpi_status acpi_pci_osc_control_set(acpi_handle handle,
+					     uint32_t *mask, uint32_t req);
+extern void acpi_early_init(void);
+
+static inline void *acpi_os_ioremap(acpi_physical_address phys,
+					    acpi_size size)
+{
+    panic("Not supported\n");
+	//return ioremap(phys, size);
+    return NULL;
+}
     
 
 #endif

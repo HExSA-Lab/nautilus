@@ -24,4 +24,9 @@
 #define __align(x) __attribute__ ((aligned (x)))
 #endif
 
+
+/* suppress uninitialized var warning without generating code */
+#define uninitialized_var(x) x = x
+
+
 #endif

@@ -7,7 +7,7 @@ extern "C" {
 
 struct cpu;
 int nk_cpu_topo_discover(struct cpu* me);
-int nk_topo_setup(struct naut_info* naut);
+int nk_numa_init(void);
 
 
 struct nk_topo_params {

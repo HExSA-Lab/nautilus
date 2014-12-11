@@ -15,6 +15,7 @@
 #include <nautilus/errno.h>
 #include <nautilus/fpu.h>
 #include <nautilus/numa.h>
+#include <nautilus/acpi.h>
 
 #include <nautilus/barrier.h>
 #include <nautilus/rwlock.h>
@@ -204,10 +205,9 @@ main (unsigned long mbd, unsigned long magic)
 
     smp_setup_xcall_bsp(naut->sys.cpus[0]);
 
-    /* NUMA */
-    nk_topo_setup(naut);
-
     nk_cpu_topo_discover(naut->sys.cpus[0]);
+
+    nk_acpi_init();
 
     smp_bringup_aps(naut);
 

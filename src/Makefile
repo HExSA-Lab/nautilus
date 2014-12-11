@@ -2,6 +2,7 @@ obj-y += \
 	nautilus/ \
 	asm/ \
 	dev/ \
+	acpi/ \
 	test/  
 
 obj-$(NAUT_CONFIG_CXX_SUPPORT) += cxx/
