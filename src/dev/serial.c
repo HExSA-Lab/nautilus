@@ -3,6 +3,7 @@
 #include <nautilus/idt.h>
 #include <nautilus/irq.h>
 #include <nautilus/cpu.h>
+#include <nautilus/shutdown.h>
 #include <dev/serial.h>
 
 
@@ -12,16 +13,6 @@ static spinlock_t serial_lock; /* for SMP */
 static uint8_t serial_device_ready = 0;
 uint16_t serial_io_addr = 0;
 uint_t serial_print_level;
-
-static void reboot (void) 
-{
-    uint8_t good = 0x02;
-    while (good & 0x02) {
-        good = inb(0x64);
-    }
-    outb(0xfe, 0x64);
-    halt();
-}
 
 
 static int 
@@ -36,15 +27,20 @@ serial_irq_handler (excp_entry_t * excp,
   if ((irq_id & COM1_IRQ) != 0) {
     rcv_byte = inb(serial_io_addr + 0);
 
-    if (rcv_byte == 'k') {
-      serial_print("Rebooting Machine\n");
-      reboot();
-      //machine_real_restart();
-    }
-
-    if (rcv_byte == 'p') {
-      serial_print("Manually invoking panic\n");
-      panic();
+    switch (rcv_byte) {
+        case 'k' :
+            serial_print("Rebooting Machine\n");
+            reboot();
+            break;
+        case 'p' :
+            serial_print("Manually invoking panic\n");
+            panic();
+            break;
+        case 's' :
+            acpi_shutdown();
+            break;
+        default:
+            break;
     }
       
   }

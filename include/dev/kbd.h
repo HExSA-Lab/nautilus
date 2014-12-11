@@ -18,6 +18,9 @@
 #define KEY_LSHIFT   SPECIAL_KEY(15)
 #define KEY_RSHIFT   SPECIAL_KEY(16)
 
+#define KBD_BIT_KDATA 0 /* keyboard data in buffer */
+#define KBD_BIT_UDATA 1 /* user data in buffer */
+#define KBD_RESET     0xfe
 
 #define STATUS_OUTPUT_FULL 0x1
 

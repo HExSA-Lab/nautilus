@@ -24,6 +24,7 @@ obj-y += \
 	cpu.o \
 	mwait.o \
 	acpi.o \
+	shutdown.o \
 	numa.o \
 	nautilus.o \
 	libccompat.o 
