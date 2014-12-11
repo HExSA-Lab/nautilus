@@ -49,6 +49,13 @@ config DEBUG_PIT
     help
       Turn on debug prints for the i8253/8254 PIT
 
+config DEBUG_HPET
+    bool "Debug HPET"
+    depends on DEBUG_PRINTS
+    default n
+    help
+      Turn on debug prints for the HPET
+
 config HZ
     int "Timer interrupt frequency"
     range 100 10000

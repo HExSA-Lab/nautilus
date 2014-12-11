@@ -29,6 +29,7 @@ extern "C" {
 
 #include <dev/ioapic.h>
 #include <dev/timer.h>
+#include <dev/hpet.h>
 #include <nautilus/smp.h>
 #include <nautilus/paging.h>
 #include <nautilus/limits.h>
@@ -56,8 +57,10 @@ struct sys_info {
     struct nk_timer_event * time_events;
 
     struct pci_info * pci;
+    struct hpet_dev * hpet;
 
     struct multiboot_info * mb_info;
+
 };
 
 struct naut_info {

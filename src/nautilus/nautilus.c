@@ -23,6 +23,7 @@
 
 #include <dev/apic.h>
 #include <dev/pci.h>
+#include <dev/hpet.h>
 #include <dev/ioapic.h>
 #include <dev/timer.h>
 #include <dev/i8254.h>
@@ -208,6 +209,8 @@ main (unsigned long mbd, unsigned long magic)
     nk_cpu_topo_discover(naut->sys.cpus[0]);
 
     nk_acpi_init();
+
+    nk_hpet_init();
 
     smp_bringup_aps(naut);
 

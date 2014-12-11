@@ -65,6 +65,8 @@ int nk_pf_handler(excp_entry_t * excp, excp_vec_t vector, addr_t fault_addr);
 #define PAGE_SIZE_1GB  1073741824UL
 #define PAGE_SIZE      PAGE_SIZE_2MB
 
+#define PAGE_MASK(x)  ((x) & ~((1<<PAGE_SHIFT)-1))
+
 #define MEM_1GB        0x40000000ULL
 #define MEM_2MB        0x200000ULL
 
