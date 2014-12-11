@@ -52,12 +52,17 @@ clock_gettime (clockid_t clk_id, struct timespec * tp)
 void 
 __assert_fail (const char * assertion, const char * file, unsigned line, const char * function)
 {
-    panic("Failed assertion in %s: %s at %s, line %d, RA=%lx\n",
-            function,
-            assertion,
+    panic("%s:%u: %s: Assertion %s failed\n",
             file,
             line,
-            __builtin_return_address(0));
+            function,
+            assertion);
+
+    panic("Failed assertion in %s: %s at %s, line %d, RA=%lx\n",
+                        function,
+                        assertion,
+                         file,
+                                      line,
 }
 
 
@@ -294,8 +299,6 @@ textdomain (const char * domainname)
 locale_t 
 __newlocale (int category_mask, const char *locale, locale_t base)
 {
-    printk("category_mask: %d ,locale: %s, base: %p\n", category_mask, locale, base);
-
     return (locale_t)((ulong_t)base | (ulong_t)category_mask);
 }
 
