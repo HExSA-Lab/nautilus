@@ -241,7 +241,7 @@ nk_create_page_mapping (addr_t vaddr, addr_t paddr, uint64_t flags)
 int
 nk_map_page_nocache (addr_t paddr, uint64_t flags)
 {
-    ASSERT((unsigned long)paddr % PAGE_SIZE == 0);
+    ASSERT((unsigned long)paddr % PAGE_SIZE_4KB == 0);
     if (drill_page_tables(paddr, paddr, flags|PTE_CACHE_DISABLE_BIT) != 0) {
         ERROR_PRINT("error marking page range uncacheable\n");
         return -EINVAL;
