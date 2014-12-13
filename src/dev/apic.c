@@ -16,10 +16,13 @@
 #define DEBUG_PRINT(fmt, args...)
 #endif
 
+#define APIC_DEBUG(fmt, args...) DEBUG_PRINT("APIC: " fmt, ##args)
+#define APIC_PRINT(fmt, args...) printk("APIC: " fmt, ##args)
+
 static int
 spur_int_handler (excp_entry_t * excp, excp_vec_t v)
 {
-    DEBUG_PRINT("Received Spurious Interrupt\n");
+    APIC_DEBUG("Received Spurious Interrupt\n");
 
     struct apic_dev * a = per_cpu_get(apic);
     a->spur_int_cnt++;
@@ -260,11 +263,11 @@ apic_timer_setup (struct apic_dev * apic, uint32_t quantum)
     uint8_t  tmp2;
     cpuid_ret_t ret;
 
-    printk("Setting up Local APIC timer for core %u\n", apic->id);
+    APIC_PRINT("Setting up Local APIC timer for core %u\n", apic->id);
 
     cpuid(0x6, &ret);
     if (ret.a & 0x4) {
-        printk("\t[APIC Supports Constant Tick Rate]\n");
+        APIC_PRINT("\t[APIC Supports Constant Tick Rate]\n");
     }
 
     if (register_int_handler(APIC_TIMER_INT_VEC,
@@ -312,10 +315,10 @@ apic_timer_setup (struct apic_dev * apic, uint32_t quantum)
     apic_write(apic, APIC_REG_LVTT, APIC_TIMER_DISABLE);
 
     busfreq = APIC_TIMER_DIV * NAUT_CONFIG_HZ*(0xffffffff - apic_read(apic, APIC_REG_TMCCT) + 1);
-    printk("Detected CPU %u bus frequency as %u KHz\n", apic->id, busfreq/1000);
+    APIC_PRINT("Detected CPU %u bus frequency as %u KHz\n", apic->id, busfreq/1000);
     tmp = busfreq/quantum/APIC_TIMER_DIV;
 
-    DEBUG_PRINT("Writing APIC timer counter as %u\n", tmp);
+    APIC_DEBUG("Writing APIC timer counter as %u\n", tmp);
     apic_write(apic, APIC_REG_TMICT, (tmp < APIC_TIMER_DIV) ? APIC_TIMER_DIV : tmp);
     apic_write(apic, APIC_REG_LVTT, APIC_TIMER_INT_VEC | APIC_TIMER_PERIODIC);
     apic_write(apic, APIC_REG_TMDCR, APIC_TIMER_DIVCODE);
@@ -343,7 +346,7 @@ ap_apic_setup (struct cpu * core)
         panic("Unsupported APIC version (0x%x) in core %u\n", core->apic->version, core->id);
     }
 
-    DEBUG_PRINT("Configuring CPU %u LAPIC (id=0x%x)\n", core->id, core->apic->id);
+    APIC_DEBUG("Configuring CPU %u LAPIC (id=0x%x)\n", core->id, core->apic->id);
             
     /* Setup TPR (Task-priority register) to disable softwareinterrupts */
     apic_write(core->apic, APIC_REG_TPR, 0x20);
@@ -407,13 +410,13 @@ apic_init (struct cpu * core)
     } 
 
     apic->base_addr = apic_get_base_addr();
-    DEBUG_PRINT("APIC base addr: %p\n", apic->base_addr);
+    APIC_DEBUG("APIC base addr: %p\n", apic->base_addr);
 
     if (core->is_bsp) {
 
-        DEBUG_PRINT("Reserving APIC address space\n");
+        APIC_DEBUG("Reserving APIC address space\n");
         if (nk_reserve_page(apic->base_addr) < 0) {
-            DEBUG_PRINT("LAPIC mem region already reserved\n");
+            APIC_DEBUG("LAPIC mem region already reserved\n");
         }
 
         /* map in the lapic as uncacheable */
@@ -425,7 +428,7 @@ apic_init (struct cpu * core)
     apic->version   = apic_get_version(apic);
     apic->id        = apic_get_id(apic);
 
-    DEBUG_PRINT("Found LAPIC (version=0x%x, id=0x%x)\n", apic->version, apic->id);
+    APIC_DEBUG("Found LAPIC (version=0x%x, id=0x%x)\n", apic->version, apic->id);
 
     if (apic->version < 0x10 || apic->version > 0x15) {
         panic("Unsupported APIC version (0x%1x)\n", (unsigned)apic->version);
@@ -439,10 +442,10 @@ apic_init (struct cpu * core)
     /* Only the BSP takes External interrupts */
     if (core->is_bsp && !(apic_read(apic, APIC_REG_LVT0) & APIC_LVT_DISABLED)) {
         apic_write(apic, APIC_REG_LVT0, 0x700);
-        printk("Enabling ExtInt on core %u\n", my_cpu_id());
+        APIC_PRINT("Enabling ExtInt on core %u\n", my_cpu_id());
     } else {
         apic_write(apic, APIC_REG_LVT0, 0x700 | APIC_LVT_DISABLED); 
-        printk("Masking ExtInt on core %u\n", my_cpu_id());
+        APIC_PRINT("Masking ExtInt on core %u\n", my_cpu_id());
     }
 
     /* only BSP takes NMI interrupts */
