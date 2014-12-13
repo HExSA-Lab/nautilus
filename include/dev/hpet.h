@@ -4,6 +4,8 @@
 #include <nautilus/bits.h>
 
 int nk_hpet_init(void);
+inline uint64_t nk_hpet_get_freq(void);
+inline uint64_t nk_hpet_get_cntr(void);
 
 #define HPET_GEN_CAP_ID_REG   0x00
 #define HPET_GEN_CFG_REG      0x10
@@ -38,6 +40,10 @@ int nk_hpet_init(void);
 #define TN_GET_INT_ENB_CNF(x)       __CHECK_BIT(x, 2)
 #define TN_GET_INT_TYPE_CNF(x)      __CHECK_BIT(x, 1)
 
+#define TN_ENABLE (1<<2)
+#define TN_PERIODIC (1<<3)
+#define TN_VAL_SET   (1<<6)
+
 struct hpet_dev;
 
 
@@ -69,7 +75,7 @@ struct hpet_comparator {
 };
 
 typedef enum { HPET_MAP_STD, HPET_MAP_LEGACY } hpet_map_type_t;
-typedef enum { HPET_TIMER_HALTED, HPET_TIMER_RUNNING } hpet_stat_t;
+typedef enum { HPET_COUNTER_HALTED, HPET_COUNTER_RUNNING } hpet_stat_t;
 
 struct hpet_dev {
     ulong_t base_addr;
@@ -100,6 +106,7 @@ struct hpet_dev {
 
     /* must be last */
     struct hpet_comparator cmps[0];
+
 };
 
 static inline void

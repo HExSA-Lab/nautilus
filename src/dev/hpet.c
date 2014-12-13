@@ -3,6 +3,7 @@
 #include <nautilus/cpu.h>
 #include <nautilus/paging.h>
 #include <nautilus/intrinsics.h>
+#include <nautilus/naut_assert.h>
 #include <dev/timer.h>
 #include <dev/hpet.h>
 
@@ -15,11 +16,31 @@
 #define HPET_DEBUG(fmt, args...) DEBUG_PRINT("HPET: " fmt, ##args)
 
 
-static inline uint64_t 
-hpet_read_main_cntr (struct hpet_dev * hpet)
+inline uint64_t
+nk_hpet_get_freq (void)
 {
+    struct hpet_dev * hpet = nk_get_nautilus_info()->sys.hpet;
+
+    if (!hpet) {
+        return 0;
+    }
+
+    return hpet->freq;
+}
+
+
+inline uint64_t 
+nk_hpet_get_cntr (void)
+{
+    struct hpet_dev * hpet = nk_get_nautilus_info()->sys.hpet;
+    if (!hpet) {
+        return 0;
+    }
+
     return hpet_read(hpet, HPET_MAIN_CTR_REG);
 }
+
+
 
 /* 
  * This enables the HPET
@@ -29,7 +50,7 @@ hpet_cntr_run (struct hpet_dev * hpet)
 {
     uint64_t val = hpet_read(hpet, HPET_GEN_CFG_REG);
     hpet_write(hpet, HPET_GEN_CFG_REG, val | 0x1);
-    hpet->cntr_status = HPET_TIMER_RUNNING;
+    hpet->cntr_status = HPET_COUNTER_RUNNING;
 }
 
 
@@ -38,7 +59,7 @@ hpet_cntr_halt (struct hpet_dev * hpet)
 {
     uint64_t val = hpet_read(hpet, HPET_GEN_CFG_REG);
     hpet_write(hpet, HPET_GEN_CFG_REG, val & ~0x1);
-    hpet->cntr_status = HPET_TIMER_HALTED;
+    hpet->cntr_status = HPET_COUNTER_HALTED;
 }
 
 
@@ -53,6 +74,107 @@ static inline uint8_t
 hpet_get_cmp_stat (struct hpet_comparator * cmp)
 {
     return cmp->stat;
+}
+
+static inline void
+hpet_cmp_run (struct hpet_comparator * cmp)
+{
+    hpet_write(cmp->parent, TIMER_N_CFG_CAP_REG(cmp->idx), 
+            hpet_read(cmp->parent, TIMER_N_CFG_CAP_REG(cmp->idx)) | TN_ENABLE);
+}
+
+static inline void
+hpet_cmp_stop (struct hpet_comparator * cmp)
+{
+    hpet_write(cmp->parent, TIMER_N_CFG_CAP_REG(cmp->idx), 
+            hpet_read(cmp->parent, TIMER_N_CFG_CAP_REG(cmp->idx)) & ~TN_ENABLE);
+}
+
+static void 
+hpet_write_cmp_val (struct hpet_comparator * cmp, uint64_t val)
+{
+    hpet_write(cmp->parent, TIMER_N_CMP_VAL_REG(cmp->idx), val);
+}
+
+
+static struct hpet_comparator *
+hpet_get_free_timer (struct hpet_dev * hpet)
+{
+    int i;
+    for (i = 0; i < hpet->num_cmps; i++) {
+        if (hpet_get_cmp_stat(&hpet->cmps[i]) == TIMER_DISABLED) {
+            return &(hpet->cmps[i]);
+        }
+    }
+    return NULL;
+}
+
+
+/* TODO THIS NEEDS TO BE IMPLEMENTED */
+
+static int
+hpet_request_irq (struct hpet_comparator * cmp, uint32_t mask)
+{
+    int irq;
+
+    ASSERT(cmp);
+    /* nk_request_irq -> scan IOAPICS -> check each ioapic entry to 
+     * see if it has been assigned */
+
+    irq = 0;//nk_request_irq(cmp->int_route_cap);
+
+    if (irq < 0) {
+        return -1;
+    }
+
+    cmp->int_route = irq;
+
+    /* TODO: setup a handler */
+
+    /* Tell the timer which IRQ to raise */
+    hpet_write(cmp->parent, 
+            TIMER_N_CFG_CAP_REG(cmp->idx), 
+            hpet_read(cmp->parent, TIMER_N_CFG_CAP_REG(cmp->idx)) | (irq & 0x1fU) << 9);
+
+    return 0;
+}
+
+
+int
+hpet_set_oneshot (uint64_t ticks)
+{
+    struct hpet_dev * hpet = nk_get_nautilus_info()->sys.hpet;
+    struct hpet_comparator * cmp = NULL;
+
+    if (!hpet) {
+        return -1;
+    }
+
+    cmp = hpet_get_free_timer(hpet);
+    if (!cmp) {
+        HPET_DEBUG("Could not find a free HPET timer\n");
+        return -1;
+    }
+
+    /* do we need to set up this timer for an IOAPIC pin? */
+    if (!cmp->int_route) {
+        if (hpet_request_irq(cmp, cmp->int_route_cap) != 0) {
+            HPET_DEBUG("Could not assign IRQ for HPET timer\n");
+            return -1;
+        }
+    }
+
+    /* set the count and turn on the timer */
+    hpet_write_cmp_val(cmp, hpet_read(hpet, HPET_MAIN_CTR_REG) + ticks);
+
+    /* turn on the main counter if it isn't already */
+    if (hpet_get_cntr_stat(hpet) == HPET_COUNTER_HALTED) {
+        hpet_cntr_run(hpet);
+    }
+
+    hpet_cmp_run(cmp);
+
+    return 0;
 }
 
 
@@ -85,9 +207,15 @@ hpet_init_comparator (struct hpet_dev * hpet,
     cmp->stat     = TIMER_DISABLED;
     cmp->int_type = TIMER_EDGE; 
 
+    /* make sure it's not running */
+    hpet_cmp_stop(cmp);
+
     /* we don't need to actually write the cfg register
      * at this point since we're using default (0) values
      */
+
+    /* NOTE that we're not setting up legacy replacement
+     * routing */
     
     return 0;
 }
@@ -167,6 +295,9 @@ nk_hpet_init (void)
     }
 
     nk_get_nautilus_info()->sys.hpet = hpet;
+
+    // go ahead and start the counter
+    hpet_cntr_run(hpet);
 
     return 0;
 }

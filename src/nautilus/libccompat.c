@@ -8,9 +8,8 @@
 #include <nautilus/libccompat.h>
 #include <nautilus/thread.h>
 #include <nautilus/errno.h>
+#include <dev/hpet.h>
 
-static uint64_t compat_nsec;
-static uint64_t compat_sec;
 
 #define GEN_DEF(x) \
     int x (void) { \
@@ -18,6 +17,8 @@ static uint64_t compat_sec;
         return 0; \
     } 
 
+
+static uint64_t dummy_mono_clock = 0;
 
 void 
 abort(void) 
@@ -36,14 +37,26 @@ exit(int status)
 int 
 clock_gettime (clockid_t clk_id, struct timespec * tp)
 {
-    /* ignore clk_id */
+
+    if (clk_id != CLOCK_MONOTONIC) {
+        printk("NAUTILUS WARNING: using invalid clock type\n");
+        return -EINVAL;
+    }
 
     if (!tp) {
         return -EINVAL;
     }
 
-    tp->tv_nsec = compat_nsec++;
-    tp->tv_sec  = compat_sec++;
+#ifdef NAUT_CONFIG_HPET
+    uint64_t freq = nk_hpet_get_freq();
+    uint64_t cnt  = nk_hpet_get_cntr();
+    tp->tv_nsec   = cnt / (freq / 1000000000);
+    tp->tv_sec    = cnt / freq;
+#else
+    tp->tv_nsec = dummy_mono_clock/100;
+    tp->tv_sec  = dummy_mono_clock/100000000;
+    ++dummy_mono_clock;
+#endif
 
     return 0;
 }
