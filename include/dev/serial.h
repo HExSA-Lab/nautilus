@@ -1,8 +1,12 @@
 #ifndef __SERIAL_H__
 #define __SERIAL_H__
 
-#define COM1_IRQ 4
-#define DEFAULT_SERIAL_ADDR 0x3F8
+#define COM1_3_IRQ 4
+#define COM2_4_IRQ 3
+#define COM1_ADDR 0x3F8
+#define COM2_ADDR 0x2F8
+#define COM3_ADDR 0x3E8
+#define COM4_ADDR 0x2E8
 
 #ifndef SERIAL_PRINT_DEBUG_LEVEL
 #define SERIAL_PRINT_DEBUG_LEVEL  10

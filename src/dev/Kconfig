@@ -7,6 +7,14 @@ config SERIAL_REDIRECT
     help
         Redirect all printing to serial device
 
+config SERIAL_PORT
+    int "Serial COM Port"
+    range 1 4
+    depends on SERIAL_REDIRECT
+    default "1"
+    help
+      Specifies which serial port to use. E.g. 1 is COM1.
+
 config DEBUG_APIC
     bool "Debug APIC"
     depends on DEBUG_PRINTS
@@ -49,9 +57,15 @@ config DEBUG_PIT
     help
       Turn on debug prints for the i8253/8254 PIT
 
+config HPET
+    bool "HPET Support"
+    default n
+    help
+      Includes HPET timer support in Nautilus
+
 config DEBUG_HPET
     bool "Debug HPET"
-    depends on DEBUG_PRINTS
+    depends on DEBUG_PRINTS && HPET
     default n
     help
       Turn on debug prints for the HPET

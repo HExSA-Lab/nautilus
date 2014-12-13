@@ -14,6 +14,8 @@ static uint8_t serial_device_ready = 0;
 uint16_t serial_io_addr = 0;
 uint_t serial_print_level;
 
+static uint8_t com_irq;
+
 
 static int 
 serial_irq_handler (excp_entry_t * excp,
@@ -24,7 +26,7 @@ serial_irq_handler (excp_entry_t * excp,
 
   irq_id = inb(serial_io_addr + 2);
 
-  if ((irq_id & COM1_IRQ) != 0) {
+  if ((irq_id & com_irq) != 0) {
     rcv_byte = inb(serial_io_addr + 0);
 
     switch (rcv_byte) {
@@ -56,7 +58,6 @@ serial_init_addr (uint16_t io_addr)
 {
   serial_io_addr = io_addr;
 
-  //printk("Initializing Polled Serial Output on COM1 - 115200 N81 noflow\n");
 
   //  io_adr = 0x3F8;	/* 3F8=COM1, 2F8=COM2, 3E8=COM3, 2E8=COM4 */
   outb(0x80, io_addr + 3);
@@ -289,8 +290,18 @@ serial_init (void)
   serial_output_sink.Emit = &Serial_Emit;
   serial_output_sink.Finish = &Serial_Finish;
 
-  register_irq_handler(COM1_IRQ, serial_irq_handler, NULL);
-  serial_init_addr(DEFAULT_SERIAL_ADDR);
+
+#if NAUT_CONFIG_SERIAL_PORT == 1
+  serial_init_addr(COM1_ADDR);
+  register_irq_handler(COM1_3_IRQ, serial_irq_handler, NULL);
+  com_irq = COM1_3_IRQ;
+#elif NAUT_CONFIG_SERIAL_PORT == 2
+  register_irq_handler(COM2_4_IRQ, serial_irq_handler, NULL);
+  serial_init_addr(COM2_ADDR);
+  com_irq = COM2_4_IRQ;
+#else
+#error Invalid serial port
+#endif
 
   serial_device_ready = 1;
 }
