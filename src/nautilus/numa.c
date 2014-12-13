@@ -154,7 +154,7 @@ get_topo_params (struct nk_topo_params * tp)
 }
 
 static void 
-assign_core_coords (struct nk_cpu_coords * coord, struct nk_topo_params *tp)
+assign_core_coords (struct cpu * me, struct nk_cpu_coords * coord, struct nk_topo_params *tp)
 {
     uint32_t my_apic_id = apic_get_id(per_cpu_get(apic));
 
@@ -162,7 +162,7 @@ assign_core_coords (struct nk_cpu_coords * coord, struct nk_topo_params *tp)
     coord->core_id = (my_apic_id >> tp->smt_bits) & ((1 << tp->core_bits) - 1);
     coord->pkg_id  = my_apic_id & ~((1 << (tp->smt_bits + tp->core_bits)) - 1);
 
-    NUMA_DEBUG("OS Core %u:\n", my_apic_id);
+    NUMA_DEBUG("Core OS ID: %u (APIC ID=0x%x):\n", me->id, my_apic_id);
     NUMA_DEBUG("\tLogical Core ID:  %u\n", coord->smt_id);
     NUMA_DEBUG("\tPhysical Core ID: %u\n", coord->core_id);
     NUMA_DEBUG("\tPhysical Chip ID: %u\n", coord->pkg_id);
@@ -197,7 +197,7 @@ nk_cpu_topo_discover (struct cpu * me)
     get_topo_params(tp);
 
     /* now we can determine the CPU coordinates */
-    assign_core_coords(coord, tp);
+    assign_core_coords(me, coord, tp);
 
     me->tp    = tp;
     me->coord = coord;

@@ -65,13 +65,15 @@ parse_mptable_cpu (struct sys_info * sys, struct mp_table_entry_cpu * cpu)
     new_cpu->system     = sys;
     new_cpu->cpu_khz    = nk_detect_cpu_freq(new_cpu->id);
 
-    SMP_DEBUG("CPU entry:\n");
-    SMP_DEBUG("\tSystem ID=0x%x\n", new_cpu->id);
-    SMP_DEBUG("\tLAPIC_ID=0x%x\n", new_cpu->lapic_id);
+    SMP_PRINT("CPU %u -- LAPIC ID 0x%x -- Features: ", new_cpu->id, new_cpu->lapic_id);
+    printk("%s", (new_cpu->feat_flags & 1) ? "fpu " : "");
+    printk("%s", (new_cpu->feat_flags & (1<<7)) ? "mce " : "");
+    printk("%s", (new_cpu->feat_flags & (1<<8)) ? "cx8 " : "");
+    printk("%s", (new_cpu->feat_flags & (1<<9)) ? "apic " : "");
+    printk("\n");
     SMP_DEBUG("\tEnabled?=%01d\n", new_cpu->enabled);
     SMP_DEBUG("\tBSP?=%01d\n", new_cpu->is_bsp);
     SMP_DEBUG("\tSignature=0x%x\n", new_cpu->cpu_sig);
-    SMP_DEBUG("\tFeature Flags=0x%x\n", new_cpu->feat_flags);
     SMP_DEBUG("\tFreq=%lu.%03lu MHz\n", new_cpu->cpu_khz/1000, new_cpu->cpu_khz%1000);
 
     spinlock_init(&new_cpu->lock);
@@ -141,6 +143,14 @@ parse_mptable_ioint (struct sys_info * sys, struct mp_table_entry_ioint * ioint)
     SMP_DEBUG("\tSrc Bus IRQ=0x%02x\n", ioint->src_bus_irq);
     SMP_DEBUG("\tDst IOAPIC ID=0x%02x\n", ioint->dst_ioapic_id);
     SMP_DEBUG("\tDst IOAPIC INT Pin=0x%02x\n", ioint->dst_ioapic_intin);
+
+    nk_add_int_entry(ioint->el,
+                     ioint->po,
+                     ioint->int_type,
+                     ioint->src_bus_id,
+                     ioint->src_bus_irq,
+                     ioint->dst_ioapic_intin,
+                     ioint->dst_ioapic_id);
 }
 
 static void
@@ -148,7 +158,7 @@ parse_mptable_bus (struct sys_info * sys, struct mp_table_entry_bus * bus)
 {
     SMP_DEBUG("Bus entry\n");
     SMP_DEBUG("\tBus ID: 0x%02x\n", bus->bus_id);
-    SMP_DEBUG("\tType: %s\n", bus->bus_type_string);
+    SMP_DEBUG("\tType: %.6s\n", bus->bus_type_string);
 }
 
 static uint8_t 

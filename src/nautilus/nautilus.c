@@ -210,7 +210,9 @@ main (unsigned long mbd, unsigned long magic)
 
     nk_acpi_init();
 
+#ifdef NAUT_CONFIG_HPET
     nk_hpet_init();
+#endif
 
     smp_bringup_aps(naut);
 
