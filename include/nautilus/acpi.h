@@ -47,7 +47,7 @@ struct mp_table_entry_cpu {
 struct mp_table_entry_bus {
     uint8_t type;
     uint8_t bus_id; 
-    char    bus_type_string[48];
+    char    bus_type_string[6];
 } __packed;
 
 struct mp_table_entry_ioapic {
@@ -59,11 +59,6 @@ struct mp_table_entry_ioapic {
     uint32_t addr;
 } __packed;
 
-/* NOTE: for the following two, the last two
- * fields are reversed in order from the Intel 
- * MP Spec. QEMU and KVM put them in this order
- * not sure why
- */
 struct mp_table_entry_lint {
     uint8_t type;
     uint8_t int_type;
@@ -71,8 +66,8 @@ struct mp_table_entry_lint {
     uint8_t el         : 2;
     uint8_t src_bus_id;
     uint8_t src_bus_irq; 
-    uint8_t dst_lapic_lintin;
     uint8_t dst_lapic_id;
+    uint8_t dst_lapic_lintin;
 } __packed;
 
 struct mp_table_entry_ioint {
@@ -82,8 +77,8 @@ struct mp_table_entry_ioint {
     uint8_t el         : 2;
     uint8_t src_bus_id;
     uint8_t src_bus_irq; 
-    uint8_t dst_ioapic_intin;
     uint8_t dst_ioapic_id;
+    uint8_t dst_ioapic_intin;
 } __packed;
 
 
