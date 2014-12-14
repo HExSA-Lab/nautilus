@@ -84,19 +84,26 @@ acpi_physical_address acpi_os_get_root_pointer(void)
 }
 
 
+/*
+ *
+ * NOTE: this only works if the size is less than 2MB Page,
+ * which should be pretty reasonable. Either way, we'll see
+ * it bomb if it isn't enough
+ *
+ */
 void *
 acpi_os_map_memory(acpi_physical_address phys, acpi_size size)
 {
-    if (phys < nk_get_nautilus_info()->sys.mem.phys_mem_avail) {
-        return (void*)phys;
-    } else {
-        //printk("mapping page for %p\n", (void*)phys);
-        void * addr = (void*)(phys & ~((1ULL<<PAGE_SHIFT)-1));
-        ASSERT(((void*)phys + size) < (addr+PAGE_SIZE));
-        nk_map_page_nocache((addr_t)addr, PTE_WRITABLE_BIT|PTE_PRESENT_BIT);
-        return (void*)phys;
-    }
+    ASSERT((phys + size) < (PAGE_MASK(phys) + PAGE_SIZE));
+
+    //printk("ACPI ATTEMPT TO MAP: %p\n", (void*)phys);
+
+    nk_map_page_nocache(PAGE_MASK(phys), PTE_WRITABLE_BIT|PTE_PRESENT_BIT);
+    nk_reserve_page(PAGE_MASK(phys));
+
+    return (void*)phys;
 }
+
 
 void __ref acpi_os_unmap_memory(void __iomem *virt, acpi_size size)
 {

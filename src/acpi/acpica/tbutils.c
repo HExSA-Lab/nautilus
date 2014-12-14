@@ -367,7 +367,7 @@ acpi_tb_install_table(acpi_physical_address address,
 
     //printk("installing table at index %u (root_table_list=%p, tables=%p)\n", table_index, acpi_gbl_root_table_list,
             //acpi_gbl_root_table_list.tables);
-    struct acpi_table_desc * t = &acpi_gbl_root_table_list.tables[table_index];
+    //struct acpi_table_desc * t = &acpi_gbl_root_table_list.tables[table_index];
     //printk("printing table desc: %p\n", t);
     //printk("addr=%p\n", t->address);
     //printk("pointer=%p\n", t->pointer);
