@@ -43,6 +43,7 @@ __cxa_atexit (void (*destructor)(void*), void * arg, void * __dso_handle)
     __atexit_funcs[__atexit_func_count].destructor_func = destructor;
     __atexit_funcs[__atexit_func_count].obj_ptr         = arg;
     __atexit_funcs[__atexit_func_count].dso_handle      = __dso_handle;
+    __atexit_func_count++;
     return 0;
 }
 
