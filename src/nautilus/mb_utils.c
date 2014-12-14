@@ -12,34 +12,45 @@ multiboot_get_size (ulong_t mbd)
 }
 
 
-// returns number of BYTES of physical memory
+
+/* 
+ * Returns total physical memory in BYTES
+ *
+ * Multiboot basic memory info doesn't appear to give right num, so
+ * better to actually use the e820 map
+ */
 addr_t
-multiboot_get_phys_mem (ulong_t mbd) 
+multiboot_get_phys_mem (ulong_t mbd)
 {
     struct multiboot_tag * tag;
+    ulong_t sum = 0;
 
     if (mbd & 7) {
         panic("ERROR: Unaligned multiboot info struct\n");
     }
 
     tag = (struct multiboot_tag*)(mbd+8);
-    while (tag->type != MULTIBOOT_TAG_TYPE_BASIC_MEMINFO) {
-        tag = (struct multiboot_tag*)((multiboot_uint8_t*)tag + ((tag->size+7) & ~7));
+    while (tag->type != MULTIBOOT_TAG_TYPE_MMAP) {
+        tag = (struct multiboot_tag*)((multiboot_uint8_t*)tag + ((tag->size+7)&~7));
     }
 
-    if (tag->type != MULTIBOOT_TAG_TYPE_BASIC_MEMINFO) {
-        panic("ERROR: couldn't find multiboot mem info\n");
+    if (tag->type != MULTIBOOT_TAG_TYPE_MMAP) {
+        panic("ERROR: no mmap tag found\n");
     }
 
-    
-    ulong_t lo;
-    ulong_t hi;
+    multiboot_memory_map_t * mmap;
 
-    lo = ((struct multiboot_tag_basic_meminfo *) tag)->mem_lower;
-    hi = ((struct multiboot_tag_basic_meminfo *) tag)->mem_upper;
+    for (mmap=((struct multiboot_tag_mmap*)tag)->entries;
+            (multiboot_uint8_t*)mmap < (multiboot_uint8_t*)tag + tag->size;
+            mmap = (multiboot_memory_map_t*)((ulong_t)mmap + 
+                ((struct multiboot_tag_mmap*)tag)->entry_size)) {
 
-    return (lo+hi)<<10;
+        sum += mmap->len;
+    }
+
+    return (addr_t)sum;
 }
+
 
 void 
 multiboot_rsv_mem_regions(struct nk_mem_info * mem, ulong_t mbd) 
@@ -66,12 +77,12 @@ multiboot_rsv_mem_regions(struct nk_mem_info * mem, ulong_t mbd)
             mmap = (multiboot_memory_map_t*)((ulong_t)mmap + 
                 ((struct multiboot_tag_mmap*)tag)->entry_size)) {
 
-        addr_t base_addr = (mmap->addr >> 32) | (mmap->addr & 0xffffffff);
-        addr_t len       = (mmap->len >> 32) | (mmap->len & 0xffffffff);
+        addr_t base_addr = mmap->addr;
+        addr_t len       = mmap->len;
 
         if (mmap->type != MULTIBOOT_MEMORY_AVAILABLE) {
-            DEBUG_PRINT("reserving pages %d to %d (0x%x - 0x%x)\n", PADDR_TO_PAGE(base_addr), PADDR_TO_PAGE(base_addr+len-1),
-                    base_addr, base_addr+len-1);
+            DEBUG_PRINT("Reserving pages %d to %d (0x%x - 0x%x) (pg addr=%p)\n", PADDR_TO_PAGE(base_addr), PADDR_TO_PAGE(base_addr+len-1),
+                    base_addr, base_addr+len-1, (void*)PAGE_MASK(base_addr));
             nk_reserve_range(base_addr, base_addr+len);
         }
     }
