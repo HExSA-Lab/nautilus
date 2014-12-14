@@ -22,7 +22,7 @@ nk_hpet_get_freq (void)
     struct hpet_dev * hpet = nk_get_nautilus_info()->sys.hpet;
 
     if (!hpet) {
-        return 0;
+        panic("No HPET device found\n");
     }
 
     return hpet->freq;
@@ -34,6 +34,7 @@ nk_hpet_get_cntr (void)
 {
     struct hpet_dev * hpet = nk_get_nautilus_info()->sys.hpet;
     if (!hpet) {
+        panic("No HPET device found\n");
         return 0;
     }
 
@@ -242,6 +243,8 @@ parse_hpet_tbl (struct acpi_table_header * hdr, void * arg)
 
     /* first map in the page */
     nk_map_page_nocache(PAGE_MASK(hpet_tbl->address.address), PTE_PRESENT_BIT|PTE_WRITABLE_BIT);
+
+    nk_reserve_page(PAGE_MASK(hpet_tbl->address.address));
 
     /* get the number of comparators */
     cap = *((volatile uint64_t*)(hpet_tbl->address.address + HPET_GEN_CAP_ID_REG));

@@ -44,17 +44,20 @@ clock_gettime (clockid_t clk_id, struct timespec * tp)
     }
 
     if (!tp) {
+        printk("NAUTILUS WARNING: using invalid timespec\n");
         return -EINVAL;
     }
 
 #ifdef NAUT_CONFIG_HPET
     uint64_t freq = nk_hpet_get_freq();
     uint64_t cnt  = nk_hpet_get_cntr();
-    tp->tv_nsec   = cnt / (freq / 1000000000);
+    tp->tv_nsec   = (cnt * 1000000000)/freq;
     tp->tv_sec    = cnt / freq;
 #else
-    tp->tv_nsec = dummy_mono_clock/100;
-    tp->tv_sec  = dummy_mono_clock/100000000;
+    /* runs at "10kHz" */
+    tp->tv_nsec = dummy_mono_clock*100000;
+    tp->tv_sec  = dummy_mono_clock/10000;
+    printk("MONOTONIC CLOCK: s: %lu ns: %lu\n", tp->tv_sec, tp->tv_nsec);
     ++dummy_mono_clock;
 #endif
 
