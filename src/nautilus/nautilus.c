@@ -164,11 +164,15 @@ main (unsigned long mbd, unsigned long magic)
 
     setup_idt();
 
+    nk_int_init(&(naut->sys));
+
     serial_init();
 
     detect_cpu();
 
     nk_paging_init(&(naut->sys.mem), mbd);
+
+    nk_acpi_init();
 
     init_liballoc_hooks();
 
@@ -180,6 +184,7 @@ main (unsigned long mbd, unsigned long magic)
     disable_8259pic();
 
     i8254_init(naut);
+
 
     smp_early_init(naut);
 
@@ -208,7 +213,6 @@ main (unsigned long mbd, unsigned long magic)
 
     nk_cpu_topo_discover(naut->sys.cpus[0]);
 
-    nk_acpi_init();
 
 #ifdef NAUT_CONFIG_HPET
     nk_hpet_init();

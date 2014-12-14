@@ -2,6 +2,7 @@
 #include <nautilus/idt.h>
 #include <nautilus/irq.h>
 #include <nautilus/cpu.h>
+#include <lib/liballoc.h>
 
 
 /* NOTE: the APIC organizes interrupt priorities as follows:
@@ -27,25 +28,6 @@
  * priority with increasing vector number
  *
  */
-static uint8_t irq_to_vec_map[NUM_EXT_IRQS] = {
-    0xec,  // IRQ 0 (timer)
-    0xe4,  // IRQ 1
-    0xec,  // disabled
-    0x94,  // IRQ 3
-    0x8c,  // IRQ 4 (COM1)
-    0x84,  // IRQ 5
-    0x7c,  // IRQ 6
-    0x74,  // IRQ 7
-    0xd4,  // IRQ 8
-    0xcc,  // IRQ 9
-    0xc4,  // IRQ 10
-    0xbc,  // IRQ 11
-    0xb4,  // IRQ 12
-    0xac,  // IRQ 13
-    0xa4,  // IRQ 14
-    0x9c,  // IRQ 15
-};
-
 uint8_t 
 irqs_enabled (void)
 {
@@ -57,7 +39,45 @@ irqs_enabled (void)
 inline uint8_t
 irq_to_vec (uint8_t irq)
 {
-    return irq_to_vec_map[irq];
+    return nk_get_nautilus_info()->sys.int_info.irq_map[irq].vector;
+}
+
+inline void
+irqmap_set_ioapic (uint8_t irq, struct ioapic * ioapic)
+{
+    struct naut_info * naut = nk_get_nautilus_info();
+    naut->sys.int_info.irq_map[irq].ioapic = ioapic;
+    naut->sys.int_info.irq_map[irq].assigned = 1;
+}
+
+static inline void 
+set_irq_vector (uint8_t irq, uint8_t vector)
+{
+    nk_get_nautilus_info()->sys.int_info.irq_map[irq].vector = vector;
+}
+
+
+inline void 
+nk_mask_irq (uint8_t irq)
+{
+    struct naut_info * naut = nk_get_nautilus_info();
+    ioapic_mask_irq(naut->sys.int_info.irq_map[irq].ioapic, irq);
+}
+
+
+inline void
+nk_unmask_irq (uint8_t irq)
+{
+    struct naut_info * naut = nk_get_nautilus_info();
+    ioapic_unmask_irq(naut->sys.int_info.irq_map[irq].ioapic, irq);
+}
+
+
+inline uint8_t
+nk_irq_is_assigned (uint8_t irq)
+{
+    struct naut_info * naut = nk_get_nautilus_info();
+    return naut->sys.int_info.irq_map[irq].assigned;
 }
 
 
@@ -128,6 +148,107 @@ imcr_begin_sym_io (void)
     /* ICMR */
     outb(0x70, 0x22);
     outb(0x01, 0x23);
+}
+
+
+uint8_t 
+nk_int_matches_bus (struct nk_int_entry * entry, const char * bus_type, const uint8_t len)
+{
+    uint8_t src_bus;
+    struct nk_bus_entry * bus;
+
+    /* find the src bus id */
+    src_bus = entry->src_bus_id;
+
+    list_for_each_entry(bus, 
+            &(nk_get_nautilus_info()->sys.int_info.bus_list),
+            elm) {
+
+        if (bus->bus_id == entry->src_bus_id) {
+            return !strncmp(bus->bus_type, bus_type, len);
+        }
+
+    }
+
+    return 0;
+}
+
+
+void 
+nk_add_bus_entry (const uint8_t bus_id, const char * bus_type)
+{
+    struct nk_bus_entry * bus = NULL;
+    struct naut_info * naut = nk_get_nautilus_info();
+
+    bus = malloc(sizeof(struct nk_bus_entry));
+    if (!bus) {
+        ERROR_PRINT("Could not allocate bus entry\n");
+        return;
+    }
+    memset(bus, 0, sizeof(struct nk_bus_entry));
+
+    bus->bus_id  = bus_id;
+    memcpy((void*)bus->bus_type, bus_type, 6);
+
+    list_add(&(bus->elm), &(naut->sys.int_info.bus_list));
+
+}
+
+void
+nk_add_int_entry (int_trig_t trig_mode,
+                  int_pol_t  polarity,
+                  int_type_t type,
+                  uint8_t    src_bus_id,
+                  uint8_t    src_bus_irq,
+                  uint8_t    dst_ioapic_intin,
+                  uint8_t    dst_ioapic_id)
+{
+    struct nk_int_entry * new = NULL;
+    struct naut_info * naut = nk_get_nautilus_info();
+
+    new = malloc(sizeof(struct nk_int_entry));
+    if (!new) {
+        ERROR_PRINT("Could not allocate IRQ entry\n");
+        return;
+    }
+    memset(new, 0, sizeof(struct nk_int_entry));
+
+    new->trig_mode        = trig_mode;
+    new->polarity         = polarity;
+    new->type             = type;
+    new->src_bus_id       = src_bus_id;
+    new->src_bus_irq      = src_bus_irq;
+    new->dst_ioapic_intin = dst_ioapic_intin;
+    new->dst_ioapic_id    = dst_ioapic_id;
+
+    list_add(&(new->elm), &(naut->sys.int_info.int_list));
+}
+
+
+int 
+nk_int_init (struct sys_info * sys)
+{
+    struct nk_int_info * info = &(sys->int_info);
+    int i;
+    uint8_t vector;
+
+    /* set it up so we get an illegal vector if we don't
+     * assign IRQs properly. 0xff is reserved for APIC 
+     * suprious interrupts */
+    for (i = 0; i < 256; i++) {
+        set_irq_vector(i, 0xfe);
+    }
+
+    /* we're going to count down in decreasing priority 
+     * when we run out of vectors, we'll stop */
+    for (i = 0, vector = 0xef; vector > 0x1f; vector--, i++) {
+        set_irq_vector(i, vector);
+    }
+
+    INIT_LIST_HEAD(&(info->int_list));
+    INIT_LIST_HEAD(&(info->bus_list));
+
+    return 0;
 }
 
 

@@ -119,10 +119,12 @@ parse_mptable_lint (struct sys_info * sys, struct mp_table_entry_lint * lint)
     char * type_map[4] = {"[INT]", "[NMI]", "[SMI]", "[ExtINT]"};
     char * po_map[4] = {"[BUS]", "[ActHi]", "[Rsvd]", "[ActLo]"};
     char * el_map[4] = {"[BUS]", "[Edge]", "[Rsvd]", "[Level]"};
+    uint8_t polarity = lint->int_flags & 0x3;
+    uint8_t trig_mode = lint->int_flags & 0xc;
     SMP_DEBUG("LINT entry\n");
     SMP_DEBUG("\tInt Type=%s\n", type_map[lint->int_type]);
-    SMP_DEBUG("\tPolarity=%s\n", po_map[lint->po]);
-    SMP_DEBUG("\tTrigger Mode=%s\n", el_map[lint->el]);
+    SMP_DEBUG("\tPolarity=%s\n", po_map[polarity]);
+    SMP_DEBUG("\tTrigger Mode=%s\n", el_map[trig_mode]);
     SMP_DEBUG("\tSrc Bus ID=0x%02x\n", lint->src_bus_id);
     SMP_DEBUG("\tSrc Bus IRQ=0x%02x\n", lint->src_bus_irq);
     SMP_DEBUG("\tDst LAPIC ID=0x%02x\n", lint->dst_lapic_id);
@@ -135,17 +137,19 @@ parse_mptable_ioint (struct sys_info * sys, struct mp_table_entry_ioint * ioint)
     char * type_map[4] = {"[INT]", "[NMI]", "[SMI]", "[ExtINT]"};
     char * po_map[4] = {"[BUS]", "[ActHi]", "[Rsvd]", "[ActLo]"};
     char * el_map[4] = {"[BUS]", "[Edge]", "[Rsvd]", "[Level]"};
+    uint8_t polarity = ioint->int_flags & 0x3;
+    uint8_t trig_mode = ioint->int_flags & 0xc;
     SMP_DEBUG("IOINT entry\n");
     SMP_DEBUG("\tType=%s\n", type_map[ioint->int_type]);
-    SMP_DEBUG("\tPolarity=%s\n", po_map[ioint->po]);
-    SMP_DEBUG("\tTrigger Mode=%s\n", el_map[ioint->el]);
+    SMP_DEBUG("\tPolarity=%s\n", po_map[polarity]);
+    SMP_DEBUG("\tTrigger Mode=%s\n", el_map[trig_mode]);
     SMP_DEBUG("\tSrc Bus ID=0x%02x\n", ioint->src_bus_id);
     SMP_DEBUG("\tSrc Bus IRQ=0x%02x\n", ioint->src_bus_irq);
     SMP_DEBUG("\tDst IOAPIC ID=0x%02x\n", ioint->dst_ioapic_id);
     SMP_DEBUG("\tDst IOAPIC INT Pin=0x%02x\n", ioint->dst_ioapic_intin);
 
-    nk_add_int_entry(ioint->el,
-                     ioint->po,
+    nk_add_int_entry(trig_mode,
+                     polarity,
                      ioint->int_type,
                      ioint->src_bus_id,
                      ioint->src_bus_irq,
@@ -159,6 +163,7 @@ parse_mptable_bus (struct sys_info * sys, struct mp_table_entry_bus * bus)
     SMP_DEBUG("Bus entry\n");
     SMP_DEBUG("\tBus ID: 0x%02x\n", bus->bus_id);
     SMP_DEBUG("\tType: %.6s\n", bus->bus_type_string);
+    nk_add_bus_entry(bus->bus_id, bus->bus_type_string);
 }
 
 static uint8_t 

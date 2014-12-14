@@ -60,12 +60,28 @@
 
 #define IOAPIC_MASK_IRQ    (1 << 16)
 
+struct nk_int_entry;
+
+struct iored_entry {
+    /* are we enabled or masked? */
+    uint8_t enabled; 
+
+    /* what we got from the MP Tables */
+    struct nk_int_entry * boot_info;
+
+    /* the irq number that we assign */
+    uint8_t actual_irq; 
+};
+
 
 struct ioapic {
     uint8_t id;
     uint8_t version;
     uint8_t usable;
     addr_t  base;
+
+    uint8_t num_entries;
+    struct iored_entry * entries;
 };
 
 struct sys_info;

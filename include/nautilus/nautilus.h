@@ -35,6 +35,23 @@ extern "C" {
 #include <nautilus/limits.h>
 #include <nautilus/naut_assert.h>
 #include <nautilus/barrier.h>
+#include <nautilus/list.h>
+
+
+struct ioapic;
+struct irq_mapping {
+    struct ioapic * ioapic;
+    uint8_t vector;
+    uint8_t assigned;
+};
+
+
+struct nk_int_info {
+    struct list_head int_list; /* list of interrupts from MP spec */
+    struct list_head bus_list; /* list of buses from MP spec */
+
+    struct irq_mapping irq_map[256];
+};
 
 
 struct sys_info {
@@ -61,6 +78,7 @@ struct sys_info {
 
     struct multiboot_info * mb_info;
 
+    struct nk_int_info int_info;
 };
 
 struct naut_info {
