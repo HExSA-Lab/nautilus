@@ -60,25 +60,23 @@ struct mp_table_entry_ioapic {
 } __packed;
 
 struct mp_table_entry_lint {
-    uint8_t type;
-    uint8_t int_type;
-    uint8_t po         : 2;
-    uint8_t el         : 2;
-    uint8_t src_bus_id;
-    uint8_t src_bus_irq; 
-    uint8_t dst_lapic_id;
-    uint8_t dst_lapic_lintin;
+    uint8_t  type;
+    uint8_t  int_type;
+    uint16_t int_flags;
+    uint8_t  src_bus_id;
+    uint8_t  src_bus_irq; 
+    uint8_t  dst_lapic_id;
+    uint8_t  dst_lapic_lintin;
 } __packed;
 
 struct mp_table_entry_ioint {
-    uint8_t type;
-    uint8_t int_type;
-    uint8_t po         : 2;
-    uint8_t el         : 2;
-    uint8_t src_bus_id;
-    uint8_t src_bus_irq; 
-    uint8_t dst_ioapic_id;
-    uint8_t dst_ioapic_intin;
+    uint8_t  type;
+    uint8_t  int_type;
+    uint16_t int_flags;
+    uint8_t  src_bus_id;
+    uint8_t  src_bus_irq; 
+    uint8_t  dst_ioapic_id;
+    uint8_t  dst_ioapic_intin;
 } __packed;
 
 
