@@ -110,7 +110,5 @@ int smp_setup_xcall_bsp (struct cpu * core);
 #define BIOS_ROM_BASE      0xf0000
 #define BIOS_ROM_END       0xfffff
 
-#define MSR_FS_BASE 0xc0000100
-#define MSR_GS_BASE 0xc0000101
 
 #endif
