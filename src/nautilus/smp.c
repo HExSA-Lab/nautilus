@@ -120,7 +120,7 @@ parse_mptable_lint (struct sys_info * sys, struct mp_table_entry_lint * lint)
     char * po_map[4] = {"[BUS]", "[ActHi]", "[Rsvd]", "[ActLo]"};
     char * el_map[4] = {"[BUS]", "[Edge]", "[Rsvd]", "[Level]"};
     uint8_t polarity = lint->int_flags & 0x3;
-    uint8_t trig_mode = lint->int_flags & 0xc;
+    uint8_t trig_mode = (lint->int_flags >> 2) & 0x3;
     SMP_DEBUG("LINT entry\n");
     SMP_DEBUG("\tInt Type=%s\n", type_map[lint->int_type]);
     SMP_DEBUG("\tPolarity=%s\n", po_map[polarity]);
@@ -138,7 +138,7 @@ parse_mptable_ioint (struct sys_info * sys, struct mp_table_entry_ioint * ioint)
     char * po_map[4] = {"[BUS]", "[ActHi]", "[Rsvd]", "[ActLo]"};
     char * el_map[4] = {"[BUS]", "[Edge]", "[Rsvd]", "[Level]"};
     uint8_t polarity = ioint->int_flags & 0x3;
-    uint8_t trig_mode = ioint->int_flags & 0xc;
+    uint8_t trig_mode = (ioint->int_flags >> 2) & 0x3;
     SMP_DEBUG("IOINT entry\n");
     SMP_DEBUG("\tType=%s\n", type_map[ioint->int_type]);
     SMP_DEBUG("\tPolarity=%s\n", po_map[polarity]);
