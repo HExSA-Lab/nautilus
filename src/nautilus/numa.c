@@ -342,9 +342,72 @@ acpi_parse_srat (struct acpi_table_header * hdr, void * arg)
     return 0;
 }
 
-static int acpi_parse_slit(struct acpi_table_header *table, void * arg)
+void 
+nk_dump_numa_matrix (struct nk_locality_info * numa)
 {
-    //acpi_numa_slit_init((struct acpi_table_slit *)table);
+    uint64_t i,j;
+
+    if (!numa || !numa->numa_matrix) {
+        return;
+    }
+
+    printk(" ");
+    for (i = 0; i < numa->num_regions; i++) {
+        printk("%02u ");
+    }
+    printk("\n");
+
+    for (i = 0; i < numa->num_regions; i++) {
+        printk("%02u ", i);
+        for (j = 0; j < numa->num_regions; j++) {
+            printk("%02u ", *(numa->numa_matrix + i*numa->num_regions + j));
+        }
+        printk("\n");
+    }
+
+}
+
+
+static int 
+acpi_parse_slit(struct acpi_table_header *table, void * arg)
+{
+    struct nk_locality_info * numa = (struct nk_locality_info*)arg;
+#ifdef NAUT_CONFIG_DEBUG_NUMA
+    struct acpi_table_slit * slit = (struct acpi_table_slit*)table;
+    uint64_t i,j;
+
+    NUMA_DEBUG("Parsing SLIT...\n");
+    NUMA_DEBUG("Locality Count: %llu\n", slit->locality_count);
+
+    NUMA_DEBUG("  Entries:\n");
+    NUMA_DEBUG("   ");
+    for (i = 0; i < slit->locality_count; i++) {
+        printk("%02u ");
+    }
+    printk("\n");
+
+    for (i = 0; i < slit->locality_count; i++) {
+        NUMA_DEBUG("%02u ", i);
+        for (j = 0; j < slit->locality_count; j++) {
+            printk("%02u ", *(uint8_t*)(slit->entry + i*slit->locality_count + j));
+        }
+        printk("\n");
+    }
+
+    NUMA_DEBUG("DONE.\n");
+
+#endif
+
+    numa->num_regions = slit->locality_count;
+    numa->numa_matrix = malloc(slit->locality_count * slit->locality_count);
+    if (!numa->numa_matrix) {
+        ERROR_PRINT("Could not allocate NUMA matrix\n");
+        return -1;
+    }
+
+    memcpy((void*)numa->numa_matrix, 
+           (void*)slit->entry, 
+           slit->locality_count * slit->locality_count);
 
     return 0;
 }
@@ -357,33 +420,36 @@ static int acpi_parse_slit(struct acpi_table_header *table, void * arg)
 int
 nk_numa_init (void)
 {
-    NUMA_DEBUG("Parsing NUMA structures\n");
+    struct sys_info * sys = &(nk_get_nautilus_info()->sys);
+    NUMA_PRINT("Parsing ACPI NUMA information...\n");
 
- /* SRAT: Static Resource Affinity Table */
+    /* SRAT: Static Resource Affinity Table */
     if (!acpi_table_parse(ACPI_SIG_SRAT, acpi_parse_srat, NULL)) {
-        NUMA_PRINT("Parsing SRAT_TYPE_X2APIC_CPU_AFFINITY table...\n");
+        NUMA_DEBUG("Parsing SRAT_TYPE_X2APIC_CPU_AFFINITY table...\n");
 
         acpi_table_parse_srat(ACPI_SRAT_TYPE_X2APIC_CPU_AFFINITY,
                            acpi_parse_x2apic_affinity, NAUT_CONFIG_MAX_CPUS);
-        NUMA_PRINT("DONE.\n\n");
+        NUMA_DEBUG("DONE.\n");
 
-        NUMA_PRINT("Parsing SRAT_PROCESSOR_AFFINITY table...\n");
+        NUMA_DEBUG("Parsing SRAT_PROCESSOR_AFFINITY table...\n");
 
         acpi_table_parse_srat(ACPI_SRAT_PROCESSOR_AFFINITY,
                            acpi_parse_processor_affinity,
                            NAUT_CONFIG_MAX_CPUS);
-        NUMA_PRINT("DONE.\n\n");
+        NUMA_DEBUG("DONE.\n");
 
-        NUMA_PRINT("Parsing SRAT_MEMORY_AFFINITY table...\n");
+        NUMA_DEBUG("Parsing SRAT_MEMORY_AFFINITY table...\n");
 
         acpi_table_parse_srat(ACPI_SRAT_MEMORY_AFFINITY,
                 acpi_parse_memory_affinity, NAUT_CONFIG_MAX_CPUS * 2);
 
-        NUMA_PRINT("DONE.\n\n");
+        NUMA_DEBUG("DONE.\n");
     }
 
     /* SLIT: System Locality Information Table */
-    acpi_table_parse(ACPI_SIG_SLIT, acpi_parse_slit, NULL);
+    acpi_table_parse(ACPI_SIG_SLIT, acpi_parse_slit, &(sys->locality_info));
+
+    NUMA_PRINT("DONE.\n");
 
     return 0;
 }

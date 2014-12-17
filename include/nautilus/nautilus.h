@@ -38,6 +38,7 @@ extern "C" {
 #include <nautilus/naut_assert.h>
 #include <nautilus/barrier.h>
 #include <nautilus/list.h>
+#include <nautilus/numa.h>
 
 
 struct ioapic;
@@ -81,6 +82,8 @@ struct sys_info {
     struct multiboot_info * mb_info;
 
     struct nk_int_info int_info;
+
+    struct nk_locality_info locality_info;
 };
 
 struct naut_info {
