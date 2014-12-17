@@ -13,7 +13,6 @@ static spinlock_t serial_lock; /* for SMP */
 static uint8_t serial_device_ready = 0;
 uint16_t serial_io_addr = 0;
 uint_t serial_print_level;
-
 static uint8_t com_irq;
 
 
@@ -278,6 +277,12 @@ serial_printlevel (int level, const char * format, ...)
 }
 
 
+uint8_t 
+serial_get_irq (void)
+{
+    return com_irq;
+}
+
 void 
 serial_init (void) 
 {
@@ -290,15 +295,22 @@ serial_init (void)
   serial_output_sink.Emit = &Serial_Emit;
   serial_output_sink.Finish = &Serial_Finish;
 
-
-#if NAUT_CONFIG_SERIAL_PORT == 1
+#if NAUT_CONFIG_SERIAL_PORT == 1 
   serial_init_addr(COM1_ADDR);
   register_irq_handler(COM1_3_IRQ, serial_irq_handler, NULL);
   com_irq = COM1_3_IRQ;
-#elif NAUT_CONFIG_SERIAL_PORT == 2
-  register_irq_handler(COM2_4_IRQ, serial_irq_handler, NULL);
+#elif NAUT_CONFIG_SERIAL_PORT == 2 
   serial_init_addr(COM2_ADDR);
+  register_irq_handler(COM2_4_IRQ, serial_irq_handler, NULL);
   com_irq = COM2_4_IRQ;
+#elif NAUT_CONFIG_SERIAL_PORT == 3 
+  serial_init_addr(COM3_ADDR);
+  register_irq_handler(COM1_3_IRQ, serial_irq_handler, NULL);
+  com_irq = COM1_3_IRQ;
+#elif NAUT_CONFIG_SERIAL_PORT == 4
+  serial_init_addr(COM4_ADDR);
+  register_irq_handler(COM2_4_IRQ, serial_irq_handler, NULL);
+  com_irq = COM2_4_IRQ;;
 #else
 #error Invalid serial port
 #endif

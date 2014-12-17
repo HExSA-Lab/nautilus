@@ -32,6 +32,7 @@ void serial_putlnn(char * line, int len);
 void serial_print_hex(unsigned char x);
 void serial_mem_dump(unsigned char *start, int n);
 
+uint8_t serial_get_irq(void);
 void serial_init(void);
 void serial_init_addr(unsigned short io_addr);
 
