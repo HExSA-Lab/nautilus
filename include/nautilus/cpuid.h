@@ -5,10 +5,21 @@
 #include <nautilus/naut_types.h>
 
 uint8_t cpuid_leaf_max(void);
+uint8_t cpuid_get_family(void);
+uint8_t cpuid_get_model(void);
+uint8_t cpuid_get_step(void);
+void detect_cpu(void);
 
+#define CPUID_BASIC_INFO         0x0
 #define CPUID_FEATURE_INFO       0x1
 #define CPUID_AMD_BASIC_INFO     0x80000000
 #define CPUID_AMD_FEATURE_INFO   0x80000001
+
+#define CPUID_GET_BASE_FAM(x)   (((x) >> 8) & 0xfu)
+#define CPUID_GET_BASE_MOD(x)   (((x) >> 4) & 0xfu)
+#define CPUID_GET_PROC_STEP(x)  ((x) & 0xfu)
+#define CPUID_GET_EXT_FAM(x)    (((x) >> 20) & 0xffu)
+#define CPUID_GET_EXT_MOD(x)    (((x) >> 16) & 0xfu)
 
 #define CPUID_HAS_FEATURE_ECX(flags, feat) ((flags).ecx.##feat)
 #define CPUID_HAS_FEATURE_EDX(flags, feat) ((flags).edx.##feat)
@@ -215,11 +226,6 @@ struct cpuid_ext_feat_flags_ebx {
     } __packed;
 } __packed;
 
-
-
-
-
-
 struct cpuid_feature_flags {
     struct cpuid_ecx_flags ecx;
     struct cpuid_edx_flags edx;
@@ -254,6 +260,5 @@ cpuid_sub (uint32_t func, uint32_t sub_func, cpuid_ret_t * ret)
     return 0;
 }
 
-void detect_cpu(void);
 
 #endif 
