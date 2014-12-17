@@ -10,6 +10,7 @@
 #include <dev/i8254.h>
 #include <dev/timer.h>
 #include <lib/liballoc.h>
+#include <lib/bitops.h>
 
 #ifndef NAUT_CONFIG_DEBUG_APIC
 #undef DEBUG_PRINT
@@ -18,16 +19,94 @@
 
 #define APIC_DEBUG(fmt, args...) DEBUG_PRINT("APIC: " fmt, ##args)
 #define APIC_PRINT(fmt, args...) printk("APIC: " fmt, ##args)
+#define APIC_WARN(fmt, args...)  WARN_PRINT("APIC: " fmt, ##args)
+
+
+static const char * apic_err_codes[8] = {
+    "[Send Checksum Error]",
+    "[Receive Checksum Error]",
+    "[Send Accept Error]",
+    "[Receive Accept Error]",
+    "[Redirectable IPI]",
+    "[Send Illegal Vector]",
+    "[Receive Illegal Vector]",
+    "[Illegal Register Address]"
+};
+
 
 static int
 spur_int_handler (excp_entry_t * excp, excp_vec_t v)
 {
-    APIC_DEBUG("Received Spurious Interrupt\n");
+    APIC_WARN("APIC (ID=0x%x) Received Spurious Interrupt on core %u\n",
+        per_cpu_get(apic)->id,
+        my_cpu_id());
 
     struct apic_dev * a = per_cpu_get(apic);
     a->spur_int_cnt++;
 
     /* we don't need to EOI here */
+    return 0;
+}
+
+
+static int
+error_int_handler (excp_entry_t * excp, excp_vec_t v)
+{
+    struct apic_dev * apic = per_cpu_get(apic);
+    char * s = "[Unknown Error]";
+    uint32_t err = apic_read(apic, APIC_REG_ESR);
+    uint8_t i;
+
+    i = ffs(err);
+
+    if (i < 8) {
+        s = (char*)apic_err_codes[i];
+    }
+
+    APIC_WARN("Error interrupt recieved from local APIC (ID=0x%x) on Core %u:\n", 
+            per_cpu_get(apic)->id, my_cpu_id());
+    APIC_WARN("\t%s (0x%08lx)\n", s, err);
+
+    apic->err_int_cnt++;
+
+    /* clear it and turn on the interrupt trigger again */
+    apic_write(apic, APIC_REG_ESR, 0);
+
+    apic_do_eoi();
+
+    return 0;
+}
+
+
+static int
+dummy_int_handler (excp_entry_t * excp, excp_vec_t v)
+{
+    panic("Received an interrupt from an Extended LVT vector  on LAPIC (0x%x) on core %u (Should be masked)\n",
+        per_cpu_get(apic)->id,
+        my_cpu_id());
+
+    return 0;
+}
+
+
+static int
+pc_int_handler (excp_entry_t * excp, excp_vec_t v)
+{
+    panic("Received a performance counter interrupt from the LAPIC (0x%x) on core %u (Should be masked)\n",
+        per_cpu_get(apic)->id,
+        my_cpu_id());
+
+    return 0;
+}
+
+
+static int
+thermal_int_handler (excp_entry_t * excp, excp_vec_t v)
+{
+    panic("Received a thermal interrupt from the LAPIC (0x%x) on core %u (Should be masked)\n",
+        per_cpu_get(apic)->id,
+        my_cpu_id());
+
     return 0;
 }
 
@@ -49,7 +128,7 @@ static uint8_t
 apic_is_bsp (struct apic_dev * apic)
 {
     uint64_t data;
-    data = msr_read(IA32_APIC_BASE_MSR);
+    data = msr_read(APIC_BASE_MSR);
     return APIC_IS_BSP(data);
 }
 
@@ -85,25 +164,17 @@ apic_assign_spiv (struct apic_dev * apic, uint8_t spiv_vec)
 }
 
 
-static void 
-apic_enable (struct apic_dev * apic) 
+static inline void
+apic_global_enable (void)
 {
-    uint64_t data;
-    uint8_t flags = irq_disable_save();
-    data = msr_read(IA32_APIC_BASE_MSR);
-    msr_write(IA32_APIC_BASE_MSR, data | APIC_GLOBAL_ENABLE);
-    apic_sw_enable(apic);
-    irq_enable_restore(flags);
+    msr_write(APIC_BASE_MSR, msr_read(APIC_BASE_MSR) | APIC_GLOBAL_ENABLE);
 }
-
-
-
 
 static ulong_t 
 apic_get_base_addr (void) 
 {
     uint64_t data;
-    data = msr_read(IA32_APIC_BASE_MSR);
+    data = msr_read(APIC_BASE_MSR);
 
     // we're assuming PAE is on
     return (addr_t)(data & APIC_BASE_ADDR_MASK);
@@ -114,8 +185,8 @@ static void
 apic_set_base_addr (struct apic_dev * apic, addr_t addr)
 {
     uint64_t data;
-    data = msr_read(IA32_APIC_BASE_MSR);
-    msr_write(IA32_APIC_BASE_MSR, (addr & APIC_BASE_ADDR_MASK) | (data & 0xfff));
+    data = msr_read(APIC_BASE_MSR);
+    msr_write(APIC_BASE_MSR, (addr & APIC_BASE_ADDR_MASK) | (data & 0xfff));
 }
 
 
@@ -167,6 +238,7 @@ apic_get_maxlvt (struct apic_dev * apic)
     v = apic_read(apic, APIC_REG_LVR);
     return ((v >> 16) & 0xffu);
 }
+
 
 int
 apic_read_timer (struct apic_dev * apic)
@@ -252,8 +324,6 @@ apic_bcast_sipi (struct apic_dev * apic, uint8_t target)
     irq_enable_restore(flags);
 }
 
-/* TODO: add apic dump function */
-
 
 void
 apic_timer_setup (struct apic_dev * apic, uint32_t quantum)
@@ -276,11 +346,13 @@ apic_timer_setup (struct apic_dev * apic, uint32_t quantum)
         panic("Could not register APIC timer handler\n");
     }
 
-    /* first we set up the APIC for one-shot  */
-    apic_write(apic, APIC_REG_LVTT, APIC_TIMER_INT_VEC);
+    /* run the APIC timer in one-shot mode, it shouldn't get to 0 */
+    apic_write(apic, APIC_REG_LVTT, APIC_TIMER_ONESHOT | APIC_DEL_MODE_FIXED | APIC_TIMER_INT_VEC);
 
     /* set up the divider */
     apic_write(apic, APIC_REG_TMDCR, APIC_TIMER_DIVCODE);
+
+
 
     /* set PIT channel 2 to "out" mode */
     outb((inb(KB_CTRL_PORT_B) & 0xfd) | 0x1, 
@@ -307,113 +379,270 @@ apic_timer_setup (struct apic_dev * apic, uint32_t quantum)
     outb(tmp2, KB_CTRL_PORT_B);
     outb(tmp2 | 1, KB_CTRL_PORT_B);
 
-    /* our count down value */
+    /* reset timer to our count down value */
     apic_write(apic, APIC_REG_TMICT, 0xffffffff);
 
     while (!(inb(KB_CTRL_PORT_B) & 0x20));
 
+    /* disable the timer */
     apic_write(apic, APIC_REG_LVTT, APIC_TIMER_DISABLE);
 
     busfreq = APIC_TIMER_DIV * NAUT_CONFIG_HZ*(0xffffffff - apic_read(apic, APIC_REG_TMCCT) + 1);
-    APIC_PRINT("Detected CPU %u bus frequency as %u KHz\n", apic->id, busfreq/1000);
+    APIC_PRINT("Detected APIC 0x%x bus frequency as %u KHz\n", apic->id, busfreq/1000);
     tmp = busfreq/quantum/APIC_TIMER_DIV;
 
-    APIC_DEBUG("Writing APIC timer counter as %u\n", tmp);
+    APIC_DEBUG("Setting APIC timer Initial Count Reg to %u\n", tmp);
     apic_write(apic, APIC_REG_TMICT, (tmp < APIC_TIMER_DIV) ? APIC_TIMER_DIV : tmp);
-    apic_write(apic, APIC_REG_LVTT, APIC_TIMER_INT_VEC | APIC_TIMER_PERIODIC);
+    apic_write(apic, APIC_REG_LVTT, 0 | APIC_DEL_MODE_FIXED | APIC_TIMER_INT_VEC | APIC_TIMER_PERIODIC);
     apic_write(apic, APIC_REG_TMDCR, APIC_TIMER_DIVCODE);
 }
 
 
-#if 0
-void
-ap_apic_setup (struct cpu * core)
+/**
+ * Converts an entry in a local APIC's Local Vector Table to a
+ * human-readable string.
+ * (NOTE: taken from Kitten)
+ */
+static char *
+lvt_stringify (uint32_t entry, char *buf)
 {
-    struct apic_dev * a = malloc(sizeof(struct apic_dev));
-    if (!a) {
-        ERROR_PRINT("Could not allocate APIC struct for core %u\n", core->id);
-        return;
-    }
-    memset(a, 0, sizeof(struct apic_dev));
-    core->apic = a;
+	uint32_t delivery_mode = entry & 0x700;
 
-    core->apic->base_addr    = apic_get_base_addr();
-    core->apic->version      = apic_get_version(core->apic);
-    core->apic->id           = apic_get_id(core->apic);
-    core->apic->spur_int_cnt = 0;
+	if (delivery_mode == APIC_DEL_MODE_FIXED) {
+		sprintf(buf, "FIXED -> IDT VECTOR %u",
+			entry & APIC_LVT_VEC_MASK
+		);
+	} else if (delivery_mode == APIC_DEL_MODE_NMI) {
+		sprintf(buf, "NMI   -> IDT VECTOR 2"); 
+	} else if (delivery_mode == APIC_DEL_MODE_EXTINT) {
+		sprintf(buf, "ExtINT, hooked to old 8259A PIC");
+	} else {
+		sprintf(buf, "UNKNOWN");
+	}
 
-    if (core->apic->version < 0x10 || core->apic->version > 0x15) {
-        panic("Unsupported APIC version (0x%x) in core %u\n", core->apic->version, core->id);
-    }
+	if (entry & APIC_LVT_DISABLED)
+		strcat(buf, ", MASKED");
 
-    APIC_DEBUG("Configuring CPU %u LAPIC (id=0x%x)\n", core->id, core->apic->id);
-            
-    /* Setup TPR (Task-priority register) to disable softwareinterrupts */
-    apic_write(core->apic, APIC_REG_TPR, 0x20);
-
-    /* disable LAPIC timer interrupts */
-    apic_write(core->apic, APIC_REG_LVTT, (1<<16)); 
-
-    /* disable perf cntr interrupts */
-    apic_write(core->apic, APIC_REG_LVTPC, (1<<16));
-
-    /* disable thermal interrupts */
-    apic_write(core->apic, APIC_REG_LVTTHMR, (1<<16));
-
-    /* enable normal external interrupts */
-    apic_write(core->apic, APIC_REG_LVT0, 0x8700);
-
-    /* enable normal NMI processing */
-    apic_write(core->apic, APIC_REG_LVT1, 0x400);
-    
-    /* disable error interrupts */
-    apic_write(core->apic, APIC_REG_LVTERR, (1<<16));
-
-    /* set spurious interrupt vector to 0xff, disable CPU core focusing */
-    apic_write(core->apic, 
-               APIC_REG_SPIV,
-               apic_read(core->apic, APIC_REG_SPIV) & APIC_DISABLE_FOCUS);
-
-    apic_assign_spiv(core->apic, 0xffu);
-
-    if (register_int_handler(0xff, spur_int_handler, core->apic) != 0) {
-        ERROR_PRINT("Could not register handler for spurious interrupt\n");
-    }
-
+	return buf;
 }
 
 
-void
-ap_apic_final_init(struct cpu * core)
+static void
+apic_dump (struct apic_dev * apic)
 {
-    apic_enable(core->apic);
+	char buf[128];
 
-    apic_timer_setup(core->apic, (NAUT_CONFIG_HZ * 100 / 1000));
-    apic_write(core->apic, APIC_REG_LVT0, 0x8700); /* BAM BAM */
+	APIC_DEBUG("DUMP (LOGICAL CPU #%u):\n", my_cpu_id());
+
+	APIC_DEBUG(
+		"  ID:  0x%08x (id=%d)\n",
+		apic_read(apic, APIC_REG_ID),
+		APIC_GET_ID(apic_read(apic, APIC_REG_ID))
+	);
+
+    APIC_DEBUG(
+		"  VER: 0x%08x (version=0x%x, max_lvt=%d)\n",
+		apic_read(apic, APIC_REG_LVR),
+		APIC_LVR_VER(apic_read(apic, APIC_REG_LVR)),
+		APIC_LVR_MAX(apic_read(apic, APIC_REG_LVR))
+	);
+
+    APIC_DEBUG(
+        "  BASE ADDR: %p\n",
+        apic->base_addr
+    );
+
+    if (nk_is_amd()) {
+        APIC_DEBUG(
+                "  EXT (AMD-only): 0x%08x (Ext LVT Count=%u, Ext APIC ID=%u, Specific EOI=%u, Int Enable Reg=%u)\n",
+                apic_read(apic, APIC_REG_EXFR),
+                APIC_EXFR_GET_LVT(apic_read(apic, APIC_REG_EXFR)),
+                APIC_EXFR_GET_XAIDC(apic_read(apic, APIC_REG_EXFR)),
+                APIC_EXFR_GET_SNIC(apic_read(apic, APIC_REG_EXFR)),
+                APIC_EXFR_GET_INC(apic_read(apic, APIC_REG_EXFR))
+                );
+
+        int i;
+        for (i = 0; i < APIC_EXFR_GET_LVT(apic_read(apic, APIC_REG_EXFR)); i++) {
+            APIC_DEBUG(
+                "      EXT-LVT[%u]: 0x%08x (%s)\n", 
+                i,
+                apic_read(apic, APIC_REG_EXTLVT(i)),
+                lvt_stringify(apic_read(apic, APIC_REG_EXTLVT(i)), buf)
+            );
+        }
+    }
+        
+    APIC_DEBUG(
+		"  ESR: 0x%08x (Error Status Reg, non-zero is bad)\n",
+		apic_read(apic, APIC_REG_ESR)
+	);
+    APIC_DEBUG(
+		"  SVR: 0x%08x (Spurious vector=%d, %s, %s)\n",
+		apic_read(apic, APIC_REG_SPIV),
+		apic_read(apic, APIC_REG_SPIV) & APIC_SPIV_VEC_MASK,
+		(apic_read(apic, APIC_REG_SPIV) & APIC_SPIV_SW_ENABLE)
+			? "APIC IS ENABLED"
+			: "APIC IS DISABLED",
+        (apic_read(apic, APIC_REG_SPIV) & APIC_SPIV_CORE_FOCUS)
+            ? "Core Focusing Disabled"
+            : "Core Focusing Enabled"
+	);
+
+	/*
+ 	 * Local Vector Table
+ 	 */
+	APIC_DEBUG("  Local Vector Table Entries:\n");
+    char * timer_mode;
+    if (apic_read(apic, APIC_REG_LVTT) & APIC_TIMER_PERIODIC) {
+        timer_mode = "Periodic";
+    } else if (apic_read(apic, APIC_REG_LVTT) & APIC_TIMER_TSCDLINE) {
+        timer_mode = "TSC-Deadline";
+    } else {
+        timer_mode = "One-shot";
+    }
+
+	APIC_DEBUG("      LVT[0] Timer:     0x%08x (mode=%s, %s)\n",
+		apic_read(apic, APIC_REG_LVTT),
+        timer_mode,
+		lvt_stringify(apic_read(apic, APIC_REG_LVTT), buf)
+	);
+	APIC_DEBUG("      LVT[1] Thermal:   0x%08x (%s)\n",
+		apic_read(apic, APIC_REG_LVTTHMR),
+		lvt_stringify(apic_read(apic, APIC_REG_LVTTHMR), buf)
+	);
+	APIC_DEBUG("      LVT[2] Perf Cnt:  0x%08x (%s)\n",
+		apic_read(apic, APIC_REG_LVTPC),
+		lvt_stringify(apic_read(apic, APIC_REG_LVTPC), buf)
+	);
+	APIC_DEBUG("      LVT[3] LINT0 Pin: 0x%08x (%s)\n",
+		apic_read(apic, APIC_REG_LVT0),
+		lvt_stringify(apic_read(apic, APIC_REG_LVT0), buf)
+	);
+	APIC_DEBUG("      LVT[4] LINT1 Pin: 0x%08x (%s)\n",
+		apic_read(apic, APIC_REG_LVT1),
+		lvt_stringify(apic_read(apic, APIC_REG_LVT1), buf)
+	);
+	APIC_DEBUG("      LVT[5] Error:     0x%08x (%s)\n",
+		apic_read(apic, APIC_REG_LVTERR),
+		lvt_stringify(apic_read(apic, APIC_REG_LVTERR), buf)
+	);
+
+	/*
+ 	 * APIC timer configuration registers
+ 	 */
+	APIC_DEBUG("  Local APIC Timer:\n");
+	APIC_DEBUG("      DCR (Divide Config Reg): 0x%08x\n",
+		apic_read(apic, APIC_REG_TMDCR)
+	);
+	APIC_DEBUG("      ICT (Initial Count Reg): 0x%08x\n",
+		apic_read(apic, APIC_REG_TMICT)
+	);
+
+	APIC_DEBUG("      CCT (Current Count Reg): 0x%08x\n",
+		apic_read(apic, APIC_REG_TMCCT)
+	);
+
+	/*
+ 	 * Logical APIC addressing mode registers
+ 	 */
+	APIC_DEBUG("  Logical Addressing Mode Information:\n");
+	APIC_DEBUG("      LDR (Logical Dest Reg):  0x%08x (id=%d)\n",
+		apic_read(apic, APIC_REG_LDR),
+		GET_APIC_LOGICAL_ID(apic_read(apic, APIC_REG_LDR))
+	);
+	APIC_DEBUG("      DFR (Dest Format Reg):   0x%08x (%s)\n",
+		apic_read(apic, APIC_REG_DFR),
+		(apic_read(apic, APIC_REG_DFR) == APIC_DFR_FLAT) ? "FLAT" : "CLUSTER"
+	);
+
+	/*
+ 	 * Task/processor/arbitration priority registers
+ 	 */
+	APIC_DEBUG("  Task/Processor/Arbitration Priorities:\n");
+	APIC_DEBUG("      TPR (Task Priority Reg):        0x%08x\n",
+		apic_read(apic, APIC_REG_TPR)
+	);
+	APIC_DEBUG("      PPR (Processor Priority Reg):   0x%08x\n",
+		apic_read(apic, APIC_REG_PPR)
+	);
+	APIC_DEBUG("      APR (Arbitration Priority Reg): 0x%08x\n",
+		apic_read(apic, APIC_REG_APR)
+	);
+
+
+    /* 
+     * ISR/IRR
+     */
+    APIC_DEBUG("  IRR/ISR:\n");
+    APIC_DEBUG("      IRR (Interrupt Request Reg):       0x%08x\n",
+            apic_read(apic, APIC_GET_IRR(0)));
+    APIC_DEBUG("                                         0x%08x\n",
+            apic_read(apic, APIC_GET_IRR(1)));
+    APIC_DEBUG("                                         0x%08x\n",
+            apic_read(apic, APIC_GET_IRR(2)));
+    APIC_DEBUG("                                         0x%08x\n",
+            apic_read(apic, APIC_GET_IRR(3)));
+    APIC_DEBUG("                                         0x%08x\n",
+            apic_read(apic, APIC_GET_IRR(4)));
+    APIC_DEBUG("                                         0x%08x\n",
+            apic_read(apic, APIC_GET_IRR(5)));
+    APIC_DEBUG("                                         0x%08x\n",
+            apic_read(apic, APIC_GET_IRR(6)));
+    APIC_DEBUG("                                         0x%08x\n",
+            apic_read(apic, APIC_GET_IRR(7)));
+
+    APIC_DEBUG("      ISR (In-Service Reg):              0x%08x\n",
+            apic_read(apic, APIC_GET_ISR(0)));
+    APIC_DEBUG("                                         0x%08x\n",
+            apic_read(apic, APIC_GET_ISR(1)));
+    APIC_DEBUG("                                         0x%08x\n",
+            apic_read(apic, APIC_GET_ISR(2)));
+    APIC_DEBUG("                                         0x%08x\n",
+            apic_read(apic, APIC_GET_ISR(3)));
+    APIC_DEBUG("                                         0x%08x\n",
+            apic_read(apic, APIC_GET_ISR(4)));
+    APIC_DEBUG("                                         0x%08x\n",
+            apic_read(apic, APIC_GET_ISR(5)));
+    APIC_DEBUG("                                         0x%08x\n",
+            apic_read(apic, APIC_GET_ISR(6)));
+    APIC_DEBUG("                                         0x%08x\n",
+            apic_read(apic, APIC_GET_ISR(7)));
+
 }
 
-#endif
 
 void
 apic_init (struct cpu * core)
 {
     struct apic_dev * apic = NULL;
+    uint32_t val;
 
     apic = (struct apic_dev*)malloc(sizeof(struct apic_dev));
     if (!apic) {
         panic("Could not allocate apic struct\n");
     }
     memset(apic, 0, sizeof(struct apic_dev));
+    core->apic = apic;
 
     if (!check_apic_avail()) {
         panic("No APIC found on core %u, dying\n", core->id);
     } 
 
+    /* In response to AMD erratum #663 
+     * the damn thing may give us lint interrupts
+     * even when we have them masked
+     */
+    if (nk_is_amd()  && cpuid_get_family() == 0x15) {
+        msr_write(AMD_MSR_NBRIDGE_CTL, 
+                msr_read(AMD_MSR_NBRIDGE_CTL) | 
+                (1ULL<<23) | 
+                (1ULL<<54));
+    }
+
     apic->base_addr = apic_get_base_addr();
-    APIC_DEBUG("APIC base addr: %p\n", apic->base_addr);
 
     if (core->is_bsp) {
-
         APIC_DEBUG("Reserving APIC address space\n");
         if (nk_reserve_page(apic->base_addr) < 0) {
             APIC_DEBUG("LAPIC mem region already reserved\n");
@@ -428,50 +657,77 @@ apic_init (struct cpu * core)
     apic->version   = apic_get_version(apic);
     apic->id        = apic_get_id(apic);
 
-    APIC_DEBUG("Found LAPIC (version=0x%x, id=0x%x)\n", apic->version, apic->id);
-
     if (apic->version < 0x10 || apic->version > 0x15) {
         panic("Unsupported APIC version (0x%1x)\n", (unsigned)apic->version);
     }
 
-    apic_write(apic, APIC_REG_TPR, apic_read(apic, APIC_REG_TPR) & 0xfffffff00);        // accept all interrupts
-    apic_write(apic, APIC_REG_LVTT, APIC_LVT_DISABLED);    // disable timer interrupts intially
-    apic_write(apic, APIC_REG_LVTPC, APIC_LVT_DISABLED);   // disable perf cntr interrupts
-    apic_write(apic, APIC_REG_LVTTHMR, APIC_LVT_DISABLED); // disable thermal interrupts
+    val = apic_read(apic, APIC_REG_LDR) & ~APIC_LDR_MASK;
+    val |= SET_APIC_LOGICAL_ID(0);
+    apic_write(apic, APIC_REG_LDR, val);
 
-    /* Only the BSP takes External interrupts */
-    if (core->is_bsp && !(apic_read(apic, APIC_REG_LVT0) & APIC_LVT_DISABLED)) {
-        apic_write(apic, APIC_REG_LVT0, 0x700);
-        APIC_PRINT("Enabling ExtInt on core %u\n", my_cpu_id());
-    } else {
-        apic_write(apic, APIC_REG_LVT0, 0x700 | APIC_LVT_DISABLED); 
-        APIC_PRINT("Masking ExtInt on core %u\n", my_cpu_id());
+    apic_write(apic, APIC_REG_TPR, apic_read(apic, APIC_REG_TPR) & 0xffffff00);                       // accept all interrupts
+    apic_write(apic, APIC_REG_LVTT,    APIC_DEL_MODE_FIXED | APIC_LVT_DISABLED);                      // disable timer interrupts intially
+    apic_write(apic, APIC_REG_LVTPC,   APIC_DEL_MODE_FIXED | APIC_LVT_DISABLED | APIC_PC_INT_VEC);    // disable perf cntr interrupts
+    apic_write(apic, APIC_REG_LVTTHMR, APIC_DEL_MODE_FIXED | APIC_LVT_DISABLED | APIC_THRML_INT_VEC); // disable thermal interrupts
+
+    /* we have AMD extended LVT entries to deal with */
+    if (nk_is_amd() && APIC_EXFR_GET_LVT(apic_read(apic, APIC_REG_EXFR))) {
+        int i;
+        for (i = 0; i < APIC_EXFR_GET_LVT(apic_read(apic, APIC_REG_EXFR)); i++) {
+
+            /* we assign a bogus vector to extended LVT entries */
+            apic_write(apic, APIC_REG_EXTLVT(i), 0 | 
+                    APIC_LVT_DISABLED | 
+                    APIC_EXT_LVT_DUMMY_VEC);
+        }
     }
+
+    /* mask 8259a interrupts */
+    apic_write(apic, APIC_REG_LVT0, APIC_DEL_MODE_EXTINT  | APIC_LVT_DISABLED);
 
     /* only BSP takes NMI interrupts */
-    if (core->is_bsp) {
-        apic_write(apic, APIC_REG_LVT1, 0x400);
-    } else {
-        apic_write(apic, APIC_REG_LVT1, 0x400 | APIC_LVT_DISABLED);
+    apic_write(apic, APIC_REG_LVT1, 
+            APIC_DEL_MODE_NMI | (core->is_bsp ? 0 : APIC_LVT_DISABLED));
+
+    apic_write(apic, APIC_REG_LVTERR, APIC_DEL_MODE_FIXED | APIC_ERROR_INT_VEC); // allow error interrupts
+
+    // clear the ESR
+    apic_write(apic, APIC_REG_ESR, 0u);
+
+    apic_global_enable();
+
+    if (register_int_handler(APIC_SPUR_INT_VEC, spur_int_handler, apic) != 0) {
+        panic("Could not register spurious interrupt handler\n");
     }
 
-    apic_write(apic, APIC_REG_LVTERR, (apic_read(apic, APIC_REG_LVTERR) & 0xffffff00) | 0xfe);  // error interrupt maps to vector fe
+    if (register_int_handler(APIC_ERROR_INT_VEC, error_int_handler, apic) != 0) {
+        panic("Could not register spurious interrupt handler\n");
+        return;
+    }
 
-    /* disable core focusing */
-    apic_write(apic, 
-               APIC_REG_SPIV,
-               APIC_DISABLE_FOCUS);
+    /* we shouldn't ever get these, but just in case */
+    if (register_int_handler(APIC_PC_INT_VEC, pc_int_handler, apic) != 0) {
+        panic("Could not register perf counter interrupt handler\n");
+        return;
+    }
+
+    if (register_int_handler(APIC_THRML_INT_VEC, thermal_int_handler, apic) != 0) {
+        panic("Could not register thermal interrupt handler\n");
+        return;
+    }
+
+    if (register_int_handler(APIC_EXT_LVT_DUMMY_VEC, dummy_int_handler, apic) != 0) {
+        panic("Could not register dummy ext lvt handler\n");
+        return;
+    }
 
     apic_assign_spiv(apic, APIC_SPUR_INT_VEC);
 
-    if (register_int_handler(APIC_SPUR_INT_VEC, spur_int_handler, apic) != 0) {
-        ERROR_PRINT("Could not register spurious interrupt handler\n");
-    }
-
-    apic_enable(apic); // This will also set S/W enable bit in SPIV
+    /* turn it on */
+    apic_sw_enable(apic);
 
     apic_timer_setup(apic, (NAUT_CONFIG_HZ * 100 / 1000));
 
-    core->apic = apic;
+    apic_dump(apic);
 }
 
