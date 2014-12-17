@@ -124,8 +124,6 @@ panic (const char * fmt, ...)
 #endif
     va_end(arg);
 
-    print_gprs();
-    backtrace();
    __asm__ __volatile__ ("cli");
    while(1);
 }

@@ -54,6 +54,31 @@ uint8_t nk_is_intel(void);
 #define CR4_OSXSAVE    (1<<18)
 #define CR4_SMEP       (1<<20)
 
+struct nk_regs {
+    ulong_t r15;
+    ulong_t r14;
+    ulong_t r13;
+    ulong_t r12;
+    ulong_t r11;
+    ulong_t r10;
+    ulong_t r9;
+    ulong_t r8;
+    ulong_t rbp;
+    ulong_t rdi;
+    ulong_t rsi;
+    ulong_t rdx;
+    ulong_t rcx;
+    ulong_t rbx;
+    ulong_t rax;
+    ulong_t vector;
+    ulong_t err_code;
+    ulong_t rip;
+    ulong_t cs;
+    ulong_t rflags;
+    ulong_t rsp;
+    ulong_t ss;
+};
+
 
 #define PAUSE_WHILE(x) \
     while ((x)) { \

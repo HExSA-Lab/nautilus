@@ -1,5 +1,7 @@
 #include <nautilus/intrinsics.h>
 #include <nautilus/nautilus.h>
+#include <nautilus/cpu.h>
+#include <nautilus/thread.h>
 
 extern int printk (const char * fmt, ...);
 
@@ -54,24 +56,59 @@ nk_stack_dump (ulong_t n)
 }
 
 
-inline void 
-print_gprs (void) 
+void 
+nk_print_regs (struct nk_regs * r)
 {
     int i = 0;
-    char * reg_names[9] = {"RAX", "RBX" , "RCX", "RDX", "RDI", "RSI", "RBP", "RSP", 0};
-    void * reg_vals[8];
+    ulong_t cr0 = 0ul;
+    ulong_t cr2 = 0ul;
+    ulong_t cr3 = 0ul;
+    ulong_t cr4 = 0ul;
+    ulong_t fs  = 0ul;
+    ulong_t gs  = 0ul;
+    ulong_t sgs = 0ul;
+    uint_t  fsi;
+    uint_t  gsi;
+    uint_t  cs;
+    uint_t  ds;
+    uint_t  es;
 
-    asm volatile("movq %%rax, %[m]" : [m] "=m" (reg_vals[0]));
-    asm volatile("movq %%rbx, %[m]" : [m] "=m" (reg_vals[1]));
-    asm volatile("movq %%rcx, %[m]" : [m] "=m" (reg_vals[2]));
-    asm volatile("movq %%rdx, %[m]" : [m] "=m" (reg_vals[3]));
-    asm volatile("movq %%rdi, %[m]" : [m] "=m" (reg_vals[4]));
-    asm volatile("movq %%rsi, %[m]" : [m] "=m" (reg_vals[5]));
-    asm volatile("movq %%rbp, %[m]" : [m] "=m" (reg_vals[6]));
-    asm volatile("movq %%rsp, %[m]" : [m] "=m" (reg_vals[7]));
+    printk("Current Thread=0x%x (%p)\n", 
+            get_cur_thread() ? get_cur_thread()->tid : -1,
+            get_cur_thread() ? (void*)get_cur_thread() :  NULL);
+
     
     printk("[-------------- Register Contents --------------]\n");
-    for (i = 0; i < 4; i++) {
-        printk("%s: %8p  %s: %8p\n", reg_names[i], reg_vals[i], reg_names[i+1], reg_vals[i+1]);
-    }
+    printk("RIP: %04lx:%016lx\n", r->cs, r->rip);
+    printk("RSP: %04lx:%016lx RFLAGS: %08lx Vector: %08lx Error: %08lx\n", 
+            r->cs, r->rsp, r->rflags, r->vector, r->err_code);
+    printk("RAX: %016lx RBX: %016lx RCX: %016lx\n", r->rax, r->rbx, r->rcx);
+    printk("RDX: %016lx RDI: %016lx RSI: %016lx\n", r->rdx, r->rdi, r->rsi);
+    printk("RBP: %016lx R08: %016lx R09: %016lx\n", r->rbp, r->r8, r->r9);
+    printk("R10: %016lx R11: %016lx R12: %016lx\n", r->r10, r->r11, r->r12);
+    printk("R13: %016lx R14: %016lx R15: %016lx\n", r->r13, r->r14, r->r15);
+
+    asm volatile("movl %%cs, %0": "=r" (cs));
+    asm volatile("movl %%ds, %0": "=r" (ds));
+    asm volatile("movl %%es, %0": "=r" (es));
+    asm volatile("movl %%fs, %0": "=r" (fsi));
+    asm volatile("movl %%gs, %0": "=r" (gsi));
+
+    gs  = msr_read(MSR_GS_BASE);
+    fs  = msr_read(MSR_FS_BASE);
+    gsi = msr_read(MSR_KERNEL_GS_BASE);
+
+    asm volatile("movq %%cr0, %0": "=r" (cr0));
+    asm volatile("movq %%cr2, %0": "=r" (cr2));
+    asm volatile("movq %%cr3, %0": "=r" (cr3));
+    asm volatile("movq %%cr4, %0": "=r" (cr4));
+
+    printk("FS: %016lx(%04x) GS: %016lx(%04x) knlGS: %016lx\n", 
+            fs, fsi, gs, gsi, sgs);
+    printk("CS: %04x DS: %04x ES: %04x CR0: %016lx\n", 
+            cs, ds, es, cr0);
+    printk("CR2: %016lx CR3: %016lx CR4: %016lx\n", 
+            cr2, cr3, cr4);
+
+    printk("[-----------------------------------------------]\n");
 }
