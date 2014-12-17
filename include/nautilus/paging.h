@@ -148,7 +148,7 @@ int nk_pf_handler(excp_entry_t * excp, excp_vec_t vector, addr_t fault_addr);
 #define PF_ERR_IFETCH          ((x)&(1<<5))  /* fault caused by ifetch */
 
 
-#define __page_align __attribute__ ((aligned(PAGE_SIZE)))
+#define __page_align __attribute__ ((aligned(PAGE_SIZE_4KB)))
 
 // given a page num, what's it byte offset in the page map
 #define PAGE_MAP_OFFSET(n)   (n >> 3)
