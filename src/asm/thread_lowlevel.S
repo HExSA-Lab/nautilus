@@ -29,7 +29,7 @@ ENTRY(nk_thread_switch)
     pushfq               /* save RFLAGS */
     movq -8(%rsp), %rax  /* restore rax */
     pushq $KERNEL_CS     /* push CS seg sel */
-    subq $8, %rsp        /* point rsp at ret addr */
+    subq $16, %rsp        /* point rsp at ret addr */
 
     pushq $0             /* push fake intr number */
 
@@ -56,7 +56,7 @@ ENTRY(nk_thread_switch_intr_entry)
 
     RESTORE_GPRS()      /* load the new thread's GPRs */
 
-    leaq 8(%rsp), %rsp  /* pop off the irq number */
+    leaq 16(%rsp), %rsp /* pop off the vector and the error code */
 
     iretq               /* and off we go */
 
@@ -135,7 +135,7 @@ popq %rax       ;
 
 #define GPR_LOAD_SKIP_RAX()                     \
 GPR_LOAD_NO_RAX()                                \
-leaq 8(%rsp), %rsp     ;                     // This instruction must not affect CCs
+leaq 16(%rsp), %rsp ;                            // This instruction must not affect CCs
 
 #define FPR_SAVE()			// WRITE ME
 #define FPR_LOAD()

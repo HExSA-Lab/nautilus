@@ -2,65 +2,46 @@
 #include <nautilus/thread.h>
 
 .code64
-.align 8
-.globl early_excp_handlers
-early_excp_handlers:
-    MAKE_EXCP_HANDLER(0)
-    MAKE_EXCP_HANDLER(1)
-    MAKE_EXCP_HANDLER(2)
-    MAKE_EXCP_HANDLER(3)
-    MAKE_EXCP_HANDLER(4)
-    MAKE_EXCP_HANDLER(5)
-    MAKE_EXCP_HANDLER(6)
-    MAKE_EXCP_HANDLER(7)
-    MAKE_EXCP_HANDLER(8)
-    MAKE_EXCP_HANDLER(9)
-    MAKE_EXCP_HANDLER(10)
-    MAKE_EXCP_HANDLER(11)
-    MAKE_EXCP_HANDLER(12)
-    MAKE_EXCP_HANDLER(13)
-    MAKE_EXCP_HANDLER(14)
-    MAKE_EXCP_HANDLER(15)
-    MAKE_EXCP_HANDLER(16)
-    MAKE_EXCP_HANDLER(17)
-    MAKE_EXCP_HANDLER(18)
-    MAKE_EXCP_HANDLER(19)
-    MAKE_EXCP_HANDLER(20)
-    MAKE_EXCP_HANDLER(21)
-    MAKE_EXCP_HANDLER(22)
-    MAKE_EXCP_HANDLER(23)
-    MAKE_EXCP_HANDLER(24)
-    MAKE_EXCP_HANDLER(25)
-    MAKE_EXCP_HANDLER(26)
-    MAKE_EXCP_HANDLER(27)
-    MAKE_EXCP_HANDLER(28)
-    MAKE_EXCP_HANDLER(29)
-    MAKE_EXCP_HANDLER(30)
-    MAKE_EXCP_HANDLER(31)
+.macro make_excp_handler v
+    .if (ERR_CODE_EXCP_MASK >> \v) & 1
+        pushq $0
+    .else
+        GEN_NOP(NOP_2BYTE)
+    .endif
+    pushq $\v
+    jmp early_excp_common
+    .align 16
+.endm
+
+.align 16
+GLOBAL(early_excp_handlers)
+    vector = 0
+    .rept 32
+    make_excp_handler vector
+    vector = vector + 1
+    .endr
+END(early_excp_handlers)
+
 
 .macro make_irq_handler v
-    .globl early_irq_handler_\@
-    .type  early_irq_handler_\@, @function
-    .align 16
-    early_irq_handler_\@ :
+    pushq $0 // KCH DANGER
     pushq $\v
     jmp early_irq_common
+    .align 16
 .endm
     
 .align 16
-.globl early_irq_handlers
-early_irq_handlers:
-
+GLOBAL(early_irq_handlers)
     vector = 32
     .rept NUM_IDT_ENTRIES - 32
     make_irq_handler vector
     vector = vector + 1
     .endr
+END(early_irq_handlers)
 
 
-.globl early_irq_common
-.align 8
-early_irq_common:
+.align 16
+GLOBAL(early_irq_common)
 
     SAVE_GPRS()
 
@@ -68,6 +49,12 @@ early_irq_common:
     movq 120(%rsp), %rsi # irq num
     movq $handler_table, %rdx
     movq (%rdx, %rsi, 8), %rcx
+    
+    cmpq $256, %rsi
+    jge irq_err
+
+    cmpq $32, %rsi
+    jl irq_err
 
     callq *%rcx
 
@@ -84,28 +71,27 @@ early_irq_common:
 
 thr_return:
     RESTORE_GPRS()
-    addq $8, %rsp // pop the irq num, don't need it now
+    addq $16, %rsp  // pop the vector and the error code
     iretq
 
 irq_err:
+    movq $irq_err_str, %rdi
+    callq panic
+errloop:
     hlt
+    jmp errloop
 
-.globl early_excp_common
 .align 8
-early_excp_common:
+GLOBAL(early_excp_common)
 
-    pushq %rax
-    pushq %rcx
-    pushq %rdx
-    pushq %rsi 
-    pushq %rdi  
-    pushq %r8    
-    pushq %r9     
-    pushq %r10     
-    pushq %r11      
+    SAVE_GPRS()
 
-    leaq 80(%rsp), %rdi # pointer to exception struct
-    movq 72(%rsp), %rsi # excp vector
+    movq 120(%rsp), %rsi
+    cmpq $32, %rsi
+    jge excp_err
+
+    leaq 128(%rsp), %rdi # pointer to exception struct
+    movq 120(%rsp), %rsi # excp vector
     movq $handler_table, %rdx
     movq (%rdx, %rsi, 8), %rcx
     cmpq $14, %rsi
@@ -117,24 +103,21 @@ no_pf:
     testq %rax, %rax
     jnz excp_err
 
-    popq %r11
-    popq %r10 
-    popq %r9
-    popq %r8
-    popq %rdi
-    popq %rsi
-    popq %rdx
-    popq %rcx
-    popq %rax
+    RESTORE_GPRS()
+    /* pop error code and excp number */
     addq $16, %rsp
     iretq
 
 excp_err:
+    movq $excp_err_str, %rdi
+    callq panic
+loop1:
     hlt
+    jmp loop1
 
 
-.globl handler_table
-handler_table:
+.align 8
+GLOBAL(handler_table)
 .rept NUM_EXCEPTIONS
     .quad null_excp_handler
 .endr
@@ -142,3 +125,11 @@ handler_table:
 .rept NUM_IDT_ENTRIES - NUM_EXCEPTIONS
     .quad null_irq_handler
 .endr
+END(handler_table)
+
+
+irq_err_str:
+.asciz "Received illegal interrupt %u\12"
+
+excp_err_str:
+.asciz "Received illegal exception %u\12"

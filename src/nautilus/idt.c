@@ -6,10 +6,12 @@
 #include <nautilus/percpu.h>
 #include <nautilus/cpu.h>
 #include <nautilus/thread.h>
+#include <nautilus/irq.h>
+#include <nautilus/backtrace.h>
 
 extern ulong_t handler_table[NUM_IDT_ENTRIES];
 
-struct gate_desc64 idt64[NUM_IDT_ENTRIES] __page_align;
+struct gate_desc64 idt64[NUM_IDT_ENTRIES] __align(8);
 
 #define EXCP_NAME 0
 #define EXCP_MNEMONIC 1
@@ -52,7 +54,7 @@ const char * excp_codes[NUM_EXCEPTIONS][2] = {
 struct idt_desc idt_descriptor =
 {
     .base_addr = (uint64_t)&idt64,
-    .size      = (NUM_IDT_ENTRIES<<4)-1,
+    .size      = (NUM_IDT_ENTRIES*16)-1,
 };
         
 
@@ -63,21 +65,26 @@ null_excp_handler (excp_entry_t * excp,
 {
     printk("\n+++ UNHANDLED EXCEPTION +++\n");
     if (vector >= 0 && vector < 32) {
-        printk("[%s] <%s>\n    RIP=%p    fault addr=%p    (core=%u, thread=%u)\n", 
+        printk("[%s] (0x%x) error=0x%x <%s>\n    RIP=%p      (core=%u, thread=%u)\n", 
                 excp_codes[vector][EXCP_NAME],
+                vector,
+                excp->error_code,
                 excp_codes[vector][EXCP_MNEMONIC],
                 (void*)excp->rip, 
-                (void*)fault_addr, 
                 my_cpu_id(), get_cur_thread()->tid);
     } else {
-        printk("[Unknown Exception] (vector=0x%x)\n    RIP=(%p)    fault addr=%p    (core=%u)\n", 
+        printk("[Unknown Exception] (vector=0x%x)\n    RIP=(%p)     (core=%u)\n", 
                 vector,
                 (void*)excp->rip,
-                (void*)fault_addr,
                 my_cpu_id());
     }
 
+    struct nk_regs * r = (struct nk_regs*)((char*)excp - 128);
+    nk_print_regs(r);
+    backtrace(r->rbp);
+
     panic("+++ HALTING +++\n");
+
     return 0;
 }
 
@@ -86,9 +93,18 @@ int
 null_irq_handler (excp_entry_t * excp,
                   excp_vec_t vector)
 {
-    panic("unhandled irq, (v=0x%x), addr=(%p)\n", vector,(void*)excp->rip);
-    return 0;
+    printk("[Unhandled IRQ] (vector=0x%x)\n    RIP=(%p)     (core=%u)\n", 
+            vector,
+            (void*)excp->rip,
+            my_cpu_id());
 
+    struct nk_regs * r = (struct nk_regs*)((char*)excp - 128);
+    nk_print_regs(r);
+    backtrace(r->rbp);
+
+    panic("+++ HALTING +++\n");
+    
+    return 0;
 }
 
 
@@ -98,6 +114,17 @@ df_handler (excp_entry_t * excp,
             addr_t unused)
 {
     panic("DOUBLE FAULT. Dying.\n");
+    return 0;
+}
+
+
+static int
+pic_spur_int_handler (excp_entry_t * excp,
+                      excp_vec_t vector,
+                      addr_t unused)
+{
+    WARN_PRINT("Received Spurious interrupt from PIC\n");
+    IRQ_HANDLER_END();
     return 0;
 }
 
@@ -122,21 +149,28 @@ idt_assign_entry (ulong_t entry, ulong_t handler_addr)
 }
 
 
-int 
+extern void early_irq_handlers(void);
+extern void early_excp_handlers(void);
+
+int
 setup_idt (void)
 {
     uint_t i;
+
+    ulong_t irq_start = (ulong_t)&early_irq_handlers;
+    ulong_t excp_start = (ulong_t)&early_excp_handlers;
 
     // clear the IDT out
     memset(&idt64, 0, sizeof(struct gate_desc64) * NUM_IDT_ENTRIES);
 
     for (i = 0; i < NUM_EXCEPTIONS; i++) {
-        set_intr_gate(idt64, i, &early_excp_handlers[i]);
+        set_intr_gate(idt64, i, (void*)(excp_start + i*16));
+        idt_assign_entry(i, (ulong_t)null_excp_handler);
     }
 
     for (i = 32; i < NUM_IDT_ENTRIES; i++) {
-        set_intr_gate(idt64, i, &early_irq_handlers[i-32]);
-        //set_intr_gate(idt64, i, &early_excp_handlers[i]);
+        set_intr_gate(idt64, i, (void*)(irq_start + (i-32)*16));
+        idt_assign_entry(i, (ulong_t)null_irq_handler);
     }
 
     if (idt_assign_entry(PF_EXCP, (ulong_t)nk_pf_handler) < 0) {
@@ -146,6 +180,11 @@ setup_idt (void)
 
     if (idt_assign_entry(DF_EXCP, (ulong_t)df_handler) < 0) {
         ERROR_PRINT("Couldn't assign double fault handler\n");
+        return -1;
+    }
+
+    if (idt_assign_entry(0xf, (ulong_t)pic_spur_int_handler) < 0) {
+        ERROR_PRINT("Couldn't assign PIC spur int handler\n");
         return -1;
     }
 

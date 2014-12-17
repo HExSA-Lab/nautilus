@@ -348,6 +348,7 @@ thread_setup_init_stack (nk_thread_t * t, nk_thread_fun_t fun, void * arg)
     thread_push(t, (uint64_t)0UL);                       // rflags
     thread_push(t, (uint64_t)KERNEL_CS);
     thread_push(t, (uint64_t)&nk_thread_entry);
+    thread_push(t, 0);                                   // dummy error code
     thread_push(t, 0);                                   // intr no
 
     /*
@@ -1211,7 +1212,8 @@ nk_sched_init_ap (void)
         goto out_err1;
     }
 
-    my_stack = malloc(PAGE_SIZE); if (!my_stack) {
+    my_stack = malloc(PAGE_SIZE); 
+    if (!my_stack) {
         ERROR_PRINT("Couldn't allocate new stack for CPU (%u)\n", id);
         goto out_err2;
     }

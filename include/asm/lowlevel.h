@@ -21,4 +21,7 @@
     .globl x;      \
     x:
 
+#define END(x) \
+    .size x, .-x 
+
 #endif

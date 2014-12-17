@@ -3,6 +3,8 @@
 .section .mbhdr
 .align 8
 
+#include <asm/lowlevel.h>
+
 /**
  * This header makes us multi-boot compliant
  */
@@ -34,13 +36,12 @@ multiboot_hdr:
 hdr_end:
 
 .section .boot
-.globl nautilus_entry
 
 /**
  * our entry point into the kernel, this is where
  * GRUB2 will drop us
  */
-nautilus_entry:
+ GLOBAL(nautilus_entry)
 
     /* get GRUB multiboot info and stash it */
     movl %ebx, %edi
@@ -131,25 +132,25 @@ paging_longmode_setup:
     ret
      
 .align 8
-
 gdt32:
     .quad 0x0000000000000000 /* null */
     .quad 0x00cf9a000000ffff /* code */
     .quad 0x00cf92000000ffff /* data */
 
+.align 8
 gdt64:
     .quad 0x0000000000000000 /* null */
     .quad 0x00a09a0000000000 /* code (note lme bit) */
     .quad 0x00a0920000000000 /* data (most entries don't matter) */
 
-.align 8
 
+.align 8
 gdtr32:
     .word 23
     .long gdt32
 
-.globl gdtr64
-gdtr64:
+.align 8
+GLOBAL(gdtr64)
     .word 23
     .long gdt64
     .long 0

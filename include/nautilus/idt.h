@@ -34,18 +34,7 @@ extern "C" {
 
 
 /* 0s for exceptions that push an error code on the stack */
-#define ERR_CODE_EXCP_MASK   ~0x00027d00
-
-#define MAKE_EXCP_HANDLER(x)      \
-.align 2;                         \
-early_excp_handler_##x:;          \
-.if (ERR_CODE_EXCP_MASK >> x) & 1;\
-    pushq $0;                     \
-.else;                            \
-    GEN_NOP(NOP_2BYTE);           \
-.endif;                           \
-pushq $##x;                       \
-jmp early_excp_common;
+#define ERR_CODE_EXCP_MASK   ~0x00427d00
 
 #ifndef __ASSEMBLER__
 
@@ -54,9 +43,6 @@ jmp early_excp_common;
 #include <nautilus/intrinsics.h>
 #include <nautilus/naut_string.h>
 
-
-extern const uint8_t early_excp_handlers[NUM_EXCEPTIONS][10];
-extern const uint8_t early_irq_handlers[NUM_IDT_ENTRIES-NUM_EXCEPTIONS][16];
 
 #define ADDR_LO(x) ((ulong_t)(x) & 0xFFFF)
 #define ADDR_MI(x) (((ulong_t)(x) >> 16) & 0xFFFF)
@@ -92,16 +78,17 @@ struct gate_desc64 {
         struct {
             uint16_t target_off_lo;
             uint16_t target_css;
-            uint8_t  ist  : 2;
-            uint8_t  rsvd0 : 5;
-            uint8_t  type : 5;
-            uint8_t  dpl  : 2;
-            uint8_t  p    : 1;
+            uint8_t  ist   : 5;
+            uint8_t  rsvd0 : 3;
+            uint8_t  type  : 4;
+            uint8_t  rsvd1 : 1;
+            uint8_t  dpl   : 2;
+            uint8_t  p     : 1;
             uint16_t target_off_mid;
             uint32_t target_off_hi;
-            uint32_t rsvd1;
-        };
-    };
+            uint32_t rsvd2;
+        } __packed;
+    } __packed;
 } __packed;
 
 
@@ -120,30 +107,27 @@ static inline void
 write_gate_desc (struct   gate_desc64 * idt,
                  uint32_t gate, 
                  gate_type_t type, 
-                 void      * func,
+                 const void      * func,
                  uint32_t    dpl,
                  uint32_t    ist, 
                  uint32_t    seg)
 {
-    struct gate_desc64 d;
-
-    d.target_off_lo     = ADDR_LO(func);
-    d.target_css        = seg;
-    d.ist               = ist;
-    d.rsvd0             = 0;
-    d.type              = type;
-    d.dpl               = dpl;
-    d.p                 = 1;
-    d.target_off_mid    = ADDR_MI(func);
-    d.target_off_hi     = ADDR_HI(func);
-
-    /* COPY IT */
-    memcpy(&idt[gate], &d, sizeof(struct gate_desc64));
+    idt[gate].target_off_lo     = ADDR_LO(func);
+    idt[gate].target_css        = seg;
+    idt[gate].ist               = ist;
+    idt[gate].rsvd0             = 0;
+    idt[gate].type              = type;
+    idt[gate].rsvd1             = 0;
+    idt[gate].dpl               = dpl;
+    idt[gate].p                 = 1;
+    idt[gate].target_off_mid    = ADDR_MI(func);
+    idt[gate].target_off_hi     = ADDR_HI(func);
+    idt[gate].rsvd2             = 0;
 }
 
 
 static inline void
-set_intr_gate (struct gate_desc64 * idt, int gate, void * func) 
+set_intr_gate (struct gate_desc64 * idt, unsigned gate, const void * func) 
 {
     write_gate_desc(idt, gate, GATE_TYPE_INT, func, 0, 0, KERNEL_CS);
 }
