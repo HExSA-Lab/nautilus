@@ -281,7 +281,7 @@ smp_early_init (struct naut_info * naut)
         return -1;
     }
 
-    naut->sys.pic_mode_enabled = mp_ptr->mp_feat2 & PIC_MODE_ON;
+    naut->sys.pic_mode_enabled = !!(mp_ptr->mp_feat2 & PIC_MODE_ON);
 
     SMP_PRINT("Verifying MP Floating Ptr Struct integrity...");
     if (!blk_cksum_ok((uint8_t*)mp_ptr, 16)) {
