@@ -15,8 +15,12 @@
 
 /* Internal register offsets */
 #define IOAPICID_REG  0x00    // IOAPIC ID
+#define   IOAPIC_GET_ID(x)  (((x) >> 24) & 0xfu)
 #define IOAPICVER_REG 0x01    // IOAPIC Version
+#define   IOAPIC_GET_VER(x)     ((x) & 0xffu)
+#define   IOAPIC_GET_MAX_RED(x) (((x) >> 16) & 0xffu)
 #define IOAPICARB_REG 0x02    // IOAPIC Arbitration ID
+#define   IOAPIC_GET_ARBID(x)   (((x) >> 24) & 0xfu)
 #define IOREDTBL      0x10    // Redirection Table (Entries 0-23) (64 bits each)
 
 /* used for accessing IOREDTBL entries */
@@ -25,6 +29,16 @@
 
 #define IORED_VEC_MASK      0xffff
 #define IORED_DEL_MODE_MASK (0x7 << 8)
+
+#define IORED_GET_DEST(x)     (((x) >> 56) & 0xffu)
+#define IORED_GET_MASK(x)     (((x) >> 16) & 1)
+#define IORED_GET_TRIG(x)     (((x) >> 15) & 1)
+#define IORED_GET_RIRR(x)     (((x) >> 14) & 1)
+#define IORED_GET_POL(x)      (((x) >> 13) & 1)
+#define IORED_GET_DST_MODE(x) (((x) >> 11) & 1)
+#define IORED_GET_DEL_MODE(x) (((x) >> 8) & 0x7)
+#define IORED_GET_VEC(x)      ((x) & 0xffu)
+
 
 #define IORED_DEST_MODE     (1 << 11)
 #define IORED_DELIVS        (1 << 12)

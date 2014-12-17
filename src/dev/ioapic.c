@@ -37,7 +37,7 @@ ioapic_write_irq_entry (struct ioapic * ioapic, uint8_t irq, uint64_t val)
     ioapic_write_reg(ioapic, IOAPIC_IRQ_ENTRY_LO(irq), (uint32_t)(val & 0xffffffff));
 
     /* re-enable it */
-    ioapic_unmask_irq(ioapic, irq);
+    //ioapic_unmask_irq(ioapic, irq);
 }
 
 
@@ -106,8 +106,77 @@ ioapic_get_version (struct ioapic * ioapic)
 }
 
 
+static void
+ioapic_dump (struct ioapic * ioapic)
+{
+    uint64_t val = 0;
+    unsigned pin;
+    const char * del_modes[8] = {
+        "Fixed",
+        "Lowest",
+        "SMI",
+        "Rsvd",
+        "NMI",
+        "INIT",
+        "Rsvd",
+        "ExtINT"
+    };
+
+    IOAPIC_DEBUG("IOAPIC DUMP: \n");
+
+    IOAPIC_DEBUG(
+        "  ID:  0x%08x (id=%u)\n",
+        ioapic_read_reg(ioapic, IOAPICID_REG),
+        IOAPIC_GET_ID(ioapic_read_reg(ioapic, IOAPICID_REG))
+    );
+
+    IOAPIC_DEBUG(
+        "  VER: 0x%08x (Max Red. Entry=%u, Version=0x%02x)\n",
+        ioapic_read_reg(ioapic, IOAPICVER_REG),
+        IOAPIC_GET_MAX_RED(ioapic_read_reg(ioapic, IOAPICVER_REG)),
+        IOAPIC_GET_VER(ioapic_read_reg(ioapic, IOAPICVER_REG))
+    );
+
+    IOAPIC_DEBUG(
+        "  BASE ADDR: %p\n",
+        ioapic->base
+    );
+
+    IOAPIC_DEBUG(
+        "  ARB: 0x%08x (Arb. ID=0x%01x)\n", 
+        ioapic_read_reg(ioapic, IOAPICARB_REG),
+        IOAPIC_GET_ARBID(ioapic_read_reg(ioapic, IOAPICARB_REG))
+    );
+
+    for (pin = 0; pin < ioapic->num_entries; pin++)  {
+        val = ioapic_read_irq_entry(ioapic, pin);
+
+        IOAPIC_DEBUG(
+            "  IORED[%u]: (Dest ID=0x%02x, %s, Trig Mode=%s,\n",
+            pin,
+            IORED_GET_DEST(val),
+            IORED_GET_MASK(val) ? "MASKED" : "ENABLED",
+            IORED_GET_TRIG(val) ? "Level" : "Edge"
+        );
+
+        IOAPIC_DEBUG(
+            "             Remote IRR=%u, Polarity=%s, Dest Mode=%s,\n",
+            IORED_GET_RIRR(val),
+            IORED_GET_POL(val) ? "ActiveLo" : "ActiveHi",
+            IORED_GET_DST_MODE(val) ? "Logical" : "Physical"
+        );
+
+        IOAPIC_DEBUG(
+            "             Delivery Mode=%s, IDT VECTOR %u\n", 
+            del_modes[IORED_GET_DEL_MODE(val)],
+            IORED_GET_VEC(val)
+        );
+    }
+}
+
+
 static int
-__ioapic_init (struct ioapic * ioapic)
+__ioapic_init (struct ioapic * ioapic, uint8_t ioapic_id)
 {
     int i;
     struct nk_int_entry * ioint = NULL;
@@ -115,6 +184,13 @@ __ioapic_init (struct ioapic * ioapic)
     if (nk_map_page_nocache(PAGE_MASK(ioapic->base), PTE_PRESENT_BIT|PTE_WRITABLE_BIT) == -1) {
         panic("Could not map IOAPIC\n");
         return -1;
+    }
+
+    ioapic_write_reg(ioapic, IOAPICID_REG, ioapic_id);
+
+    /* be paranoid and mask everything right off the bat */
+    for (i = 0; i < ioapic->num_entries; i++) {
+        ioapic_mask_irq(ioapic, i);
     }
 
     /* get the last entry we can access for this IOAPIC */
@@ -132,6 +208,17 @@ __ioapic_init (struct ioapic * ioapic)
     IOAPIC_PRINT("\tMapping at %p\n", (void*)ioapic->base);
     IOAPIC_PRINT("\tNum Entries: %u\n", ioapic->num_entries);
 
+    /* we assign 0xf7 as our "bogus" vector. If we see this,
+     * something is wrong because it doesn't correspond to an
+     * assigned interrupt
+     */
+    for (i = 0; i < ioapic->num_entries; i++) {
+        ioapic_assign_irq(ioapic,
+                i,
+                0xf7,
+                0,
+                0);
+    }
 
     /* now walk through the MP Table IO INT entries */
     list_for_each_entry(ioint, 
@@ -145,8 +232,6 @@ __ioapic_init (struct ioapic * ioapic)
         if (ioint->dst_ioapic_id != ioapic->id) {
             continue;
         }
-
-
 
         /* PCI IRQs get their own IOAPIC entrires
          * we're not going to bother with dealing 
@@ -205,10 +290,12 @@ __ioapic_init (struct ioapic * ioapic)
         ioapic_mask_irq(ioapic, i);
     }
 
-    /* we come out of this with all IOAPIC entries masked 
-     * we can later enable them using the more general
-     * IRQ functions 
+    /* we unmask serial interrupts initially. This
+     * should probably be done somewhere else
      */
+    nk_unmask_irq(serial_get_irq());
+
+    ioapic_dump(ioapic);
 
     return 0;
 }
@@ -219,12 +306,13 @@ ioapic_init (struct sys_info * sys)
 {
     int i = 0;
     for (i = 0; i < sys->num_ioapics; i++) {
-        if (__ioapic_init(sys->ioapics[i]) < 0) {
+        if (__ioapic_init(sys->ioapics[i], i) < 0) {
             ERROR_PRINT("Couldn't initialize IOAPIC\n");
             return -1;
         }
     }
 
+    /* Enter Symmetric I/O mode */
     if (sys->pic_mode_enabled) {
         IOAPIC_PRINT("Disabling PIC mode\n");
         imcr_begin_sym_io();
