@@ -67,8 +67,8 @@ using namespace LegionRuntime::Accessor;
 #define BASE_INSTANCES	  64
 
 // The number of threads for this version
-//#define NUM_PROCS	4
-#define NUM_PROCS	1
+#define NUM_PROCS	4
+//#define NUM_PROCS	1
 #define NUM_UTIL_PROCS  1
 #define NUM_DMA_THREADS 1
 // Maximum memory in global
@@ -1425,7 +1425,6 @@ namespace LegionRuntime {
     {
         DetailedTimer::ScopedPush sp(TIME_LOW_LEVEL);
 	ReservationImpl *l = Runtime::get_runtime()->get_reservation_impl(*this);
-    NAUTILUS_DEEP_DEBUG("leaving acquire\n");
 	return l->acquire(mode,exclusive, wait_on);
     }
 
@@ -1521,13 +1520,12 @@ namespace LegionRuntime {
                   mode = m;
                   holders = 1;
 #if DEBUG_PRINT == 1
-                  NAUTILUS_DEEP_DEBUG("Granting reservation %d in mode %d with exclusive %d\n",index,mode,exclusive);
+                  //NAUTILUS_DEEP_DEBUG("Granting reservation %d in mode %d with exclusive %d\n",index,mode,exclusive);
 #endif
           }
         }
 	//PTHREAD_SAFE_CALL(pthread_mutex_unlock(mutex));
     spin_unlock_irq_restore(mutex, flags);
-    NAUTILUS_DEEP_DEBUG("leaving acquire (res=%p)\n", result);
 	return result;
     }
 
@@ -1681,7 +1679,7 @@ namespace LegionRuntime {
 	if (holders==0)
 	{
 #if DEBUG_PRINT == 1
-		DPRINT1("Releasing reservation %d\n",index);
+		//DPRINT1("Releasing reservation %d\n",index);
 #endif
 		// Check to see if there are any waiters
 		if (requests.empty())
@@ -5753,10 +5751,10 @@ namespace LegionRuntime {
     {
         //PTHREAD_SAFE_CALL(pthread_rwlock_rdlock(&metadata_lock));
         nk_rwlock_rd_lock(&metadata_lock);
-#ifdef DEBUG_LOW_LEVEL
+//#ifdef DEBUG_LOW_LEVEL
 	assert(m.id != 0);
 	assert(m.id < metadatas.size());
-#endif
+//#endif
         IndexSpace::Impl *result = metadatas[m.id];
         //PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&metadata_lock));
         nk_rwlock_rd_unlock(&metadata_lock);

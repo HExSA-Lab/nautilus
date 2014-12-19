@@ -13,40 +13,45 @@
  * limitations under the License.
  */
 
-#ifndef __CIRCUIT_MAPPER_H__
-#define __CIRCUIT_MAPPER_H__
 
+#ifndef __CIRCUIT_MAPPER__
+#define __CIRCUIT_MAPPER__
 
 #include "../legion_runtime/legion.h"
-#include "../legion_runtime/default_mapper.h"
-#include "circuit.h"
+#include "../legion_runtime/shim_mapper.h"
 
-using namespace LegionRuntime::HighLevel;
-
-class CircuitMapper : public DefaultMapper {
+class CircuitMapper : public ShimMapper {
 public:
-  CircuitMapper(Machine *machine, HighLevelRuntime *runtime, Processor local);
+  CircuitMapper(Machine *m, HighLevelRuntime *rt, Processor local);
 public:
-  virtual void slice_domain(const Task *task, const Domain &domain,
-                            std::vector<DomainSplit> &slices);
-  virtual bool map_task(Task *task);
-  virtual bool map_inline(Inline *inline_operation);
-
-  virtual void notify_mapping_failed(const Mappable *mappable);
-#if 0
-  virtual bool rank_copy_targets(const Mappable *mappble,
-                                 const std::set<Memory> &current_instances,
-                                 bool complete,
-                                 size_t max_blocking_factor,
-                                 std::set<Memory> &to_reuse,
-                                 std::vector<Memory> &to_create,
-                                 bool &create_one,
-                                 size_t &blocking_factor);
-#endif
-protected:
-  bool map_to_gpus;
-  std::vector<Processor> all_cpus;
-  std::vector<Processor> all_gpus;
+  virtual bool spawn_task(const Task *task);
+  virtual Processor select_target_processor(const Task *task);
+  virtual Processor target_task_steal(const std::set<Processor> &blacklisted);
+  virtual void permit_task_steal(Processor thief, const std::vector<const Task*> &tasks,
+                                      std::set<const Task*> &to_steal);
+  virtual bool map_task_region(const Task *task, Processor target, 
+                                MappingTagID tag, bool inline_mapping, bool pre_mapping,
+                                const RegionRequirement &req, unsigned index,
+                                const std::map<Memory,bool/*all-fields-up-to-date*/> &current_instances,
+                                std::vector<Memory> &target_ranking,
+                                std::set<FieldID> &additional_fields,
+                                bool &enable_WAR_optimization);
+  virtual void rank_copy_target(const Task *task, Processor target,
+                                MappingTagID tag, bool inline_mapping,
+                                const RegionRequirement &req, unsigned index,
+                                const std::set<Memory> &current_instances,
+                                std::set<Memory> &to_reuse,
+                                std::vector<Memory> &to_create,
+                                bool &create_one);
+  virtual void slice_domain(const Task *task, const Domain& domain,
+                            std::vector<Mapper::DomainSplit> &slices);
+public:
+  std::vector<Processor> cpu_procs;
+  std::vector<Processor> gpu_procs;
+  Memory gasnet_mem;
+  Memory zero_copy_mem;
+  Memory framebuffer_mem;
 };
 
-#endif // __CIRCUIT_MAPPER_H__
+#endif // __CIRCUIT_MAPPER__
+
