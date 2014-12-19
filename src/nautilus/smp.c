@@ -531,11 +531,14 @@ smp_ap_setup (struct cpu * core)
 
 
 extern void fpu_init(void);
+extern void nk_rand_init(struct cpu*);
 
 static void
 smp_ap_finish (struct cpu * core)
 {
     fpu_init();
+
+    nk_rand_init(core);
 
     nk_cpu_topo_discover(core);
 

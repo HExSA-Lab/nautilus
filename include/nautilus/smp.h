@@ -67,6 +67,8 @@ struct cpu {
     /* NUMA info */
     struct nk_topo_params * tp;
     struct nk_cpu_coords * coord;
+
+    struct nk_rand_info * rand;
 };
 
 

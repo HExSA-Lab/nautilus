@@ -9,6 +9,8 @@ extern "C" {
 
 #define UNDEF_FUN_ERR() ERROR_PRINT("Function (%s) undefined\n", __func__)
 
+#define RAND_MAX    2147483647
+
 typedef int clockid_t;
 #define CLOCK_REALTIME                  0
 #define CLOCK_MONOTONIC                 1
@@ -23,7 +25,7 @@ typedef int clockid_t;
 #define CLOCK_SGI_CYCLE                 10      /* Hardware specific */
 #define CLOCK_TAI                       11
  
-typedef int time_t;
+typedef long time_t;
 typedef void FILE;
 typedef uint64_t off_t;
 
@@ -43,12 +45,18 @@ struct pollfd {
 
 typedef void* locale_t;
 
+time_t time(time_t * timer);
 void abort(void);
+int __popcountdi2(long long a);
 void exit(int status);
 int clock_gettime(clockid_t, struct timespec*);
 void __assert_fail(const char*, const char*, unsigned, const char*);
 int vfprintf(FILE*, const char*, va_list);
+int rand(void);
+void srand(unsigned int seed);
+void srand48(long int seedval);
 long int lrand48(void);
+double drand48(void);
 char * strerror(int);
 
 int fclose(FILE*);
@@ -104,7 +112,6 @@ GEN_HDR(wctob)
 GEN_HDR(mbsrtowcs)
 GEN_HDR(read)
 GEN_HDR(wmemmove)
-GEN_HDR(strdup)
 GEN_HDR(__strxfrm_l)
 GEN_HDR(wmemchr)
 GEN_HDR(__freelocale)
@@ -123,7 +130,6 @@ GEN_HDR(strtold_l)
 GEN_HDR(wmemcmp)
 GEN_HDR(__strtod_l)
 GEN_HDR(setvbuf)
-GEN_HDR(__popcountdi2)
 GEN_HDR(__wctype_l)
 GEN_HDR(__towupper_l)
 GEN_HDR(__uselocale)

@@ -8,6 +8,7 @@
 #include <nautilus/libccompat.h>
 #include <nautilus/thread.h>
 #include <nautilus/errno.h>
+#include <nautilus/random.h>
 #include <dev/hpet.h>
 
 
@@ -20,11 +21,44 @@
 
 static uint64_t dummy_mono_clock = 0;
 
+time_t 
+time (time_t * timer)
+{
+    struct timespec tp;
+    clock_gettime(CLOCK_MONOTONIC, &tp);
+
+    if (timer) {
+        *timer = tp.tv_nsec;
+    }
+    return tp.tv_nsec;
+}
+
+
 void 
 abort(void) 
 {
     printk("Thread called abort\n");
     nk_thread_exit(NULL);
+}
+
+
+int 
+__popcountdi2 (long long a)
+{
+    unsigned long long x2 = (unsigned long long)a;
+    x2 = x2 - ((x2 >> 1) & 0x5555555555555555uLL);
+    /* Every 2 bits holds the sum of every pair of bits (32) */
+    x2 = ((x2 >> 2) & 0x3333333333333333uLL) + (x2 & 0x3333333333333333uLL);
+    /* Every 4 bits holds the sum of every 4-set of bits (3 significant bits) (16) */
+    x2 = (x2 + (x2 >> 4)) & 0x0F0F0F0F0F0F0F0FuLL;
+    /* Every 8 bits holds the sum of every 8-set of bits (4 significant bits) (8) */
+    unsigned x = (unsigned)(x2 + (x2 >> 32));
+    /* The lower 32 bits hold four 16 bit sums (5 significant bits). */
+    /*   Upper 32 bits are garbage */
+    x = x + (x >> 16);
+    /* The lower 16 bits hold two 32 bit sums (6 significant bits). */
+    /*   Upper 16 bits are garbage */
+    return (x + (x >> 8)) & 0x0000007F;  /* (7 significant bits) */
 }
 
 void 
@@ -51,13 +85,13 @@ clock_gettime (clockid_t clk_id, struct timespec * tp)
 #ifdef NAUT_CONFIG_HPET
     uint64_t freq = nk_hpet_get_freq();
     uint64_t cnt  = nk_hpet_get_cntr();
-    tp->tv_nsec   = (cnt * 1000000000)/freq;
-    tp->tv_sec    = cnt / freq;
+    uint64_t nsec = (1000000000/freq) * cnt;
+    tp->tv_sec    = nsec / 1000000000;
+    tp->tv_nsec   = nsec % 1000000000;
 #else
     /* runs at "10kHz" */
     tp->tv_nsec = dummy_mono_clock*100000;
     tp->tv_sec  = dummy_mono_clock/10000;
-    printk("MONOTONIC CLOCK: s: %lu ns: %lu\n", tp->tv_sec, tp->tv_nsec);
     ++dummy_mono_clock;
 #endif
 
@@ -85,13 +119,88 @@ vfprintf (FILE * stream, const char * format, va_list arg)
 }
 
 
+int 
+rand (void) {
+    int r;
+
+    nk_get_rand_bytes((uint8_t*)&r, 4);
+
+    return RAND_MAX / r;
+}
+
+void 
+srand (unsigned int seed)
+{
+    uint64_t s = ((uint64_t)seed) << 32;
+    nk_rand_seed(s | 0x330e);
+}
+    
+
+/* NOTE: these are likely not in any way compliant
+ */
+void
+srand48 (long int seedval)
+{
+    uint64_t tmp = (((uint64_t) seedval) & 0xffffffffull) << 32;
+    nk_rand_seed(tmp | 0x330e);
+}
 
 
 long int
 lrand48 (void)
 {
-    UNDEF_FUN_ERR();
-    return -1;
+    struct nk_rand_info * rand = per_cpu_get(rand);
+    uint64_t xi     = rand->xi;
+    uint64_t seed   = rand->seed;
+    uint64_t n      = rand->n;
+    uint64_t m      = 2ull << 48;
+    uint64_t a      = 0x5deece66d;
+    uint64_t c      = 0xb;
+    uint64_t xi_new = (a*xi*n + c) % m;
+
+    nk_rand_set_xi(xi_new);
+
+    return xi_new;
+}
+
+
+union ieee754dbl {
+    double d;
+    uint64_t ui;
+    struct {
+        uint32_t mantissa1 : 32;
+        uint32_t mantissa0 : 20;
+        uint32_t exponent  : 11;
+        uint32_t sign      :1;
+    } __packed;
+} __packed;
+
+double
+drand48(void) 
+{
+    struct nk_rand_info * rand = per_cpu_get(rand);
+    uint8_t flags = spin_lock_irq_save(&rand->lock);
+    uint64_t xi     = rand->xi;
+    uint64_t n      = rand->n;
+    uint64_t m      = 2ull << 48;
+    uint64_t a      = 0x5deece66dull;
+    uint64_t c      = 0xb;
+    uint64_t xi_new = (a*xi + c) % m;
+    uint16_t *xic   = (uint16_t*)&(rand->xi);
+
+    union ieee754dbl ret;
+
+    nk_rand_set_xi(xi_new);
+
+    ret.sign     = 0;
+    ret.exponent = 0x3ff;
+    ret.mantissa0 = (xic[2] << 4) | (xic[1] >> 12);
+    ret.mantissa1 = ((xic[1] & 0xfff) << 20) | (xic[0] << 4);
+
+    //printk("new: 0x%016lx ret: 0x%016lx\n", ret.ui, ret.d);
+
+    spin_unlock_irq_restore(&rand->lock, flags);
+    return ret.d - 1.0;
 }
 
 
@@ -137,8 +246,7 @@ fdopen (int fd, const char * mode)
 int 
 fflush (FILE * f)
 {
-    UNDEF_FUN_ERR();
-    return -1;
+    return 0;
 }
 
 
@@ -183,16 +291,16 @@ printf (const char * s, ...)
 int 
 fputc (int c, FILE * f) 
 {
-    UNDEF_FUN_ERR();
-    return -1;
+    printk("%c");
+    return c;
 }
 
 
 int 
 fputs (const char * s, FILE * f)
 {
-    UNDEF_FUN_ERR();
-    return -1;
+    printk("%s\n", s);
+    return 0;
 }
 
 
@@ -352,7 +460,6 @@ GEN_DEF(wctob)
 GEN_DEF(mbsrtowcs)
 GEN_DEF(read)
 GEN_DEF(wmemmove)
-GEN_DEF(strdup)
 GEN_DEF(__strxfrm_l)
 GEN_DEF(wmemchr)
 GEN_DEF(__freelocale)
@@ -371,7 +478,6 @@ GEN_DEF(strtold_l)
 GEN_DEF(wmemcmp)
 GEN_DEF(__strtod_l)
 GEN_DEF(setvbuf)
-GEN_DEF(__popcountdi2)
 GEN_DEF(__wctype_l)
 GEN_DEF(__towupper_l)
 GEN_DEF(__uselocale)

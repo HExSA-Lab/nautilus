@@ -14,6 +14,7 @@
 #include <nautilus/percpu.h>
 #include <nautilus/errno.h>
 #include <nautilus/fpu.h>
+#include <nautilus/random.h>
 #include <nautilus/numa.h>
 #include <nautilus/acpi.h>
 
@@ -202,6 +203,8 @@ main (unsigned long mbd, unsigned long magic)
     apic_init(naut->sys.cpus[0]);
 
     fpu_init(naut);
+
+    nk_rand_init(naut->sys.cpus[0]);
 
     kbd_init(naut);
 

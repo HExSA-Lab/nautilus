@@ -8,6 +8,7 @@
 
 #include <nautilus/naut_string.h>
 #include <nautilus/naut_types.h>
+#include <lib/liballoc.h>
 
 unsigned char _ctype[] = {
 _C,_C,_C,_C,_C,_C,_C,_C,			/* 0-7 */
@@ -224,6 +225,58 @@ strncasecmp (const char * s1, const char * s2, size_t limit)
 
 
 char * 
+strdup (const char * s)
+{
+    const unsigned len = strlen(s);
+    char * new = malloc(len);
+    memcpy(new, s, len);
+    return new;
+}
+
+char *
+strpbrk (const char * cs, const char * ct)
+{
+	const char *sc1, *sc2;
+
+	for (sc1 = cs; *sc1 != '\0'; ++sc1) {
+		for (sc2 = ct; *sc2 != '\0'; ++sc2) {
+			if (*sc1 == *sc2)
+				return (char *)sc1;
+		}
+	}
+	return NULL;
+}
+
+
+/**
+ * strsep - Split a string into tokens
+ * @s: The string to be searched
+ * @ct: The characters to search for
+ *
+ * strsep() updates @s to point after the token, ready for the next call.
+ *
+ * It returns empty tokens, too, behaving exactly like the libc function
+ * of that name. In fact, it was stolen from glibc2 and de-fancy-fied.
+ * Same semantics, slimmer shape. ;)
+ */
+char *
+strsep (char ** s, const char * ct)
+{
+	char *sbegin = *s;
+	char *end;
+
+	if (sbegin == NULL)
+		return NULL;
+
+	end = strpbrk(sbegin, ct);
+	if (end)
+		*end++ = '\0';
+	*s = end;
+	return sbegin;
+}
+
+
+char * 
 strcat (char * s1, const char * s2) 
 {
     char * t1 = s1;
@@ -316,26 +369,6 @@ strrchr (const char * s, int c)
     }
     return 0;
 }
-
-
-char * 
-strpbrk (const char * s, const char * accept) 
-{
-    size_t setLen = strlen(accept);
-
-    while (*s != '\0') {
-    size_t i;
-    for (i = 0; i < setLen; ++i) {
-        if (*s == accept[i]) {
-        return (char *)s;
-        }
-    }
-    ++s;
-    }
-
-    return 0;
-}
-
 
 
 #endif  /* USE_NAUT_BUILTINS */

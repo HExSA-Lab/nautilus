@@ -1,10 +1,13 @@
+CXXFLAGS += -DSHARED_LOWLEVEL -DDEBUG_LOWLEVEL -DDEBUG_HIGHLEVEL -DCOMPILE_TIME_MIN_LEVEL=LEVEL_DEBUG
 obj-y += ipi.o
 obj-$(NAUT_CONFIG_LEGION_RT) += test_legion.o \
-								hello_world.o \
-								partitioning.o \
-								#circuit.o \
-								#circuit_cpu.o \
-								#circuit_mapper.o 
+								circuit.o \
+								circuit_cpu.o \
+								circuit_mapper.o 
+								#saxpy_array.o 
+								#delaunay.o 
+								#hello_world.o \
+								#partitioning.o \
 								# custom_mapper.o \
 								# multiple_partitions.o \
 								# privileges.o \

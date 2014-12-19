@@ -1,6 +1,12 @@
 #ifndef __MATH_H__
 #define __MATH_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#ifndef __LEGION__
+
 #include <lib/bitops.h>
 
 extern __attribute__((const, noreturn)) int ____ilog2_NaN(void);
@@ -16,6 +22,8 @@ int __ilog2_u64(uint64_t n)
 {
 	return fls64(n) - 1;
 }
+
+#ifndef ilog2
 #define ilog2(n)				\
 (						\
 	__builtin_constant_p(n) ? (		\
@@ -90,6 +98,7 @@ int __ilog2_u64(uint64_t n)
 	__ilog2_u32(n) :			\
 	__ilog2_u64(n)				\
  )
+#endif
 
 /* from linux */
 #define do_div(n, base)                     \
@@ -112,5 +121,20 @@ int __ilog2_u64(uint64_t n)
     }                           \
     __mod;                          \
 })
+
+#endif /* !__LEGION__ */
+
+static int 
+isnan (float x)
+{
+    int i = (int)x;
+    i &= 0x7fffffff;
+    i =  0x7f800000 - i;
+    return (int)(((uint32_t)(i)) >> 31);
+}
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

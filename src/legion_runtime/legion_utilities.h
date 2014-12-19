@@ -27,6 +27,7 @@
 #include "garbage_collection.h"
 
 #include "naut_debug.h"
+#include <nautilus/intrinsics.h>
 
 // Apple can go screw itself
 #ifndef __MACH__

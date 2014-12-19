@@ -16,6 +16,8 @@ extern void go_partit_c(int argc, char **argv);
 extern void go_multi_c(int argc, char **argv);
 extern void go_custom_c(int argc, char **argv);
 extern void go_circuit_c(int argc, char ** argv);
+extern void go_delaunay_c(int argc, char ** argv);
+extern void go_saxpy_c(int argc, char ** argv);
 
 typedef void (*tfun_t)(int, char**);
 
@@ -31,8 +33,10 @@ tfun_t tests[NUM_TESTS] = {
     //go_privileges_c,
     //go_multi_c,
     //go_custom_c,
-    //go_circuit_c,
-    go_partit_c,
+    go_circuit_c,
+    //go_partit_c,
+    //go_delaunay_c,
+    //go_saxpy_c,
 };
 
 static void 

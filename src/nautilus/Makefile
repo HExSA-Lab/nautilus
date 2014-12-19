@@ -16,6 +16,7 @@ obj-y += \
 	condvar.o \
 	hashtable.o \
 	rbtree.o \
+	random.o \
 	smp.o \
 	idle.o \
 	thread.o \
