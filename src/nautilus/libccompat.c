@@ -197,8 +197,6 @@ drand48(void)
     ret.mantissa0 = (xic[2] << 4) | (xic[1] >> 12);
     ret.mantissa1 = ((xic[1] & 0xfff) << 20) | (xic[0] << 4);
 
-    //printk("new: 0x%016lx ret: 0x%016lx\n", ret.ui, ret.d);
-
     spin_unlock_irq_restore(&rand->lock, flags);
     return ret.d - 1.0;
 }
