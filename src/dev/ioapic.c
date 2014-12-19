@@ -35,9 +35,6 @@ ioapic_write_irq_entry (struct ioapic * ioapic, uint8_t irq, uint64_t val)
 
     /* lo */
     ioapic_write_reg(ioapic, IOAPIC_IRQ_ENTRY_LO(irq), (uint32_t)(val & 0xffffffff));
-
-    /* re-enable it */
-    //ioapic_unmask_irq(ioapic, irq);
 }
 
 
@@ -75,12 +72,14 @@ ioapic_assign_irq (struct ioapic * ioapic,
                    uint8_t irq, 
                    uint8_t vector,
                    uint8_t polarity, 
-                   uint8_t trigger_mode)
+                   uint8_t trigger_mode,
+                   uint8_t mask_it)
 {
     ASSERT(irq < ioapic->num_entries);
     ioapic_write_irq_entry(ioapic, irq, 
                            vector                             |
-                           (DELMODE_FIXED << DEL_MODE_SHIFT) |
+                           (mask_it ? IOAPIC_MASK_IRQ : 0)    |
+                           (DELMODE_FIXED << DEL_MODE_SHIFT)  |
                            (polarity << INTPOL_SHIFT)         | 
                            (trigger_mode << TRIG_MODE_SHIFT));
 
@@ -217,7 +216,8 @@ __ioapic_init (struct ioapic * ioapic, uint8_t ioapic_id)
                 i,
                 0xf7,
                 0,
-                0);
+                0,
+                1 /* mask it */);
     }
 
     /* now walk through the MP Table IO INT entries */
@@ -274,7 +274,8 @@ __ioapic_init (struct ioapic * ioapic, uint8_t ioapic_id)
                     ioint->dst_ioapic_intin,
                     irq_to_vec(newirq),
                     pol,
-                    trig);
+                    trig,
+                    1 /* mask it */);
 
             struct iored_entry * iored_entry = &(ioapic->entries[ioint->dst_ioapic_intin]);
             iored_entry->boot_info  = ioint;
@@ -286,6 +287,7 @@ __ioapic_init (struct ioapic * ioapic, uint8_t ioapic_id)
 
 
     IOAPIC_DEBUG("Masking all IORED entries\n");
+    /* being paranoid */
     for (i = 0; i < ioapic->num_entries; i++) {
         ioapic_mask_irq(ioapic, i);
     }
