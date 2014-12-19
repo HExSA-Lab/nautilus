@@ -5,6 +5,7 @@
 #include <nautilus/idt.h>
 #include <nautilus/cpu.h>
 #include <nautilus/errno.h>
+#include <nautilus/backtrace.h>
 #include <nautilus/naut_assert.h>
 #include <lib/bitmap.h>
 #include <lib/liballoc.h>
@@ -345,7 +346,13 @@ nk_pf_handler (excp_entry_t * excp,
                excp_vec_t     vector,
                addr_t         fault_addr)
 {
-    panic("\n+++ Page Fault +++\nRIP: %p    Fault Address: %p \nError Code: 0x%x    (core=%u)\n", (void*)excp->rip, (void*)fault_addr, excp->error_code, my_cpu_id());
+    printk("\n+++ Page Fault +++\nRIP: %p    Fault Address: %p \nError Code: 0x%x    (core=%u)\n", (void*)excp->rip, (void*)fault_addr, excp->error_code, my_cpu_id());
+
+    struct nk_regs * r = (struct nk_regs*)((char*)excp - 128);
+    nk_print_regs(r);
+    backtrace(r->rbp);
+
+    panic("+++ HALTING +++\n");
     return 0;
 }
 
