@@ -313,6 +313,7 @@ CXXFLAGS := -fno-exceptions \
 			-fno-rtti \
 			-ffreestanding \
 			-fno-stack-protector \
+			-fno-strict-aliasing \
 			-mno-red-zone \
 			-mno-3dnow
 			#-mno-sse \
@@ -328,6 +329,7 @@ CFLAGS:=   -O2 \
 		   -ffreestanding \
 		   -fno-stack-protector \
 		   -fno-omit-frame-pointer \
+		   -fno-strict-aliasing \
 		   -fno-common \
 		   -fno-reorder-functions \
 		   -mcmodel=large \
