@@ -73,6 +73,13 @@ menu Debugging
       help
         Turn on debug prints for paging subsystem
 
+    config DEBUG_FPU
+      bool "Debug FPU"
+      depends on DEBUG_PRINTS
+      default n
+      help
+        Turn on debug prints for FPU related code (SIMD,MMX,SSE,etc.)
+
     config DEBUG_MALLOC
       bool "Debug malloc"
       depends on DEBUG_PRINTS

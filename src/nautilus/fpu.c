@@ -8,6 +8,15 @@
 #include <nautilus/msr.h>
 #include <nautilus/cga.h>
 
+#ifndef NAUT_CONFIG_DEBUG_FPU
+#undef DEBUG_PRINT
+#define DEBUG_PRINT(fmt, args...)
+#endif
+
+#define FPU_PRINT(fmt, args...) printk("FPU: " fmt, ##args)
+#define FPU_DEBUG(fmt, args...) DEBUG_PRINT("FPU: " fmt, ##args)
+#define FPU_WARN(fmt, args...)  WARN_PRINT("FPU: " fmt, ##args)
+
 #define _INTEL_FPU_FEAT_QUERY(r, feat)  \
     ({ \
      cpuid_ret_t ret; \
@@ -34,7 +43,7 @@
 
 #define DEFAULT_FUN_CHECK(fun, str) \
     if (fun()) { \
-        printk("\t[" #str "]\n"); \
+        FPU_DEBUG("\t[" #str "]\n"); \
     }
 
 
@@ -54,7 +63,7 @@ xm_handler (excp_entry_t * excp, excp_vec_t vec)
 {
     uint32_t m;
     asm volatile ("stmxcsr %[_m]" : [_m] "=m" (m) : : "memory");
-    printk("SIMD Floating point exception (MXCSR=0x%x)\n", m);
+    FPU_WARN("SIMD Floating point exception (MXCSR=0x%x)\n", m);
     return 0;
 }
 
@@ -250,7 +259,7 @@ set_osxsave (void)
 static void 
 amd_fpu_init (struct naut_info * naut)
 {
-    printk("Probing for AMD-specific FPU/SIMD extensions\n");
+    FPU_DEBUG("Probing for AMD-specific FPU/SIMD extensions\n");
     DEFAULT_FUN_CHECK(amd_has_fma4, FMA4)
     DEFAULT_FUN_CHECK(amd_has_mmx_ext, AMDMMXEXT)
     DEFAULT_FUN_CHECK(amd_has_sse4a, SSE4A)
@@ -263,7 +272,7 @@ amd_fpu_init (struct naut_info * naut)
 static void 
 intel_fpu_init (struct naut_info * naut)
 {
-    printk("Probing for Intel specific FPU/SIMD extensions\n");
+    FPU_DEBUG("Probing for Intel specific FPU/SIMD extensions\n");
     DEFAULT_FUN_CHECK(has_cx16, CX16)
     DEFAULT_FUN_CHECK(has_cvt16, CVT16)
     DEFAULT_FUN_CHECK(has_fma4, FMA4)
@@ -277,18 +286,18 @@ fpu_init_common (struct naut_info * naut)
     uint8_t sse_ready = 0;
 
     if (has_x87()) {
-        printk("\t[x87]\n");
+        FPU_DEBUG("\t[x87]\n");
         x87_ready = 1;
     }
 
     if (has_sse()) {
         ++sse_ready;
-        printk("\t[SSE]\n");
+        FPU_DEBUG("\t[SSE]\n");
     }
 
     if (has_clflush()) {
         ++sse_ready;
-        printk("\t[CLFLUSH]\n");
+        FPU_DEBUG("\t[CLFLUSH]\n");
     }
 
     DEFAULT_FUN_CHECK(has_sse2, SSE2)
@@ -296,7 +305,7 @@ fpu_init_common (struct naut_info * naut)
 
     if (has_fxsr()) {
         ++sse_ready;
-        printk("\t[FXSAVE/RESTORE]\n");
+        FPU_DEBUG("\t[FXSAVE/RESTORE]\n");
     } else {
         panic("No FXSAVE/RESTORE support. Thread switching will be broken\n");
     }
@@ -309,13 +318,13 @@ fpu_init_common (struct naut_info * naut)
 
     /* should we turn on x87? */
     if (x87_ready) {
-        printk("\tInitializing legacy x87 FPU\n");
+        FPU_DEBUG("\tInitializing legacy x87 FPU\n");
         enable_x87();
     }
 
     /* did we meet SSE requirements? */
     if (sse_ready >= 3) {
-        printk("\tInitializing SSE extensions\n");
+        FPU_DEBUG("\tInitializing SSE extensions\n");
         enable_sse();
     }
 }
@@ -330,7 +339,7 @@ fpu_init_common (struct naut_info * naut)
 void
 fpu_init (struct naut_info * naut)
 {
-    printk("Probing for Floating Point/SIMD extensions...\n");
+    FPU_DEBUG("Probing for Floating Point/SIMD extensions...\n");
 
     fpu_init_common(naut);
 
