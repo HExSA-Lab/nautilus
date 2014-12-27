@@ -333,7 +333,7 @@ apic_timer_setup (struct apic_dev * apic, uint32_t quantum)
     uint8_t  tmp2;
     cpuid_ret_t ret;
 
-    APIC_PRINT("Setting up Local APIC timer for core %u\n", apic->id);
+    APIC_PRINT("Setting up Local APIC timer for APIC 0x%x\n", apic->id);
 
     cpuid(0x6, &ret);
     if (ret.a & 0x4) {
