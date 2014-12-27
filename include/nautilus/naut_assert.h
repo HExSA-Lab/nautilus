@@ -5,8 +5,9 @@
 extern "C" {
 #endif
 
+#include <nautilus/nautilus.h>
+
 extern void serial_print_redirect(const char * format, ...);
-extern int printk(const char* fmt, ...);
 
 
 #ifdef NAUT_CONFIG_ENABLE_ASSERTS
