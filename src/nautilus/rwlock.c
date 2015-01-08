@@ -32,10 +32,12 @@ nk_rwlock_init (nk_rwlock_t * l)
 int 
 nk_rwlock_rd_lock (nk_rwlock_t * l)
 {
+    NK_PROFILE_ENTRY();
     DEBUG_PRINT("rwlock read lock: %p\n", (void*)l);
     int flags = spin_lock_irq_save(&l->lock);
     ++l->readers;
     spin_unlock_irq_restore(&l->lock, flags);
+    NK_PROFILE_EXIT();
     return 0;
 }
 
@@ -43,11 +45,12 @@ nk_rwlock_rd_lock (nk_rwlock_t * l)
 int 
 nk_rwlock_rd_unlock (nk_rwlock_t * l) 
 {
+    NK_PROFILE_ENTRY();
     DEBUG_PRINT("rwlock read unlock: %p\n", (void*)l);
     int flags = spin_lock_irq_save(&l->lock);
-    /* TODO: cond_signal/broadcast */
     --l->readers;
     spin_unlock_irq_restore(&l->lock, flags);
+    NK_PROFILE_EXIT();
     return 0;
 }
 
@@ -55,6 +58,7 @@ nk_rwlock_rd_unlock (nk_rwlock_t * l)
 int 
 nk_rwlock_wr_lock (nk_rwlock_t * l)
 {
+    NK_PROFILE_ENTRY();
     DEBUG_PRINT("rwlock write lock: %p\n", (void*)l);
 
     while (1) {
@@ -64,11 +68,11 @@ nk_rwlock_wr_lock (nk_rwlock_t * l)
             break;
         } else { 
             spin_unlock(&l->lock);
-            /* TODO: use a condvar here */
-            nk_yield();
+            /* TODO: we should yield if we're not spread across cores */
         }
     }
 
+    NK_PROFILE_EXIT();
     return 0;
 }
 
@@ -76,8 +80,10 @@ nk_rwlock_wr_lock (nk_rwlock_t * l)
 int 
 nk_rwlock_wr_unlock (nk_rwlock_t * l)
 {
+    NK_PROFILE_ENTRY();
     DEBUG_PRINT("rwlock write unlock: %p\n", (void*)l);
     spin_unlock(&l->lock);
+    NK_PROFILE_EXIT();
     return 0;
 }
 
@@ -86,6 +92,7 @@ uint8_t
 nk_rwlock_wr_lock_irq_save (nk_rwlock_t * l)
 {
     int flags;
+    NK_PROFILE_ENTRY();
     DEBUG_PRINT("rwlock write lock (irq): %p\n", (void*)l);
 
     while (1) {
@@ -95,11 +102,10 @@ nk_rwlock_wr_lock_irq_save (nk_rwlock_t * l)
             break;
         } else {
             spin_unlock_irq_restore(&l->lock, flags);
-            /* TODO: use a condvar here */
-            nk_yield();
         }
     }
 
+    NK_PROFILE_EXIT();
     return flags;
 }
 
@@ -107,8 +113,10 @@ nk_rwlock_wr_lock_irq_save (nk_rwlock_t * l)
 int 
 nk_rwlock_wr_unlock_irq_restore (nk_rwlock_t * l, uint8_t flags)
 {
+    NK_PROFILE_ENTRY();
     DEBUG_PRINT("rwlock write unlock (irq): %p\n", (void*)l);
     spin_unlock_irq_restore(&l->lock, flags);
+    NK_PROFILE_EXIT();
     return 0;
 }
 

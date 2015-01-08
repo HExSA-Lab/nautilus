@@ -4,8 +4,11 @@
 #include <nautilus/queue.h>
 #include <nautilus/thread.h>
 #include <nautilus/errno.h>
+#include <nautilus/irq.h>
 #include <nautilus/cpu.h>
+#include <nautilus/atomic.h>
 
+#include <dev/apic.h>
 #include <lib/liballoc.h>
 
 #ifndef NAUT_CONFIG_DEBUG_SYNCH
@@ -50,37 +53,41 @@ nk_condvar_destroy (nk_condvar_t * c)
 
 
 uint8_t
-nk_condvar_wait (nk_condvar_t * c, spinlock_t * l, uint8_t flags)
+nk_condvar_wait (nk_condvar_t * c, spinlock_t * l)
 {
+    NK_PROFILE_ENTRY();
     DEBUG_PRINT("Condvar wait on (%p) mutex=%p\n", (void*)c, (void*)l);
 
-    /* we're about to modify shared condvar state, lock it */
-    uint8_t cflags = spin_lock_irq_save(&c->lock);
-        ++c->nwaiters;
-    spin_unlock_irq_restore(&c->lock, cflags);
+    atomic_inc(c->nwaiters);
 
     /* now we can unlock the mutex and go to sleep */
-    spin_unlock_irq_restore(l, flags);
+    spin_unlock(l);
     nk_thread_queue_sleep(c->wait_queue);
 
-    /* we need to modify shared state again */
-    cflags = spin_lock_irq_save(&c->lock);
-    --c->nwaiters;
-    spin_unlock_irq_restore(&c->lock, cflags); 
+    atomic_dec(c->nwaiters);
 
-    /* release the mutex */
-    return spin_lock_irq_save(l);
+    /* reacquire lock */
+    spin_lock(l);
+    NK_PROFILE_EXIT();
+    return 0;
 }
 
 
 int 
 nk_condvar_signal (nk_condvar_t * c)
 {
+    uint8_t flags;
+    NK_PROFILE_ENTRY();
+    flags = irq_disable_save();
     DEBUG_PRINT("Condvar signaling on (%p)\n", (void*)c);
-    if (nk_thread_queue_wake_one(c->wait_queue) != 0) {
+    if (unlikely(nk_thread_queue_wake_one(c->wait_queue) != 0)) {
         ERROR_PRINT("Could not signal on condvar\n");
         return -1;
     }
+    /* broadcast a timer interrupt to everyone */
+    apic_bcast_ipi(per_cpu_get(apic), 0xf0);
+    irq_enable_restore(flags);
+    NK_PROFILE_EXIT();
     return 0;
 }
 
@@ -88,11 +95,18 @@ nk_condvar_signal (nk_condvar_t * c)
 int
 nk_condvar_bcast (nk_condvar_t * c)
 {
+    uint8_t flags;
+    NK_PROFILE_ENTRY();
+    flags = irq_disable_save();
     DEBUG_PRINT("Condvar broadcasting on (%p)\n", (void*)c);
-    if (nk_thread_queue_wake_all(c->wait_queue) != 0) {
+    if (unlikely(nk_thread_queue_wake_all(c->wait_queue) != 0)) {
         ERROR_PRINT("Could not broadcast on condvar\n");
         return -1;
     }
+    /* broadcast a timer interrupt to everyone */
+    apic_bcast_ipi(per_cpu_get(apic), 0xf0);
+    irq_enable_restore(flags);
+    NK_PROFILE_EXIT();
     return 0;
 }
 
@@ -104,11 +118,11 @@ test1 (void * in, void ** out)
     spinlock_t lock;
     spinlock_init(&lock);
     printk("test 1 is starting to wait on condvar\n");
-    int flags = spin_lock_irq_save(&lock);
+    spin_lock(&lock);
 
-    nk_condvar_wait(c, &lock, flags);
+    nk_condvar_wait(c, &lock);
 
-    spin_unlock_irq_restore(&lock, flags);
+    spin_unlock(&lock);
 
     printk("test one is out of wait on condvar\n");
 }
@@ -120,11 +134,11 @@ test2 (void * in, void ** out)
     spinlock_t lock;
     spinlock_init(&lock);
     printk("test 2 is starting to wait on condvar\n");
-    int flags = spin_lock_irq_save(&lock);
+    spin_lock(&lock);
 
-    nk_condvar_wait(c, &lock, flags);
+    nk_condvar_wait(c, &lock);
 
-    spin_unlock_irq_restore(&lock, flags);
+    spin_unlock(&lock);
 
     printk("test 2 is out of wait on condvar\n");
 }

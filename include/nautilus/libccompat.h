@@ -7,7 +7,11 @@ extern "C" {
 
 #include <nautilus/nautilus.h>
 
+#ifndef NAUT_CONFIG_SILENCE_UNDEF_ERR
 #define UNDEF_FUN_ERR() ERROR_PRINT("Function (%s) undefined\n", __func__)
+#else
+#define UNDEF_FUN_ERR() 
+#endif
 
 #define RAND_MAX    2147483647
 

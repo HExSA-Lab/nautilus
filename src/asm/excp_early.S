@@ -45,6 +45,10 @@ GLOBAL(early_irq_common)
 
     SAVE_GPRS()
 
+#ifdef NAUT_CONFIG_PROFILE
+    callq nk_irq_prof_enter
+#endif
+
     leaq 128(%rsp), %rdi # pointer to exception struct
     movq 120(%rsp), %rsi # irq num
     movq $handler_table, %rdx
@@ -60,6 +64,10 @@ GLOBAL(early_irq_common)
 
     testq %rax, %rax
     jnz irq_err
+
+#ifdef NAUT_CONFIG_PROFILE
+    callq nk_irq_prof_exit
+#endif
 
     // we're back from the irq handler
     // do we need to switch to someone else?

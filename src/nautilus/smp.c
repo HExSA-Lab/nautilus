@@ -65,12 +65,14 @@ parse_mptable_cpu (struct sys_info * sys, struct mp_table_entry_cpu * cpu)
     new_cpu->system     = sys;
     new_cpu->cpu_khz    = nk_detect_cpu_freq(new_cpu->id);
 
-    SMP_PRINT("CPU %u -- LAPIC ID 0x%x -- Features: ", new_cpu->id, new_cpu->lapic_id);
+    SMP_DEBUG("CPU %u -- LAPIC ID 0x%x -- Features: ", new_cpu->id, new_cpu->lapic_id);
+#ifdef NAUT_CONFIG_DEBUG_SMP
     printk("%s", (new_cpu->feat_flags & 1) ? "fpu " : "");
     printk("%s", (new_cpu->feat_flags & (1<<7)) ? "mce " : "");
     printk("%s", (new_cpu->feat_flags & (1<<8)) ? "cx8 " : "");
     printk("%s", (new_cpu->feat_flags & (1<<9)) ? "apic " : "");
     printk("\n");
+#endif
     SMP_DEBUG("\tEnabled?=%01d\n", new_cpu->enabled);
     SMP_DEBUG("\tBSP?=%01d\n", new_cpu->is_bsp);
     SMP_DEBUG("\tSignature=0x%x\n", new_cpu->cpu_sig);
@@ -551,8 +553,14 @@ smp_ap_finish (struct cpu * core)
 
     SMP_DEBUG("Core %u ready, enabling interrupts\n", core->id);
     sti();
+
+#ifdef NAUT_CONFIG_PROFILE
+    nk_instrument_calibrate();
+#endif
 }
 
+
+extern void idle(void* in, void**out);
 
 void 
 smp_ap_entry (struct cpu * core) 
@@ -585,9 +593,8 @@ smp_ap_entry (struct cpu * core)
     smp_ap_finish(my_cpu);
 
     ASSERT(irqs_enabled());
-    while (1) {
-        nk_yield();
-    }
+
+    idle(NULL, NULL);
 }
 
 

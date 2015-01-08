@@ -29,3 +29,5 @@ obj-y += \
 	numa.o \
 	nautilus.o \
 	libccompat.o 
+
+obj-$(NAUT_CONFIG_PROFILE) += instrument.o

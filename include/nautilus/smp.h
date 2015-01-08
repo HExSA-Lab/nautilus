@@ -39,6 +39,10 @@ struct nk_xcall {
 };
 
 
+#ifdef NAUT_CONFIG_PROFILE
+    struct nk_instr_data;
+#endif
+
 struct cpu {
     nk_thread_t * cur_thread; /* KCH: this must be first! */
 
@@ -69,6 +73,11 @@ struct cpu {
     struct nk_cpu_coords * coord;
 
     struct nk_rand_info * rand;
+
+    /* temporary */
+#ifdef NAUT_CONFIG_PROFILE
+    struct nk_instr_data * instr_data;
+#endif
 };
 
 

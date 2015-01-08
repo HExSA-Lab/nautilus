@@ -1,6 +1,7 @@
 #include <lib/liballoc.h>
 #include <nautilus/naut_types.h>
 #include <nautilus/paging.h>
+#include <nautilus/nautilus.h>
 
 /**  Durand's Ridiculously Amazing Super Duper Memory functions.  */
 
@@ -303,6 +304,8 @@ void *malloc(size_t size)
 	struct boundary_tag *tag = NULL;
     int flags;
 
+    NK_MALLOC_PROF_ENTRY();
+
 #ifdef DEBUG
     printf("malloc request for %u bytes\n", size);
 #endif
@@ -425,6 +428,8 @@ void *malloc(size_t size)
     liballoc_memset(ptr, 0, tag->size);
 
 	liballoc_unlock(flags);
+
+    NK_MALLOC_PROF_EXIT();
 	return ptr;
 }
 

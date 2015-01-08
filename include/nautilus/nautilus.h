@@ -4,6 +4,7 @@
 #include <nautilus/printk.h>
 #include <dev/serial.h>
 #include <nautilus/naut_types.h>
+#include <nautilus/instrument.h>
 
 #ifdef __cplusplus
 extern "C" {

@@ -15,7 +15,7 @@ typedef struct nk_condvar {
 
 int nk_condvar_init(nk_condvar_t * c);
 int nk_condvar_destroy(nk_condvar_t * c);
-uint8_t nk_condvar_wait(nk_condvar_t * c, spinlock_t * l, uint8_t flags);
+uint8_t nk_condvar_wait(nk_condvar_t * c, spinlock_t * l);
 int nk_condvar_signal(nk_condvar_t * c);
 int nk_condvar_bcast(nk_condvar_t * c);
 void nk_condvar_test(void);

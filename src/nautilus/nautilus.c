@@ -17,6 +17,9 @@
 #include <nautilus/random.h>
 #include <nautilus/numa.h>
 #include <nautilus/acpi.h>
+#include <nautilus/atomic.h>
+
+#include <nautilus/libccompat.h>
 
 #include <nautilus/barrier.h>
 #include <nautilus/rwlock.h>
@@ -41,48 +44,11 @@
 static struct naut_info nautilus_info;
 extern spinlock_t printk_lock;
 
-#ifdef NAUT_CONFIG_CXX_SUPPORT
-/* for global constructors */
-extern void (*_init_array_start []) (void) __attribute__((weak));
-extern void (*_init_array_end []) (void) __attribute__((weak));
-
-static void do_ctors_init (void) {
-    void (**p)(void) = NULL;
-
-    for (p = _init_array_start; p < _init_array_end; p++) {
-        if (*p) {
-            DEBUG_PRINT("Calling static constructor (%p)\n", (void*)(*p));
-            (*p)();
-        }
-    }
-}
-
-#endif /* !NAUT_CONFIG_CXX_SUPPORT */
-
 
 inline struct naut_info*
 nk_get_nautilus_info (void)
 {
     return &nautilus_info;
-}
-
-
-static void xcall_test (void * arg)
-{
-    printk("Running xcore test on core %u\n", my_cpu_id());
-}
-
-
-extern void ipi_test_setup(void);
-extern void ipi_begin_test(cpu_id_t t);
-
-
-static void tfun (void * in, void ** out)
-{
-    while (1) {
-        printk("thread tfun running (tid=%u)\n", nk_get_tid());
-        nk_yield();
-    }
 }
 
 
@@ -186,7 +152,6 @@ main (unsigned long mbd, unsigned long magic)
 
     i8254_init(naut);
 
-
     smp_early_init(naut);
 
     // setup per-core area for BSP
@@ -216,20 +181,24 @@ main (unsigned long mbd, unsigned long magic)
 
     nk_cpu_topo_discover(naut->sys.cpus[0]);
 
-
 #ifdef NAUT_CONFIG_HPET
     nk_hpet_init();
+#endif
+
+#ifdef NAUT_CONFIG_PROFILE
+    nk_instrument_init();
 #endif
 
     smp_bringup_aps(naut);
 
 
 #ifdef NAUT_CONFIG_CXX_SUPPORT
-    // We can assume that we won't encounter any
-    // C++ before this point, invoke the constructors now
-    do_ctors_init();
-#endif
+    extern void nk_cxx_init(void);
+    // Assuming we don't encounter C++ before here
+    nk_cxx_init();
+#endif 
 
+    /* interrupts on */
     sti();
 
 #ifdef NAUT_CONFIG_NO_RT
@@ -237,14 +206,26 @@ main (unsigned long mbd, unsigned long magic)
     // screen saver
     nk_thread_start(side_screensaver, NULL, NULL, 0, TSTACK_DEFAULT, NULL, 1);
 
-#endif
+#endif /* !NAUT_CONFIG_NO_RT */
+
 
 #ifdef NAUT_CONFIG_LEGION_RT
+
+#ifdef NAUT_CONFIG_PROFILE
+    nk_instrument_start();
+    nk_instrument_calibrate();
+#endif
 
     extern void run_legion_tests(void);
     run_legion_tests();
 
+#ifdef NAUT_CONFIG_PROFILE
+    nk_instrument_end();
+    nk_instrument_query();
 #endif
+
+
+#endif /* !NAUT_CONFIG_LEGION_RT */
 
 #ifdef NAUT_CONFIG_NDPC_RT
 
@@ -258,11 +239,7 @@ main (unsigned long mbd, unsigned long magic)
 
 #endif
 
-
-    printk("Nautilus main thread (core 0) yielding\n");
-    while (1) {
-        nk_yield();
-    }
-
+    printk("Nautilus boot thread yielding (indefinitely)\n");
+    /* we don't come back from this */
+    idle(NULL, NULL);
 }
-

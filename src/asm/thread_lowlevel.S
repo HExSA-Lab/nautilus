@@ -37,22 +37,36 @@ ENTRY(nk_thread_switch)
 
 ENTRY(nk_thread_switch_intr_entry)
 
+#ifdef NAUT_CONFIG_PROFILE
+    pushq %rdi
+    callq nk_thr_switch_prof_enter
+    popq %rdi
+#endif
+
     movq %gs:0x0, %rax
     movq %rsp, (%rax)   /* save the current stack pointer */
 
+#ifdef NAUT_CONFIG_FPU_SAVE
     /* Save the FPRs */
     movzwq 16(%rax), %rbx
     movq (%rax, %rbx, 1), %rbx
     fxsave (%rbx)
+#endif
 
     movq %rdi, %rax     /* load up pointer to the next thread */
     movq %rax, %gs:0x0  /* make it the new current thread */
     movq (%rax), %rsp   /* load its stack pointer */
 
+#ifdef NAUT_CONFIG_FPU_SAVE
     /* Restore the FPRs */
     movzwq 16(%rax), %rbx
     movq (%rax, %rbx, 1), %rbx
     fxrstor (%rbx)
+#endif
+
+#ifdef NAUT_CONFIG_PROFILE
+    callq nk_thr_switch_prof_exit
+#endif
 
     RESTORE_GPRS()      /* load the new thread's GPRs */
 

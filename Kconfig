@@ -1,26 +1,16 @@
 mainmenu "Nautilus Kernel Configuration"
 
-config DEBUG_INFO
-    bool "Compile with debug symbols"
-    default n
-    help
-      Compiles Nautilus with GCC debugging information
-
-config DEBUG_PRINTS
-	bool "Enable debugging prints"
-	default n
-	help
-	  Compiles the Nautilus kernel with debugging prints
 
 config USE_NAUT_BUILTINS
-    bool "Use built-in utility functions"
+    bool "Use GCC Built-in Utility Functions"
     default n
     help
       Compiles the Nuatilus kernel with built-in functions
-      like strlen 
+      like __builtin_strcpy etc., as opposed to Nautilus
+      versions, the full set of which may not be supported
 
 config MAX_CPUS
-	int "Maximum number of cpus"
+	int "Maximum Number of CPUs"
 	range 1 255
 	default "64"
 	help 
@@ -28,7 +18,7 @@ config MAX_CPUS
 	  For uniprocessor environments, set this to 1
 
 config MAX_IOAPICS
-    int "Maximum number of IOAPICS"
+    int "Maximum Number of IOAPICS"
     range 1 255
     default "16"
     help
@@ -41,15 +31,40 @@ config CXX_SUPPORT
         Compiles the Nautilus kernel with C++ support. Necessary for,
         e.g. Legion integration
 
+config FPU_SAVE
+    bool "Save FPU state on all context switches"
+    default y
+    help
+       Compiles the kernel to save FPU state on every context switch
+
 config THREAD_EXIT_KEYCODE
-    int "Thread exit keycode"
+    int "Thread Exit Keycode"
     range 1 255
     default "196"
     help
         uses a special thread exit keycode
+
+config SILENCE_UNDEF_ERR
+    bool "Silence Errors for Undefined Functions"
+    default n
+    help
+      Mutes error prints related to undefined 
+      libc compatibility functions
     
 
 menu Debugging
+
+    config DEBUG_INFO
+      bool "Compile with Debug Symbols"
+      default n
+      help
+        Compiles Nautilus with GCC debugging information
+
+    config DEBUG_PRINTS
+  	  bool "Enable Debugging Prints"
+	  default n
+	  help
+	    Compiles the Nautilus kernel with debugging prints
 
     config ENABLE_ASSERTS
       bool "Enable Runtime Assertions"
@@ -57,6 +72,12 @@ menu Debugging
       help
         This will enable runtime assert statements. If this is
         disabled, they will not be generated
+
+    config PROFILE
+      bool "Enable Profiling"
+      default n
+      help
+        Profile select function entries and exits
 
     config ENABLE_STACK_CHECK
     bool "Enable Runtime Stack Overrun Checking"
@@ -67,7 +88,7 @@ menu Debugging
       stack
 
     config DEBUG_PAGING
-      bool "Debug paging"
+      bool "Debug Paging"
       depends on DEBUG_PRINTS
       default n
       help
@@ -81,7 +102,7 @@ menu Debugging
         Turn on debug prints for FPU related code (SIMD,MMX,SSE,etc.)
 
     config DEBUG_MALLOC
-      bool "Debug malloc"
+      bool "Debug Malloc"
       depends on DEBUG_PRINTS
       default n
       help
@@ -95,6 +116,13 @@ menu Debugging
       help
         Turn on debug prints for SMP code
 
+    config DEBUG_CXX
+      bool "Debug C++"
+      depends on DEBUG_PRINTS
+      default n
+      help
+        Turn on debug prints for C++ initialization/support code
+
     config DEBUG_THREADS
       bool "Debug Threads"
       depends on DEBUG_PRINTS
@@ -103,12 +131,19 @@ menu Debugging
         Turn on debug prints for the scheduler/threads
 
     config DEBUG_SYNCH
-      bool "Debug synchronization"
+      bool "Debug Synchronization"
       depends on DEBUG_PRINTS
       default n
       help
         Turns on debug prints for synchronization functions
-        (barrier, rwlock, condvar)
+        (rwlock, condvar)
+
+    config DEBUG_BARRIER
+      bool "Debug Barriers"
+      depends on DEBUG_PRINTS
+      default n
+      help
+        Turns on debug prints for barriers
 
     config DEBUG_NUMA
       bool "Debug NUMA code"
