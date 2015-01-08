@@ -11625,7 +11625,8 @@ namespace LegionRuntime {
 #endif
       NAUTILUS_DEEP_DEBUG("kicking off the low-level machine\n");
       // Kick off the low-level machine
-      m->run(0, Machine::ONE_TASK_ONLY, 0, 0, background);
+      //m->run(0, Machine::ONE_TASK_ONLY, 0, 0, background);
+      m->run(0, Machine::ONE_TASK_PER_PROC, 0, 0, background);
       // We should only make it here if the machine thread is backgrounded
       assert(background);
       if (background)
