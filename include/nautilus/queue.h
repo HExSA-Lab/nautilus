@@ -11,7 +11,6 @@ extern "C" {
 struct nk_queue {
     struct list_head queue;
     spinlock_t lock;
-    size_t size;
 };
 
 struct nk_queue_entry {
@@ -33,8 +32,6 @@ nk_queue_entry_t* nk_dequeue_first_atomic(nk_queue_t * q);
 
 uint8_t nk_queue_empty(nk_queue_t * q);
 uint8_t nk_queue_empty_atomic(nk_queue_t * q);
-
-unsigned nk_queue_size(nk_queue_t * q);
 
 
 

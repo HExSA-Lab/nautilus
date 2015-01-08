@@ -19,7 +19,6 @@
 #endif
 #define SCHED_PRINT(fmt, args...) printk("SCHED: " fmt, ##args)
 #define SCHED_DEBUG(fmt, args...) DEBUG_PRINT("SCHED: " fmt, ##args)
-#define SCHED_WARN(fmt, args...)  WARN_PRINT("SCHED: " fmt, ##args)
 
 static unsigned long next_tid = 0;
 static nk_thread_queue_t * global_thread_list;
@@ -69,8 +68,11 @@ nk_enqueue_thread_on_runq (nk_thread_t * t, int cpu)
 
     if (cpu == CPU_ANY || 
         cpu < CPU_ANY  || 
-        cpu >= sys->num_cpus) {
+        cpu >= sys->num_cpus || 
+        cpu == my_cpu_id()) {
+
         q = per_cpu_get(run_q);
+
     } else {
         q = sys->cpus[cpu]->run_q;
     }
@@ -91,11 +93,13 @@ nk_enqueue_thread_on_runq (nk_thread_t * t, int cpu)
 static inline void 
 enqueue_thread_on_waitq (nk_thread_t * waiter, nk_thread_queue_t * waitq)
 {
-    ASSERT(waiter->waiting_on == NULL && 
-           waiter->status != NK_THR_WAITING);
-
-    waiter->status     = NK_THR_WAITING;
-    waiter->waiting_on = waitq;
+    /* are we already waiting on another queue? */
+    if (waiter->status == NK_THR_WAITING) {
+        panic("Attempt to put thread on more than one wait queue\n");
+        //return;
+    } else {
+        waiter->status = NK_THR_WAITING;
+    }
 
     nk_enqueue_entry_atomic(waitq, &(waiter->wait_node));
 }
@@ -110,8 +114,7 @@ dequeue_thread_from_waitq (nk_thread_t * waiter, nk_thread_queue_t * waitq)
     t = container_of(elm, nk_thread_t, wait_node);
 
     if (t) {
-        t->status     = NK_THR_SUSPENDED;
-        t->waiting_on = NULL;
+        t->status = NK_THR_SUSPENDED;
     }
 
     return t;
@@ -455,39 +458,6 @@ out_err:
 }
 
 
-static cpu_id_t 
-find_best_runq (void)
-{
-    cpu_id_t me   = my_cpu_id();
-    cpu_id_t best = me;
-    struct sys_info * sys = per_cpu_get(system);
-    unsigned i;
-
-    if (nk_queue_size(per_cpu_get(run_q)) == 0) {
-        SCHED_DEBUG("my cpu's run queue is the best (it's empty)\n");
-        goto out;
-    }
-
-    for (i = 0; i < sys->num_cpus; i++) {
-
-        if (i == me) {
-            continue;
-        }
-
-        size_t tmp = nk_queue_size(sys->cpus[i]->run_q);
-        
-        if (tmp < best) {
-            SCHED_DEBUG("found shorter runq at %u\n", tmp);
-            best = tmp;
-        }
-    }
-
-out:
-    SCHED_DEBUG("Returning best run queue as %u\n", best);
-    return best;
-}
-
-
 /* 
  * nk_thread_start
  *
@@ -517,15 +487,8 @@ nk_thread_start (nk_thread_fun_t fun,
 {
     nk_thread_id_t newtid   = NULL;
     nk_thread_t * newthread = NULL;
-    cpu_id_t best;
-    
-    if (cpu < 0 || cpu >= per_cpu_get(system)->num_cpus) {
-        best = find_best_runq();
-    } else {
-        best = cpu;
-    }
 
-    if (nk_thread_create(fun, input, output, is_detached, stack_size, &newtid, best) < 0) {
+    if (nk_thread_create(fun, input, output, is_detached, stack_size, &newtid, cpu) < 0) {
         ERROR_PRINT("Could not create thread\n");
         return -1;
     }
@@ -536,12 +499,13 @@ nk_thread_start (nk_thread_fun_t fun,
 
     thread_setup_init_stack(newthread, fun, input);
 
-    nk_enqueue_thread_on_runq(newthread, cpu);
+    newthread->status = NK_THR_RUNNING;
 
+    nk_enqueue_thread_on_runq(newthread, cpu);
     if (cpu == CPU_ANY) {
-        SCHED_DEBUG("Started thread (%p, tid=%u) on [ANY CPU] (putting it on %u)\n", newthread, newthread->tid, best); 
+        SCHED_DEBUG("Started thread (%p, tid=%u) on [ANY CPU]\n", newthread, newthread->tid); 
     } else {
-        SCHED_DEBUG("Started thread (%p, tid=%u) on cpu %u\n", newthread, newthread->tid, best); 
+        SCHED_DEBUG("Started thread (%p, tid=%u) on cpu %u\n", newthread, newthread->tid, cpu); 
     }
 
     return 0;
@@ -575,8 +539,7 @@ nk_wake_waiters (void)
         }
 
         nk_enqueue_thread_on_runq(t, t->bound_cpu);
-        //nk_dequeue_entry(&(t->wait_node));
-        nk_dequeue_entry_atomic(me->waitq, &(t->wait_node));
+        nk_dequeue_entry(&(t->wait_node));
 
     }
 
@@ -609,20 +572,19 @@ nk_thread_exit (void * retval)
     /* clear any thread local storage that may have been allocated */
     tls_exit();
 
-    SCHED_DEBUG("Thread %p (tid=%u) exiting, joining with children\n", me, me->tid);
-
     /* wait for my children to finish */
     nk_join_all_children(NULL);
+
+    /* wake up everyone who is waiting on me */
+    nk_wake_waiters();
 
     me->output      = retval;
     me->status      = NK_THR_EXITED;
 
     me->refcount--;
 
-    /* wake up everyone who is waiting on me */
-    nk_wake_waiters();
+    SCHED_DEBUG("Thread %p (tid=%u) exiting, joining with children\n", me, me->tid);
 
-    /* goodbye! */
     nk_schedule();
 
     /* we should never get here! */
@@ -642,6 +604,8 @@ nk_thread_exit (void * retval)
 void 
 nk_thread_destroy (nk_thread_id_t t)
 {
+
+
     nk_thread_t * thethread = (nk_thread_t*)t;
 
     SCHED_DEBUG("Destroying thread (%p, tid=%lu)\n", (void*)thethread, thethread->tid);
@@ -651,11 +615,8 @@ nk_thread_destroy (nk_thread_id_t t)
     nk_dequeue_thread_from_runq(thethread);
     dequeue_thread_from_tlist(thethread);
 
-    /* remove it from any wait queues (shouldn't be on any) */
-    if (thethread->waiting_on) {
-        SCHED_WARN("Thread waiting on a queue but shouldn't be (tid=%u)\n", thethread->tid);
-        nk_dequeue_entry_atomic(thethread->waiting_on, &(thethread->wait_node));
-    }
+    /* remove it from any wait queues */
+    nk_dequeue_entry(&(thethread->wait_node));
 
     /* remove its own wait queue 
      * (waiters should already have been notified */
@@ -871,9 +832,6 @@ nk_thread_queue_wake_one (nk_thread_queue_t * q)
 
     ASSERT(t->status == NK_THR_WAITING);
 
-    t->waiting_on = NULL;
-    t->status     = NK_THR_SUSPENDED;
-
     nk_enqueue_thread_on_runq(t, t->bound_cpu);
 
     return 0;
@@ -910,9 +868,6 @@ nk_thread_queue_wake_all (nk_thread_queue_t * q)
         }
 
         ASSERT(t->status == NK_THR_WAITING);
-
-        t->waiting_on = NULL;
-        t->status     = NK_THR_SUSPENDED;
 
         nk_enqueue_thread_on_runq(t, t->bound_cpu);
     }
@@ -1257,7 +1212,7 @@ nk_sched_init_ap (void)
         goto out_err1;
     }
 
-    my_stack = malloc(PAGE_SIZE/2); 
+    my_stack = malloc(PAGE_SIZE); 
     if (!my_stack) {
         ERROR_PRINT("Couldn't allocate new stack for CPU (%u)\n", id);
         goto out_err2;
@@ -1265,7 +1220,7 @@ nk_sched_init_ap (void)
 
     /* we have no parent thread... */
 
-    me->stack_size = PAGE_SIZE/2;
+    me->stack_size = PAGE_SIZE;
     if (thread_init(me, my_stack, 1, id, NULL) != 0) {
         ERROR_PRINT("Could not init start thread on core %u\n", id);
         goto out_err3;

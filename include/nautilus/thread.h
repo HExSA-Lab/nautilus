@@ -108,11 +108,7 @@ struct nk_thread {
     struct list_head child_node;
     unsigned long refcount;
 
-    /* The queue others will wait for me in */
     nk_thread_queue_t * waitq;
-
-    /* the thread queue I'm waiting on */
-    nk_thread_queue_t * waiting_on; 
     nk_queue_entry_t wait_node;
 
     nk_thread_queue_t * cur_run_q;
