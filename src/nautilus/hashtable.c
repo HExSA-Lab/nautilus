@@ -345,7 +345,7 @@ hashtable_expand (struct nk_hashtable * htable)
 
 /*****************************************************************************/
 uint_t 
-nk__htable_count (struct nk_hashtable * htable) 
+nk_htable_count (struct nk_hashtable * htable) 
 {
     return htable->entry_count;
 }
