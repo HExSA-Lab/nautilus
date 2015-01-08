@@ -5848,6 +5848,9 @@ namespace LegionRuntime {
 #endif
       exit(ERROR_ALIASED_REGION_REQUIREMENTS);
 #else
+
+      // KCH
+#if 0
       log_run(LEVEL_WARNING,"Region requirements %d and %d of individual task "
                             "%s (UID %lld) in parent task %s (UID %lld) are "
                             "aliased.  This behavior is currently undefined. "
@@ -5855,6 +5858,8 @@ namespace LegionRuntime {
                             idx1, idx2, variants->name, get_unique_task_id(),
                             parent_ctx->variants->name, 
                             parent_ctx->get_unique_task_id());
+#endif /* !KCH */
+
 #endif
     }
     
@@ -8079,6 +8084,8 @@ namespace LegionRuntime {
 #endif
       exit(ERROR_ALIASED_REGION_REQUIREMENTS);
 #else
+
+#if 0 /* KCH: */
       log_run(LEVEL_WARNING,"Region requirements %d and %d of individual task "
                             "%s (UID %lld) in parent task %s (UID %lld) are "
                             "aliased.  This behavior is currently undefined. "
@@ -8086,6 +8093,8 @@ namespace LegionRuntime {
                             idx1, idx2, variants->name, get_unique_task_id(),
                             parent_ctx->variants->name, 
                             parent_ctx->get_unique_task_id());
+#endif /* !KCH */
+
 #endif
     }
 
