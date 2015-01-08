@@ -8,7 +8,7 @@
 
 #include <lib/liballoc.h>
 
-#ifndef NAUT_CONFIG_DEBUG_SYNCH
+#ifndef NAUT_CONFIG_DEBUG_BARRIER
 #undef DEBUG_PRINT
 #define DEBUG_PRINT(fmt, args...)
 #endif
@@ -119,10 +119,11 @@ nk_barrier_wait (nk_barrier_t * barrier)
 
     if (--barrier->remaining == 0) {
         res = NK_BARRIER_LAST;
-        while (atomic_cmpswap(barrier->notify, 0, 1) == 0);
+        atomic_cmpswap(barrier->notify, 0, 1);
     } else {
         spin_unlock(&barrier->lock);
-        PAUSE_WHILE(barrier->notify != 1);
+        mbarrier();
+        BARRIER_WHILE(barrier->notify != 1);
     }
 
     DEBUG_PRINT("Thread (%p) exiting barrier (%p)\n", (void*)get_cur_thread(), (void*)barrier);
