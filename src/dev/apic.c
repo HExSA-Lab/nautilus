@@ -54,25 +54,30 @@ error_int_handler (excp_entry_t * excp, excp_vec_t v)
 {
     struct apic_dev * apic = per_cpu_get(apic);
     char * s = "[Unknown Error]";
-    uint32_t err = apic_read(apic, APIC_REG_ESR);
-    uint8_t i;
+    uint8_t i = 0;
+    uint32_t err = 0;
 
-    i = ffs(err);
-
-    if (i < 8) {
-        s = (char*)apic_err_codes[i];
-    }
-
-    APIC_WARN("Error interrupt recieved from local APIC (ID=0x%x) on Core %u:\n", 
-            per_cpu_get(apic)->id, my_cpu_id());
-    APIC_WARN("\t%s (0x%08lx)\n", s, err);
+    apic_write(apic, APIC_REG_ESR, 0);
+    err = apic_read(apic, APIC_REG_ESR);
+    apic_do_eoi();
 
     apic->err_int_cnt++;
 
-    /* clear it and turn on the interrupt trigger again */
-    apic_write(apic, APIC_REG_ESR, 0);
+    err &= 0xff;
 
-    apic_do_eoi();
+    APIC_WARN("Error interrupt recieved from local APIC (ID=0x%x) on Core %u (error=0x%x):\n", 
+            per_cpu_get(apic)->id, my_cpu_id(), err);
+
+    while (err) {
+
+        if (err & 0x1) {
+            s = (char*)apic_err_codes[i];
+            APIC_WARN("\t%s\n", s);
+        }
+
+        ++i;
+        err >>= 1;
+    }
 
     return 0;
 }
@@ -258,6 +263,15 @@ apic_ipi (struct apic_dev * apic,
     irq_enable_restore(flags);
 }
 
+inline void __always_inline
+apic_bcast_ipi (struct apic_dev * apic,
+        uint_t vector)
+{
+    uint8_t flags = irq_disable_save();
+    apic_write(apic, APIC_REG_ICR, APIC_IPI_OTHERS | APIC_DEL_MODE_FIXED | vector);
+    irq_enable_restore(flags);
+}
+
 
 void
 apic_self_ipi (struct apic_dev * apic, uint_t vector)
@@ -333,11 +347,11 @@ apic_timer_setup (struct apic_dev * apic, uint32_t quantum)
     uint8_t  tmp2;
     cpuid_ret_t ret;
 
-    APIC_PRINT("Setting up Local APIC timer for APIC 0x%x\n", apic->id);
+    APIC_DEBUG("Setting up Local APIC timer for APIC 0x%x\n", apic->id);
 
     cpuid(0x6, &ret);
     if (ret.a & 0x4) {
-        APIC_PRINT("\t[APIC Supports Constant Tick Rate]\n");
+        APIC_DEBUG("\t[APIC Supports Constant Tick Rate]\n");
     }
 
     if (register_int_handler(APIC_TIMER_INT_VEC,
@@ -387,8 +401,9 @@ apic_timer_setup (struct apic_dev * apic, uint32_t quantum)
     /* disable the timer */
     apic_write(apic, APIC_REG_LVTT, APIC_TIMER_DISABLE);
 
+    /* TODO need to fixup when frequency is way off */
     busfreq = APIC_TIMER_DIV * NAUT_CONFIG_HZ*(0xffffffff - apic_read(apic, APIC_REG_TMCCT) + 1);
-    APIC_PRINT("Detected APIC 0x%x bus frequency as %u KHz\n", apic->id, busfreq/1000);
+    APIC_DEBUG("Detected APIC 0x%x bus frequency as %u.%u MHz\n", apic->id, busfreq/1000000, busfreq%1000000);
     tmp = busfreq/quantum/APIC_TIMER_DIV;
 
     APIC_DEBUG("Setting APIC timer Initial Count Reg to %u\n", tmp);
@@ -634,6 +649,7 @@ apic_init (struct cpu * core)
      * even when we have them masked
      */
     if (nk_is_amd()  && cpuid_get_family() == 0x15) {
+        APIC_DEBUG("Writing Bridge Ctrl MSR for AMD Errata #663\n");
         msr_write(AMD_MSR_NBRIDGE_CTL, 
                 msr_read(AMD_MSR_NBRIDGE_CTL) | 
                 (1ULL<<23) | 

@@ -181,6 +181,7 @@ struct naut_info;
 uint32_t apic_get_id(struct apic_dev * apic);
 void apic_do_eoi(void);
 inline void apic_ipi(struct apic_dev * apic, uint_t remote_id, uint_t vector);
+inline void apic_bcast_ipi(struct apic_dev * apic, uint_t vector);
 void apic_self_ipi (struct apic_dev * apic, uint_t vector);
 void apic_send_iipi(struct apic_dev * apic, uint32_t remote_id);
 void apic_deinit_iipi(struct apic_dev * apic, uint32_t remote_id);

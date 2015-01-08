@@ -82,9 +82,6 @@ ioapic_assign_irq (struct ioapic * ioapic,
                            (DELMODE_FIXED << DEL_MODE_SHIFT)  |
                            (polarity << INTPOL_SHIFT)         | 
                            (trigger_mode << TRIG_MODE_SHIFT));
-
-
-    IOAPIC_PRINT("Wrote IOAPIC reg %d (=0x%lx)\n", irq, ioapic_read_irq_entry(ioapic, irq));
 }
 
 
@@ -202,10 +199,10 @@ __ioapic_init (struct ioapic * ioapic, uint8_t ioapic_id)
     }
     memset(ioapic->entries, 0, sizeof(struct iored_entry)*ioapic->num_entries);
 
-    IOAPIC_PRINT("Initializing IOAPIC (ID=0x%x)\n", ioapic_get_id(ioapic));
-    IOAPIC_PRINT("\tVersion=0x%x\n", ioapic_get_version(ioapic));
-    IOAPIC_PRINT("\tMapping at %p\n", (void*)ioapic->base);
-    IOAPIC_PRINT("\tNum Entries: %u\n", ioapic->num_entries);
+    IOAPIC_DEBUG("Initializing IOAPIC (ID=0x%x)\n", ioapic_get_id(ioapic));
+    IOAPIC_DEBUG("\tVersion=0x%x\n", ioapic_get_version(ioapic));
+    IOAPIC_DEBUG("\tMapping at %p\n", (void*)ioapic->base);
+    IOAPIC_DEBUG("\tNum Entries: %u\n", ioapic->num_entries);
 
     /* we assign 0xf7 as our "bogus" vector. If we see this,
      * something is wrong because it doesn't correspond to an
