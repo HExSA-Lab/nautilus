@@ -30,8 +30,13 @@ nk_queue_entry_t* nk_dequeue_entry_atomic(nk_queue_t * q, nk_queue_entry_t * ent
 nk_queue_entry_t* nk_dequeue_first(nk_queue_t * q);
 nk_queue_entry_t* nk_dequeue_first_atomic(nk_queue_t * q);
 
-uint8_t nk_queue_empty(nk_queue_t * q);
 uint8_t nk_queue_empty_atomic(nk_queue_t * q);
+
+static inline uint8_t 
+nk_queue_empty(nk_queue_t * q) 
+{
+    return list_empty(&(q->queue));
+}
 
 
 
