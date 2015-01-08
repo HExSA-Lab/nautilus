@@ -106,14 +106,12 @@ multiboot_parse (ulong_t mbd, ulong_t magic)
         panic("ERROR: Not loaded by multiboot compliant bootloader\n");
     }
 
-    DEBUG_PRINT("Our multiboot info structure is at: 0x%x\n", mbd);
-
     if (mbd & 7) {
         panic("ERROR: Unaligned multiboot info struct\n");
     }
 
     size = *(uint_t*)mbd;
-    DEBUG_PRINT("Multiboot info size 0x%x\n", size);
+    DEBUG_PRINT("Multiboot info size %uB\n", size);
 
     for (tag = (struct multiboot_tag*)(mbd+8);
             tag->type != MULTIBOOT_TAG_TYPE_END;
