@@ -17,6 +17,7 @@
 void 
 idle (void * in, void ** out)
 {
+    get_cur_thread()->is_idle = 1;
     while (1) {
         nk_yield();
     }

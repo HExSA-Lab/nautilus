@@ -19,6 +19,7 @@
 #endif
 #define SCHED_PRINT(fmt, args...) printk("SCHED: " fmt, ##args)
 #define SCHED_DEBUG(fmt, args...) DEBUG_PRINT("SCHED: " fmt, ##args)
+#define SCHED_WARN(fmt, args...)  WARN_PRINT("SCHED: " fmt, ##args)
 
 static unsigned long next_tid = 0;
 static nk_thread_queue_t * global_thread_list;
@@ -63,13 +64,12 @@ nk_thread_queue_destroy (nk_thread_queue_t * q)
 inline void 
 nk_enqueue_thread_on_runq (nk_thread_t * t, int cpu)
 {
+    NK_PROFILE_ENTRY();
     nk_thread_queue_t * q = NULL;
     struct sys_info * sys = per_cpu_get(system);
 
-    if (cpu == CPU_ANY || 
-        cpu < CPU_ANY  || 
-        cpu >= sys->num_cpus || 
-        cpu == my_cpu_id()) {
+    if (cpu <= CPU_ANY || 
+        cpu >= sys->num_cpus) {
 
         q = per_cpu_get(run_q);
 
@@ -78,28 +78,22 @@ nk_enqueue_thread_on_runq (nk_thread_t * t, int cpu)
     }
 
     /* bail if the run queue hasn't been created yet */
-    if (!q) {
-        ERROR_PRINT("Attempt (by cpu %d) to enqueue thread (tid=%d) on non-existant run queue (cpu=%u)\n", my_cpu_id(), t->tid, cpu);
-        return;
-    }
+    ASSERT(q);
 
     t->cur_run_q = q;
-    t->status    = NK_THR_RUNNING;
+    t->status    = NK_THR_SUSPENDED;
 
     nk_enqueue_entry_atomic(q, &(t->runq_node));
+    NK_PROFILE_EXIT();
 }
 
 
 static inline void 
 enqueue_thread_on_waitq (nk_thread_t * waiter, nk_thread_queue_t * waitq)
 {
-    /* are we already waiting on another queue? */
-    if (waiter->status == NK_THR_WAITING) {
-        panic("Attempt to put thread on more than one wait queue\n");
-        //return;
-    } else {
-        waiter->status = NK_THR_WAITING;
-    }
+    ASSERT(waiter->status != NK_THR_WAITING);
+
+    waiter->status = NK_THR_WAITING;
 
     nk_enqueue_entry_atomic(waitq, &(waiter->wait_node));
 }
@@ -218,14 +212,13 @@ tls_exit (void)
 }
 
 
-
-
-
-
 /*
  * get_runnable_thread
  *
  * get the next thread in the specified thread's CPU
+ *
+ * NOTE: assumes that this thread *will* be run after this
+ *
  *
  */
 static nk_thread_t *
@@ -235,34 +228,75 @@ get_runnable_thread (uint32_t cpu)
     nk_thread_queue_t * runq = NULL;
     nk_queue_entry_t * elm   = NULL;
     struct sys_info * sys = per_cpu_get(system);
+    uint8_t flags = irq_disable_save();
 
-    if (cpu >= sys->num_cpus || !sys->cpus[cpu]) {
+    if (unlikely(cpu >= sys->num_cpus || !sys->cpus[cpu])) {
         ERROR_PRINT("Attempt to get thread on invalid CPU (%u)\n", cpu);
         return NULL;
     }
 
     runq = sys->cpus[cpu]->run_q;
 
-    if (!runq) {
+    if (unlikely(!runq)) {
         ERROR_PRINT("Attempt to get thread from invalid run queue on CPU %u\n", cpu);
         return NULL;
     }
 
-    elm = nk_dequeue_first_atomic(runq);
-    if (!elm) {
+    if (nk_queue_empty(runq)) {
         return NULL;
     }
-    return container_of(elm, nk_thread_t, runq_node);
+
+    elm = nk_dequeue_first_atomic(runq);
+    if (unlikely(!elm)) {
+        ERROR_PRINT("Queue wasn't empty but now it is, something is wrong\n");
+        return NULL;
+    }
+
+    runnable = container_of(elm, nk_thread_t, runq_node);
+
+    if (!get_cur_thread()->is_idle && 
+         get_cur_thread()->status == NK_THR_RUNNING) {
+
+        /* the next thing is an idle thread, but do we have something else to run? */
+        if (runnable->is_idle)  {
+
+            if (!nk_queue_empty(runq)) {
+                nk_thread_t * idle = runnable;
+                elm = nk_dequeue_first_atomic(runq);
+                runnable = container_of(elm, nk_thread_t, runq_node);
+                if (unlikely(!runnable)) {
+                    panic("Could not get second thread after idle thread\n");
+                }
+                nk_enqueue_thread_on_runq(idle, cpu);
+            } else  {
+                /* we put the idle thread back when it is the only thing on the queue */
+                nk_enqueue_thread_on_runq(runnable, cpu);
+                runnable  = NULL;
+            }
+
+        } else {
+            /* all good, we switch to runnable */
+        }
+
+    } else {
+        /* if we're the idle thread, we *ALWAYS* run the next thing */
+    }
+
+    if (runnable) {
+        runnable->status = NK_THR_RUNNING;
+    }
+
+    irq_enable_restore(flags);
+    return runnable;
 }
 
 
-static nk_thread_t * 
+static inline nk_thread_t * __always_inline
 get_runnable_thread_myq (void) 
 {
     cpu_id_t id = my_cpu_id();
     return get_runnable_thread(id);
 }
-
 
 
 static int
@@ -499,8 +533,6 @@ nk_thread_start (nk_thread_fun_t fun,
 
     thread_setup_init_stack(newthread, fun, input);
 
-    newthread->status = NK_THR_RUNNING;
-
     nk_enqueue_thread_on_runq(newthread, cpu);
     if (cpu == CPU_ANY) {
         SCHED_DEBUG("Started thread (%p, tid=%u) on [ANY CPU]\n", newthread, newthread->tid); 
@@ -565,9 +597,7 @@ nk_thread_exit (void * retval)
 {
     nk_thread_t * me = get_cur_thread();
 
-    if (irqs_enabled()) {
-        cli();
-    }
+    cli();
 
     /* clear any thread local storage that may have been allocated */
     tls_exit();
@@ -604,8 +634,6 @@ nk_thread_exit (void * retval)
 void 
 nk_thread_destroy (nk_thread_id_t t)
 {
-
-
     nk_thread_t * thethread = (nk_thread_t*)t;
 
     SCHED_DEBUG("Destroying thread (%p, tid=%lu)\n", (void*)thethread, thethread->tid);
@@ -643,18 +671,17 @@ int
 nk_join (nk_thread_id_t t, void ** retval)
 {
     nk_thread_t *thethread = (nk_thread_t*)t;
-    int flags;
+    uint8_t flags;
 
-    //ASSERT(irqs_enabled());
     ASSERT(thethread->parent == get_cur_thread());
 
-
     flags = irq_disable_save();
+
     if (thethread->status == NK_THR_EXITED) {
         if (thethread->output) {
             *retval = thethread->output;
         }
-        return 0;
+        goto out;
     } else {
         while (thethread->status != NK_THR_EXITED) {
             nk_wait(t);
@@ -665,6 +692,7 @@ nk_join (nk_thread_id_t t, void ** retval)
 
     thread_detach(thethread);
 
+out:
     irq_enable_restore(flags);
     return 0;
 }
@@ -745,15 +773,39 @@ nk_wait (nk_thread_id_t t)
  *
  * schedule some other thread
  *
+ * TODO: do not replicate nk_schedule functionality
  */
 void 
 nk_yield (void)
 {
-    uint8_t flags   = irq_disable_save();
-    nk_thread_t * t = get_cur_thread();
+    nk_thread_t * runme = NULL;
+    nk_thread_t * me    = get_cur_thread();
+    uint8_t flags       = irq_disable_save();
 
-    nk_enqueue_thread_on_runq(t, t->bound_cpu);
-    nk_schedule();
+    if (nk_queue_empty(per_cpu_get(run_q))) {
+        return;
+    }
+    /* only put myself on the run queue if there 
+     * is something else to run */
+    if ((runme = get_runnable_thread_myq())) {
+
+        nk_enqueue_thread_on_runq(me, me->bound_cpu);
+
+#ifdef NAUT_CONFIG_ENABLE_STACK_CHECK
+        if (me->rsp <= (uint64_t)(me->stack)) {
+            panic("This thread (%p, tid=%u) has run off the end of its stack! (start=%p, rsp=%p, start size=%lx)\n", 
+                    (void*)me,
+                    me->tid,
+                    me->stack,
+                    (void*)me->rsp,
+                    me->stack_size);
+        }
+#endif /* !NAUT_CONFIG_ENABLE_STACK_CHECK */
+
+        nk_thread_switch(runme);
+
+    }
+
     irq_enable_restore(flags);
 }
 
@@ -807,34 +859,38 @@ nk_thread_queue_wake_one (nk_thread_queue_t * q)
 {
     nk_queue_entry_t * elm = NULL;
     nk_thread_t * t = NULL;
+    uint8_t flags = irq_disable_save();
 
     SCHED_DEBUG("Thread queue wake one (q=%p)\n", (void*)q);
 
-    if (!q) {
-        ERROR_PRINT("Attempt to wake up thread on non-existant thread queue\n");
-        return -EINVAL;
-    }
+    ASSERT(q);
 
     elm = nk_dequeue_first_atomic(q);
 
     /* no one is sleeping on this queue */
     if (!elm) {
         SCHED_DEBUG("No waiters on wait queue\n");
-        return 0;
+        goto out;
     }
 
     t = container_of(elm, nk_thread_t, wait_node);
 
     if (!t) {
         ERROR_PRINT("Could not get thread from queue element\n");
-        return -EINVAL;
+        goto out_err;
     }
 
     ASSERT(t->status == NK_THR_WAITING);
 
     nk_enqueue_thread_on_runq(t, t->bound_cpu);
 
+out:
+    irq_enable_restore(flags);
     return 0;
+
+out_err:
+    irq_enable_restore(flags);
+    return -EINVAL;
 }
 
 
@@ -853,13 +909,11 @@ nk_thread_queue_wake_all (nk_thread_queue_t * q)
 {
     nk_queue_entry_t * elm = NULL;
     nk_thread_t * t = NULL;
+    uint8_t flags = irq_disable_save();
 
     SCHED_DEBUG("Waking all waiters on thread queue (q=%p)\n", (void*)q);
 
-    if (!q) {
-        ERROR_PRINT("Attempt to wake up thread on non-existant thread queue\n");
-        return -EINVAL;
-    }
+    ASSERT(q);
 
     while ((elm = nk_dequeue_first_atomic(q))) {
         t = container_of(elm, nk_thread_t, wait_node);
@@ -872,6 +926,8 @@ nk_thread_queue_wake_all (nk_thread_queue_t * q)
         nk_enqueue_thread_on_runq(t, t->bound_cpu);
     }
 
+
+    irq_enable_restore(flags);
     return 0;
 }
 
@@ -1150,12 +1206,8 @@ nk_schedule (void)
 
     ASSERT(!irqs_enabled());
 
-    runme = get_runnable_thread_myq();
-
-    if (!runme) {
-        cpu_id_t id = my_cpu_id();
-        ERROR_PRINT("Nothing to run (cpu=%d)\n", id);
-        return;
+    if (!(runme = get_runnable_thread_myq())) {
+        panic("Nothing to run on cpu %u\n", my_cpu_id());
     }
 
 #ifdef NAUT_CONFIG_ENABLE_STACK_CHECK
@@ -1211,18 +1263,27 @@ nk_sched_init_ap (void)
         ERROR_PRINT("Could not allocate thread for CPU (%u)\n", id);
         goto out_err1;
     }
+    memset(me, 0, sizeof(nk_thread_t));
 
     my_stack = malloc(PAGE_SIZE); 
     if (!my_stack) {
         ERROR_PRINT("Couldn't allocate new stack for CPU (%u)\n", id);
         goto out_err2;
     }
+    memset(my_stack, 0, PAGE_SIZE);
 
     /* we have no parent thread... */
 
     me->stack_size = PAGE_SIZE;
     if (thread_init(me, my_stack, 1, id, NULL) != 0) {
         ERROR_PRINT("Could not init start thread on core %u\n", id);
+        goto out_err3;
+    }
+    me->status = NK_THR_RUNNING;
+
+    me->waitq = nk_thread_queue_create();
+    if (!me->waitq) {
+        ERROR_PRINT("Could not create waitq for thread on cpu %u\n", id);
         goto out_err3;
     }
 
@@ -1232,8 +1293,8 @@ nk_sched_init_ap (void)
     enqueue_thread_on_tlist(me);
 
     // start another idle thread
-    SCHED_DEBUG("Starting idle thread for cpu %d\n", id);
-    nk_thread_start(idle, NULL, NULL, 0, TSTACK_DEFAULT, NULL, id);
+    //SCHED_DEBUG("Starting idle thread for cpu %d\n", id);
+    //nk_thread_start(idle, NULL, NULL, 0, TSTACK_DEFAULT, NULL, id);
 
     irq_enable_restore(flags);
     return 0;
@@ -1260,7 +1321,7 @@ int
 nk_sched_init (void) 
 {
     struct nk_sched_state * sched = NULL;
-    struct cpu * my_cpu = per_cpu_get(system)->cpus[0];
+    struct cpu * my_cpu = nk_get_nautilus_info()->sys.cpus[0];
     nk_thread_t * main = NULL;
     int flags;
 
@@ -1295,7 +1356,7 @@ nk_sched_init (void)
         ERROR_PRINT("Could not allocate main thread\n");
         goto out_err3;
     }
-
+    memset(main, 0, sizeof(nk_thread_t));
 
     /* 
      * some important notes:
@@ -1306,11 +1367,10 @@ nk_sched_init (void)
      *    okay because it will be overwritten in thread_lowlevel.S 
      *    when we switch from it to the first spawned thread
      *
-     * 4. TODO: currently, the boot thread is bound to CPU 0. I will change this
-     *
      */
     main->stack_size = TSTACK_2MB;
-    thread_init(main, (void*)&boot_stack_start, 1, my_cpu_id(), NULL);
+    thread_init(main, (void*)&boot_stack_start, 1, 0, NULL);
+    main->status = NK_THR_RUNNING;
     main->waitq = nk_thread_queue_create();
     if (!main->waitq) {
         ERROR_PRINT("Could not create main thread's wait queue\n");
@@ -1320,6 +1380,9 @@ nk_sched_init (void)
     put_cur_thread(main);
 
     enqueue_thread_on_tlist(main);
+
+    // the idle thread
+    nk_thread_start(idle, NULL, NULL, 0, TSTACK_DEFAULT, NULL, 0);
 
     irq_enable_restore(flags);
 

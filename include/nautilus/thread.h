@@ -118,6 +118,8 @@ struct nk_thread {
 
     int bound_cpu;
 
+    uint8_t is_idle;
+
     void * output;
 
     const void * tls[TLS_MAX_KEYS];
@@ -161,13 +163,13 @@ void nk_tls_test(void);
 #include <nautilus/percpu.h>
 
 static inline nk_thread_t*
-get_cur_thread (void) 
+get_cur_thread (void)
 {
     return (nk_thread_t*)per_cpu_get(cur_thread);
 }
 
 static inline void
-put_cur_thread (nk_thread_t * t)
+put_cur_thread (nk_thread_t * t) 
 {
     per_cpu_put(cur_thread, t);
 }
