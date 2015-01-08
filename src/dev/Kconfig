@@ -9,7 +9,6 @@ config SERIAL_REDIRECT
 config SERIAL_PORT
     int "Serial COM Port"
     range 1 4
-    depends on SERIAL_REDIRECT
     default "1"
     help
       Specifies which serial port to use. E.g. 1 is COM1.
