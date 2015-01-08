@@ -68,7 +68,7 @@ run_legion_tests (void)
                 0,
                 TSTACK_2MB,
                 &t,
-                CPU_ANY);
+                0);
 
         nk_join(t, NULL);
     }
