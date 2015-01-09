@@ -54,11 +54,13 @@ GLOBAL(early_irq_common)
     movq $handler_table, %rdx
     movq (%rdx, %rsi, 8), %rcx
     
+#ifdef NAUT_CONFIG_ENABLE_ASSERTS
     cmpq $256, %rsi
     jge irq_err
 
     cmpq $32, %rsi
     jl irq_err
+#endif
 
     callq *%rcx
 
