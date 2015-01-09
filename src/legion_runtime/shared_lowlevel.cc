@@ -2355,10 +2355,12 @@ namespace LegionRuntime {
 	else
 	{
 		// Pop a task off the queue and run it
+        /*
         NAUTILUS_DEEP_DEBUG("TaskDesc list length: %u\n", ready_queue.size());
         for (std::list<TaskDesc*>::const_iterator it=ready_queue.begin(); it != ready_queue.end(); ++it) {
             NAUTILUS_DEEP_DEBUG("TaskDesc func id = %u\n", (*it)->func_id);
         }
+        */
 		TaskDesc *task = ready_queue.front();
         NAUTILUS_DEEP_DEBUG("executing default block (got taskdesc %p, arglen=%u)\n", task, task->arglen);
 		ready_queue.pop_front();
@@ -5704,9 +5706,7 @@ namespace LegionRuntime {
 	assert(r.id != 0);
 	assert(r.id < reservations.size());
 #endif
-        // KCH: edit
-        //ReservationImpl *result = reservations[r.id];
-        ReservationImpl *result = reservations.at(r.id);
+        ReservationImpl *result = reservations[r.id];
         //PTHREAD_SAFE_CALL(pthread_rwlock_unlock(&reservation_lock));
         nk_rwlock_rd_unlock(&reservation_lock);
 	return result;
