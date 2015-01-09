@@ -1,6 +1,9 @@
 #ifndef __INSTRUMENT_H__
 #define __INSTRUMENT_H__
 
+
+#define INSTR_CAL_LOOPS 1000
+
 #ifdef NAUT_CONFIG_PROFILE
 #define NK_PROFILE_ENTRY() nk_profile_func_enter(__func__)
 #define NK_PROFILE_EXIT() nk_profile_func_exit(__func__)
@@ -60,7 +63,7 @@ void nk_instrument_init(void);
 void nk_instrument_start(void);
 void nk_instrument_end(void);
 void nk_instrument_query(void);
-void nk_instrument_calibrate(void);
+void nk_instrument_calibrate(unsigned loops);
 
 
 

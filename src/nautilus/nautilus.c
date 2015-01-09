@@ -213,7 +213,7 @@ main (unsigned long mbd, unsigned long magic)
 
 #ifdef NAUT_CONFIG_PROFILE
     nk_instrument_start();
-    nk_instrument_calibrate();
+    nk_instrument_calibrate(INSTR_CAL_LOOPS);
 #endif
 
     extern void run_legion_tests(void);

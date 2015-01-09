@@ -555,7 +555,7 @@ smp_ap_finish (struct cpu * core)
     sti();
 
 #ifdef NAUT_CONFIG_PROFILE
-    nk_instrument_calibrate();
+    nk_instrument_calibrate(INSTR_CAL_LOOPS);
 #endif
 }
 
