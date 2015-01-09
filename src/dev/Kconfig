@@ -69,12 +69,12 @@ config DEBUG_HPET
       Turn on debug prints for the HPET
 
 config HZ
-    int "Timer interrupt frequency"
-    range 100 10000
-    default "100"
+    int "Timer Interrupt Frequency"
+    range 10 10000
+    default "10"
     help
-        Specifies the 8254 PIT default timer
-        interrupt frequency
+        Specifies the default scheduler tick 
+        frequency
 endmenu
 
     

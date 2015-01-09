@@ -404,7 +404,7 @@ apic_timer_setup (struct apic_dev * apic, uint32_t quantum)
     /* TODO need to fixup when frequency is way off */
     busfreq = APIC_TIMER_DIV * NAUT_CONFIG_HZ*(0xffffffff - apic_read(apic, APIC_REG_TMCCT) + 1);
     APIC_DEBUG("Detected APIC 0x%x bus frequency as %u.%u MHz\n", apic->id, busfreq/1000000, busfreq%1000000);
-    tmp = busfreq/quantum/APIC_TIMER_DIV;
+    tmp = busfreq/(1000/quantum)/APIC_TIMER_DIV;
 
     APIC_DEBUG("Setting APIC timer Initial Count Reg to %u\n", tmp);
     apic_write(apic, APIC_REG_TMICT, (tmp < APIC_TIMER_DIV) ? APIC_TIMER_DIV : tmp);
@@ -742,7 +742,8 @@ apic_init (struct cpu * core)
     /* turn it on */
     apic_sw_enable(apic);
 
-    apic_timer_setup(apic, (NAUT_CONFIG_HZ * 100 / 1000));
+    /* pass in quantum as milliseconds */
+    apic_timer_setup(apic, 1000/NAUT_CONFIG_HZ);
 
     apic_dump(apic);
 }
