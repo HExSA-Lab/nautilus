@@ -425,7 +425,7 @@ void *malloc(size_t size)
 	#endif
 
 
-    liballoc_memset(ptr, 0, tag->size);
+    //liballoc_memset(ptr, 0, tag->size);
 
 	liballoc_unlock(flags);
 
