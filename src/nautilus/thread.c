@@ -68,8 +68,8 @@ nk_enqueue_thread_on_runq (nk_thread_t * t, int cpu)
     nk_thread_queue_t * q = NULL;
     struct sys_info * sys = per_cpu_get(system);
 
-    if (cpu <= CPU_ANY || 
-        cpu >= sys->num_cpus) {
+    if (unlikely(cpu <= CPU_ANY || 
+        cpu >= sys->num_cpus)) {
 
         q = per_cpu_get(run_q);
 
@@ -228,7 +228,7 @@ get_runnable_thread (uint32_t cpu)
     nk_thread_queue_t * runq = NULL;
     nk_queue_entry_t * elm   = NULL;
     struct sys_info * sys = per_cpu_get(system);
-    uint8_t flags = irq_disable_save();
+    //uint8_t flags = irq_disable_save();
 
     if (unlikely(cpu >= sys->num_cpus || !sys->cpus[cpu])) {
         ERROR_PRINT("Attempt to get thread on invalid CPU (%u)\n", cpu);
@@ -237,20 +237,15 @@ get_runnable_thread (uint32_t cpu)
 
     runq = sys->cpus[cpu]->run_q;
 
-    if (unlikely(!runq)) {
-        ERROR_PRINT("Attempt to get thread from invalid run queue on CPU %u\n", cpu);
-        return NULL;
-    }
+    ASSERT(runq);
 
     if (nk_queue_empty(runq)) {
         return NULL;
     }
 
     elm = nk_dequeue_first_atomic(runq);
-    if (unlikely(!elm)) {
-        ERROR_PRINT("Queue wasn't empty but now it is, something is wrong\n");
-        return NULL;
-    }
+
+    ASSERT(elm);
 
     runnable = container_of(elm, nk_thread_t, runq_node);
 
@@ -261,13 +256,18 @@ get_runnable_thread (uint32_t cpu)
         if (runnable->is_idle)  {
 
             if (!nk_queue_empty(runq)) {
+
                 nk_thread_t * idle = runnable;
                 elm = nk_dequeue_first_atomic(runq);
+
+                ASSERT(elm);
+
                 runnable = container_of(elm, nk_thread_t, runq_node);
-                if (unlikely(!runnable)) {
-                    panic("Could not get second thread after idle thread\n");
-                }
+
+                ASSERT(runnable);
+
                 nk_enqueue_thread_on_runq(idle, cpu);
+
             } else  {
                 /* we put the idle thread back when it is the only thing on the queue */
                 nk_enqueue_thread_on_runq(runnable, cpu);
@@ -286,7 +286,7 @@ get_runnable_thread (uint32_t cpu)
         runnable->status = NK_THR_RUNNING;
     }
 
-    irq_enable_restore(flags);
+    //irq_enable_restore(flags);
     return runnable;
 }
 
@@ -1206,7 +1206,7 @@ nk_schedule (void)
 
     ASSERT(!irqs_enabled());
 
-    if (!(runme = get_runnable_thread_myq())) {
+    if (unlikely(!(runme = get_runnable_thread_myq()))) {
         panic("Nothing to run on cpu %u\n", my_cpu_id());
     }
 
