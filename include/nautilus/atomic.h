@@ -18,4 +18,15 @@
 #define atomic_cmpswap(var, old, new) __sync_val_compare_and_swap((volatile typeof(var)*)&(var), (old), (new))
 
 
+static inline void*
+xchg64 (void ** dst, void * newval)
+{
+    void * ret = newval;
+    asm volatile("xchgq %0, %1"
+                 : "+r" (ret), "+m" (*dst)
+                 : 
+                 : "memory", "cc");
+    return ret;
+}
+
 #endif

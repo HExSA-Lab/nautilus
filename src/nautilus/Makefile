@@ -12,6 +12,7 @@ obj-y += \
 	cpuid.o \
 	fpu.o \
 	spinlock.o \
+	mcslock.o \
 	ticketlock.o \
 	rwlock.o \
 	condvar.o \
