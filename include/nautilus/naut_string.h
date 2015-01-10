@@ -145,6 +145,7 @@ char * strstr (const char * haystack, const char * needle);
 
 int atoi (const char * buf);
 int strtoi (const char * nptr, char ** endptr);
+long strtol(const char * str, char ** endptr, int base);
 uint64_t atox (const char * buf);
 uint64_t strtox (const char * nptr, char ** endptr);
 void str_toupper (char * s);

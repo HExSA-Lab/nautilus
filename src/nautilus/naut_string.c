@@ -408,6 +408,12 @@ strtoi (const char * nptr, char ** endptr)
     return ret;
 }
 
+extern long simple_strtol(const char*, char**, unsigned int);
+long 
+strtol (const char * str, char ** endptr, int base)
+{
+    return simple_strtol(str, endptr, base);
+}
 
 uint64_t 
 atox (const char * buf) {
