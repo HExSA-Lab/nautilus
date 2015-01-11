@@ -440,7 +440,7 @@ namespace LegionRuntime {
     /*static*/ void DetailedTimer::roll_up_timers(std::map<int,double> &timers, bool local_only)
     {
       //PTHREAD_SAFE_CALL(pthread_mutex_lock(&global_timer_mutex));
-        spin_lock(thread_timer_data->mutex);
+        spin_lock(&global_timer_mutex);
 
       for (std::vector<PerThreadTimerData*>::iterator it = timer_data.begin();
             it != timer_data.end(); it++)
