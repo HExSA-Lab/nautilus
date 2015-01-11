@@ -308,35 +308,32 @@ NAUT_INCLUDE      := -D__NAUTILUS__ -Iinclude \
 
 CPPFLAGS        := $(NAUT_INCLUDE) -D__NAUTILUS__
 
-CXXFLAGS := -O2 \
+COMMON_FLAGS := -O2 \
+			   -fno-omit-frame-pointer \
+			   -ffreestanding \
+			   -fno-stack-protector \
+			   -fno-strict-aliasing \
+			   -mno-red-zone \
+			   -mcmodel=large 
+			  
+
+CXXFLAGS := $(COMMON_FLAGS) \
 			-fno-exceptions \
-            -fno-omit-frame-pointer \
-			-fno-rtti \
-			-ffreestanding \
-			-fno-stack-protector \
-			-fno-strict-aliasing \
-			-mno-red-zone \
-			-mno-3dnow
+			-fno-rtti 
+			#-mno-3dnow
 			#-mno-sse \
 			#-mno-sse2 \
 			#-mno-sse3 \
 			#-mno-mmx \
 
 #CFLAGS 		:=  -fno-stack-protector -Wall -Werror  -mno-red-zone -fno-common 
-CFLAGS:=   -O2 \
+CFLAGS:=   $(COMMON_FLAGS) \
 		   -Wall \
 		   -Wno-unused-function \
 		   -Wno-unused-variable \
-		   -ffreestanding \
-		   -fno-stack-protector \
-		   -fno-omit-frame-pointer \
-		   -fno-strict-aliasing \
 		   -fno-common \
-		   -fno-reorder-functions \
-		   -mcmodel=large \
-		   -mno-red-zone \
-		   -mno-3dnow \
 		    $(call cc-option, -Wno-unused-but-set-variable,)
+		   #-mno-3dnow \
 		   #-std=gnu99 \
 		   #-Werror \
 		   #-Wmissing-prototypes \
