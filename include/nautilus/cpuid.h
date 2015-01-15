@@ -14,6 +14,7 @@ void detect_cpu(void);
 #define CPUID_FEATURE_INFO       0x1
 #define CPUID_AMD_BASIC_INFO     0x80000000
 #define CPUID_AMD_FEATURE_INFO   0x80000001
+#define CPUID_AMD_EXT_INFO       0x80000008
 
 #define CPUID_GET_BASE_FAM(x)   (((x) >> 8) & 0xfu)
 #define CPUID_GET_BASE_MOD(x)   (((x) >> 4) & 0xfu)
