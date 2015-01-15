@@ -6,6 +6,7 @@
 #include <nautilus/naut_assert.h>
 #include <dev/timer.h>
 #include <dev/hpet.h>
+#include <nautilus/math.h>
 
 #ifndef NAUT_CONFIG_DEBUG_HPET
 #undef DEBUG_PRINT
@@ -14,6 +15,9 @@
 
 #define HPET_PRINT(fmt, args...) printk("HPET: " fmt, ##args)
 #define HPET_DEBUG(fmt, args...) DEBUG_PRINT("HPET: " fmt, ##args)
+
+
+#define FEMTOS_PER_SEC 0x38D7EA4C68000
 
 
 inline uint64_t
@@ -267,7 +271,10 @@ parse_hpet_tbl (struct acpi_table_header * hdr, void * arg)
     hpet->access_width = hpet_tbl->address.access_width;
     hpet->base_addr    = hpet_tbl->address.address;
 
-    hpet->freq     = 0x38D7EA4C68000/GEN_CAP_GET_CLK_PER(cap); // 10^15 / period
+    unsigned long freq = FEMTOS_PER_SEC;
+    unsigned int period = GEN_CAP_GET_CLK_PER(cap);
+    hpet->freq     = freq/period;
+    hpet->nanos_per_tick = period / 1000000;
     hpet->vendor   = GEN_CAP_GET_VENDOR_ID(cap);
     hpet->num_cmps = GEN_CAP_GET_NUM_TIMERS(cap);
     hpet->rev_id   = GEN_CAP_GET_REV_ID(cap);

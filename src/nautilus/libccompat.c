@@ -83,9 +83,10 @@ clock_gettime (clockid_t clk_id, struct timespec * tp)
     }
 
 #ifdef NAUT_CONFIG_HPET
-    uint64_t freq = nk_hpet_get_freq();
+    //uint64_t freq = nk_hpet_get_freq();
     uint64_t cnt  = nk_hpet_get_cntr();
-    uint64_t nsec = (1000000000/freq) * cnt;
+    //uint64_t nsec = (1000000000/freq) * cnt;
+    uint64_t nsec = cnt * nk_hpet_nanos_per_tick();
     tp->tv_sec    = nsec / 1000000000;
     tp->tv_nsec   = nsec % 1000000000;
 #else

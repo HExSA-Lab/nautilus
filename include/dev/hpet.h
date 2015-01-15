@@ -1,6 +1,7 @@
 #ifndef __HPET_H__
 #define __HPET_H__
 
+#include <nautilus/nautilus.h>
 #include <nautilus/bits.h>
 
 int nk_hpet_init(void);
@@ -69,6 +70,7 @@ struct hpet_comparator {
     hpet_cmp_type_t mode;        /* oneshot or periodic? */
     uint8_t timer_val_set;    /* will writes be allowed to the accumulator? */
 
+
     hpet_cmp_stat_t stat; /* enabled or not? */
     hpet_cmp_int_type_t int_type; /* edge or level? */
 
@@ -93,6 +95,8 @@ struct hpet_dev {
     uint16_t min_tick;
     uint8_t flags;
     uint8_t seq; // sequence number
+
+    unsigned long nanos_per_tick;
 
     /* info about the base address */
     uint8_t bit_width;
@@ -119,6 +123,15 @@ static inline uint64_t
 hpet_read (struct hpet_dev * hpet, uint32_t reg)
 {
     return *((volatile uint64_t*)(hpet->base_addr + reg));
+}
+
+struct naut_info;
+extern struct naut_info * nk_get_nautilus_info(void);
+static inline unsigned long
+nk_hpet_nanos_per_tick (void)
+{
+    struct hpet_dev * hpet = nk_get_nautilus_info()->sys.hpet;
+    return hpet->nanos_per_tick;
 }
 
 #endif
