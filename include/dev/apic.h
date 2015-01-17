@@ -63,7 +63,7 @@ extern "C" {
 
 
 #define APIC_REG_ID       0x20
-#define   APIC_GET_ID(x) (((x) >> 24) & 0xfu)
+#define   APIC_GET_ID(x) (((x) >> 24) & 0xffu)
 #define APIC_REG_LVR      0x30
 #define     APIC_LVR_VER(x) ((x) & 0xffu)
 #define     APIC_LVR_MAX(x) (((x) >> 16) & 0xffu)
