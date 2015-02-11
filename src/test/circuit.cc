@@ -26,8 +26,19 @@
 #include "circuit_mapper.h"
 #include "../legion_runtime/legion.h"
 
+extern "C" void panic(const char*, ...);
+extern "C" unsigned long long nk_alloc_page_region(unsigned);
+
 using namespace LegionRuntime::HighLevel;
 using namespace LegionRuntime::Accessor;
+
+extern unsigned long calc_new_current_start;
+extern unsigned long calc_new_current_end;
+
+
+namespace TaskHelper {
+    void * numa_current_task[8] = {0,0,0,0,0,0,0,0};
+};
 
 
 extern "C" int printk(const char * fmt, ...);
@@ -65,8 +76,8 @@ void top_level_task(const Task *task,
   int wires_per_piece = 32;
   int pct_wire_in_piece = 95;
   int random_seed = 12345;
-  int steps = STEPS;
-  //int steps = 1000000;
+  //int steps = STEPS;
+  int steps = 100000;
   int sync = 0;
   bool perform_checks = false;
   {
@@ -220,6 +231,20 @@ int go_circuit(int argc, char **argv)
   CheckTask::register_task();
   HighLevelRuntime::register_reduction_op<AccumulateCharge>(REDUCE_ID);
   HighLevelRuntime::set_registration_callback(update_mappers);
+
+#if 0
+  /* I will now pull some devious NUMA hackery out of my... */
+  //size_t size = (&calc_new_current_end - &calc_new_current_start);
+  for (int i = 0; i < 8; i++) {
+      void * funcptr = (void*)nk_alloc_page_region(i);
+      if (!funcptr) {
+          panic("Legion couldn't allocate NUMA page\n");
+      }
+      printk("copying CalcNewCurrents to addr %p (size=%u)\n", funcptr);
+      TaskHelper::numa_current_task[i] = funcptr;
+      memcpy(funcptr, (void*)CalcNewCurrentsTask::cpu_base_impl, 0x1000);
+  }
+#endif
 
   return HighLevelRuntime::start(argc, argv);
 }
@@ -624,4 +649,3 @@ Partitions load_circuit(Circuit &ckt, std::vector<CircuitPiece> &pieces, Context
 extern "C" void go_circuit_c(int argc, char ** argv) {
     go_circuit(argc, argv);
 }
-

@@ -19,8 +19,11 @@
 
 #include <cmath>
 #include <cstdio>
+#include "../legion_runtime/arrays.h"
 #include "../legion_runtime/legion.h"
+#include <nautilus/numa.h>
 
+extern "C" int printk (const char *, ...);
 //#define DISABLE_MATH
 // KCH
 #define SSE_FUNC __attribute__((force_align_arg_pointer))
@@ -180,7 +183,7 @@ public:
   static const int MAPPER_ID = 0;
 public:
   static void cpu_base_impl(const CircuitPiece &piece,
-                            const std::vector<PhysicalRegion> &regions);
+                            const std::vector<PhysicalRegion> &regions) __attribute__((hot));
   static void gpu_base_impl(const CircuitPiece &piece,
                             const std::vector<PhysicalRegion> &regions);
 };
@@ -230,7 +233,11 @@ public:
   static void register_task(void);
 };
 
+
 namespace TaskHelper {
+
+    extern void* numa_current_task[8];
+
   template<typename T>
   void dispatch_task(T &launcher, Context ctx, HighLevelRuntime *runtime,
                      bool perform_checks, bool &simulation_success, bool wait = false)
@@ -253,6 +260,20 @@ namespace TaskHelper {
                         Context ctx, HighLevelRuntime *runtime)
   {
     const CircuitPiece *p = (CircuitPiece*)task->local_args;
+#if 0
+
+    void (*cpu_base_impl)(const CircuitPiece &piece, const std::vector<PhysicalRegion> &regs);
+
+    if (T::cpu_base_impl == CalcNewCurrentsTask::cpu_base_impl) {
+        //printk("invoking NUMA version of cpu base: %p\n", TaskHelper::numa_current_task[nk_my_numa_node()]);
+        cpu_base_impl = (void (*)(const CircuitPiece&, const std::vector<LegionRuntime::HighLevel::PhysicalRegion>&))TaskHelper::numa_current_task[nk_my_numa_node()];
+    } else {
+        cpu_base_impl = T::cpu_base_impl;
+    }
+
+    cpu_base_impl(*p, regions);
+#endif 
+        
     T::cpu_base_impl(*p, regions);
   }
 

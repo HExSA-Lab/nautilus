@@ -2879,6 +2879,7 @@ namespace LegionRuntime {
                                            bool background)
     //--------------------------------------------------------------------------
     {
+        //log_run(LEVEL_WARNING, "Starting the low level runtime");
       return Runtime::start(argc, argv, background);
     }
 

@@ -18,6 +18,8 @@
 #include <x86intrin.h>
 
 
+#include <nautilus/instrument.h>
+
 static int 
 isnan (float x)
 {
@@ -28,6 +30,7 @@ isnan (float x)
 }
 
 using namespace LegionRuntime::Accessor;
+
 
 const float AccumulateCharge::identity = 0.0f;
 
@@ -109,6 +112,7 @@ CalcNewCurrentsTask::CalcNewCurrentsTask(LogicalPartition lp_pvt_wires,
                              READ_ONLY, EXCLUSIVE, lr_all_nodes);
   rr_ghost.add_field(FID_NODE_VOLTAGE);
   add_region_requirement(rr_ghost);
+
 }
 
 /*static*/ const char * const CalcNewCurrentsTask::TASK_NAME = "calc_new_currents";
@@ -385,6 +389,8 @@ bool CalcNewCurrentsTask::dense_calc_new_currents(const CircuitPiece &piece,
 void CalcNewCurrentsTask::cpu_base_impl(const CircuitPiece &p,
                                         const std::vector<PhysicalRegion> &regions)
 {
+    //asm volatile ("xend");
+    NK_PROFILE_ENTRY_NAME(CALC_NEW_CURRENTS1);
 #ifndef DISABLE_MATH
   RegionAccessor<AccessorType::Generic, float> fa_current[WIRE_SEGMENTS];
   for (int i = 0; i < WIRE_SEGMENTS; i++)
@@ -420,11 +426,13 @@ void CalcNewCurrentsTask::cpu_base_impl(const CircuitPiece &p,
                               fa_current, fa_voltage))
     return;
 
+  NK_PROFILE_EXIT_NAME(CALC_NEW_CURRENTS1);
   LegionRuntime::HighLevel::IndexIterator itr(p.pvt_wires);
   float temp_v[WIRE_SEGMENTS+1];
   float temp_i[WIRE_SEGMENTS];
   float old_i[WIRE_SEGMENTS];
   float old_v[WIRE_SEGMENTS-1];
+  NK_PROFILE_ENTRY_NAME(CALC_NEW_CURRENTS2);
   while (itr.has_next())
   {
     ptr_t wire_ptr = itr.next();
@@ -456,6 +464,7 @@ void CalcNewCurrentsTask::cpu_base_impl(const CircuitPiece &p,
     float inductance = fa_inductance.read(wire_ptr);
     float resistance = fa_resistance.read(wire_ptr);
     float capacitance = fa_wire_cap.read(wire_ptr);
+    NK_PROFILE_ENTRY_NAME(CALC_CURRENTS_LOOP_NEST);
     for (int j = 0; j < steps; j++)
     {
       // first, figure out the new current from the voltage differential
@@ -472,6 +481,8 @@ void CalcNewCurrentsTask::cpu_base_impl(const CircuitPiece &p,
         temp_v[i+1] = old_v[i] + dt * (temp_i[i] - temp_i[i+1]) / capacitance;
       }
     }
+    NK_PROFILE_EXIT_NAME(CALC_CURRENTS_LOOP_NEST);
+
 
     // Write out the results
     for (int i = 0; i < WIRE_SEGMENTS; i++)
@@ -480,7 +491,9 @@ void CalcNewCurrentsTask::cpu_base_impl(const CircuitPiece &p,
       fa_voltage[i].write(wire_ptr, temp_v[i+1]);
   }
 #endif
+    NK_PROFILE_EXIT_NAME(CALC_NEW_CURRENTS2);
 }
+
 
 DistributeChargeTask::DistributeChargeTask(LogicalPartition lp_pvt_wires,
                                            LogicalPartition lp_pvt_nodes,
@@ -559,6 +572,7 @@ static inline void reduce_node(const RegionAccessor<AT1,typename REDOP::LHS> &pr
 void DistributeChargeTask::cpu_base_impl(const CircuitPiece &p,
                                          const std::vector<PhysicalRegion> &regions)
 {
+NK_PROFILE_ENTRY_NAME(DistributeChargeTask::cpu_base_impl);
 #ifndef DISABLE_MATH
   RegionAccessor<AccessorType::Generic, ptr_t> fa_in_ptr = 
     regions[0].get_field_accessor(FID_IN_PTR).typeify<ptr_t>();
@@ -613,6 +627,7 @@ void DistributeChargeTask::cpu_base_impl(const CircuitPiece &p,
                                   out_loc, out_ptr, out_current);
   }
 #endif
+NK_PROFILE_EXIT_NAME(DistributeChargeTask::cpu_base_impl);
 }
 
 
@@ -701,6 +716,7 @@ static inline void update_voltages(LogicalRegion lr,
 void UpdateVoltagesTask::cpu_base_impl(const CircuitPiece &p,
                                        const std::vector<PhysicalRegion> &regions)
 {
+NK_PROFILE_ENTRY_NAME(UpdateVoltagesTask::cpu_base_impl);
 #ifndef DISABLE_MATH
   RegionAccessor<AccessorType::Generic, float> fa_pvt_voltage = 
     regions[0].get_field_accessor(FID_NODE_VOLTAGE).typeify<float>();
@@ -727,6 +743,7 @@ void UpdateVoltagesTask::cpu_base_impl(const CircuitPiece &p,
   update_voltages(p.shr_nodes, fa_shr_voltage, fa_shr_charge, 
                   fa_shr_cap, fa_shr_leakage);
 #endif
+NK_PROFILE_EXIT_NAME(UpdateVoltagesTask::cpu_base_impl);
 }
 
 CheckTask::CheckTask(LogicalPartition lp,

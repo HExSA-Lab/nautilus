@@ -53,6 +53,7 @@ legion_test_thread_func (void * in, void ** out)
 }
 
 
+
 void 
 run_legion_tests (void) 
 {
@@ -60,15 +61,23 @@ run_legion_tests (void)
     nk_thread_id_t t;
     unsigned i;
 
+    /* I will now pull some
+     * devious NUMA hackery out of my...
+     */
+
+    
+
+
     for (i = 0; i < NUM_TESTS; i++) {
         printk("starting legion test %u\n", i);
         nk_thread_start(legion_test_thread_func,
-                (void*)tests[i],
+                (void*)go_circuit_c,
                 NULL,
                 0,
                 TSTACK_2MB,
                 &t,
-                0);
+                1);
+                //nk_get_cpu_by_lapicid(96));
 
         nk_join(t, NULL);
     }

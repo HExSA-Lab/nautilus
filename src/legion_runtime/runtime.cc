@@ -32,6 +32,7 @@
 
 // KCH: added
 #include "naut_debug.h"
+#include <nautilus/instrument.h>
 
 namespace LegionRuntime {
 
@@ -6519,12 +6520,14 @@ namespace LegionRuntime {
                                                   const IndexLauncher &launcher)
     //--------------------------------------------------------------------------
     {
+        NK_PROFILE_ENTRY();
       // Quick out for predicate false
       if (launcher.predicate == Predicate::FALSE_PRED)
       {
         FutureMap::Impl *result = legion_new<FutureMap::Impl>(ctx, this);
         if (launcher.predicate_false_future.impl != NULL)
         {
+            
 #ifdef INORDER_EXECUTION
           // Wait for the result if we need things to happen in order
           launcher.predicate_false_future.get_void_result();
@@ -6559,6 +6562,7 @@ namespace LegionRuntime {
             args.domain = launcher.launch_domain;
             utility_group.spawn(HLR_TASK_ID, &args, sizeof(args), ready_event);
           }
+          NK_PROFILE_EXIT();
           return FutureMap(result);
         }
         if (launcher.predicate_false_result.get_size() == 0)
@@ -6601,6 +6605,7 @@ namespace LegionRuntime {
           }
         }
         result->complete_all_futures();
+        NK_PROFILE_EXIT();
         return FutureMap(result);
       }
       IndexTask *task = get_available_index_task();
@@ -6631,6 +6636,7 @@ namespace LegionRuntime {
         result.wait_all_results();
       }
 #endif
+      NK_PROFILE_EXIT();
       return result;
     }
 
@@ -9406,6 +9412,7 @@ namespace LegionRuntime {
     void Runtime::execute_task_launch(Context ctx, TaskOp *task)
     //--------------------------------------------------------------------------
     {
+        NK_PROFILE_ENTRY();
       Processor proc = ctx->get_executing_processor();
 #ifdef DEBUG_HIGH_LEVEL
       assert(proc_managers.find(proc) != proc_managers.end());
@@ -9488,6 +9495,7 @@ namespace LegionRuntime {
         }
       }
       NAUTILUS_DEEP_DEBUG("execute task launch complete\n");
+      NK_PROFILE_EXIT();
     }
 
     //--------------------------------------------------------------------------
@@ -11627,12 +11635,16 @@ namespace LegionRuntime {
       // Kick off the low-level machine
       //m->run(0, Machine::ONE_TASK_ONLY, 0, 0, background);
       m->run(0, Machine::ONE_TASK_PER_PROC, 0, 0, background);
+      log_run(LEVEL_WARNING, "out of machine run");
       // We should only make it here if the machine thread is backgrounded
+      return 0;
+#if 0
       assert(background);
       if (background)
         return 0;
       else
         return -1;
+#endif
     }
 
     //--------------------------------------------------------------------------
@@ -12182,7 +12194,8 @@ namespace LegionRuntime {
 #ifdef DEBUG_HIGH_LEVEL
           assert(false);
 #endif
-          exit(ERROR_RESERVED_TASK_ID);
+          // KCH added
+          //exit(ERROR_RESERVED_TASK_ID);
         }
       }
       table[INIT_FUNC_ID]          = Runtime::initialize_runtime;
@@ -12323,6 +12336,7 @@ namespace LegionRuntime {
                                   const void *args, size_t arglen, Processor p)
     //--------------------------------------------------------------------------
     {
+        NK_PROFILE_ENTRY();
       // Always enable the idle task for any processor 
       // that is not a utility processor
       Machine *machine = Machine::get_machine();
@@ -12516,6 +12530,7 @@ namespace LegionRuntime {
           local_rt->construct_mpi_rank_tables(p, Runtime::mpi_rank);
         local_rt->launch_top_level_task(p);
       }
+      NK_PROFILE_EXIT();
     }
 
     //--------------------------------------------------------------------------
