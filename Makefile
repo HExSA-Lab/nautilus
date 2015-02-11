@@ -332,9 +332,9 @@ CFLAGS:=   $(COMMON_FLAGS) \
 		   -Wno-unused-function \
 		   -Wno-unused-variable \
 		   -fno-common \
+		   -std=gnu99 \
 		    $(call cc-option, -Wno-unused-but-set-variable,)
 		   #-mno-3dnow \
-		   #-std=gnu99 \
 		   #-Werror \
 		   #-Wmissing-prototypes \
 		   #-Wstrict-prototypes \
