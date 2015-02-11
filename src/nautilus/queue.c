@@ -40,20 +40,6 @@ nk_queue_destroy (nk_queue_t * q, uint8_t free_entries)
 }
 
 
-void
-nk_enqueue_entry (nk_queue_t * q, nk_queue_entry_t * entry)
-{
-    list_add_tail(&(entry->node), &(q->queue));
-}
-
-
-void 
-nk_enqueue_entry_atomic (nk_queue_t * q, nk_queue_entry_t * entry)
-{
-    uint8_t flags = spin_lock_irq_save(&(q->lock));
-    list_add_tail(&(entry->node), &(q->queue));
-    spin_unlock_irq_restore(&(q->lock), flags);
-}
 
 
 nk_queue_entry_t*
