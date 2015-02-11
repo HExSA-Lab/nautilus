@@ -1,5 +1,6 @@
 #include <nautilus/nautilus.h>
 #include <nautilus/cpuid.h>
+#include <nautilus/mwait.h>
 
 
 static struct mwait_info {
@@ -23,49 +24,6 @@ has_mwait (void)
     cpuid(CPUID_FEATURE_INFO, &ret);
     f.val = ret.c;
     return f.monitor;
-}
-
-
-/*
- * addr: the addr to wait on
- *       be sure that the range is well-known, and matches
- *       the data area indicated by CPUID
- * 
- * ECX = hints
- * EDX = hints
- *
- */
-inline void 
-nk_monitor (addr_t addr, uint32_t ecx, uint32_t edx)
-{
-    asm volatile ("movq %[_a], %%rax\n\t"
-                  "mov %[_c], %%ecx\n\t"
-                  "mov %[_d], %%edx\n\t"
-                  : /* no outputs */
-                  : [_a] "r" (addr),
-                    [_c] "r" (ecx),
-                    [_d] "r" (edx)
-                  : "rax", "ecx", "edx");
-}
-
-
-/* 
- * wakeups may be caused by:
- * External interrupts: NMI, SML, INIT, BINIT, MCERR
- * Faults, Aborts including Machine Check
- * Architectural TLB invalidations, including writes to CR0, CR3, CR4 and certain MSR writes
- * Voluntary transitions due to fast system call and far calls
- *
- */
-inline void 
-nk_mwait (uint32_t eax, uint32_t ecx)
-{
-    asm volatile ("mov %[_a], %%eax\n\t"
-                  "mov %[_c], %%ecx\n\t"
-                  : /* no outputs */
-                  : [_a] "r" (eax),
-                    [_c] "r" (ecx)
-                  : "eax", "ecx");
 }
 
 
