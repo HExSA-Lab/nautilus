@@ -50,6 +50,14 @@ config SILENCE_UNDEF_ERR
     help
       Mutes error prints related to undefined 
       libc compatibility functions
+
+config USE_TICKETLOCKS
+    bool "Use Ticket/Bakery locks instead of default spin"
+    default n
+    help
+      Uses ticketlocks (similar to Linux impl.) instead of
+      default spinlocks
+    
     
 
 menu Debugging

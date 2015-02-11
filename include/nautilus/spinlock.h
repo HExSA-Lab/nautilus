@@ -7,6 +7,11 @@ extern "C" {
 
 #include <nautilus/naut_types.h>
 
+#include <nautilus/intrinsics.h>
+#include <nautilus/atomic.h>
+#include <nautilus/cpu.h>
+#include <nautilus/instrument.h>
+
 #define SPINLOCK_INITIALIZER 0
 
 typedef uint32_t spinlock_t;
@@ -17,13 +22,27 @@ spinlock_init (volatile spinlock_t * lock);
 void
 spinlock_deinit (volatile spinlock_t * lock);
 
-void
-spin_lock (volatile spinlock_t * lock);
+static inline void
+spin_lock (volatile spinlock_t * lock) 
+{
+    NK_PROFILE_ENTRY();
+    
+    while (__sync_lock_test_and_set(lock, 1));
 
+    NK_PROFILE_EXIT();
+}
 
-uint8_t
-spin_lock_irq_save (volatile spinlock_t * lock);
-
+static uint8_t
+spin_lock_irq_save (volatile spinlock_t * lock)
+{
+    uint64_t rflags = read_rflags();
+    uint8_t flags = (rflags & RFLAGS_IF) != 0;
+    if (flags) {
+        asm volatile ("cli");
+    }
+    PAUSE_WHILE(__sync_lock_test_and_set(lock, 1));
+    return flags;
+}
 
 void
 spin_lock_nopause (volatile spinlock_t * lock);
@@ -31,13 +50,43 @@ spin_lock_nopause (volatile spinlock_t * lock);
 uint8_t
 spin_lock_irq_save_nopause (volatile spinlock_t * lock);
 
+static inline void 
+spin_unlock (volatile spinlock_t * lock) 
+{
+    NK_PROFILE_ENTRY();
+    __sync_lock_release(lock);
+    NK_PROFILE_EXIT();
+}
 
-void
-spin_unlock (volatile spinlock_t * lock);
+static void
+spin_unlock_irq_restore (volatile spinlock_t * lock, uint8_t flags)
+{
+    __sync_lock_release(lock);
+    if (flags) {
+        asm volatile ("sti");
+    }
+}
 
 
-void
-spin_unlock_irq_restore (volatile spinlock_t * lock, uint8_t flags);
+
+#ifdef NAUT_CONFIG_USE_TICKETLOCKS
+#include <nautilus/ticketlock.h>
+// this expects the struct, not the pointer to it
+#define NK_LOCK_GLBINIT(l) 
+#define NK_LOCK_T         nk_ticket_lock_t
+#define NK_LOCK_INIT(l)   nk_ticket_lock_deinit(l)
+#define NK_LOCK(l)        nk_ticket_lock(l)
+#define NK_UNLOCK(l)      nk_ticket_unlock(l)
+#define NK_LOCK_DEINIT(l) nk_ticket_lock_deinit(l)
+#else
+// this expects the struct, not the pointer to it
+#define NK_LOCK_GLBINIT(l) ((l) = SPINLOCK_INITIALIZER) 
+#define NK_LOCK_T         spinlock_t
+#define NK_LOCK_INIT(l)   spinlock_init(l)
+#define NK_LOCK(l)        spin_lock(l)
+#define NK_UNLOCK(l)      spin_unlock(l)
+#define NK_LOCK_DEINIT(l) spinlock_deinit(l)
+#endif
 
 #ifdef __cplusplus
 }
