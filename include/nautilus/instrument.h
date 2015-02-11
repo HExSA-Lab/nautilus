@@ -2,16 +2,24 @@
 #define __INSTRUMENT_H__
 
 
+#ifdef __cplusplus 
+extern "C" {
+#endif
+
 #define INSTR_CAL_LOOPS 1000
 
 #ifdef NAUT_CONFIG_PROFILE
 #define NK_PROFILE_ENTRY() nk_profile_func_enter(__func__)
+#define NK_PROFILE_ENTRY_NAME(s) nk_profile_func_enter(#s)
+#define NK_PROFILE_EXIT_NAME(s) nk_profile_func_exit(#s)
 #define NK_PROFILE_EXIT() nk_profile_func_exit(__func__)
 #define NK_MALLOC_PROF_ENTRY() nk_malloc_enter()
 #define NK_MALLOC_PROF_EXIT() nk_malloc_exit()
 #else
 #define NK_PROFILE_ENTRY() 
 #define NK_PROFILE_EXIT()
+#define NK_PROFILE_ENTRY_NAME(s)
+#define NK_PROFILE_EXIT_NAME(s)
 #define NK_MALLOC_PROF_ENTRY()
 #define NK_MALLOC_PROF_EXIT()
 #endif
@@ -65,6 +73,10 @@ void nk_instrument_end(void);
 void nk_instrument_query(void);
 void nk_instrument_calibrate(unsigned loops);
 
+
+#ifdef __cplusplus
+}
+#endif
 
 
 #endif

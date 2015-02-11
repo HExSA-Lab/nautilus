@@ -12,6 +12,8 @@
 #include <lib/liballoc.h>
 
 static uint8_t instr_active = 0;
+static uint64_t instr_start_count = 0;
+static uint64_t instr_end_count = 0;
 
 struct func_data {
     uint64_t call_count;
@@ -19,6 +21,7 @@ struct func_data {
     uint64_t max_nsec;
     uint64_t min_nsec;
     uint64_t start_count;
+    uint64_t total_count;
 };
 
 
@@ -109,6 +112,7 @@ nk_profile_func_exit (const char *func)
             return;
         }
         time = end - data->start_count;
+        data->total_count += time;
         if (time < data->min_nsec) {
             data->min_nsec = time;
         }
@@ -162,13 +166,19 @@ nk_instrument_init (void)
 void
 nk_instrument_start (void)
 {
+    struct timespec ts;
     printk("Beginning Instrumentation\n");
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    instr_start_count = 1000000000 * ts.tv_sec + ts.tv_nsec;
     atomic_cmpswap(instr_active, 0, 1);
 }
 
 void 
 nk_instrument_end (void) 
 {
+    struct timespec te;
+    clock_gettime(CLOCK_MONOTONIC, &te);
+    instr_end_count = 1000000000 * te.tv_sec + te.tv_nsec;
     printk("Deactivating instrumentation\n");
     atomic_cmpswap(instr_active, 1, 0);
 }
@@ -347,8 +357,12 @@ nk_instrument_query (void)
             char * func = (void*)nk_htable_get_iter_key(iter);
             struct func_data * data = (struct func_data*)nk_htable_get_iter_value(iter);
 
+            uint64_t total_nsec = (instr_end_count - instr_start_count);
+
             if (data->call_count > 0) {
-                printk("\tFunc: %s\n\tCall Count: %16u, Avg Latency: %16llunsec, Max Latency: %16llunsec, Min Latency: %16llunsec\n", 
+                printk("\t%lu.%lu\% Func: %s\n\tCount: %16u Lat - Avg: %16llunsec Max: %16llunsec Min: %16llunsec\n", 
+                        data->total_count / total_nsec,
+                        data->total_count % total_nsec,
                         func,
                         data->call_count,
                         data->avg_nsec,
@@ -362,19 +376,20 @@ nk_instrument_query (void)
         printk("Malloc Stats for Core %u:\n", i);
 
         /* print malloc data */
-        printk("\tCount: %16u, Avg Latency: %16llunsec, Max Latency: %16llunsec, Min Latency: %16llunsec\n", 
+        printk("\tCount: %16u Lat - Avg: %16llunsec, Max: %16llunsec Min: %16llunsec\n", 
                 this_cpu->instr_data->mallocstat.count,
                 this_cpu->instr_data->mallocstat.avg_latency,
                 this_cpu->instr_data->mallocstat.max_latency,
                 this_cpu->instr_data->mallocstat.min_latency);
         printk("IRQ Stats for Core %u:\n", i);
-        printk("\tCount: %16u, Avg Latency: %16llunsec, Max Latency: %16llunsec, Min Latency: %16llunsec\n", 
+        printk("\tCount: %16u Lat - Avg: %16llunsec Max: %16llunsec Min: %16llunsec\n", 
                 this_cpu->instr_data->irqstat.count,
                 this_cpu->instr_data->irqstat.avg_latency,
                 this_cpu->instr_data->irqstat.max_latency,
                 this_cpu->instr_data->irqstat.min_latency);
         printk("Thread Switch Stats for Core %u:\n", i);
-        printk("\tCount: %16u, Avg Latency: %16llunsec, Max Latency: %16llunsec, Min Latency: %16llunsec\n", 
+        printk("\tCount: %16u Lat - Avg: %16llunsec Max: %16llunsec Min: %16llunsec\n", 
+                
                 this_cpu->instr_data->thr_switch.count,
                 this_cpu->instr_data->thr_switch.avg_latency,
                 this_cpu->instr_data->thr_switch.max_latency,
