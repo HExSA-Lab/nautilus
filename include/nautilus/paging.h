@@ -8,6 +8,7 @@ extern "C" {
 #include <nautilus/naut_types.h>
 #include <nautilus/idt.h>
 #include <nautilus/printk.h>
+#include <nautilus/smp.h>
     
 typedef ulong_t pml4e_t;
 typedef ulong_t pdpte_t;
@@ -44,7 +45,7 @@ struct nk_mem_info {
 int nk_create_page_mapping (addr_t vaddr, addr_t paddr, uint64_t flags);
 int nk_map_page_nocache (addr_t paddr, uint64_t flags);
 void nk_paging_init(struct nk_mem_info * mem, ulong_t mbd);
-addr_t nk_alloc_page(void);
+addr_t nk_alloc_page_region(unsigned cpu);
 int nk_free_page(addr_t addr);
 int nk_reserve_pages(addr_t paddr, unsigned n);
 int nk_reserve_page(addr_t paddr);
@@ -53,6 +54,8 @@ int nk_reserve_range(addr_t start, addr_t end);
 /* hooks */
 int nk_free_pages(void * addr, unsigned num);
 addr_t nk_alloc_pages(unsigned num);
+addr_t nk_alloc_pages_cpu(unsigned num, cpu_id_t cpu);
+addr_t nk_alloc_pages_region(unsigned num, unsigned region);
 
 int nk_pf_handler(excp_entry_t * excp, excp_vec_t vector, addr_t fault_addr);
 
@@ -155,6 +158,37 @@ int nk_pf_handler(excp_entry_t * excp, excp_vec_t vector, addr_t fault_addr);
 
 // given a page num, what's the bit number within the byte
 #define PAGE_MAP_BIT_IDX(n)  (n % 8)
+
+
+/*
+ * nk_alloc_page
+ *
+ * allocate a single page
+ *
+ */
+static inline addr_t 
+nk_alloc_page (void) 
+{
+    return nk_alloc_pages(1);
+}
+
+
+/* 
+ * nk_alloc_page_cpu
+ *
+ * Allocate a page in this CPU's NUMA domain
+ *
+ * @cpu: The CPU to search for the domain by
+ *
+ * returns NULL on error, the physical address otherwise
+ *
+ */
+static inline addr_t
+nk_alloc_page_cpu (cpu_id_t cpu)
+{
+    return nk_alloc_pages_cpu(1, cpu);
+}
+
 
 
 

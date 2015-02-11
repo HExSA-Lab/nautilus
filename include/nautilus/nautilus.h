@@ -32,7 +32,6 @@ extern "C" {
 
 #include <dev/ioapic.h>
 #include <dev/timer.h>
-#include <dev/hpet.h>
 #include <nautilus/smp.h>
 #include <nautilus/paging.h>
 #include <nautilus/limits.h>
@@ -57,7 +56,8 @@ struct nk_int_info {
     struct irq_mapping irq_map[256];
 };
 
-
+struct hpet_dev;
+struct nk_locality_info;
 struct sys_info {
 
     struct cpu * cpus[NAUT_CONFIG_MAX_CPUS];
@@ -92,7 +92,18 @@ struct naut_info {
 };
 
 void main (unsigned long mbd, unsigned long magic) __attribute__((section (".text")));
-inline struct naut_info* nk_get_nautilus_info(void);
+
+#ifdef __NAUTILUS_MAIN__
+struct naut_info nautilus_info;
+#else
+extern struct naut_info nautilus_info;
+#endif
+
+static inline struct naut_info*
+nk_get_nautilus_info (void)
+{
+    return &nautilus_info;
+}
 
 #ifdef __cplusplus
 }

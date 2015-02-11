@@ -7,6 +7,7 @@
 #include <nautilus/errno.h>
 #include <nautilus/backtrace.h>
 #include <nautilus/naut_assert.h>
+#include <nautilus/numa.h>
 #include <lib/bitmap.h>
 #include <lib/liballoc.h>
 #include <nautilus/percpu.h>
@@ -314,7 +315,7 @@ nk_alloc_pages (unsigned n)
     int p                    = bitmap_find_free_region(mem->page_map, mem->npages, order);
 
     if (p < 0) {
-        panic("Could not find %u free pages\n", n);
+        //panic("Could not find %u free pages\n", n);
         return (addr_t)NULL;
     } 
 
@@ -322,17 +323,82 @@ nk_alloc_pages (unsigned n)
 }
 
 
-/*
- * nk_alloc_page
+/* 
+ * nk_alloc_pages_cpu
  *
- * allocate a single page
+ * allocate n pages in the NUMA domain
+ * that this processor belongs to
+ *
+ * @n: the number of pages to allocate
+ * @cpu: Pick from the NUMA domain to which this CPU belongs
+ *
+ * returns NULL on error, the page address on success
  *
  */
-addr_t 
-nk_alloc_page (void) 
+addr_t
+nk_alloc_pages_cpu (unsigned num, cpu_id_t cpu)
 {
-    return nk_alloc_pages(1);
+    struct nk_mem_info * mem = &(nk_get_nautilus_info()->sys.mem);
+    int order                = get_count_order(num);
+    int p;
+    struct mem_region * r = nk_get_base_region_by_cpu(cpu);
+    unsigned page_offset = r->base_addr / PAGE_SIZE;
+
+    if (!r) {
+        panic("Could not find mem region on cpu %u\n", cpu);
+    }
+
+    ulong_t * start = (ulong_t*)(((ulong_t)mem->page_map) + (page_offset/8));
+
+    p = bitmap_find_free_region(start,
+                r->len / PAGE_SIZE,
+                order);
+
+    if (p < 0) {
+        //ERROR_PRINT("Could not find free page\n");
+        return 0;
+    }
+
+    return PAGE_TO_PADDR((p + page_offset));
 }
+
+
+addr_t
+nk_alloc_pages_region (unsigned num, unsigned region)
+{
+    struct nk_mem_info * mem = &(nk_get_nautilus_info()->sys.mem);
+    int order                = get_count_order(num);
+    int p;
+    struct mem_region * r = nk_get_base_region_by_num(region);
+    unsigned page_offset = r->base_addr / PAGE_SIZE;
+
+    printk("allocating pages at region %u\n", region);
+    if (!r) {
+        panic("Could not find mem region %u\n", region);
+    }
+
+    ulong_t * start = (ulong_t*)(((ulong_t)mem->page_map) + (page_offset/8));
+
+    p = bitmap_find_free_region(start,
+                r->len / PAGE_SIZE,
+                order);
+
+    if (p < 0) {
+        ERROR_PRINT("Could not find free page\n");
+        return 0;
+    }
+
+    return PAGE_TO_PADDR((p + page_offset));
+}
+
+
+addr_t
+nk_alloc_page_region (unsigned num)
+{
+    return nk_alloc_pages_region(1, num);
+}
+
+
 
 
 /*

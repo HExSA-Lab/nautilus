@@ -83,6 +83,7 @@ extern "C" {
 #define APIC_REG_ESR      0x280
 #define APIC_REG_LVT_CMCI 0x2f0
 #define APIC_REG_ICR      0x300
+#define     APIC_ICR_BUSY 0x01000
 #define APIC_REG_ICR2     0x310
 #define APIC_REG_LVTT     0x320
 #define APIC_REG_LVTTHMR  0x330

@@ -48,6 +48,12 @@ spur_int_handler (excp_entry_t * excp, excp_vec_t v)
     return 0;
 }
 
+static int
+null_kick (excp_entry_t * excp, excp_vec_t v)
+{
+    IRQ_HANDLER_END();
+    return 0;
+}
 
 static int
 error_int_handler (excp_entry_t * excp, excp_vec_t v)
@@ -207,7 +213,7 @@ apic_do_eoi (void)
 uint32_t
 apic_get_id (struct apic_dev * apic)
 {
-    return apic_read(apic, APIC_REG_ID) >> APIC_ID_SHIFT;
+    return (apic_read(apic, APIC_REG_ID) >> APIC_ID_SHIFT) & 0xff;
 }
 
 
@@ -259,7 +265,7 @@ apic_ipi (struct apic_dev * apic,
 {
     uint8_t flags = irq_disable_save();
     apic_write(apic, APIC_REG_ICR2, remote_id << APIC_ICR2_DST_SHIFT);
-    apic_write(apic, APIC_REG_ICR, vector | ICR_LEVEL_ASSERT);
+    apic_write(apic, APIC_REG_ICR, APIC_DEL_MODE_FIXED | vector);
     irq_enable_restore(flags);
 }
 
@@ -711,6 +717,10 @@ apic_init (struct cpu * core)
     apic_write(apic, APIC_REG_ESR, 0u);
 
     apic_global_enable();
+
+    if (register_int_handler(0xfc, null_kick, apic) != 0) {
+        panic("Could not register null kick interrupt handler\n");
+    }
 
     if (register_int_handler(APIC_SPUR_INT_VEC, spur_int_handler, apic) != 0) {
         panic("Could not register spurious interrupt handler\n");

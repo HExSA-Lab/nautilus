@@ -1,6 +1,5 @@
 #include <nautilus/nautilus.h>
 #include <nautilus/condvar.h>
-#include <nautilus/spinlock.h>
 #include <nautilus/queue.h>
 #include <nautilus/thread.h>
 #include <nautilus/errno.h>
@@ -27,7 +26,7 @@ nk_condvar_init (nk_condvar_t * c)
         return -EINVAL;
     }
 
-    spinlock_init(&c->lock);
+    NK_LOCK_INIT(&c->lock);
     c->nwaiters = 0;
 
     return 0;
@@ -39,21 +38,24 @@ nk_condvar_destroy (nk_condvar_t * c)
 {
     DEBUG_PRINT("Destroying condvar (%p)\n", (void*)c);
 
-    int flags = spin_lock_irq_save(&c->lock);
+    //int flags = spin_lock_irq_save(&c->lock);
+    NK_LOCK(&c->lock);
     if (c->nwaiters != 0) {
-        spin_unlock_irq_restore(&c->lock, flags);
+        //spin_unlock_irq_restore(&c->lock, flags);
+        NK_UNLOCK(&c->lock);
         return -EINVAL;
     }
 
     nk_thread_queue_destroy(c->wait_queue);
     c->nwaiters = 0;
-    spin_unlock_irq_restore(&c->lock, flags);
+    //spin_unlock_irq_restore(&c->lock, flags);
+    NK_UNLOCK(&c->lock);
     return 0;
 }
 
 
 uint8_t
-nk_condvar_wait (nk_condvar_t * c, spinlock_t * l)
+nk_condvar_wait (nk_condvar_t * c, NK_LOCK_T * l)
 {
     NK_PROFILE_ENTRY();
     DEBUG_PRINT("Condvar wait on (%p) mutex=%p\n", (void*)c, (void*)l);
@@ -61,13 +63,15 @@ nk_condvar_wait (nk_condvar_t * c, spinlock_t * l)
     atomic_inc(c->nwaiters);
 
     /* now we can unlock the mutex and go to sleep */
-    spin_unlock(l);
+    //spin_unlock(l);
+    NK_UNLOCK(l);
     nk_thread_queue_sleep(c->wait_queue);
 
     atomic_dec(c->nwaiters);
 
     /* reacquire lock */
-    spin_lock(l);
+    //spin_lock(l);
+    NK_LOCK(l);
     NK_PROFILE_EXIT();
     return 0;
 }
@@ -85,7 +89,7 @@ nk_condvar_signal (nk_condvar_t * c)
         return -1;
     }
     /* broadcast a timer interrupt to everyone */
-    apic_bcast_ipi(per_cpu_get(apic), 0xf0);
+    apic_bcast_ipi(per_cpu_get(apic), 0xfc);
     irq_enable_restore(flags);
     NK_PROFILE_EXIT();
     return 0;
@@ -104,7 +108,7 @@ nk_condvar_bcast (nk_condvar_t * c)
         return -1;
     }
     /* broadcast a timer interrupt to everyone */
-    apic_bcast_ipi(per_cpu_get(apic), 0xf0);
+    apic_bcast_ipi(per_cpu_get(apic), 0xfc);
     irq_enable_restore(flags);
     NK_PROFILE_EXIT();
     return 0;
@@ -115,14 +119,14 @@ static void
 test1 (void * in, void ** out) 
 {
     nk_condvar_t * c = (nk_condvar_t*)in;
-    spinlock_t lock;
-    spinlock_init(&lock);
+    NK_LOCK_T lock;
+    NK_LOCK_INIT(&lock);
     printk("test 1 is starting to wait on condvar\n");
-    spin_lock(&lock);
+    NK_LOCK(&lock);
 
     nk_condvar_wait(c, &lock);
 
-    spin_unlock(&lock);
+    NK_UNLOCK(&lock);
 
     printk("test one is out of wait on condvar\n");
 }
@@ -131,14 +135,14 @@ static void
 test2 (void * in, void ** out) 
 {
     nk_condvar_t * c = (nk_condvar_t*)in;
-    spinlock_t lock;
-    spinlock_init(&lock);
+    NK_LOCK_T lock;
+    NK_LOCK_INIT(&lock);
     printk("test 2 is starting to wait on condvar\n");
-    spin_lock(&lock);
+    NK_LOCK(&lock);
 
     nk_condvar_wait(c, &lock);
 
-    spin_unlock(&lock);
+    NK_UNLOCK(&lock);
 
     printk("test 2 is out of wait on condvar\n");
 }

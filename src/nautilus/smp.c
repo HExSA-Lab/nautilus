@@ -26,7 +26,17 @@
 #define SMP_DEBUG(fmt, args...) DEBUG_PRINT("SMP: " fmt, ##args)
 
 
+static struct cpu init_cpus[NAUT_CONFIG_MAX_CPUS];
+
 extern struct cpu * smp_ap_stack_switch(uint64_t, uint64_t, struct cpu*);
+
+static uint8_t lapicid_to_nk_coreid[128];
+
+uint8_t 
+nk_get_cpu_by_lapicid (uint8_t lapicid)
+{
+    return lapicid_to_nk_coreid[lapicid];
+}
 
 static volatile unsigned smp_core_count = 1; // assume BSP is booted
 
@@ -51,13 +61,21 @@ parse_mptable_cpu (struct sys_info * sys, struct mp_table_entry_cpu * cpu)
         panic("CPU count exceeded max (check your .config)\n");
     }
 
+    new_cpu = &init_cpus[sys->num_cpus];
+
+#if 0
     if(!(new_cpu = malloc(sizeof(struct cpu)))) {
         panic("Couldn't allocate CPU struct\n");
     } 
     memset(new_cpu, 0, sizeof(struct cpu));
+#endif
 
     new_cpu->id         = sys->num_cpus;
     new_cpu->lapic_id   = cpu->lapic_id;
+
+    /* HACK */
+    lapicid_to_nk_coreid[new_cpu->lapic_id] = new_cpu->id;
+
     new_cpu->enabled    = cpu->enabled;
     new_cpu->is_bsp     = cpu->is_bsp;
     new_cpu->cpu_sig    = cpu->sig;
@@ -409,7 +427,7 @@ smp_bringup_aps (struct naut_info * naut)
 
 
         /* Send the INIT sequence */
-        SMP_DEBUG("sending INIT to remote APIC (%u)\n", naut->sys.cpus[i]->lapic_id);
+        SMP_DEBUG("sending INIT to remote APIC (0x%x)\n", naut->sys.cpus[i]->lapic_id);
         apic_send_iipi(apic, naut->sys.cpus[i]->lapic_id);
 
         /* wait for status to update */
@@ -576,7 +594,7 @@ smp_ap_entry (struct cpu * core)
      * for the next CPU boot! 
      */
     my_cpu = get_cpu();
-    SMP_PRINT("CPU (AP) %u operational)\n", my_cpu->id);
+    SMP_DEBUG("CPU (AP) %u operational\n", my_cpu->id);
 
     // switch from boot stack to my new stack (allocated in thread_init)
     nk_thread_t * cur = get_cur_thread();
@@ -594,7 +612,9 @@ smp_ap_entry (struct cpu * core)
 
     ASSERT(irqs_enabled());
 
+    sti();
     idle(NULL, NULL);
+    //while (1) { asm volatile("pause"); }
 }
 
 

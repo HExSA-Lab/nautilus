@@ -1,3 +1,5 @@
+#define __NAUTILUS_MAIN__
+
 #include <nautilus/nautilus.h>
 #include <nautilus/cga.h>
 #include <nautilus/paging.h>
@@ -15,15 +17,12 @@
 #include <nautilus/errno.h>
 #include <nautilus/fpu.h>
 #include <nautilus/random.h>
-#include <nautilus/numa.h>
 #include <nautilus/acpi.h>
 #include <nautilus/atomic.h>
 
 #include <nautilus/libccompat.h>
 
 #include <nautilus/barrier.h>
-#include <nautilus/rwlock.h>
-#include <nautilus/condvar.h>
 
 #include <dev/apic.h>
 #include <dev/pci.h>
@@ -41,16 +40,7 @@
 #include "ndpc_preempt_threads.h"
 #endif
 
-static struct naut_info nautilus_info;
 extern spinlock_t printk_lock;
-
-
-inline struct naut_info*
-nk_get_nautilus_info (void)
-{
-    return &nautilus_info;
-}
-
 
 #ifdef NAUT_CONFIG_NDPC_RT
 void ndpc_rt_test()
@@ -139,8 +129,6 @@ main (unsigned long mbd, unsigned long magic)
 
     nk_paging_init(&(naut->sys.mem), mbd);
 
-    nk_acpi_init();
-
     init_liballoc_hooks();
 
     naut->sys.mb_info = multiboot_parse(mbd, magic);
@@ -148,11 +136,13 @@ main (unsigned long mbd, unsigned long magic)
         ERROR_PRINT("Problem parsing multiboot header\n");
     }
 
+    smp_early_init(naut);
+
+    nk_acpi_init();
+
     disable_8259pic();
 
     i8254_init(naut);
-
-    smp_early_init(naut);
 
     // setup per-core area for BSP
     msr_write(MSR_GS_BASE, (uint64_t)naut->sys.cpus[0]);
@@ -190,6 +180,9 @@ main (unsigned long mbd, unsigned long magic)
 #endif
 
     smp_bringup_aps(naut);
+
+    extern void nk_mwait_init(void);
+    nk_mwait_init();
 
 
 #ifdef NAUT_CONFIG_CXX_SUPPORT

@@ -11,6 +11,7 @@ extern "C" {
 /******* EXTERNAL INTERFACE *********/
 
 uint32_t nk_get_num_cpus (void);
+uint8_t nk_get_cpu_by_lapicid (uint8_t lapicid);
 
 /******* !EXTERNAL INTERFACE! *********/
 
@@ -71,6 +72,8 @@ struct cpu {
     /* NUMA info */
     struct nk_topo_params * tp;
     struct nk_cpu_coords * coord;
+    uint32_t numa_domain;
+
 
     struct nk_rand_info * rand;
 

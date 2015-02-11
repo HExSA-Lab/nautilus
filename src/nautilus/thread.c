@@ -13,6 +13,8 @@
 
 #include <lib/liballoc.h>
 
+extern uint8_t malloc_cpus_ready;
+
 #ifndef NAUT_CONFIG_DEBUG_THREADS
 #undef  DEBUG_PRINT
 #define DEBUG_PRINT(fmt, args...)
@@ -228,7 +230,7 @@ get_runnable_thread (uint32_t cpu)
     nk_thread_queue_t * runq = NULL;
     nk_queue_entry_t * elm   = NULL;
     struct sys_info * sys = per_cpu_get(system);
-    //uint8_t flags = irq_disable_save();
+    uint8_t flags;
 
     if (unlikely(cpu >= sys->num_cpus || !sys->cpus[cpu])) {
         ERROR_PRINT("Attempt to get thread on invalid CPU (%u)\n", cpu);
@@ -243,7 +245,9 @@ get_runnable_thread (uint32_t cpu)
         return NULL;
     }
 
-    elm = nk_dequeue_first_atomic(runq);
+    flags = spin_lock_irq_save(&runq->lock);
+
+    elm = nk_dequeue_first(runq);
 
     ASSERT(elm);
 
@@ -258,7 +262,7 @@ get_runnable_thread (uint32_t cpu)
             if (!nk_queue_empty(runq)) {
 
                 nk_thread_t * idle = runnable;
-                elm = nk_dequeue_first_atomic(runq);
+                elm = nk_dequeue_first(runq);
 
                 ASSERT(elm);
 
@@ -266,11 +270,18 @@ get_runnable_thread (uint32_t cpu)
 
                 ASSERT(runnable);
 
-                nk_enqueue_thread_on_runq(idle, cpu);
+
+                idle->status    = NK_THR_SUSPENDED;
+                nk_enqueue_entry(runq, &(idle->runq_node));
+
+                //nk_enqueue_thread_on_runq(idle, cpu);
+
 
             } else  {
                 /* we put the idle thread back when it is the only thing on the queue */
-                nk_enqueue_thread_on_runq(runnable, cpu);
+                runnable->status = NK_THR_SUSPENDED;
+                nk_enqueue_entry(runq, &(runnable->runq_node));
+                //nk_enqueue_thread_on_runq(runnable, cpu);
                 runnable  = NULL;
             }
 
@@ -286,6 +297,7 @@ get_runnable_thread (uint32_t cpu)
         runnable->status = NK_THR_RUNNING;
     }
 
+    spin_unlock_irq_restore(&runq->lock, flags);
     //irq_enable_restore(flags);
     return runnable;
 }
@@ -442,12 +454,16 @@ nk_thread_create (nk_thread_fun_t fun,
     nk_thread_t * t = NULL;
     void * stack    = NULL;
 
+    ASSERT(cpu < per_cpu_get(system)->num_cpus && cpu != CPU_ANY);
+
     if (cpu >= per_cpu_get(system)->num_cpus && cpu != CPU_ANY) {
         ERROR_PRINT("thread create received invalid CPU id (%u)\n", cpu);
         return -EINVAL;
     }
 
     t = malloc(sizeof(nk_thread_t));
+
+    ASSERT(t);
     if (!t) {
         ERROR_PRINT("Could not allocate thread struct\n");
         return -EINVAL;
@@ -462,10 +478,9 @@ nk_thread_create (nk_thread_fun_t fun,
         t->stack_size =  PAGE_SIZE_4KB;
     }
 
-    if (!stack) {
-        ERROR_PRINT("Could not allocate thread stack\n");
-        goto out_err;
-    }
+    stack = (void*)nk_alloc_page();
+
+    ASSERT(stack);
 
     if (thread_init(t, stack, is_detached, cpu, get_cur_thread()) < 0) {
         ERROR_PRINT("Could not initialize thread\n");
@@ -486,7 +501,7 @@ nk_thread_create (nk_thread_fun_t fun,
 
 out_err1:
     free(stack);
-out_err:
+//out_err:
     free(t);
     return -1;
 }
@@ -534,11 +549,14 @@ nk_thread_start (nk_thread_fun_t fun,
     thread_setup_init_stack(newthread, fun, input);
 
     nk_enqueue_thread_on_runq(newthread, cpu);
+
+#ifdef NAUT_CONFIG_DEBUG_THREADS
     if (cpu == CPU_ANY) {
         SCHED_DEBUG("Started thread (%p, tid=%u) on [ANY CPU]\n", newthread, newthread->tid); 
     } else {
         SCHED_DEBUG("Started thread (%p, tid=%u) on cpu %u\n", newthread, newthread->tid, cpu); 
     }
+#endif
 
     return 0;
 }
@@ -875,11 +893,7 @@ nk_thread_queue_wake_one (nk_thread_queue_t * q)
 
     t = container_of(elm, nk_thread_t, wait_node);
 
-    if (!t) {
-        ERROR_PRINT("Could not get thread from queue element\n");
-        goto out_err;
-    }
-
+    ASSERT(t);
     ASSERT(t->status == NK_THR_WAITING);
 
     nk_enqueue_thread_on_runq(t, t->bound_cpu);
@@ -887,10 +901,6 @@ nk_thread_queue_wake_one (nk_thread_queue_t * q)
 out:
     irq_enable_restore(flags);
     return 0;
-
-out_err:
-    irq_enable_restore(flags);
-    return -EINVAL;
 }
 
 
@@ -909,25 +919,24 @@ nk_thread_queue_wake_all (nk_thread_queue_t * q)
 {
     nk_queue_entry_t * elm = NULL;
     nk_thread_t * t = NULL;
-    uint8_t flags = irq_disable_save();
+    uint8_t flags;
 
     SCHED_DEBUG("Waking all waiters on thread queue (q=%p)\n", (void*)q);
 
     ASSERT(q);
 
-    while ((elm = nk_dequeue_first_atomic(q))) {
-        t = container_of(elm, nk_thread_t, wait_node);
-        if (!t) {
-            continue;
-        }
+    flags = spin_lock_irq_save(&q->lock);
 
+    while ((elm = nk_dequeue_first(q))) {
+        t = container_of(elm, nk_thread_t, wait_node);
+
+        ASSERT(t);
         ASSERT(t->status == NK_THR_WAITING);
 
         nk_enqueue_thread_on_runq(t, t->bound_cpu);
     }
 
-
-    irq_enable_restore(flags);
+    spin_unlock_irq_restore(&q->lock, flags);
     return 0;
 }
 
@@ -1265,11 +1274,17 @@ nk_sched_init_ap (void)
     }
     memset(me, 0, sizeof(nk_thread_t));
 
-    my_stack = malloc(PAGE_SIZE); 
+    //my_stack = malloc(PAGE_SIZE); 
+    my_stack = (void*)nk_alloc_page_cpu(id);
     if (!my_stack) {
         ERROR_PRINT("Couldn't allocate new stack for CPU (%u)\n", id);
         goto out_err2;
     }
+    printk("Allocated thread stack for CPU %u in NUMA domain %u (addr=%p)\n",
+            id,
+            per_cpu_get(numa_domain),
+            my_stack);
+            
     memset(my_stack, 0, PAGE_SIZE);
 
     /* we have no parent thread... */
@@ -1293,8 +1308,8 @@ nk_sched_init_ap (void)
     enqueue_thread_on_tlist(me);
 
     // start another idle thread
-    //SCHED_DEBUG("Starting idle thread for cpu %d\n", id);
-    //nk_thread_start(idle, NULL, NULL, 0, TSTACK_DEFAULT, NULL, id);
+    SCHED_DEBUG("Starting idle thread for cpu %d\n", id);
+    nk_thread_start(idle, NULL, NULL, 0, TSTACK_DEFAULT, NULL, id);
 
     irq_enable_restore(flags);
     return 0;
