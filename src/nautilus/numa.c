@@ -5,7 +5,12 @@
 #include <nautilus/numa.h>
 #include <nautilus/errno.h>
 #include <nautilus/acpi.h>
+#include <nautilus/list.h>
 #include <nautilus/percpu.h>
+#include <nautilus/math.h>
+#include <nautilus/paging.h>
+#include <nautilus/atomic.h>
+#include <nautilus/naut_string.h>
 #include <dev/apic.h>
 #include <lib/liballoc.h>
 
@@ -35,6 +40,7 @@ next_pow2 (uint32_t v)
     return ++v;
 }
 
+/* logical processor count */
 static uint8_t
 get_max_id_per_pkg (void)
 {
@@ -43,6 +49,14 @@ get_max_id_per_pkg (void)
     return ((ret.b >> 16) & 0xff);
 }
 
+
+static uint8_t
+amd_get_cmplegacy (void)
+{
+    cpuid_ret_t ret;
+    cpuid(CPUID_AMD_FEATURE_INFO, &ret);
+    return ret.c & 0x2;
+}
 
 static uint8_t
 has_leafb (void)
@@ -91,18 +105,33 @@ amd_get_topo_secondary (struct nk_topo_params * tp)
 
     cpuid(CPUID_AMD_BASIC_INFO, &ret);
 
-    if (ret.a >= 0x80000008) {
+    unsigned num_cores;
+    unsigned max_num_cores;
+    unsigned threads_per_core;
+    unsigned cores_per_proc;
+
+    if (ret.a >= CPUID_AMD_EXT_INFO) {
         NUMA_DEBUG("AMD probing topo using CPUID fn 8000_0008\n");
 
-        cpuid(0x80000008, &ret);
+        cpuid(CPUID_AMD_EXT_INFO, &ret);
 
-        if (((ret.c >> 12) & 0xf)) {
-            tp->core_bits = ((ret.c >> 12) & 0xf);
+        tp->core_bits = (ret.c >> 12) & 0xf;
+
+        num_cores = (ret.c & 0xff) + 1;
+
+        if (tp->core_bits) {
+            max_num_cores  = 1 << tp->core_bits;
         } else {
-            tp->core_bits = next_pow2(ret.c & 0xff);
+            max_num_cores = num_cores;
         }
 
-        tp->smt_bits = next_pow2(get_max_id_per_pkg() >> tp->core_bits);
+        cores_per_proc   = num_cores;
+        threads_per_core = amd_get_cmplegacy() ? 1 : 
+                                                 get_max_id_per_pkg()/cores_per_proc;
+        NUMA_DEBUG("%u Cores per proc, %u threads per core (max logical count=%u)\n", cores_per_proc, threads_per_core, 
+                get_max_id_per_pkg());
+
+        tp->smt_bits = ilog2(threads_per_core);
 
     } else {
         NUMA_DEBUG("AMD probing topo using CPUID FN 0x0000_0001\n");
@@ -205,6 +234,7 @@ nk_cpu_topo_discover (struct cpu * me)
     return 0;
 }
 
+
 void acpi_table_print_srat_entry(struct acpi_subtable_header * header)
 {
 
@@ -226,7 +256,7 @@ void acpi_table_print_srat_entry(struct acpi_subtable_header * header)
                 proximity_domain |= p->proximity_domain_hi[1] << 16;
                 proximity_domain |= p->proximity_domain_hi[2] << 24;
             }
-            NUMA_PRINT("SRAT Processor (id[0x%02x] eid[0x%02x]) in proximity domain %d %s\n",
+            NUMA_DEBUG("SRAT Processor (id[0x%02x] eid[0x%02x]) in proximity domain %d %s\n",
                       p->apic_id, p->local_sapic_eid,
                       proximity_domain,
                       p->flags & ACPI_SRAT_CPU_ENABLED
@@ -242,7 +272,7 @@ void acpi_table_print_srat_entry(struct acpi_subtable_header * header)
 
             if (srat_rev < 2)
                 proximity_domain &= 0xff;
-            NUMA_PRINT("SRAT Memory (0x%016llx length 0x%016llx type 0x%x) in proximity domain %d %s%s\n",
+            NUMA_DEBUG("SRAT Memory (0x%016llx length 0x%016llx type 0x%x) in proximity domain %d %s%s\n",
                       p->base_address, p->length,
                       p->memory_type, proximity_domain,
                       p->flags & ACPI_SRAT_MEM_ENABLED
@@ -256,7 +286,7 @@ void acpi_table_print_srat_entry(struct acpi_subtable_header * header)
         {
             struct acpi_srat_x2apic_cpu_affinity *p =
                 (struct acpi_srat_x2apic_cpu_affinity *)header;
-            NUMA_PRINT("SRAT Processor (x2apicid[0x%08x]) in"
+            NUMA_DEBUG("SRAT Processor (x2apicid[0x%08x]) in"
                       " proximity domain %d %s\n",
                       p->apic_id,
                       p->proximity_domain,
@@ -265,7 +295,7 @@ void acpi_table_print_srat_entry(struct acpi_subtable_header * header)
         }
         break;
     default:
-        NUMA_PRINT("Found unsupported SRAT entry (type = 0x%x)\n",
+        NUMA_DEBUG("Found unsupported SRAT entry (type = 0x%x)\n",
                header->type);
         break;
     }
@@ -283,12 +313,16 @@ acpi_parse_x2apic_affinity(struct acpi_subtable_header *header,
 
     acpi_table_print_srat_entry(header);
 
-    /* let architecture-dependent part to do it */
-    //acpi_numa_x2apic_affinity_init(processor_affinity);
-
     return 0;
 }
 
+
+static void
+numa_srat_init (struct acpi_subtable_header * hdr,
+                struct sys_info * sys)
+{
+
+}
 static int 
 acpi_table_parse_srat(enum acpi_srat_entry_id id,
               acpi_madt_entry_handler handler, unsigned int max_entries)
@@ -305,13 +339,26 @@ acpi_parse_processor_affinity(struct acpi_subtable_header * header,
     struct acpi_srat_cpu_affinity *processor_affinity
         = container_of(header, struct acpi_srat_cpu_affinity, header);
 
+    struct sys_info * sys = &(nk_get_nautilus_info()->sys);
+    unsigned i;
+    uint32_t domain_id;
+
     if (!processor_affinity)
         return -EINVAL;
 
     acpi_table_print_srat_entry(header);
 
-    /* let architecture-dependent part to do it */
-    //acpi_numa_processor_affinity_init(processor_affinity);
+    /* TODO: wildly inefficient and kinda dumb */
+    for (i = 0; i < sys->num_cpus; i++) {
+
+        if (sys->cpus[i]->lapic_id == processor_affinity->apic_id) {
+            domain_id = processor_affinity->proximity_domain_lo | 
+                (((*(uint32_t*)(&(processor_affinity->proximity_domain_hi))) & 0xffffff) << 8);
+
+            sys->cpus[i]->numa_domain = domain_id;
+            break;
+        }
+    }
 
     return 0;
 }
@@ -323,16 +370,41 @@ acpi_parse_memory_affinity(struct acpi_subtable_header * header,
     struct acpi_srat_mem_affinity *memory_affinity
         = container_of(header, struct acpi_srat_mem_affinity, header);
 
+    struct sys_info * sys       = &(nk_get_nautilus_info()->sys);
+    struct mem_region * mem     = NULL;
+    struct numa_domain * domain = NULL;
+
     if (!memory_affinity)
         return -EINVAL;
 
     acpi_table_print_srat_entry(header);
 
-    /* let architecture-dependent part to do it */
-    //acpi_numa_memory_affinity_init(memory_affinity);
+    mem = malloc(sizeof(struct mem_region));
+    if (!mem) {
+        ERROR_PRINT("Could not allocate mem region\n");
+        return -1;
+    }
+    memset(mem, 0, sizeof(struct mem_region));
+
+    mem->domain_id     = memory_affinity->proximity_domain;
+    mem->base_addr     = memory_affinity->base_address;
+    mem->len           = memory_affinity->length;
+    mem->enabled       = memory_affinity->flags & 0x1;
+    mem->hot_pluggable = memory_affinity->flags & 0x2;
+    mem->nonvolatile   = memory_affinity->flags & 0x4;
+
+    /* update NUMA domain-specific info */
+    domain = &(sys->locality_info.domains[mem->domain_id]);
+
+    list_add(&(mem->entry), &(domain->regions));
+
+    domain->num_regions++;
+
+    domain->addr_space_size += mem->len;
 
     return 0;
 }
+
 
 static int
 acpi_parse_srat (struct acpi_table_header * hdr, void * arg)
@@ -342,39 +414,140 @@ acpi_parse_srat (struct acpi_table_header * hdr, void * arg)
     return 0;
 }
 
-void 
-nk_dump_numa_matrix (struct nk_locality_info * numa)
+
+static void 
+dump_mem_regions (struct numa_domain * d)
 {
-    uint64_t i,j;
+    struct mem_region * reg = NULL;
+    unsigned i = 0;
+
+    list_for_each_entry(reg, &(d->regions), entry) {
+        printk("\tMemory Region %u:\n", i);
+        printk("\t\tRange:         %p - %p\n", (void*)reg->base_addr, (void*)(reg->base_addr + reg->len));
+        printk("\t\tSize:          %lu.%lu MB\n", reg->len / 1000000, reg->len % 1000000);
+        printk("\t\tEnabled:       %s\n", reg->enabled ? "Yes" : "No");
+        printk("\t\tHot Pluggable: %s\n", reg->hot_pluggable ? "Yes" : "No");
+        printk("\t\tNon-volatile:  %s\n", reg->nonvolatile ? "Yes" : "No");
+        i++;
+    }
+}
+
+
+static void
+dump_numa_domains (struct nk_locality_info * numa)
+{
+    unsigned i;
+
+    printk("%u NUMA Domains:\n", numa->num_domains);
+    printk("----------------\n");
+
+    for (i = 0; i < numa->num_domains; i++) {
+
+        struct numa_domain * domain = &(numa->domains[i]);
+
+        printk("Domain %u (Total Size=%lu.%lu MB, %u Region%s):\n", 
+                domain->id,
+                domain->addr_space_size / 1000000,
+                domain->addr_space_size % 1000000,
+                domain->num_regions,
+                domain->num_regions > 1 ? "s" : "");
+
+        dump_mem_regions(domain);
+        printk("\n");
+    }
+}
+
+
+static void 
+dump_numa_matrix (struct nk_locality_info * numa)
+{
+    unsigned i,j;
 
     if (!numa || !numa->numa_matrix) {
         return;
     }
 
-    printk(" ");
-    for (i = 0; i < numa->num_regions; i++) {
-        printk("%02u ");
+    printk("NUMA Distance Matrix:\n");
+    printk("---------------------\n");
+    printk("   ");
+
+    for (i = 0; i < numa->num_domains; i++) {
+        printk("%02u ", i);
     }
     printk("\n");
 
-    for (i = 0; i < numa->num_regions; i++) {
+    for (i = 0; i < numa->num_domains; i++) {
         printk("%02u ", i);
-        for (j = 0; j < numa->num_regions; j++) {
-            printk("%02u ", *(numa->numa_matrix + i*numa->num_regions + j));
+        for (j = 0; j < numa->num_domains; j++) {
+            printk("%02u ", *(numa->numa_matrix + i*numa->num_domains + j));
         }
         printk("\n");
     }
 
 }
 
+struct mem_region *
+nk_get_base_region_by_num (unsigned num)
+{
+    struct nk_locality_info * loc = &(nautilus_info.sys.locality_info);
+
+    ASSERT(num < loc->num_domains);
+
+    struct list_head * first = loc->domains[num].regions.next;
+    /* TODO: add a better way to do this */
+    return list_entry(first, struct mem_region, entry);
+}
+
+struct mem_region * 
+nk_get_base_region_by_cpu (unsigned cpu)
+{
+    ASSERT(cpu >= 0);
+
+    struct nk_locality_info * loc = &(nk_get_nautilus_info()->sys.locality_info);
+    uint32_t domain_id = nk_get_nautilus_info()->sys.cpus[cpu]->numa_domain;
+    struct numa_domain * domain = &(loc->domains[domain_id]);
+
+    NUMA_DEBUG("CPU %u's domain is %u\n", cpu, domain_id);
+
+    /* TODO what to return if there are more regions? */
+    struct list_head * first = domain->regions.next;
+    return list_entry(first, struct mem_region, entry);
+}
+
+unsigned
+nk_my_numa_node (void)
+{
+    return per_cpu_get(numa_domain);
+}
+
+
+void
+nk_dump_numa_info (void)
+{
+    struct nk_locality_info * numa = &(nk_get_nautilus_info()->sys.locality_info);
+
+    printk("===================\n");
+    printk("     NUMA INFO:\n");
+    printk("===================\n");
+    
+    dump_numa_domains(numa);
+
+    dump_numa_matrix(numa);
+
+    printk("\n");
+    printk("======================\n");
+    printk("     END NUMA INFO:\n");
+    printk("======================\n");
+}
 
 static int 
 acpi_parse_slit(struct acpi_table_header *table, void * arg)
 {
     struct nk_locality_info * numa = (struct nk_locality_info*)arg;
     struct acpi_table_slit * slit = (struct acpi_table_slit*)table;
+    unsigned i;
 #ifdef NAUT_CONFIG_DEBUG_NUMA
-    uint64_t i,j;
+    unsigned j;
 
     NUMA_DEBUG("Parsing SLIT...\n");
     NUMA_DEBUG("Locality Count: %llu\n", slit->locality_count);
@@ -398,7 +571,21 @@ acpi_parse_slit(struct acpi_table_header *table, void * arg)
 
 #endif
 
-    numa->num_regions = slit->locality_count;
+    numa->num_domains = slit->locality_count;
+    numa->domains = malloc(sizeof(struct numa_domain) * numa->num_domains);
+    if (!numa->num_domains) {
+        ERROR_PRINT("Could not allocate NUMA domain structures\n");
+        return -1;
+    }
+
+    /* initialize each domain, we'll fill in it's memory regions soon */
+    memset(numa->domains, 0, sizeof(struct numa_domain) * numa->num_domains);
+
+    for (i = 0; i < numa->num_domains; i++) {
+        numa->domains[i].id = i;
+        INIT_LIST_HEAD(&(numa->domains[i].regions));
+    }
+
     numa->numa_matrix = malloc(slit->locality_count * slit->locality_count);
     if (!numa->numa_matrix) {
         ERROR_PRINT("Could not allocate NUMA matrix\n");
@@ -412,6 +599,17 @@ acpi_parse_slit(struct acpi_table_header *table, void * arg)
     return 0;
 }
 
+
+unsigned 
+nk_get_num_domains (void)
+{
+    struct nk_locality_info * l = &(nk_get_nautilus_info()->sys.locality_info);
+
+    return l->num_domains;
+}
+
+
+
 /*
  *
  * only called by BSP once
@@ -421,10 +619,14 @@ int
 nk_numa_init (void)
 {
     struct sys_info * sys = &(nk_get_nautilus_info()->sys);
+    unsigned i;
     NUMA_PRINT("Parsing ACPI NUMA information...\n");
 
+    /* SLIT: System Locality Information Table */
+    acpi_table_parse(ACPI_SIG_SLIT, acpi_parse_slit, &(sys->locality_info));
+
     /* SRAT: Static Resource Affinity Table */
-    if (!acpi_table_parse(ACPI_SIG_SRAT, acpi_parse_srat, NULL)) {
+    if (!acpi_table_parse(ACPI_SIG_SRAT, acpi_parse_srat, &(sys->locality_info))) {
         NUMA_DEBUG("Parsing SRAT_TYPE_X2APIC_CPU_AFFINITY table...\n");
 
         acpi_table_parse_srat(ACPI_SRAT_TYPE_X2APIC_CPU_AFFINITY,
@@ -446,10 +648,12 @@ nk_numa_init (void)
         NUMA_DEBUG("DONE.\n");
     }
 
-    /* SLIT: System Locality Information Table */
-    acpi_table_parse(ACPI_SIG_SLIT, acpi_parse_slit, &(sys->locality_info));
 
     NUMA_PRINT("DONE.\n");
+
+#ifdef NAUT_CONFIG_DEBUG_NUMA
+    nk_dump_numa_info();
+#endif
 
     return 0;
 }
