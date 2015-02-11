@@ -235,7 +235,7 @@ cli (void)
 }
 
 
-static inline uint64_t
+static inline uint64_t __attribute__((always_inline))
 rdtsc (void)
 {
     uint32_t lo, hi;
