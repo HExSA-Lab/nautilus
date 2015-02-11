@@ -7,13 +7,16 @@
 #include <nautilus/math.h>
 #include <nautilus/naut_assert.h>
 
-#define PING_VEC 0xf0
-#define PONG_VEC 0xf1
+#define PING_VEC 0xfb
+#define PONG_VEC 0xfa
 
-#define TRIALS 1000
+static volatile uint8_t done = 0;
+
+#define TRIALS 100
 void ipi_test_setup(void);
 void ipi_begin_test(cpu_id_t);
 
+static uint64_t diffs[TRIALS];
 
 static struct time_struct {
     uint64_t start_cycle;
@@ -21,7 +24,7 @@ static struct time_struct {
     uint64_t sum;
     uint64_t max;
     uint64_t min;
-    volatile unsigned done;
+    volatile uint64_t  done;
 } time;
 
 
@@ -43,12 +46,16 @@ time_end (void)
 }
 
 
-static int
+int
+ping (excp_entry_t * excp, excp_vec_t vec);
+int
 ping (excp_entry_t * excp, excp_vec_t vec)
 {
     struct apic_dev * apic = per_cpu_get(apic);
-    apic_ipi(apic, 0, PONG_VEC);
+    //printk("PING\n");
     IRQ_HANDLER_END();
+    apic_write(apic, APIC_REG_ICR2, 0 << APIC_ICR2_DST_SHIFT);
+    apic_write(apic, APIC_REG_ICR, APIC_DEL_MODE_FIXED | PONG_VEC);
     return 0;
 }
 
@@ -56,26 +63,10 @@ ping (excp_entry_t * excp, excp_vec_t vec)
 static int
 pong (excp_entry_t * excp, excp_vec_t vec)
 {
-    time_end();
 
     //printk("PONG\n");
-    //PAUSE_WHILE(atomic_cmpswap(time.done, 0, 1) != 0);
-    //time.done = 1;
-    //mbarrier();
-
-    while (1) {
-        cli();
-        if (__sync_bool_compare_and_swap((volatile unsigned*)&(time.done), 0, 1) == 0) {
-            sti();
-            break;
-        }
-        sti();
-        asm volatile("pause");
-    }
-
-
-    //ASSERT(!irqs_enabled());
     IRQ_HANDLER_END();
+    done = 1;
     return 0;
 }
 
@@ -94,7 +85,6 @@ ipi_test_setup (void)
     }
 }
 
-
 #define APIC_WRITE(apic, reg, val) \
     *(volatile uint32_t*)(apic->base_addr + (reg)) = (val);
 
@@ -103,63 +93,57 @@ ipi_begin_test (cpu_id_t cpu)
 {
     struct apic_dev * apic = per_cpu_get(apic);
     int i;
-    uint64_t avg;
-
-    if (cpu >= per_cpu_get(system)->num_cpus) {
-        ERROR_PRINT("IPI_TEST: invalid cpu number (%u)\n", cpu);
-        return;
-    }
-
-    memset(&time, 0, sizeof(time));
-    time.min = ULONG_MAX;
+    uint64_t diff = 0;
+    uint64_t avg = 0;
+    uint64_t max = 0;
+    uint64_t min = ULLONG_MAX;
+    uint64_t sum = 0;
 
     /* IPI the remote core (1 for now) */
     printk("Starting IPI PING-PONG between core %u and core %u \n", my_cpu_id(), cpu);
 
     for (i = 0; i < TRIALS; i++) {
-        uint64_t diff;
-        time_start();
-        asm volatile ("cli");
-        APIC_WRITE(apic, APIC_REG_ICR2, cpu << APIC_ICR2_DST_SHIFT);
-        APIC_WRITE(apic, APIC_REG_ICR, PING_VEC | ICR_LEVEL_ASSERT);
-        asm volatile ("sti");
+    
+        uint64_t end = 0;
+        uint64_t start = 0;
+        uint64_t end_send = 0;
 
-        while (1) {
-            cli();
-            if (*(volatile unsigned*)&(time.done) == 1) {
-                sti();
-                break;
-            }
-            sti();
-            asm volatile ("pause");
-        }
+        apic_write(apic, APIC_REG_ESR, 0);
 
-        if (time.end_cycle < time.start_cycle) {
+        start = rdtsc();
+        apic_write(apic, APIC_REG_ICR2, 0 | (cpu << APIC_ICR2_DST_SHIFT));
+        apic_write(apic, APIC_REG_ICR, 0 | APIC_DEL_MODE_FIXED | PING_VEC);
+        end_send = rdtsc();
+
+        while (!done);
+
+        end = rdtsc();
+
+        if (start > end) {
             ERROR_PRINT("Strangeness occured in cycle count\n");
         }
 
-        diff = time.end_cycle - time.start_cycle;
-        if (diff > time.max) {
-            time.max = diff;
+        diffs[i] = end - start;
+
+        if (diffs[i] > max) {
+            max = diffs[i];
         }
-        if (diff < time.min) {
-            time.min = diff;
+        if (diffs[i] < min) {
+            min = diffs[i];
         }
 
-        time.sum += diff; 
+        sum += diffs[i];
 
-        time.end_cycle = 0;
-        time.start_cycle = 0;
-        time.done = 0;
+        done = 0;
     }
 
-    avg = time.sum / TRIALS;
+    avg = sum / TRIALS;
     
     printk("PING-PONG complete, IPI latency: %llu cycles, (%u trials, min=%llu, max=%llu)\n",
            avg,
            TRIALS,
-           time.min,
-           time.max);
+           min,
+           max);
 }
 
 
