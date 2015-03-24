@@ -3,7 +3,7 @@ mainmenu "Nautilus Kernel Configuration"
 
 config USE_NAUT_BUILTINS
     bool "Use GCC Built-in Utility Functions"
-    default n
+    default y
     help
       Compiles the Nuatilus kernel with built-in functions
       like __builtin_strcpy etc., as opposed to Nautilus

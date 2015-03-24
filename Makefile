@@ -500,6 +500,7 @@ endif
 # Update libs, etc based on NAUT_CONFIG_TOOLCHAIN_ROOT 
 #
 #
+ifneq ($(NAUT_CONFIG_CXX_SUPPORT)a,a)
 ifeq ($(NAUT_CONFIG_TOOLCHAIN_ROOT)a,a)
 ifeq ($(CROSS_COMPILE)a, a)
 # guess where the std libs are 
@@ -510,6 +511,7 @@ endif
 else
   libs-y += $(NAUT_CONFIG_TOOLCHAIN_ROOT)/lib64/libstdc++.a
 endif
+endif # NAUT_CONFIG_CXX_SUPPORT
 
                            #$(NAUT_CONF_TOOLCHAIN_ROOT)/lib64/libstdc++.a
 			   #-lstdc++ 

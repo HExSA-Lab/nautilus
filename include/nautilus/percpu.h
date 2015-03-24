@@ -33,7 +33,7 @@ struct cpu;
 #define __per_cpu_get(var, n)                                        \
     ({                                                               \
     typeof(((struct cpu*)0)->var) __r;                             \
-    asm volatile (__xpand_str(__movop_##n) "  " __xpand_str(__percpu_seg)":%p[_o], %[_r]"  \
+    asm volatile (__xpand_str(__movop_##n) "  " __xpand_str(__percpu_seg)":%P[_o], %[_r]"  \
                   : [_r] "=r" (__r)                                  \
                   : [_o] "n" (offsetof(struct cpu, var)));           \
     __r;                                                             \
@@ -65,8 +65,8 @@ struct cpu;
 
 #define __per_cpu_put(var, newval, n) \
 do {\
-     asm volatile (__xpand_str(__movop_##n) " "  __xpand_str(__percpu_seg)":%p[_o], " __xpand_str(__areg_##n) ";\n" \
-                   "1:\n\t " __xpand_str(__cmpop_##n) " %[newv],"  __xpand_str(__percpu_seg) ":%p[_o];\n"     \
+     asm volatile (__xpand_str(__movop_##n) " "  __xpand_str(__percpu_seg)":%P[_o], " __xpand_str(__areg_##n) ";\n" \
+                   "1:\n\t " __xpand_str(__cmpop_##n) " %[newv],"  __xpand_str(__percpu_seg) ":%P[_o];\n"     \
                    "\tjnz 1b;\n" \
                    : /* no outputs */ \
                    : [_o] "n" (offsetof(struct cpu, var)), \
