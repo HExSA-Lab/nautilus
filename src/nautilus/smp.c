@@ -263,7 +263,7 @@ find_mp_pointer (void)
      * if not, this will fail 
      */
 
-    while (cursor != (char*)(BASE_MEM_LAST_KILO+PAGE_SIZE)) {
+    while (cursor <= (char*)(BASE_MEM_LAST_KILO+PAGE_SIZE)) {
 
         if (strncmp(cursor, "_MP_", 4) == 0) {
             return (struct mp_float_ptr_struct*)cursor;
@@ -274,7 +274,7 @@ find_mp_pointer (void)
 
     cursor = (char*)BIOS_ROM_BASE;
 
-    while (cursor != (char*)BIOS_ROM_END) {
+    while (cursor <= (char*)BIOS_ROM_END) {
 
         if (strncmp(cursor, "_MP_", 4) == 0) {
             return (struct mp_float_ptr_struct*)cursor;
