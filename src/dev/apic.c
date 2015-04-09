@@ -448,6 +448,37 @@ lvt_stringify (uint32_t entry, char *buf)
 }
 
 
+static inline uint8_t 
+amd_has_ext_lvt (struct apic_dev * apic)
+{
+    uint32_t ver = apic_read(apic, APIC_REG_LVR);
+
+    if (APIC_HAS_EXT_LVT(ver)) {
+        return 1;
+    }
+
+    return 0;
+}
+
+
+static void
+amd_setup_ext_lvt (struct apic_dev * apic)
+{
+    if (APIC_EXFR_GET_LVT(apic_read(apic, APIC_REG_EXFR))) {
+
+        int i;
+        for (i = 0; i < APIC_EXFR_GET_LVT(apic_read(apic, APIC_REG_EXFR)); i++) {
+
+            /* we assign a bogus vector to extended LVT entries */
+            apic_write(apic, APIC_REG_EXTLVT(i), 0 | 
+                    APIC_LVT_DISABLED | 
+                    APIC_EXT_LVT_DUMMY_VEC);
+        }
+    }
+
+}
+
+
 static void
 apic_dump (struct apic_dev * apic)
 {
@@ -473,7 +504,7 @@ apic_dump (struct apic_dev * apic)
         apic->base_addr
     );
 
-    if (nk_is_amd()) {
+    if (nk_is_amd() && amd_has_ext_lvt(apic)) {
         APIC_DEBUG(
                 "  EXT (AMD-only): 0x%08x (Ext LVT Count=%u, Ext APIC ID=%u, Specific EOI=%u, Int Enable Reg=%u)\n",
                 apic_read(apic, APIC_REG_EXFR),
@@ -633,6 +664,7 @@ apic_dump (struct apic_dev * apic)
 }
 
 
+
 void
 apic_init (struct cpu * core)
 {
@@ -692,17 +724,11 @@ apic_init (struct cpu * core)
     apic_write(apic, APIC_REG_LVTPC,   APIC_DEL_MODE_FIXED | APIC_LVT_DISABLED | APIC_PC_INT_VEC);    // disable perf cntr interrupts
     apic_write(apic, APIC_REG_LVTTHMR, APIC_DEL_MODE_FIXED | APIC_LVT_DISABLED | APIC_THRML_INT_VEC); // disable thermal interrupts
 
-    /* we have AMD extended LVT entries to deal with */
-    if (nk_is_amd() && APIC_EXFR_GET_LVT(apic_read(apic, APIC_REG_EXFR))) {
-        int i;
-        for (i = 0; i < APIC_EXFR_GET_LVT(apic_read(apic, APIC_REG_EXFR)); i++) {
-
-            /* we assign a bogus vector to extended LVT entries */
-            apic_write(apic, APIC_REG_EXTLVT(i), 0 | 
-                    APIC_LVT_DISABLED | 
-                    APIC_EXT_LVT_DUMMY_VEC);
-        }
+    /* do we have AMD extended LVT entries to deal with */
+    if (nk_is_amd() && amd_has_ext_lvt(apic)) {
+        amd_setup_ext_lvt(apic);
     }
+            
 
     /* mask 8259a interrupts */
     apic_write(apic, APIC_REG_LVT0, APIC_DEL_MODE_EXTINT  | APIC_LVT_DISABLED);
