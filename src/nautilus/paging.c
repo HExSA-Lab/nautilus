@@ -286,12 +286,14 @@ int
 nk_free_pages (void * addr, unsigned num)
 {
     struct nk_mem_info * mem = &(nk_get_nautilus_info()->sys.mem);
+    int order                = get_count_order(num);
     uint_t pgnum             = PADDR_TO_PAGE((addr_t)addr);
 
     ASSERT((unsigned long)addr % PAGE_SIZE == 0);
     ASSERT(!(num & (num-1)));
 
-    bitmap_release_region(mem->page_map, pgnum, num);
+    bitmap_release_region(mem->page_map, pgnum, order);
+
     return 0;
 }
 
@@ -315,7 +317,7 @@ nk_alloc_pages (unsigned n)
     int p                    = bitmap_find_free_region(mem->page_map, mem->npages, order);
 
     if (p < 0) {
-        //panic("Could not find %u free pages\n", n);
+        panic("Could not find %u free pages\n", n);
         return (addr_t)NULL;
     } 
 
@@ -458,6 +460,27 @@ nk_reserve_page (addr_t paddr)
 {
     return nk_reserve_pages(paddr, 1);
 }
+
+
+uint8_t 
+nk_page_free (addr_t paddr)
+{
+    struct nk_mem_info * mem = &(nk_get_nautilus_info()->sys.mem);
+    unsigned pnum = PADDR_TO_PAGE(paddr);
+    ASSERT(pnum < mem->npages);
+    return !(mem->page_map[pnum / BITS_PER_LONG] & (1UL << (pnum % BITS_PER_LONG)));
+}
+
+
+uint8_t
+nk_page_allocated (addr_t paddr)
+{
+    struct nk_mem_info * mem = &(nk_get_nautilus_info()->sys.mem);
+    unsigned pnum = PADDR_TO_PAGE(paddr);
+    ASSERT(pnum < mem->npages);
+    return !!(mem->page_map[pnum / BITS_PER_LONG] & (1UL << (pnum % BITS_PER_LONG)));
+}
+
 
 
 /*

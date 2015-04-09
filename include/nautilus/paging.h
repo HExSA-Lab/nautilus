@@ -50,6 +50,8 @@ int nk_free_page(addr_t addr);
 int nk_reserve_pages(addr_t paddr, unsigned n);
 int nk_reserve_page(addr_t paddr);
 int nk_reserve_range(addr_t start, addr_t end);
+uint8_t nk_page_free(addr_t paddr);
+uint8_t nk_page_allocated(addr_t paddr);
 
 /* hooks */
 int nk_free_pages(void * addr, unsigned num);
