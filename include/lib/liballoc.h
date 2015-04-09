@@ -19,12 +19,15 @@ typedef	unsigned long size_t;
 #endif
 
 
+
 #ifndef	NULL
 #define NULL		0
 #endif
 
 #endif
 
+
+#define MALLOC_DEFAULT_ALIGN 16
 
 
 /** This is a boundary tag which is prepended to the
@@ -44,6 +47,14 @@ struct	boundary_tag
 	
 	struct boundary_tag *next;	//< Linked list info.
 	struct boundary_tag *prev;	//< Linked list info.
+
+    uint8_t padding; // how many bytes to pad? 
+
+    // KCH: the last byte before the actual returned memory is the 
+    // number of pad bytes. If there is no padding, free() will find that 
+    // there are no padding bytes by reading this field, otherwise it will
+    // read from the last byte of padding to find the number of pad cells
+    uint8_t pad_byte;
 };
 
 
