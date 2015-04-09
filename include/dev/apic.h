@@ -67,6 +67,7 @@ extern "C" {
 #define APIC_REG_LVR      0x30
 #define     APIC_LVR_VER(x) ((x) & 0xffu)
 #define     APIC_LVR_MAX(x) (((x) >> 16) & 0xffu)
+#define     APIC_HAS_EXT_LVT(x) (x & (1U<<31))
 #define APIC_REG_TPR      0x80
 #define APIC_REG_APR      0x90
 #define APIC_REG_PPR      0xa0
