@@ -13,7 +13,6 @@ obj-y += \
 	fpu.o \
 	spinlock.o \
 	mcslock.o \
-	ticketlock.o \
 	rwlock.o \
 	condvar.o \
 	hashtable.o \
@@ -33,3 +32,4 @@ obj-y += \
 	libccompat.o 
 
 obj-$(NAUT_CONFIG_PROFILE) += instrument.o
+obj-$(NAUT_CONFIG_USE_TICKETLOCKS) += ticketlock.o
