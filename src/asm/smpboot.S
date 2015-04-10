@@ -89,7 +89,6 @@ ENTRY(init_smp_boot)
     callq *%rsi
 
     l0:
-        pause
         jmp l0
 
 
