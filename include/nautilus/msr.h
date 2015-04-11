@@ -8,9 +8,11 @@ extern "C" {
 #include <nautilus/naut_types.h>
 
 
-#define IA32_MSR_EFER 0xc0000080
-#define IA32_MISC_ENABLES 0x1a0
-
+#define IA32_MSR_EFER      0xc0000080
+#define IA32_MSR_APIC_BASE 0x1b
+#define     MSR_APIC_IS_BSP(x)   (x & 0x100)
+#define     MSR_APIC_GET_ADDR(x) ((x >> 12) & 0xfffff) 
+#define IA32_MISC_ENABLES  0x1a0
 
 #define MSR_FS_BASE 0xc0000100
 #define MSR_GS_BASE 0xc0000101

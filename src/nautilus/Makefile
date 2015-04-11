@@ -13,6 +13,7 @@ obj-y += \
 	fpu.o \
 	spinlock.o \
 	mcslock.o \
+	ticketlock.o \
 	rwlock.o \
 	condvar.o \
 	hashtable.o \
@@ -24,12 +25,17 @@ obj-y += \
 	barrier.o \
 	backtrace.o \
 	cpu.o \
-	mwait.o \
 	acpi.o \
 	shutdown.o \
 	numa.o \
-	nautilus.o \
 	libccompat.o 
 
 obj-$(NAUT_CONFIG_PROFILE) += instrument.o
-obj-$(NAUT_CONFIG_USE_TICKETLOCKS) += ticketlock.o
+
+ifdef NAUT_CONFIG_XEON_PHI
+obj-y += xeon_phi_nautilus.o \
+		 sfi.o
+else
+obj-y += nautilus.o \
+		 mwait.o
+endif

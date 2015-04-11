@@ -402,6 +402,7 @@ apic_timer_setup (struct apic_dev * apic, uint32_t quantum)
     /* reset timer to our count down value */
     apic_write(apic, APIC_REG_TMICT, 0xffffffff);
 
+/* TODO: need to calibrate timers with TSC on the Phi */
     while (!(inb(KB_CTRL_PORT_B) & 0x20));
 
     /* disable the timer */
@@ -711,9 +712,11 @@ apic_init (struct cpu * core)
     apic->version   = apic_get_version(apic);
     apic->id        = apic_get_id(apic);
 
+#ifndef NAUT_CONFIG_XEON_PHI
     if (apic->version < 0x10 || apic->version > 0x15) {
         panic("Unsupported APIC version (0x%1x)\n", (unsigned)apic->version);
     }
+#endif
 
     val = apic_read(apic, APIC_REG_LDR) & ~APIC_LDR_MASK;
     val |= SET_APIC_LOGICAL_ID(0);
@@ -779,7 +782,9 @@ apic_init (struct cpu * core)
     apic_sw_enable(apic);
 
     /* pass in quantum as milliseconds */
+#ifndef NAUT_CONFIG_XEON_PHI
     apic_timer_setup(apic, 1000/NAUT_CONFIG_HZ);
+#endif
 
     apic_dump(apic);
 }

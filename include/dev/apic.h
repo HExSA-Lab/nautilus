@@ -58,8 +58,13 @@ extern "C" {
 
 
 
+#ifdef NAUT_CONFIG_XEON_PHI
+#define APIC_ID_SHIFT 16
+#define APIC_ICR2_DST_SHIFT 16
+#else
 #define APIC_ID_SHIFT 24
 #define APIC_ICR2_DST_SHIFT 24
+#endif
 
 
 #define APIC_REG_ID       0x20
@@ -128,10 +133,21 @@ extern "C" {
 #define APIC_DFR_FLAT     0xfffffffful
 #define APIC_DFR_CLUSTER  0x0ffffffful
 
-#define APIC_LDR_MASK       (0xffu<<24)                                                                             
+#ifdef NAUT_CONFIG_XEON_PHI
+#define APIC_LDR_MASK       (0xffu<<16)
+#else
+#define APIC_LDR_MASK       (0xffu<<24)
+#endif
+
+#ifdef NAUT_CONFIG_XEON_PHI
+#define GET_APIC_LOGICAL_ID(x)  (((x)>>16)&0xffffu)
+#define SET_APIC_LOGICAL_ID(x)  (((x)<<16))
+#define APIC_ALL_CPUS       0xffffu
+#else
 #define GET_APIC_LOGICAL_ID(x)  (((x)>>24)&0xffu)
 #define SET_APIC_LOGICAL_ID(x)  (((x)<<24))
 #define APIC_ALL_CPUS       0xffu
+#endif
 
 
 #define APIC_TIMER_DISABLE  0x10000

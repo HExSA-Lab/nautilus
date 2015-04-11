@@ -27,6 +27,8 @@
 /* suppress uninitialized var warning without generating code */
 #define uninitialized_var(x) x = x
 
+#ifdef NAUT_CONFIG_LEGION_RT
+
 typedef int __m64 __attribute__ ((__vector_size__ (8), __may_alias__));
 typedef float __v4sf __attribute__ ((__vector_size__ (16)));
 typedef float __m128 __attribute__ ((__vector_size__ (16), __may_alias__));
@@ -138,4 +140,5 @@ _mm_and_si128 (__m128i __A, __m128i __B)
 {
   return (__m128i)__builtin_ia32_pand128 ((__v2di)__A, (__v2di)__B);
 }
+#endif
 #endif

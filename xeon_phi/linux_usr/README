@@ -1,0 +1,15 @@
+To boot Nautilus on the Phi, first compile Nautilus for it by running
+
+$> make menuconfig
+
+then in the platform selection, select the Xeon Phi
+
+Then use the phi_console utility to boot it. Run phi_console with no 
+options to get a help screen. Here's an example of using it to boot
+with the weever bootloader
+
+./phi_console -m 1 -b /sbin/weever -k nautilus.bin
+
+This boots the phi using Phi card 1 with the Weever bootloader and Nautilus as the kernel
+
+Instructions on how to navigate using the console appear on the screen

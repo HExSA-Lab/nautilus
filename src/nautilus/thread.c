@@ -1274,17 +1274,12 @@ nk_sched_init_ap (void)
     }
     memset(me, 0, sizeof(nk_thread_t));
 
-    //my_stack = malloc(PAGE_SIZE); 
-    my_stack = (void*)nk_alloc_page_cpu(id);
+    //my_stack = (void*)nk_alloc_page_cpu(id);
+    my_stack = malloc(PAGE_SIZE); 
     if (!my_stack) {
         ERROR_PRINT("Couldn't allocate new stack for CPU (%u)\n", id);
         goto out_err2;
     }
-    printk("Allocated thread stack for CPU %u in NUMA domain %u (addr=%p)\n",
-            id,
-            per_cpu_get(numa_domain),
-            my_stack);
-            
     memset(my_stack, 0, PAGE_SIZE);
 
     /* we have no parent thread... */
@@ -1336,7 +1331,7 @@ int
 nk_sched_init (void) 
 {
     struct nk_sched_state * sched = NULL;
-    struct cpu * my_cpu = nk_get_nautilus_info()->sys.cpus[0];
+    struct cpu * my_cpu = nk_get_nautilus_info()->sys.cpus[nk_get_nautilus_info()->sys.bsp_id];
     nk_thread_t * main = NULL;
     int flags;
 
@@ -1397,7 +1392,7 @@ nk_sched_init (void)
     enqueue_thread_on_tlist(main);
 
     // the idle thread
-    nk_thread_start(idle, NULL, NULL, 0, TSTACK_DEFAULT, NULL, 0);
+    nk_thread_start(idle, NULL, NULL, 0, TSTACK_DEFAULT, NULL, my_cpu->id);
 
     irq_enable_restore(flags);
 
@@ -1425,7 +1420,7 @@ tls_dummy (void * in, void ** out)
     unsigned i;
     nk_tls_key_t * keys = NULL;
 
-    printk("Beginning test of thread local storage...\n");
+    //printk("Beginning test of thread local storage...\n");
     keys = malloc(sizeof(nk_tls_key_t)*TLS_MAX_KEYS);
     if (!keys) {
         ERROR_PRINT("could not allocate keys\n");

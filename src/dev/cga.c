@@ -13,10 +13,127 @@ static struct term_info {
 } term;
 
 
+static uint16_t 
+make_vgaentry (char c, uint8_t color)
+{
+    uint16_t c16 = c;
+    uint16_t color16 = color;
+    return c16 | color16 << 8;
+}
+
+
+/* BEGIN XEON PHI SPECIFIC */
+
+#ifdef NAUT_CONFIG_XEON_PHI
+
+#define PHI_FB_CTRL_REG_ADDR 0xb8fa0
+
+#define OUTPUT_AVAIL_REG_OFFSET 0x0
+#define OUTPUT_DRAWN_REG_OFFSET 0x1
+#define CHAR_REG_OFFSET         0x2
+#define CURSOR_REG_OFFSET       0x3
+#define LINE_REG_OFFSET         0x4
+
+typedef enum {
+    TYPE_NO_UPDATE = 0,
+    TYPE_CHAR_DRAWN,
+    TYPE_LINE_DRAWN,
+    TYPE_CURSOR_UPDATE,
+    TYPE_SCREEN_REDRAW,
+    TYPE_CONSOLE_SHUTDOWN,
+    TYPE_SCROLLUP,
+    TYPE_INVAL
+} update_type_t;
+
+static inline uint32_t
+phi_cons_read_reg(uint32_t off)
+{
+   uint32_t* addr = (uint32_t*)PHI_FB_CTRL_REG_ADDR;
+   return *(volatile uint32_t*)(addr+off);
+}
+
+
+static inline void 
+phi_cons_write_reg (uint32_t off, uint32_t val)
+{
+    uint32_t* addr = (uint32_t*)PHI_FB_CTRL_REG_ADDR;
+    *(volatile uint32_t*)(addr+off) = val;
+}
+
+
+static void
+wait_for_out_cmpl (void)
+{
+    /* wait for host to tell us that the char is in the screen */
+    while (phi_cons_read_reg(OUTPUT_DRAWN_REG_OFFSET) == 0);
+
+    phi_cons_write_reg(OUTPUT_DRAWN_REG_OFFSET, 0);
+}
+
+
+static void
+phi_notify_redraw (void)
+{
+    phi_cons_write_reg(OUTPUT_AVAIL_REG_OFFSET, TYPE_SCREEN_REDRAW);
+
+    wait_for_out_cmpl();
+}
+
+
+/* tell host to save the first line in its buffer if it needs to */
+static void
+phi_notify_scrollup (void)
+{
+    phi_cons_write_reg(OUTPUT_AVAIL_REG_OFFSET, TYPE_SCROLLUP);
+
+    wait_for_out_cmpl();
+}
+
+
+static void 
+phi_notify_char_write (uint16_t x, uint16_t y)
+{
+    uint32_t coords = (uint32_t)(x | y << 16);
+
+    /* where did we draw the char? */
+    phi_cons_write_reg(CHAR_REG_OFFSET, coords);
+
+    /* we have output ready to be drawn */
+    phi_cons_write_reg(OUTPUT_AVAIL_REG_OFFSET, TYPE_CHAR_DRAWN);
+
+    wait_for_out_cmpl();
+}
+
+static void 
+phi_notify_line_draw (unsigned row)
+{
+    /* which row did we write to? */
+    phi_cons_write_reg(LINE_REG_OFFSET, row);
+
+    /* we have output ready to be drawn */
+    phi_cons_write_reg(OUTPUT_AVAIL_REG_OFFSET, TYPE_LINE_DRAWN);
+
+    wait_for_out_cmpl();
+}
+
+static void 
+phi_write_fb_and_notify (uint16_t x, uint16_t y, char c, uint8_t color)
+{
+    const size_t index = y * VGA_WIDTH + x;
+    term.buf[index] = make_vgaentry(c, color);
+    phi_notify_char_write(x, y);
+}
+
+#endif /* !NAUT_CONFIG_XEON_PHI */
+    
+
+/* END XEON PHI SPECIFIC */
+
+
 static void
 hide_cursor (void)
 {
-    outw(0x200a, 0x3d4);
+    //outw(0x200a, 0x3d4);
 }
  
  
@@ -26,15 +143,6 @@ make_color (enum vga_color fg, enum vga_color bg)
     return fg | bg << 4;
 }
 
- 
-static uint16_t 
-make_vgaentry (char c, uint8_t color)
-{
-    uint16_t c16 = c;
-    uint16_t color16 = color;
-    return c16 | color16 << 8;
-}
- 
 
 void term_setpos (size_t x, size_t y)
 {
@@ -70,6 +178,10 @@ term_init (void)
             term.buf[index] = make_vgaentry(' ', term.color);
         }
     }
+
+#ifdef NAUT_CONFIG_XEON_PHI
+    phi_notify_redraw();
+#endif
 
     hide_cursor();
 }
@@ -127,6 +239,11 @@ term_clear (void)
     for (i = 0; i < VGA_HEIGHT*VGA_WIDTH; i++) {
         term.buf[i] = make_vgaentry(' ', term.color);
     }
+
+#ifdef NAUT_CONFIG_XEON_PHI
+    phi_notify_redraw();
+#endif
+
     spin_unlock_irq_restore(&(term.lock), flags);
 }
 
@@ -140,6 +257,10 @@ term_scrollup (void)
     int lpl = (VGA_WIDTH*2)/sizeof(long);
     long * pos = (long*)term.buf;
     
+#ifdef NAUT_CONFIG_XEON_PHI
+    phi_notify_scrollup();
+#endif
+
     for (i = 0; i < n; i++) {
         *pos = *(pos + lpl);
         ++pos;
@@ -149,6 +270,11 @@ term_scrollup (void)
     for (i = 0; i < VGA_WIDTH; i++) {
         term.buf[index++] = make_vgaentry(' ', term.color);
     }
+
+#ifdef NAUT_CONFIG_XEON_PHI
+    phi_notify_redraw();
+#endif
+
 }
 
 
@@ -159,6 +285,11 @@ putchar (char c)
     
     if (c == '\n') {
         term.col = 0;
+
+#ifdef NAUT_CONFIG_XEON_PHI
+        phi_notify_line_draw(term.row);
+#endif
+
         if (++term.row == VGA_HEIGHT) {
             term_scrollup();
             term.row--;
@@ -171,6 +302,9 @@ putchar (char c)
 
     if (++term.col == VGA_WIDTH) {
         term.col = 0;
+#ifdef NAUT_CONFIG_XEON_PHI
+        phi_notify_line_draw(term.row);
+#endif
         if (++term.row == VGA_HEIGHT) {
             term_scrollup();
             term.row--;

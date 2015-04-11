@@ -11,8 +11,8 @@ config USE_NAUT_BUILTINS
 
 config MAX_CPUS
 	int "Maximum Number of CPUs"
-	range 1 255
-	default "64"
+	range 1 2048
+	default "256"
 	help 
 	  Specifies the maximum number of hardware CPUs supported by Nautilus 
 	  For uniprocessor environments, set this to 1
@@ -124,6 +124,13 @@ menu Debugging
       help
         Turn on debug prints for SMP code
 
+    config DEBUG_SFI
+      bool "Debug SFI"
+      depends on DEBUG_PRINTS
+      default n
+      help 
+        Turn on debug prints for SFI platform firmware code
+
     config DEBUG_CXX
       bool "Debug C++"
       depends on DEBUG_PRINTS
@@ -162,6 +169,22 @@ menu Debugging
 
     
 endmenu
+
+menu "Platform Options"
+    choice
+        prompt "Target Selection"
+        default X86_64_HOST
+
+        config X86_64_HOST
+            bool "x86_64 Host"
+
+        config XEON_PHI
+            bool "Intel Xeon Phi Accelerator"
+
+    endchoice
+
+endmenu
+
 
 menu "Parallel Run-time Integration"
 

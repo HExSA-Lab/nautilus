@@ -40,7 +40,11 @@ nk_ticket_unlock (nk_ticket_lock_t * l)
 {
     NK_PROFILE_ENTRY();
 
+#ifndef NAUT_CONFIG_XEON_PHI
     asm volatile ("mfence\n\t"
+#else 
+    asm volatile (
+#endif
                   "addw $1, %[_ticket]"
                   : /* no outputs */
                   : [_ticket] "m" (l->lock.ticket)

@@ -1,6 +1,6 @@
 CXXFLAGS += -DSHARED_LOWLEVEL -DCOMPILE_TIME_MIN_LEVEL=LEVEL_DEBUG  -D__LEGION__
 #-DDEBUG_LOWLEVEL -DDEBUG_HIGHLEVEL 
-obj-y += ipi.o benchmark.o
+obj-$(NAUT_CONFIG_X86_64_HOST) += benchmark.o ipi.o
 obj-$(NAUT_CONFIG_LEGION_RT) += test_legion.o \
 								circuit.o \
 								circuit_cpu.o \

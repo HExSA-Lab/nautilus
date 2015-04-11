@@ -569,7 +569,11 @@ nk_paging_init (struct nk_mem_info * mem, ulong_t mbd)
     ulong_t page_dir_end  = 0;
 
     /* how much memory do we have in the machine? */
+#ifdef NAUT_CONFIG_XEON_PHI 
+    mem->phys_mem_avail = (0x5d0000ull * 1024ull);
+#else
     mem->phys_mem_avail = multiboot_get_phys_mem(mbd);
+#endif
 
     if (mem->phys_mem_avail < MEM_1GB) {
         panic("Not enough memory to run Nautilus!\n");
@@ -593,6 +597,7 @@ nk_paging_init (struct nk_mem_info * mem, ulong_t mbd)
 
     memset((void*)mem->pm_start, 0, mem->pm_end - mem->pm_start);
 
+#ifndef NAUT_CONFIG_XEON_PHI
     // set kernel memory + page directories + page frame bitmap as reserved
     printk("Reserving kernel memory %p - %p (page num %d to %d)\n", kernel_start, mem->pm_end-1,PADDR_TO_PAGE(kernel_start), PADDR_TO_PAGE(mem->pm_end-1));
     nk_reserve_range(kernel_start, mem->pm_end);
@@ -603,12 +608,12 @@ nk_paging_init (struct nk_mem_info * mem, ulong_t mbd)
     DEBUG_PRINT("Reserving BDA and Real Mode IVT\n");
     nk_reserve_range((addr_t)0x0, (addr_t)0x4ff);
 
-    DEBUG_PRINT("Reserving Video Memory\n");
-    nk_reserve_range((addr_t)0xa0000, (addr_t)0xfffff);
-
     DEBUG_PRINT("Reserving APIC/IOAPIC\n");
     
     /* TODO: these shouldn't be hardcoded */
     nk_reserve_range((addr_t)0xfec00000, (addr_t)0xfedfffff);
+#endif
 
+    DEBUG_PRINT("Reserving Video Memory\n");
+    nk_reserve_range((addr_t)0xa0000, (addr_t)0xfffff);
 }

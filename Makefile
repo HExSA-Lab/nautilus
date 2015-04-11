@@ -6,7 +6,6 @@ NAME=Nautilus
 
 
 ISO_NAME:=nautilus.iso
-LD_SCRIPT:=link/nautilus.ld
 BIN_NAME:=nautilus.bin
 
 
@@ -280,13 +279,14 @@ include  $(srctree)/scripts/Kbuild.include
 AS		= $(CROSS_COMPILE)as
 LD		= $(CROSS_COMPILE)ld
 CC		= $(CROSS_COMPILE)gcc
-CPP		= $(CC) -E
 CXX             = $(CROSS_COMPILE)g++
 AR		= $(CROSS_COMPILE)ar
 NM		= $(CROSS_COMPILE)nm
 STRIP		= $(CROSS_COMPILE)strip
 OBJCOPY		= $(CROSS_COMPILE)objcopy
 OBJDUMP		= $(CROSS_COMPILE)objdump
+
+CPP		= $(CC) -E
 GRUBMKRESCUE    = $(CROSS_COMPILE)grub-mkrescue
 AWK		= awk
 GENKSYMS	= scripts/genksyms/genksyms
@@ -495,6 +495,17 @@ else
 include/autoconf.h: ;
 endif
 
+ifdef NAUT_CONFIG_XEON_PHI
+AS		= $(CROSS_COMPILE)k1om-mpss-linux-as
+LD		= $(CROSS_COMPILE)k1om-mpss-linux-ld
+CC		= $(CROSS_COMPILE)k1om-mpss-linux-gcc
+CXX             = $(CROSS_COMPILE)k1om-mpss-linux-g++
+AR		= $(CROSS_COMPILE)k1om-mpss-linux-ar
+NM		= $(CROSS_COMPILE)k1om-mpss-linux-nm
+STRIP		= $(CROSS_COMPILE)k1om-mpss-linux-strip
+OBJCOPY		= $(CROSS_COMPILE)k1om-mpss-linux-objcopy
+OBJDUMP		= $(CROSS_COMPILE)k1om-mpss-linux-objdump
+endif
 
 #
 # Update libs, etc based on NAUT_CONFIG_TOOLCHAIN_ROOT 
@@ -592,6 +603,12 @@ libs-y		:= $(patsubst %/, %/built-in.o, $(libs-y))
 
 
 nautilus := $(core-y) $(libs-y) 
+
+ifdef NAUT_CONFIG_XEON_PHI
+LD_SCRIPT:=link/nautilus.ld.xeon_phi
+else
+LD_SCRIPT:=link/nautilus.ld
+endif
 
 
 # Rule to link nautilus - also used during CONFIG_CONFIGKALLSYMS

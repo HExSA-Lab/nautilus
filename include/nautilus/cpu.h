@@ -85,7 +85,11 @@ struct nk_regs {
         asm volatile("pause"); \
     } 
 
+#ifndef NAUT_CONFIG_XEON_PHI
 #define mbarrier()    asm volatile("mfence":::"memory")
+#else
+#define mbarrier()
+#endif
 
 #define BARRIER_WHILE(x) \
     while ((x)) { \
@@ -243,6 +247,9 @@ rdtsc (void)
     return lo | ((uint64_t)(hi) << 32);
 }
 
+#ifdef NAUT_CONFIG_XEON_PHI 
+#define rdtscp() rdtsc
+#else
 
 static inline uint64_t
 rdtscp (void)
@@ -251,6 +258,8 @@ rdtscp (void)
     asm volatile("rdtscp" : "=a"(lo), "=d"(hi));
     return lo | ((uint64_t)(hi) << 32);
 }
+
+#endif
 
 
 static inline uint64_t 
@@ -289,11 +298,22 @@ static inline void io_delay(void)
 }
 
 
+#ifdef NAUT_CONFIG_XEON_PHI
+/* TODO: assuming 1.1GHz here... */
+static void udelay (uint_t n) {
+    uint32_t cycles = n * 1100;
+    asm volatile ("movl %0, %%eax; delay %%eax;"
+                : /* no output */
+                : "r" (cycles)
+                : "eax");
+}
+#else
 static void udelay(uint_t n) {
     while (n--){
         io_delay();
     }
 }
+#endif
 
     
 #ifdef __cplusplus 

@@ -18,6 +18,10 @@
 #include <dev/timer.h>
 #include <lib/liballoc.h>
 
+#ifdef NAUT_CONFIG_XEON_PHI
+#include <nautilus/sfi.h>
+#endif
+
 #ifndef NAUT_CONFIG_DEBUG_SMP
 #undef DEBUG_PRINT
 #define DEBUG_PRINT(fmt, args...)
@@ -26,10 +30,11 @@
 #define SMP_DEBUG(fmt, args...) DEBUG_PRINT("SMP: " fmt, ##args)
 
 
-static struct cpu init_cpus[NAUT_CONFIG_MAX_CPUS];
+//static struct cpu init_cpus[NAUT_CONFIG_MAX_CPUS];
 
 extern struct cpu * smp_ap_stack_switch(uint64_t, uint64_t, struct cpu*);
 
+#if 0
 static uint8_t lapicid_to_nk_coreid[128];
 
 uint8_t 
@@ -37,6 +42,7 @@ nk_get_cpu_by_lapicid (uint8_t lapicid)
 {
     return lapicid_to_nk_coreid[lapicid];
 }
+#endif
 
 static volatile unsigned smp_core_count = 1; // assume BSP is booted
 
@@ -61,20 +67,18 @@ parse_mptable_cpu (struct sys_info * sys, struct mp_table_entry_cpu * cpu)
         panic("CPU count exceeded max (check your .config)\n");
     }
 
-    new_cpu = &init_cpus[sys->num_cpus];
+    //new_cpu = &init_cpus[sys->num_cpus];
 
-#if 0
     if(!(new_cpu = malloc(sizeof(struct cpu)))) {
         panic("Couldn't allocate CPU struct\n");
     } 
     memset(new_cpu, 0, sizeof(struct cpu));
-#endif
 
     new_cpu->id         = sys->num_cpus;
     new_cpu->lapic_id   = cpu->lapic_id;
 
     /* HACK */
-    lapicid_to_nk_coreid[new_cpu->lapic_id] = new_cpu->id;
+    //lapicid_to_nk_coreid[new_cpu->lapic_id] = new_cpu->id;
 
     new_cpu->enabled    = cpu->enabled;
     new_cpu->is_bsp     = cpu->is_bsp;
@@ -282,15 +286,30 @@ find_mp_pointer (void)
 
         cursor += 4;
     }
+    return 0;
+}
+
+
+static int
+__early_init_sfi (struct naut_info * naut)
+{
+    struct sfi_sys_tbl * sfi = sfi_find_syst();
+    if (!sfi) {
+        panic("Could not find  SFI table!\n");
+        return -1;
+    }
+
+    if (sfi_parse_syst(&naut->sys, sfi) != 0) {
+        ERROR_PRINT("Problem parsing SFI SYST\n");
+        return -1;
+    }
 
     return 0;
 }
 
 
-
-
-int
-smp_early_init (struct naut_info * naut)
+static int
+__early_init_mp (struct naut_info * naut)
 {
     struct mp_float_ptr_struct * mp_ptr;
 
@@ -316,6 +335,19 @@ smp_early_init (struct naut_info * naut)
     SMP_PRINT("Detected %u CPUs\n", naut->sys.num_cpus);
 
     return 0;
+}
+
+
+int 
+smp_early_init (struct naut_info * naut)
+{
+    int ret;
+#ifdef NAUT_CONFIG_XEON_PHI
+    ret = __early_init_sfi(naut);
+#else
+    ret = __early_init_mp(naut);
+#endif
+    return ret;
 }
 
 
@@ -352,24 +384,19 @@ init_ap_area (struct ap_init_area * ap_area,
 }
 
 
-static inline void 
+static int 
 smp_wait_for_ap (struct naut_info * naut, unsigned int core_num)
 {
     struct cpu * core = naut->sys.cpus[core_num];
-    BARRIER_WHILE(!core->booted);
-
-#if 0
-    while (1) {
-        uint8_t flags;
-        flags = spin_lock_irq_save(&(naut->sys.cpus[core_num]->lock));
-        if (*(volatile uint8_t *)&(naut->sys.cpus[core_num]->booted) == 1) {
-            spin_unlock_irq_restore(&(naut->sys.cpus[core_num]->lock), flags);
-            break;
-        }
-        spin_unlock_irq_restore(&(naut->sys.cpus[core_num]->lock), flags);
-        asm volatile ("pause");
+#ifdef NAUT_CONFIG_XEON_PHI
+    while (!core->booted) {
+        udelay(1);
     }
+#else
+    BARRIER_WHILE(!core->booted);
 #endif
+
+    return 0;
 }
 
 
@@ -382,7 +409,7 @@ smp_bringup_aps (struct naut_info * naut)
     size_t smp_code_sz     = (addr_t)&end_smp_boot - boot_target;
     addr_t ap_trampoline   = (addr_t)AP_TRAMPOLINE_ADDR;
     uint8_t target_vec     = ap_trampoline >> 12U;
-    struct apic_dev * apic = naut->sys.cpus[0]->apic;
+    struct apic_dev * apic = naut->sys.cpus[naut->sys.bsp_id]->apic;
 
     int status = 0; 
     int err = 0;
@@ -414,8 +441,14 @@ smp_bringup_aps (struct naut_info * naut)
     /* START BOOTING AP CORES */
     
     /* we, of course, skip the BSP (NOTE: assuming it's 0...) */
-    for (i = 1; i < naut->sys.num_cpus; i++) {
+    for (i = 0; i < naut->sys.num_cpus; i++) {
         int ret;
+
+        /* skip the BSP */
+        if (naut->sys.cpus[i]->is_bsp) {
+            SMP_DEBUG("Skipping BSP (core id=%u, apicid=%u\n", i, naut->sys.cpus[i]->lapic_id);
+            continue;
+        }
 
         SMP_DEBUG("Booting secondary CPU %u\n", i);
 
@@ -464,6 +497,11 @@ smp_bringup_aps (struct naut_info * naut)
                 break;
             }
 
+            /* if it already booted up, we don't need to send the 2nd SIPI */
+            if (naut->sys.cpus[i]->booted == 1) {
+                break;
+            }
+
         }
 
         if (status) {
@@ -481,6 +519,8 @@ smp_bringup_aps (struct naut_info * naut)
     }
 
     BARRIER_WHILE(smp_core_count != naut->sys.num_cpus);
+
+    SMP_DEBUG("ALL CPUS BOOTED\n");
 
     return (status|err);
 }
@@ -614,7 +654,6 @@ smp_ap_entry (struct cpu * core)
 
     sti();
     idle(NULL, NULL);
-    //while (1) { asm volatile("pause"); }
 }
 
 

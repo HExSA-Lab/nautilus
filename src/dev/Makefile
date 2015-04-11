@@ -8,3 +8,5 @@ obj-y += apic.o \
 		 pci.o 
 
 obj-$(NAUT_CONFIG_HPET) += hpet.o
+
+obj-$(NAUT_CONFIG_XEON_PHI) += xeon_phi.o 
