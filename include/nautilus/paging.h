@@ -33,12 +33,39 @@ struct nk_pf_error {
 
 typedef struct nk_pf_error nk_pf_err_t;
 
+#define MEM_ZONE_UC      0x0000000000000001 // no cache
+#define MEM_ZONE_WC      0x0000000000000002 // write combine
+#define MEM_ZONE_WT      0x0000000000000004 // write through
+#define MEM_ZONE_WB      0x0000000000000008 // write back
+#define MEM_ZONE_UCE     0x0000000000000010 // no cache + exported + 'fetch & add'
+#define MEM_ZONE_WP      0x0000000000001000 // write protected
+#define MEM_ZONE_RP      0x0000000000002000 // read protected
+#define MEM_ZONE_XP      0x0000000000004000 // NX
+
+
+typedef enum {
+    MEM_USABLE,
+    MEM_UNUSABLE,
+} mem_zone_type_t;
+
+struct nk_mem_zone {
+    mem_zone_type_t type;
+    uint64_t start;
+    uint64_t length;
+    uint64_t attrs;
+
+    struct list_head node;
+};
+
+
 struct nk_mem_info {
     ulong_t * page_map;
     addr_t    pm_start;
     addr_t    pm_end;
     ulong_t   phys_mem_avail;
     ulong_t   npages;
+
+    struct list_head mem_zone_list;
 };
 
 

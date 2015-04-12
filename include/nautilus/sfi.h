@@ -171,6 +171,8 @@ typedef struct sfi_gpio_entry sfi_gpio_entry_t;
 
 struct sfi_sys_tbl* sfi_find_syst(void);
 struct sys_info;
+struct nk_mem_info;
+long sfi_parse_phys_mem (struct nk_mem_info * mem);
 int sfi_parse_syst (struct sys_info * sys, struct sfi_sys_tbl * sfi);
 
 #endif

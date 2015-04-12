@@ -3,6 +3,7 @@
 #include <nautilus/nautilus.h>
 #include <nautilus/naut_assert.h>
 #include <nautilus/msr.h>
+#include <nautilus/paging.h>
 #include <nautilus/cpuid.h>
 #include <dev/apic.h>
 #include <dev/ioapic.h>
@@ -216,11 +217,12 @@ sfi_fill_attrs (char * str, uint64_t attr)
 }
 
 
-static int
-parse_sfi_mmap (struct sfi_mmap_tbl * tbl, struct sys_info * sys)
+static uint64_t
+parse_sfi_mmap (struct sfi_mmap_tbl * tbl, struct nk_mem_info * sysmem)
 {
     unsigned nents;
     unsigned i;
+    uint64_t pmem = 0;
 
     if (!blk_cksum_ok((uint8_t*)tbl, tbl->hdr.len)) {
         ERROR_PRINT("SFI MMAP table checksum failed\n");
@@ -240,13 +242,33 @@ parse_sfi_mmap (struct sfi_mmap_tbl * tbl, struct sys_info * sys)
         SFI_DEBUG("  Virt Start: %p\n", (void*)mem.virt_start);
         SFI_DEBUG("  Num Pages:  %llu\n", mem.num_pages);
 
+        //printk("adding %llu bytes to pmem\n", ((uint64_t)mem.num_pages)*((uint64_t)PAGE_SIZE_4KB));
+        pmem += ((uint64_t)mem.num_pages)*((uint64_t)PAGE_SIZE_4KB);
+
         sfi_fill_attrs(attrs, mem.attr);
         
         SFI_DEBUG("  Attrs:      %s\n", attrs);
+
+#if 0
+        struct nk_mem_zone * mz = malloc(sizeof(struct nk_mem_zone));
+        if (!mz) {
+            ERROR_PRINT("Could not allocate memory zone\n");
+            return -1;
+        }
+        memset(mz, 0, sizeof(struct nk_mem_zone));
+
+        mz->start  = mem.phys_start;
+        mz->length = mem.num_pages * PAGE_SIZE_4KB;
+        mz->attrs  = mem.attr;
+
+        list_add_tail(&(mz->node), &(sysmem->mem_zone_list));
+#endif
+
     }
 
-    return 0;
+    return pmem;
 }
+
 
 static int 
 parse_entry (struct sfi_common_hdr * entry, struct sys_info * sys)
@@ -261,7 +283,7 @@ parse_entry (struct sfi_common_hdr * entry, struct sys_info * sys)
             parse_sfi_ioapic((struct sfi_ioapic_tbl*)entry, sys);
             break;
         case SFI_MMAP_SIG:
-            parse_sfi_mmap((struct sfi_mmap_tbl*)entry, sys);
+            //parse_sfi_mmap((struct sfi_mmap_tbl*)entry, sys);
             break;
         case SFI_FREQ_SIG:
             SFI_DEBUG("Found FREQ table\n");
@@ -315,3 +337,29 @@ sfi_parse_syst (struct sys_info * sys, struct sfi_sys_tbl * sfi)
     return 0;
 }
 
+
+long
+sfi_parse_phys_mem (struct nk_mem_info * mem)
+{
+    struct sfi_sys_tbl * sfi = sfi_find_syst();
+    unsigned nents = 0;
+    unsigned i;
+
+    if (!sfi) {
+        ERROR_PRINT("Could not find SFI SYST table\n");
+        return -1;
+    }
+
+    nents = (sfi->hdr.len - sizeof(struct sfi_common_hdr))/sizeof(sfi->entries[0]);
+
+    for (i = 0; i < nents; i++) {
+        struct sfi_common_hdr* entry = (struct sfi_common_hdr*)sfi->entries[i];
+        if (entry->sig != SFI_MMAP_SIG) {
+            continue;
+        } else {
+            return parse_sfi_mmap((struct sfi_mmap_tbl*)entry, mem);
+        }
+    }
+
+    return -1;
+}

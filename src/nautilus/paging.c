@@ -12,6 +12,9 @@
 #include <lib/liballoc.h>
 #include <nautilus/percpu.h>
 
+#ifdef NAUT_CONFIG_XEON_PHI
+#include <nautilus/sfi.h>
+#endif
 
 #ifndef NAUT_CONFIG_DEBUG_PAGING
 #undef DEBUG_PRINT
@@ -570,7 +573,8 @@ nk_paging_init (struct nk_mem_info * mem, ulong_t mbd)
 
     /* how much memory do we have in the machine? */
 #ifdef NAUT_CONFIG_XEON_PHI 
-    mem->phys_mem_avail = (0x5d0000ull * 1024ull);
+    INIT_LIST_HEAD(&(mem->mem_zone_list));
+    mem->phys_mem_avail = sfi_parse_phys_mem(mem);
 #else
     mem->phys_mem_avail = multiboot_get_phys_mem(mbd);
 #endif
