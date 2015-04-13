@@ -57,6 +57,7 @@ config DEBUG_PIT
 
 config HPET
     bool "HPET Support"
+    depends on X86_64_HOST
     default n
     help
       Includes HPET timer support in Nautilus
