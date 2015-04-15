@@ -290,6 +290,7 @@ find_mp_pointer (void)
 }
 
 
+#ifdef NAUT_CONFIG_XEON_PHI
 static int
 __early_init_sfi (struct naut_info * naut)
 {
@@ -306,6 +307,7 @@ __early_init_sfi (struct naut_info * naut)
 
     return 0;
 }
+#endif
 
 
 static int
