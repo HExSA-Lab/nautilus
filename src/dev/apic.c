@@ -747,33 +747,37 @@ apic_init (struct cpu * core)
 
     apic_global_enable();
 
-    if (register_int_handler(0xfc, null_kick, apic) != 0) {
-        panic("Could not register null kick interrupt handler\n");
-    }
+    // assign interrupt handlers
+    if (core->is_bsp) {
 
-    if (register_int_handler(APIC_SPUR_INT_VEC, spur_int_handler, apic) != 0) {
-        panic("Could not register spurious interrupt handler\n");
-    }
+        if (register_int_handler(APIC_NULL_KICK_VEC, null_kick, apic) != 0) {
+            panic("Could not register null kick interrupt handler\n");
+        }
 
-    if (register_int_handler(APIC_ERROR_INT_VEC, error_int_handler, apic) != 0) {
-        panic("Could not register spurious interrupt handler\n");
-        return;
-    }
+        if (register_int_handler(APIC_SPUR_INT_VEC, spur_int_handler, apic) != 0) {
+            panic("Could not register spurious interrupt handler\n");
+        }
 
-    /* we shouldn't ever get these, but just in case */
-    if (register_int_handler(APIC_PC_INT_VEC, pc_int_handler, apic) != 0) {
-        panic("Could not register perf counter interrupt handler\n");
-        return;
-    }
+        if (register_int_handler(APIC_ERROR_INT_VEC, error_int_handler, apic) != 0) {
+            panic("Could not register spurious interrupt handler\n");
+            return;
+        }
 
-    if (register_int_handler(APIC_THRML_INT_VEC, thermal_int_handler, apic) != 0) {
-        panic("Could not register thermal interrupt handler\n");
-        return;
-    }
+        /* we shouldn't ever get these, but just in case */
+        if (register_int_handler(APIC_PC_INT_VEC, pc_int_handler, apic) != 0) {
+            panic("Could not register perf counter interrupt handler\n");
+            return;
+        }
 
-    if (register_int_handler(APIC_EXT_LVT_DUMMY_VEC, dummy_int_handler, apic) != 0) {
-        panic("Could not register dummy ext lvt handler\n");
-        return;
+        if (register_int_handler(APIC_THRML_INT_VEC, thermal_int_handler, apic) != 0) {
+            panic("Could not register thermal interrupt handler\n");
+            return;
+        }
+
+        if (register_int_handler(APIC_EXT_LVT_DUMMY_VEC, dummy_int_handler, apic) != 0) {
+            panic("Could not register dummy ext lvt handler\n");
+            return;
+        }
     }
 
     apic_assign_spiv(apic, APIC_SPUR_INT_VEC);

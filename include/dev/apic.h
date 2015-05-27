@@ -7,13 +7,14 @@
 extern "C" {
 #endif
 
-#define APIC_SPUR_INT_VEC  0xff
-#define APIC_TIMER_INT_VEC 0xf0
-#define APIC_ERROR_INT_VEC 0xf1
-#define APIC_THRML_INT_VEC 0xf2
-#define APIC_PC_INT_VEC    0xf3
-#define APIC_CMCR_INT_VEC  0xf4
+#define APIC_SPUR_INT_VEC      0xff
+#define APIC_TIMER_INT_VEC     0xf0
+#define APIC_ERROR_INT_VEC     0xf1
+#define APIC_THRML_INT_VEC     0xf2
+#define APIC_PC_INT_VEC        0xf3
+#define APIC_CMCR_INT_VEC      0xf4
 #define APIC_EXT_LVT_DUMMY_VEC 0xf5
+#define APIC_NULL_KICK_VEC     0xfc
 
 #define APIC_TIMER_DIV 16
 
