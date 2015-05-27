@@ -180,7 +180,7 @@ drill_pdpt (pdpte_t * pdpt, addr_t addr, addr_t map_addr, uint64_t flags)
 static int 
 drill_page_tables (addr_t addr, addr_t map_addr, uint64_t flags)
 {
-    pml4e_t * _pml4 = (pml4e_t*)&pml4;
+    pml4e_t * _pml4 = (pml4e_t*)read_cr3();
     uint_t pml4_idx = PADDR_TO_PML4_IDX(addr);
     pdpte_t * pdpt  = 0;
     
