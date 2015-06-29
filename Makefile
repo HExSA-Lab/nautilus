@@ -606,8 +606,12 @@ nautilus := $(core-y) $(libs-y)
 
 ifdef NAUT_CONFIG_XEON_PHI
 LD_SCRIPT:=link/nautilus.ld.xeon_phi
+else 
+ifdef NAUT_CONFIG_HVM_HRT
+LD_SCRIPT:=link/nautilus.ld.hrt
 else
 LD_SCRIPT:=link/nautilus.ld
+endif
 endif
 
 

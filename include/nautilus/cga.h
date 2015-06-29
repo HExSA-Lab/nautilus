@@ -28,6 +28,7 @@ enum vga_color
 void term_init(void);
 void putchar(char c);
 void term_putc(char c, uint8_t color, size_t x, size_t y);
+void debug_putc(char c);
 void debug_puts(const char * s);
 int puts(const char * s);
 void term_print(const char * data);

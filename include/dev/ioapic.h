@@ -96,6 +96,8 @@ struct ioapic {
 
     uint8_t num_entries;
     struct iored_entry * entries;
+
+    unsigned first_hrt_entry;
 };
 
 struct sys_info;

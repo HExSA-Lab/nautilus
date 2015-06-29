@@ -443,8 +443,8 @@ int
 nk_reserve_pages (addr_t paddr, unsigned n)
 {
     struct nk_mem_info * mem = &(nk_get_nautilus_info()->sys.mem);
-    int order = get_count_order(n);
-    return bitmap_allocate_region(mem->page_map, PADDR_TO_PAGE(paddr), order);
+    bitmap_set(mem->page_map, PADDR_TO_PAGE(paddr), n);
+    return 0;
 }
 
 
@@ -489,9 +489,9 @@ nk_page_allocated (addr_t paddr)
 /*
  * nk_reserve_range
  *
- * reserve a range of pages specified by the given addresses
+ * reserve a range of pages that will overlap the given addresses
  *
- * @start: address of page to start with
+ * @start: address of page to start with (will be rounded down to page boundary)
  * @end: end address of the range (this one is rounded up to the next page
  *       boundary)
  *
@@ -501,9 +501,9 @@ nk_page_allocated (addr_t paddr)
 int 
 nk_reserve_range (addr_t start, addr_t end)
 {
-    int npages = (end - start) / PAGE_SIZE;
-    npages = (end - start) % PAGE_SIZE ? npages + 1 : npages;
-    return nk_reserve_pages(PADDR_TO_PAGE(start), npages);
+    int npages = (end - PAGE_MASK(start)) / PAGE_SIZE;
+    npages += (end - PAGE_MASK(start)) % PAGE_SIZE ? 1 : 0;
+    return nk_reserve_pages(start, npages);
 }
 
 
@@ -522,11 +522,15 @@ finish_ident_map (struct nk_mem_info * mem, ulong_t mbd)
 
     /* make sure not to overwrite multiboot header */
     /* NOTE: maybe ceil the mbd pointer */
+#ifndef NAUT_CONFIG_HVM_HRT
     if (mbd >= kernel_end) {
         pd_start = (ulong_t*)(mbd + multiboot_get_size(mbd));
     } else {
         pd_start = (ulong_t*)kernel_end;
     }
+#else 
+    pd_start = (ulong_t*)kernel_end;
+#endif
 
     // align the address where I'll lay them out to a page boundary
     pd_start = (ulong_t*)align_addr((ulong_t)pd_start, PAGE_SIZE_4KB);
@@ -613,9 +617,14 @@ nk_paging_init (struct nk_mem_info * mem, ulong_t mbd)
     nk_reserve_range((addr_t)0x0, (addr_t)0x4ff);
 
     DEBUG_PRINT("Reserving APIC/IOAPIC\n");
-    
-    /* TODO: these shouldn't be hardcoded */
     nk_reserve_range((addr_t)0xfec00000, (addr_t)0xfedfffff);
+    
+#endif
+
+#ifdef NAUT_CONFIG_HVM_HRT
+    void * hrt_addr = mb_get_first_hrt_addr(mbd);
+    DEBUG_PRINT("Reserving ROS-only memory (up to %p)\n", hrt_addr);
+    nk_reserve_range((addr_t)0x0, (addr_t)hrt_addr);
 #endif
 
     DEBUG_PRINT("Reserving Video Memory\n");

@@ -91,6 +91,54 @@ multiboot_rsv_mem_regions(struct nk_mem_info * mem, ulong_t mbd)
 
 extern void* malloc(size_t);
 
+
+int 
+mb_is_hrt_environ (ulong_t mbd)
+{
+    struct multiboot_tag * tag;
+
+    if (mbd & 7) {
+        panic("ERROR: Unaligned multiboot info struct\n");
+    }
+
+    tag = (struct multiboot_tag*)(mbd+8);
+
+    while (tag->type != MULTIBOOT_TAG_TYPE_HRT) {
+        tag = (struct multiboot_tag*)((multiboot_uint8_t*)tag + ((tag->size+7)&~7));
+    }
+
+    if (tag->type != MULTIBOOT_TAG_TYPE_HRT) {
+        return 0;
+    }
+
+    return 1;
+}
+
+
+void * 
+mb_get_first_hrt_addr (ulong_t mbd)
+{
+    struct multiboot_tag * tag;
+
+    if (mbd & 7) {
+        panic("ERROR: Unaligned multiboot info struct\n");
+    }
+
+    tag = (struct multiboot_tag*)(mbd+8);
+
+    while (tag->type != MULTIBOOT_TAG_TYPE_HRT) {
+        tag = (struct multiboot_tag*)((multiboot_uint8_t*)tag + ((tag->size+7)&~7));
+    }
+
+    if (tag->type != MULTIBOOT_TAG_TYPE_HRT) {
+        return NULL;
+    }
+
+    struct multiboot_tag_hrt * hrt = (struct multiboot_tag_hrt*)tag;
+    return (void*)hrt->first_hrt_addr;
+}
+
+
 struct multiboot_info * 
 multiboot_parse (ulong_t mbd, ulong_t magic)
 {
@@ -101,6 +149,7 @@ multiboot_parse (ulong_t mbd, ulong_t magic)
         ERROR_PRINT("Could not allocate multiboot info struct\n");
         return NULL;
     }
+    memset(mb_info, 0, sizeof(struct multiboot_info));
 
     if (magic != MULTIBOOT2_BOOTLOADER_MAGIC) {
         panic("ERROR: Not loaded by multiboot compliant bootloader\n");
@@ -150,7 +199,23 @@ multiboot_parse (ulong_t mbd, ulong_t magic)
                 DEBUG_PRINT("Cmd line: %s\n", mb_info->boot_cmd_line);
                 break;
                                              }
+#ifdef NAUT_CONFIG_HVM_HRT
+            case MULTIBOOT_TAG_TYPE_HRT: {
+                struct multiboot_tag_hrt * hrt = (struct multiboot_tag_hrt*)tag;
+                mb_info->hrt_info = malloc(hrt->size);
+                memcpy(mb_info->hrt_info, hrt, hrt->size);
+                DEBUG_PRINT("HRT Info struct\n");
+                DEBUG_PRINT("  num_apics: %u\n", hrt->num_apics);
+                DEBUG_PRINT("  first_hrt_apic_id: %u\n", hrt->first_hrt_apic_id);
+                DEBUG_PRINT("  have_hrt_ioapic: %u\n", hrt->have_hrt_ioapic);
+                DEBUG_PRINT("  first_hrt_ioapic_entry: %u\n", hrt->first_hrt_ioapic_entry);
+                DEBUG_PRINT("  first_hrt_addr: %p\n", (void*)hrt->first_hrt_addr);
+
+                break;
+                                        }
+#endif
             default:
+                DEBUG_PRINT("Unhandled tag type (0x%x)\n", tag->type);
                 break;
 
         }

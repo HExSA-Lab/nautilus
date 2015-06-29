@@ -59,6 +59,8 @@
 #define MULTIBOOT_TAG_TYPE_ACPI_NEW          15
 #define MULTIBOOT_TAG_TYPE_NETWORK           16
 
+#define MULTIBOOT_TAG_TYPE_HRT 0xf00df00d
+
 #define MULTIBOOT_HEADER_TAG_END  0
 #define MULTIBOOT_HEADER_TAG_INFORMATION_REQUEST  1
 #define MULTIBOOT_HEADER_TAG_ADDRESS  2
@@ -359,6 +361,17 @@ struct multiboot_tag_network
   multiboot_uint32_t type;
   multiboot_uint32_t size;
   multiboot_uint8_t dhcpack[0];
+};
+
+struct multiboot_tag_hrt
+{
+  multiboot_uint32_t type;
+  multiboot_uint32_t size;
+  multiboot_uint32_t num_apics;
+  multiboot_uint32_t first_hrt_apic_id;
+  multiboot_uint32_t have_hrt_ioapic;
+  multiboot_uint32_t first_hrt_ioapic_entry;
+  multiboot_uint64_t first_hrt_addr;
 };
 
 #endif /* ! ASM_FILE */

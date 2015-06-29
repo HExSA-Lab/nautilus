@@ -2,6 +2,7 @@ menu "Device options"
 
 config SERIAL_REDIRECT
     bool "Serial Debugging"
+    depends on !HVM_HRT
     default n
     help
         Redirect all printing to serial device

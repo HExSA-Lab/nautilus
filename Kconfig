@@ -31,6 +31,12 @@ config CXX_SUPPORT
         Compiles the Nautilus kernel with C++ support. Necessary for,
         e.g. Legion integration
 
+config HVM_HRT
+    bool "Compile Nautilus as an HRT"
+    default n
+    help
+      Compiles Nautilus in a Hybrid Runtime (HRT) environment
+
 config FPU_SAVE
     bool "Save FPU state on all context switches"
     default y

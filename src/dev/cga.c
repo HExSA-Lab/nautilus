@@ -170,6 +170,7 @@ term_init (void)
     spinlock_init(&(term.lock));
     size_t y;
     size_t x;
+#ifndef NAUT_CONFIG_HVM_HRT
     for ( y = 0; y < VGA_HEIGHT; y++ )
     {
         for ( x = 0; x < VGA_WIDTH; x++ )
@@ -178,6 +179,7 @@ term_init (void)
             term.buf[index] = make_vgaentry(' ', term.color);
         }
     }
+#endif
 
 #ifdef NAUT_CONFIG_XEON_PHI
     phi_notify_redraw();
@@ -203,11 +205,10 @@ term_setcolor (uint8_t color)
 }
  
 
-static inline void 
+void 
 debug_putc (char c)
 { 
     outb(c, 0xc0c0);
-    outb(c, 0x402);
 }
 
 

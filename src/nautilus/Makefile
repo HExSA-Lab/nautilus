@@ -28,6 +28,7 @@ obj-y += \
 	acpi.o \
 	shutdown.o \
 	numa.o \
+	hrt.o \
 	libccompat.o 
 
 obj-$(NAUT_CONFIG_PROFILE) += instrument.o
@@ -39,3 +40,4 @@ else
 obj-y += nautilus.o \
 		 mwait.o
 endif
+

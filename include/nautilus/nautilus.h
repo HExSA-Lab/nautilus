@@ -91,7 +91,7 @@ struct naut_info {
     struct sys_info sys;
 };
 
-void main (unsigned long mbd, unsigned long magic) __attribute__((section (".text")));
+void main (unsigned long mbd, unsigned long magic, unsigned long mycpuid, unsigned long apicid) __attribute__((section (".text")));
 
 #ifdef __NAUTILUS_MAIN__
 struct naut_info nautilus_info;

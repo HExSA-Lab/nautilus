@@ -44,6 +44,14 @@
 #include <nautilus/errno.h>
 #include <nautilus/math.h>
 
+#ifdef NAUT_CONFIG_HVM_HRT
+#define do_putchar(x) do { debug_putc(x);} while (0)
+#define do_puts(x) do {debug_puts(x);} while (0)
+#else
+#define do_putchar(x)
+#define do_puts(x)
+#endif
+
 spinlock_t printk_lock;
 
 extern void __serial_print(const char * format, va_list ap);
@@ -61,7 +69,7 @@ flush (struct printk_state *state)
 	int i;
 
 	for (i = 0; i < state->index; i++)
-		putchar(state->buf[i]);
+		do_putchar(state->buf[i]);
 
 	state->index = 0;
 }
@@ -75,13 +83,13 @@ printk_char (char * arg, int c)
 	if (c == '\n')
 	{
 		state->buf[state->index] = 0;
-		puts(state->buf);
+		do_puts(state->buf);
 		state->index = 0;
 	}
 	else if ((c == 0) || (state->index >= PRINTK_BUFMAX))
 	{
 		flush(state);
-		putchar(c);
+		do_putchar(c);
 	}
 	else
 	{

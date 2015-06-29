@@ -22,6 +22,10 @@
 #include <nautilus/sfi.h>
 #endif
 
+#ifdef NAUT_CONFIG_HVM_HRT
+#include <nautilus/hrt.h>
+#endif
+
 #ifndef NAUT_CONFIG_DEBUG_SMP
 #undef DEBUG_PRINT
 #define DEBUG_PRINT(fmt, args...)
@@ -339,6 +343,22 @@ __early_init_mp (struct naut_info * naut)
     return 0;
 }
 
+#ifdef NAUT_CONFIG_HVM_HRT
+static int
+__early_init_hrt (struct naut_info * naut)
+{
+    if (hrt_init_cpus(&(naut->sys)) < 0) {
+        panic("Could not initialize HRT cores\n");
+    }
+
+    if (hrt_init_ioapics(&(naut->sys)) < 0) {
+        panic("Could not initialize HRT IOAPICS\n");
+    }
+
+    return 0;
+}
+#endif
+
 
 int 
 smp_early_init (struct naut_info * naut)
@@ -346,6 +366,8 @@ smp_early_init (struct naut_info * naut)
     int ret;
 #ifdef NAUT_CONFIG_XEON_PHI
     ret = __early_init_sfi(naut);
+#elif NAUT_CONFIG_HVM_HRT
+    ret = __early_init_hrt(naut);
 #else
     ret = __early_init_mp(naut);
 #endif
@@ -606,10 +628,12 @@ smp_ap_finish (struct cpu * core)
 
     PAUSE_WHILE(atomic_cmpswap(core->booted, 0, 1) != 0);
 
+#ifndef NAUT_CONFIG_HVM_HRT
     atomic_inc(smp_core_count);
 
     /* wait on all the other cores to boot up */
     BARRIER_WHILE(smp_core_count != core->system->num_cpus);
+#endif
 
     SMP_DEBUG("Core %u ready, enabling interrupts\n", core->id);
     sti();
@@ -655,6 +679,7 @@ smp_ap_entry (struct cpu * core)
     ASSERT(irqs_enabled());
 
     sti();
+
     idle(NULL, NULL);
 }
 
