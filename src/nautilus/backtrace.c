@@ -81,7 +81,7 @@ nk_print_regs (struct nk_regs * r)
     printk("[-------------- Register Contents --------------]\n");
     printk("RIP: %04lx:%016lx\n", r->cs, r->rip);
     printk("RSP: %04lx:%016lx RFLAGS: %08lx Vector: %08lx Error: %08lx\n", 
-            r->cs, r->rsp, r->rflags, r->vector, r->err_code);
+            r->ss, r->rsp, r->rflags, r->vector, r->err_code);
     printk("RAX: %016lx RBX: %016lx RCX: %016lx\n", r->rax, r->rbx, r->rcx);
     printk("RDX: %016lx RDI: %016lx RSI: %016lx\n", r->rdx, r->rdi, r->rsi);
     printk("RBP: %016lx R08: %016lx R09: %016lx\n", r->rbp, r->r8, r->r9);
