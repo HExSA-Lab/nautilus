@@ -25,8 +25,11 @@ struct naut_info;
 struct nk_topo_params;
 struct nk_cpu_coords;
 
-typedef struct nk_queue nk_thread_queue_t;
-typedef struct nk_thread nk_thread_t;
+struct nk_queue;
+struct nk_thread;
+
+//typedef struct nk_queue nk_thread_queue_t;
+//typedef struct nk_thread nk_thread_t;
 typedef void (*nk_xcall_func_t)(void * arg);
 typedef uint32_t cpu_id_t;
 
@@ -45,7 +48,7 @@ struct nk_xcall {
 #endif
 
 struct cpu {
-    nk_thread_t * cur_thread; /* KCH: this must be first! */
+    struct nk_thread * cur_thread; /* KCH: this must be first! */
 
     cpu_id_t id;
     uint8_t lapic_id;
@@ -62,7 +65,7 @@ struct cpu {
 
     spinlock_t lock;
 
-    nk_thread_queue_t * run_q;
+    struct nk_queue * run_q;
 
     nk_queue_t * xcall_q;
     struct nk_xcall xcall_nowait_info;

@@ -71,9 +71,6 @@ int nk_tls_set(nk_tls_key_t key, const void * val);
 
 #define FXSAVE_SIZE 512
 
-// internal thread representations
-typedef struct nk_thread nk_thread_t;
-typedef struct nk_queue nk_thread_queue_t;
 
 /* FOR TLS */
 #define TLS_MAX_KEYS 256
@@ -90,6 +87,8 @@ typedef enum {
     NK_THR_SUSPENDED, 
     NK_THR_EXITED
 } nk_thread_status_t;
+
+typedef struct nk_queue nk_thread_queue_t;
 
 struct nk_thread {
     uint64_t rsp; /* SHOULD NOT CHANGE POSITION */
@@ -127,6 +126,8 @@ struct nk_thread {
     uint8_t fpu_state[FXSAVE_SIZE] __align(16);
 } __packed;
 
+// internal thread representations
+typedef struct nk_thread nk_thread_t;
 
 struct nk_sched_state {
     nk_thread_queue_t * thread_list;
