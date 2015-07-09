@@ -127,6 +127,11 @@ paging_longmode_setup:
     /* paging enable */
     movl %cr0, %eax
     orl $(1<<31), %eax
+
+    /* make sure we're in "normal cache mode" */
+    movl $~(3<<29), %ebx
+    andl %ebx, %eax
+
     movl %eax, %cr0
 
     ret
