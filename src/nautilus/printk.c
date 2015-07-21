@@ -44,12 +44,14 @@
 #include <nautilus/errno.h>
 #include <nautilus/math.h>
 
+/* TODO: make serial redirect happen at the character level */
+
 #ifdef NAUT_CONFIG_HVM_HRT
 #define do_putchar(x) do { debug_putc(x);} while (0)
 #define do_puts(x) do {debug_puts(x);} while (0)
 #else
-#define do_putchar(x)
-#define do_puts(x)
+#define do_putchar(x) do {putchar(x);} while (0)
+#define do_puts(x)    do {puts(x);} while (0)
 #endif
 
 spinlock_t printk_lock;
