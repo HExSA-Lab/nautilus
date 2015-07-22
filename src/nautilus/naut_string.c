@@ -130,19 +130,22 @@ memmove (void * dst, const void * src, size_t n)
         
 
 int 
-memcmp (const void * s1_, const void * s2_, size_t n) {
+memcmp (const void * s1_, const void * s2_, size_t n) 
+{
     const char * s1 = s1_;
     const char * s2 = s2_;
 
     while (n > 0) {
-    int cmp = (*s1 - *s2);
 
-    if (cmp != 0) {
-        return cmp;
-    }
+        int cmp = (*s1 - *s2);
 
-    ++s1;
-    ++s2;
+        if (cmp != 0) {
+            return cmp;
+        }
+
+        ++s1;
+        ++s2;
+        --n;
     }
 
     return 0;
