@@ -97,8 +97,9 @@ ENTRY(nk_thread_entry)
 
 #ifdef NAUT_CONFIG_ENABLE_STACK_CHECK
 bad:
-    movq $panic_str, %rdi
-    callq panic
+    movabs $panic_str, %rdi
+    movabs $panic, %rax
+    callq *%rax
 loop:
     hlt
     jmp loop

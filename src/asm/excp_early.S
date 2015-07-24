@@ -51,7 +51,7 @@ GLOBAL(early_irq_common)
 
     leaq 128(%rsp), %rdi # pointer to exception struct
     movq 120(%rsp), %rsi # irq num
-    movq $handler_table, %rdx
+    movabs $handler_table, %rdx
     movq (%rdx, %rsi, 8), %rcx
     
 #ifdef NAUT_CONFIG_ENABLE_ASSERTS
@@ -85,8 +85,9 @@ thr_return:
     iretq
 
 irq_err:
-    movq $irq_err_str, %rdi
-    callq panic
+    movabs $irq_err_str, %rdi
+    movabs $panic, %rax
+    callq *%rax
 errloop:
     hlt
     jmp errloop
@@ -102,7 +103,7 @@ GLOBAL(early_excp_common)
 
     leaq 128(%rsp), %rdi # pointer to exception struct
     movq 120(%rsp), %rsi # excp vector
-    movq $handler_table, %rdx
+    movabs $handler_table, %rdx
     movq (%rdx, %rsi, 8), %rcx
     cmpq $14, %rsi
     jnz no_pf
@@ -119,8 +120,9 @@ no_pf:
     iretq
 
 excp_err:
-    movq $excp_err_str, %rdi
-    callq panic
+    movabs $excp_err_str, %rdi
+    movabs $panic, %rax
+    callq *%rax
 loop1:
     hlt
     jmp loop1
