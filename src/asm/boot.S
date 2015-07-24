@@ -157,6 +157,5 @@ gdtr32:
 .align 8
 GLOBAL(gdtr64)
     .word 23
-    .long gdt64
-    .long 0
+    .quad gdt64
 
