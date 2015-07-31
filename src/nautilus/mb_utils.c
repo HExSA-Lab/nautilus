@@ -103,7 +103,8 @@ mb_is_hrt_environ (ulong_t mbd)
 
     tag = (struct multiboot_tag*)(mbd+8);
 
-    while (tag->type != MULTIBOOT_TAG_TYPE_HRT) {
+    while (tag->type != MULTIBOOT_TAG_TYPE_HRT &&
+           tag->type != MULTIBOOT_TAG_TYPE_END) {
         tag = (struct multiboot_tag*)((multiboot_uint8_t*)tag + ((tag->size+7)&~7));
     }
 
@@ -126,7 +127,8 @@ mb_get_first_hrt_addr (ulong_t mbd)
 
     tag = (struct multiboot_tag*)(mbd+8);
 
-    while (tag->type != MULTIBOOT_TAG_TYPE_HRT) {
+    while (tag->type != MULTIBOOT_TAG_TYPE_HRT &&
+           tag->type != MULTIBOOT_TAG_TYPE_END) {
         tag = (struct multiboot_tag*)((multiboot_uint8_t*)tag + ((tag->size+7)&~7));
     }
 
