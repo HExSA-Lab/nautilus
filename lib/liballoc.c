@@ -149,6 +149,7 @@ insert_tag (struct boundary_tag *tag, int index)
 
 	tag->index = realIndex;
 
+#ifdef NAUT_CONFIG_DEBUG_MALLOC
     for (i = 0; i < MAXEXP; i++) {
 
         struct boundary_tag * t = l_freePages[i];
@@ -171,6 +172,7 @@ insert_tag (struct boundary_tag *tag, int index)
             count++;
         }
     }
+#endif
 
     ASSERT(tag->index != BLOCK_ALLOCATED);
 
@@ -206,6 +208,7 @@ remove_tag (struct boundary_tag *tag)
         tag->next->prev = tag->prev;
     }
 
+#ifdef NAUT_CONFIG_DEBUG_MALLOC
     // do a sweep just to make sure
     int i, count;
     for (i = 0; i < MAXEXP; i++) {
@@ -242,6 +245,7 @@ remove_tag (struct boundary_tag *tag)
             count++;
         }
     }
+#endif
 
 	tag->next  = NULL;
 	tag->prev  = NULL;
