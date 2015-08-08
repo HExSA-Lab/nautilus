@@ -13,6 +13,18 @@
 #define DEBUG_PRINT(fmt, args...)
 #endif
 
+static inline void
+bspin_lock (volatile int * lock)
+{
+        while (__sync_lock_test_and_set(lock, 1));
+}
+
+static inline void
+bspin_unlock (volatile int * lock)
+{
+        __sync_lock_release(lock);
+}
+
 /* 
  * this is where cores will come in 
  * to arrive at a barrier. We're in interrupt
@@ -43,7 +55,7 @@ nk_barrier_init (nk_barrier_t * barrier, uint32_t count)
 {
     int ret = 0;
     memset(barrier, 0, sizeof(nk_barrier_t));
-    spinlock_init(&barrier->lock);
+    barrier->lock = 0;
 
     if (unlikely(count == 0)) {
         ERROR_PRINT("Barrier count must be greater than 0\n");
@@ -80,7 +92,7 @@ nk_barrier_destroy (nk_barrier_t * barrier)
 
     DEBUG_PRINT("Destroying barrier (%p)\n", (void*)barrier);
 
-    spin_lock(&barrier->lock);
+    bspin_lock(&barrier->lock);
     
     if (likely(barrier->remaining == barrier->init_count)) {
         res = 0;
@@ -89,7 +101,7 @@ nk_barrier_destroy (nk_barrier_t * barrier)
         ERROR_PRINT("Someone still waiting at barrier, cannot destroy\n");
         res = -EINVAL;
     }
-    spin_unlock(&barrier->lock);
+    bspin_unlock(&barrier->lock);
 
     return res;
 }
@@ -115,14 +127,13 @@ nk_barrier_wait (nk_barrier_t * barrier)
 
     DEBUG_PRINT("Thread (%p) entering barrier (%p)\n", (void*)get_cur_thread(), (void*)barrier);
 
-    spin_lock(&barrier->lock);
+    bspin_lock(&barrier->lock);
 
     if (--barrier->remaining == 0) {
         res = NK_BARRIER_LAST;
         atomic_cmpswap(barrier->notify, 0, 1);
     } else {
-        spin_unlock(&barrier->lock);
-        mbarrier();
+        bspin_unlock(&barrier->lock);
         BARRIER_WHILE(barrier->notify != 1);
     }
 
@@ -131,7 +142,7 @@ nk_barrier_wait (nk_barrier_t * barrier)
     register unsigned init_count = barrier->init_count;
 
     if (atomic_inc_val(barrier->remaining) == init_count) {
-        spin_unlock(&barrier->lock);
+        bspin_unlock(&barrier->lock);
     }
     
     return res;
