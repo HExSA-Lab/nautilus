@@ -1,4 +1,6 @@
 #ifdef __USER
+
+#define _GNU_SOURCE
 #include <sys/time.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -8,82 +10,39 @@
 #include <string.h>
 #include <limits.h>
 #include <time.h>
+#include <sched.h>
 #include <sys/mman.h>
 #include <pthread.h>
-#define PRINT printf
-#define THREAD_T        pthread_t
-#define FUNC_HDR        (void * in)
-#define FUNC_TYPE       void*
-#define JOIN_FUNC(x, y) pthread_join(x, y)
-#define LOCK_T          pthread_spinlock_t
-#define LOCK_INIT(x)    pthread_spin_init(x, 0)
-#define LOCK(x)         pthread_spin_lock(x)
-#define UNLOCK(x)       pthread_spin_unlock(x)
-#define MUTEX_T         pthread_mutex_t 
-#define MUTEX_INIT(x)   pthread_mutex_init(x, NULL)
-#define MUTEX_LOCK(x)   pthread_mutex_lock(x)
-#define MUTEX_UNLOCK(x) pthread_mutex_unlock(x)
-#define COND_T          pthread_cond_t
-#define COND_INIT(x)    pthread_cond_init(x, NULL)
-#define COND_WAIT(x, m) pthread_cond_wait(x, m)
-#define COND_SIG(x)     pthread_cond_signal(x)
-typedef unsigned long ulong_t;
-
-static inline uint64_t __attribute__((always_inline))
-rdtscp (void) 
-{
-    uint32_t lo, hi;
-    asm volatile("rdtscp" : "=a" (lo), "=d" (hi));
-    return lo | ((uint64_t)hi << 32);
-}
-
-static inline uint64_t __attribute__((always_inline))
-rdtsc (void) 
-{
-    uint32_t lo, hi;
-    asm volatile("cpuid\n\t"
-                 "rdtscp" : 
-                 "=a" (lo), "=d" (hi));
-    return lo | ((uint64_t)hi << 32);
-}
 
 #else
+
 #include <nautilus/nautilus.h>
+#include <nautilus/irq.h>
+#include <nautilus/cpu.h>
 #include <nautilus/libccompat.h>
 #include <nautilus/mwait.h>
 #include <nautilus/thread.h>
 #include <nautilus/condvar.h>
 #include <nautilus/spinlock.h>
+#include <nautilus/percpu.h>
+#include <nautilus/numa.h>
+#include <nautilus/nemo.h>
+#include <nautilus/pmc.h>
 #include <lib/liballoc.h>
-#define PRINT           printk
-#define THREAD_T        nk_thread_id_t
-#define LOCK_T          spinlock_t
-#define FUNC_HDR        (void * in, void ** out)
-#define FUNC_TYPE       void
-#define JOIN_FUNC(x, y) nk_join(x, y)
-#define LOCK_INIT(x)    spinlock_init(x)
-#define LOCK(x)         spin_lock(x)
-#define UNLOCK(x)       spin_unlock(x)
-#define MUTEX_T         spinlock_t
-#define MUTEX_INIT(x)   spinlock_init(x)
-#define MUTEX_LOCK(x)   spin_lock(x)
-#define MUTEX_UNLOCK(x) spin_unlock(x)
-#define COND_T          nk_condvar_t
-#define COND_INIT(x)    nk_condvar_init(x)
-#define COND_WAIT(x, m) nk_condvar_wait(x, m)
-#define COND_SIG(x)     nk_condvar_signal(x)
+
 #endif
 
-#define SIZE                  4096
-#define THR_CREATE_LOOPS      1000
-#define THR_LONG_CREATE_LOOPS 10
-#define SPINLOCK_LOOPS        1000
-#define CONDVAR_LOOPS         100
-#define MWAIT_LOOPS           100
-#define BIL                   1000000000
-#define MIL                   1000000
-#define LONG_LOCK_COUNT       (500*MIL)
-#define LOCK_COUNT            1
+#include "benchmark.h"
+
+#define rdtscll(val)                    \
+    do {                        \
+    uint64_t tsc;                   \
+    uint32_t a, d;                  \
+    asm volatile("rdtsc" : "=a" (a), "=d" (d)); \
+    *(uint32_t *)&(tsc) = a;            \
+    *(uint32_t *)(((unsigned char *)&tsc) + 4) = d;   \
+    val = tsc;                  \
+    } while (0)
 
 
 static struct cv {
@@ -94,132 +53,28 @@ static struct cv {
     uint64_t min;
 } cond_time;
 
-void ubenchmark (void);
 
-void
-ubenchmark (void) {
+#define NUM_THREADS 64
 
-    int i;
-    int j;
-    struct timespec ts, te;
+#define SIZE                  4096
+#define THR_CREATE_LOOPS      100
+#define THR_LONG_CREATE_LOOPS 8
+#define SPINLOCK_LOOPS        1000
+#define CONDVAR_LOOPS         100
+#define MWAIT_LOOPS           100
+#define BIL                   1000000000
+#define MIL                   1000000
+#define LONG_LOCK_COUNT       (500*MIL)
+#define LOCK_COUNT            1
 
-    unsigned count = 10000;
-    volatile ulong_t sum = 0;
+static volatile uint64_t core_recvd[NUM_THREADS/64 + NUM_THREADS%64];
+static volatile uint64_t core_counters[NUM_THREADS];
 
-    uint8_t  * page = malloc(SIZE);
-    if (!page) {
-#ifdef __USER
-        fprintf(stderr, "Could not alloc\n");
-#else
-        ERROR_PRINT("Could not alloc\n");
-#endif
-    }
-
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    for (j = 0; j < count; j++) {
-        for ( i = 0; i < SIZE; i++) {
-            sum += *(volatile uint8_t*)(page+i);
-        }
-    }
-    clock_gettime(CLOCK_MONOTONIC, &te);
-
-#ifdef __USER
-    printf("loop: start: %lu sec %lu nsec, end: %lu sec %lu nsec\n", 
-            ts.tv_sec, ts.tv_nsec,
-            te.tv_sec, te.tv_nsec);
-#else
-
-    printk("loop: start: %lu sec %lu nsec, end: %lu sec %lu nsec\n", 
-            ts.tv_sec, ts.tv_nsec,
-            te.tv_sec, te.tv_nsec);
-
-#endif
-}
-
-void time_spinlock_long (void);
-void time_spinlock_long (void)
-{
-    struct timespec ts, te;
-    LOCK_T l;
-    LOCK_INIT(&l);
-    int i, j;
-    uint64_t avg = 0;
-    uint64_t diff = 0;
-    uint64_t min = ULLONG_MAX;
-    uint64_t max = 0;
-    uint64_t nsec = 0;
-    uint64_t tsc_overhead = 0;
-    uint64_t nano_overhead = 0;
-    uint64_t total = 0;
-
-    for (i = 0; i < SPINLOCK_LOOPS; i++) {
-        clock_gettime(CLOCK_MONOTONIC, &ts);
-        clock_gettime(CLOCK_MONOTONIC, &te);
-        nsec += ((te.tv_sec * BIL) + te.tv_nsec) - ((ts.tv_sec * BIL) + ts.tv_nsec);
-    }
-    avg = nsec / SPINLOCK_LOOPS; 
-
-    PRINT("clock gettime overhead: %lu.%lu us\n", 
-            avg / 1000, 
-            avg % 1000);
-
-    nano_overhead = avg;
-
-    avg = 0;
-    nsec = 0;
-
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-
-    for (j = 0; j < LONG_LOCK_COUNT; j++) {
-        LOCK(&l);
-        UNLOCK(&l);
-    }
-    clock_gettime(CLOCK_MONOTONIC, &te);
-
-    diff = (te.tv_sec * BIL + te.tv_nsec) - 
-        (ts.tv_sec * BIL + ts.tv_nsec);
-
-    diff = (nano_overhead > diff) ? 0 : diff - nano_overhead;
-
-    PRINT("\nSpinlock long clock_gettime (sec) (overhead subtracted): %lu.%lu seconds\n",
-            diff / BIL,
-            diff % BIL);
-
-    avg = 0;
-    total = 0;
-
-    i = 0;
-    j = 0;
-    for (i = 0; i < SPINLOCK_LOOPS; i++) {
-        uint64_t start, end;
-        start = rdtscp();
-        end = rdtscp();
-        total += end - start;
-    }
-    avg = total / SPINLOCK_LOOPS; 
-
-    PRINT("RDTSC overhead: %lu cycles\n", avg);
-    tsc_overhead = avg;
-
-    uint64_t start, end;
-    start = rdtscp();
-    for (j = 0; j < LONG_LOCK_COUNT; j++) {
-        LOCK(&l);
-        asm volatile ("":::"memory");
-        UNLOCK(&l);
-    }
-    end = rdtscp();
-
-    diff = end - start;
-    diff = (tsc_overhead > diff) ? 0 : diff - tsc_overhead;
-            
-
-    PRINT("\nSpinlock long TSC in cycles (overhead subtracted) - %lu cycles\n",
-            diff);
-}
 
 #ifndef __USER
 
+#ifndef NAUT_CONFIG_XEON_PHI
+#if 0
 struct mwait_trigger {
     uint8_t flag;
     uint8_t pad[63]; 
@@ -260,7 +115,6 @@ time_mwait (void) {
 
     nk_monitor((addr_t)&trigger, 0, 0);
 
-    //printk("core %u going to monitor on addr %p\n", my_cpu_id(), addr);
 
     for (i = 0; i < MWAIT_LOOPS; i++) {
 
@@ -269,7 +123,7 @@ time_mwait (void) {
         //nk_monitor((addr_t)&trigger, 0, 0);
         nk_mwait(0, 0);
         cond_time.end = rdtscp();
-        printk("core %u woke up! %lu cycles\n", my_cpu_id(), cond_time.end - cond_time.start);
+        PRINT("core %u woke up! %lu cycles\n", my_cpu_id(), cond_time.end - cond_time.start);
         uint64_t diff = cond_time.end - cond_time.start;
         trigger.flag = 0;
         JOIN_FUNC(t, NULL);
@@ -296,21 +150,173 @@ time_mwait (void) {
             cond_time.max);
 
 }
+#endif
+#endif /* !NAUT_CONFIG_XEON_PHI */
 
 #endif
 
 static FUNC_TYPE
-wakemeupbeforeyougogo FUNC_HDR
+wakeme FUNC_HDR
 {
     COND_T * c = (COND_T*)in;
-#ifdef __USER
-    usleep(100000);
-#else
-    udelay(100000);
-#endif
+    DELAY(100);
     COND_SIG(c);
-    cond_time.start = rdtscp();
+	rdtscll(cond_time.start);
+	RETURN;
 }
+
+typedef struct container {
+	COND_T * cvar;
+	BARRIER_T * barrier;
+	MUTEX_T lock;
+} container_t;
+
+
+static FUNC_TYPE
+waitonit FUNC_HDR
+{
+	container_t * cont = (container_t*)in;
+	COND_T * c = (COND_T*)cont->cvar;
+	BARRIER_T * b = (BARRIER_T*)cont->barrier;
+	uint32_t my_id;
+
+/* BARRIER */
+	my_id = GETCPU();
+
+	/* wait at the barrier */
+	BARRIER_WAIT(b);
+
+	DELAY(10);
+
+	MUTEX_LOCK(&(cont->lock));
+
+	/* go to sleep */
+	COND_WAIT(c, &(cont->lock));
+	
+	/* wakeup */
+	rdtscll(core_counters[my_id]);
+
+	bset(my_id, (unsigned long*)core_recvd);
+
+	MUTEX_UNLOCK(&(cont->lock));
+	RETURN;
+}
+
+/*
+#ifdef __USER
+#define BSP_CORE 0
+#else
+#define BSP_CORE 224
+#endif
+*/
+
+#define BSP_CORE 0
+
+static inline void
+cores_wait(void)
+{
+    while (core_recvd[0] != 0xfffffffffffffffe);
+}
+
+#define REM_CORE 1
+
+void time_cvar_bcast (void);
+void time_cvar_bcast (void)
+{
+	int i, j;
+	unsigned my_id;
+	COND_T * c = malloc(sizeof(COND_T));
+	BARRIER_T * b = malloc(sizeof(BARRIER_T));
+	container_t * cont = malloc(sizeof(container_t));
+	THREAD_T t[NUM_THREADS];
+	
+    udelay(100);
+
+	my_id = GETCPU();
+
+	/* setup arguments to threads */
+	cont->cvar    = c;
+	cont->barrier = b;
+
+	/* clear timing info */
+	memset((void*)core_counters, 0, sizeof(core_counters));
+	memset((void*)core_recvd, 0, sizeof(core_recvd));
+
+
+#ifdef __USER
+	/* Make sure I'm pinned to the BSP core, already the case in Nautilus */
+	cpu_set_t cp;
+	CPU_ZERO(&cp);
+	CPU_SET(BSP_CORE, &cp);
+	pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cp);
+#endif
+
+	for (i = 0; i < CONDVAR_LOOPS; i++) {
+		uint64_t start = 0;
+
+		COND_INIT(cont->cvar);
+		MUTEX_INIT(&(cont->lock));
+
+		BARRIER_INIT(cont->barrier, NUM_THREADS);
+
+		for (j = 0; j < NUM_THREADS; j++) { 
+
+			if (j == BSP_CORE) continue;
+
+#ifdef __USER
+			cpu_set_t cpuset;
+			CPU_ZERO(&cpuset);
+			CPU_SET(j, &cpuset);
+			pthread_create(&t[j], NULL, waitonit, cont);
+			pthread_setaffinity_np(t[j], sizeof(cpu_set_t), &cpuset);
+#else
+			nk_thread_start(waitonit, cont, NULL, 0, TSTACK_DEFAULT, &t[j], j);
+#endif
+		
+		}
+
+		/* wait for everyone to start up */
+		BARRIER_WAIT(cont->barrier);
+
+		DELAY(1000);
+
+		/* set the timer */
+		rdtscll(start);
+		/* we can signal it now */
+		COND_BCAST(cont->cvar);
+
+		/* wait on everyone to finish waking up */
+		cores_wait();
+
+		/* join all the threads and print the trial */
+		for (j = 0; j < NUM_THREADS; j++) {
+			if (j == BSP_CORE) continue;
+
+			if (start > core_counters[j]) {
+				PRINT("STRANGENESS OCCURED IN CYCLE COUNT - start=%llu, end=%llu\n", start, core_counters[j]);
+			}
+
+			PRINT("TRIAL %u RC: %u %llu cycles\n", i, j, core_counters[j] - start);
+			JOIN_FUNC(t[j], NULL);
+		}
+
+		/* clear timing info */
+		memset((void*)core_counters, 0, sizeof(core_counters));
+		memset((void*)core_recvd, 0, sizeof(core_recvd));
+		
+#ifdef __USER
+		pthread_cond_destroy(cont->cvar);
+		pthread_barrier_destroy(cont->barrier);
+#else
+		nk_condvar_destroy(cont->cvar);
+		nk_barrier_destroy(cont->barrier);
+#endif
+
+		MUTEX_DEINIT(&(cont->lock));
+	}
+
+}
+
 
 void time_condvar (void);
 void time_condvar (void) {
@@ -318,28 +324,34 @@ void time_condvar (void) {
     COND_T c;
     THREAD_T t;
     MUTEX_T l;
-    int i;
-
+    int i,j;
 
     MUTEX_INIT(&l);
     COND_INIT(&c);
 
     memset(&cond_time, 0, sizeof(cond_time));
-    cond_time.min = ULLONG_MAX;
+
+    for (j = 0; j < NUM_THREADS; j++) {
+
+        if (j == 0) continue;
 
         for (i = 0; i < CONDVAR_LOOPS; i++) {
 
 #ifdef __USER
-            pthread_create(&t, NULL, wakemeupbeforeyougogo, &c);
+            cpu_set_t cpuset;
+            CPU_ZERO(&cpuset);
+            CPU_SET(j, &cpuset);
+            pthread_create(&t, NULL, wakeme, &c);
+            pthread_setaffinity_np(t, sizeof(cpu_set_t), &cpuset);
 #else
-            nk_thread_start(wakemeupbeforeyougogo, &c, NULL, 0, TSTACK_DEFAULT, &t, 1);
+            nk_thread_start(wakeme, &c, NULL, 0, TSTACK_DEFAULT, &t, j);
 #endif
 
             MUTEX_LOCK(&l);
 
             COND_WAIT(&c, &l);
 
-            cond_time.end = rdtscp();
+            rdtscll(cond_time.end);
 
             MUTEX_UNLOCK(&l);
 
@@ -347,24 +359,9 @@ void time_condvar (void) {
 
             uint64_t diff = cond_time.end - cond_time.start;
 
-            if (diff < cond_time.min) {
-                cond_time.min = diff;
-            }
-
-            if (diff > cond_time.max) {
-                cond_time.max = diff;
-            }
-
-            cond_time.sum += diff;
+            PRINT("TRIAL %u RC:%u %llu cycles\n", i, j, diff);
         }
-
-        uint64_t avg = cond_time.sum / CONDVAR_LOOPS;
-
-        PRINT("CONDVAR: (loops=%u) Avg: %lu Min: %lu Max: %lu\n",
-                CONDVAR_LOOPS,
-                avg,
-                cond_time.min,
-                cond_time.max);
+    }
 
 }
 
@@ -439,8 +436,8 @@ void time_spinlock (void)
 
     for (i = 0; i < SPINLOCK_LOOPS; i++) {
         uint64_t start, end;
-        start = rdtscp();
-        end = rdtscp();
+        rdtscll(start);
+        rdtscll(end);
         total += end - start;
     }
     avg = total / SPINLOCK_LOOPS; 
@@ -452,12 +449,12 @@ void time_spinlock (void)
 
     for (i = 0; i < SPINLOCK_LOOPS; i++) {
         uint64_t start, end;
-        start = rdtscp();
+        rdtscll(start);
         //for (j = 0; j < LOCK_COUNT; j++) {
             LOCK(&l);
             UNLOCK(&l);
         //}
-        end = rdtscp();
+        rdtscll(end);
 
         uint64_t diff = end - start;
         diff = (tsc_overhead > diff) ? 0 : diff - tsc_overhead;
@@ -481,157 +478,643 @@ void time_spinlock (void)
             max);
 }
 
+
 static FUNC_TYPE
-start_test FUNC_HDR
+create_test_func FUNC_HDR
 {
-    return;
+    RETURN;
 }
 
 
 void time_threads_long(void);
 void time_threads_long(void)
 {
-    THREAD_T t[64];
+	THREAD_T t[NUM_THREADS];
 
-    uint64_t total;
-    uint64_t min;
-    uint64_t max;
-    uint64_t avg;
+	int i, j, k;
+	uint64_t start,end;
+	//int counts[] = {2,4,8,16,32,64,128,228};
+    int counts[] = {2,4,8,16,32,64};
 
-    int i, j, k;
-    uint8_t thread_counts[6] = {2, 4, 8, 16, 32, 64};
+	for (k = 0; k < 6 ; k++) {
 
-    //for (k = 0; k < 6; k++) {
+		for (i = 0; i < 100; i++) {
 
-        total = 0;
-        max = 0;
-        min = ULLONG_MAX;
-        avg = 0;
+			rdtscll(start);
 
-#define CUR 64
-#ifndef __USER
-        asm volatile ("cli");
-#endif
-        for (i = 0; i < THR_LONG_CREATE_LOOPS; i++) {
-
-            uint64_t start = rdtscp();
-
-            for (j = 0; j < CUR; j++) {
+			/* TODO: each of these should go on a separate core */
+			for (j = 0; j < counts[k]; j++) {
+				if (j == BSP_CORE) continue;
 #ifdef __USER
-                pthread_create(&t[j], NULL, start_test, NULL);
+				cpu_set_t cpuset;
+				CPU_ZERO(&cpuset);
+				CPU_SET(j, &cpuset);
+				pthread_create(&t[j], NULL, create_test_func, NULL);
+				pthread_setaffinity_np(t[j], sizeof(cpu_set_t), &cpuset);
 #else
-                nk_thread_start(start_test, NULL, NULL, 0, TSTACK_DEFAULT, &t[j], 0);
+				nk_thread_start(create_test_func, NULL, NULL, 0, TSTACK_DEFAULT, &t[j], j);
 #endif
-            }
+			}
 
-            uint64_t end = rdtscp();
+			rdtscll(end);
 
-            for (j = 0; j < CUR; j++) {
-                JOIN_FUNC(t[j], NULL);
-            }
+			DELAY(10000);
 
-            uint64_t diff = end - start;
+			for (j = 0; j < counts[k]; j++) {
 
-            if (diff < min) { 
-                min = diff;
-            }
+				if (j == BSP_CORE) continue;
 
-            if (diff > max) { 
-                max = diff;
-            }
+				JOIN_FUNC(t[j], NULL);
+			}
 
-            total += diff;
+			DELAY(10000);
 
-        }
-#ifndef __USER
-        asm volatile ("sti");
-#endif
+			memset(t, 0, sizeof(t));
 
-        avg = total / THR_LONG_CREATE_LOOPS;
+			PRINT("TRIAL %u THREADS %u %llu\n", i, counts[k], end-start);
 
-        PRINT("Thread Create (%u threads): Avg: %lu cycles Min: %lu cycles Max: %lu cycles\n",
-                CUR,
-                avg,
-                min,
-                max);
-    //}
+		}
+	}
 }
 
-void time_threads(void);
+
+void time_thread_create(void);
 void
-time_threads (void)
+time_thread_create (void)
 {
-    struct timespec ts, te;
     THREAD_T t;
 
-    uint64_t nsec = 0;
-    uint64_t min = ULLONG_MAX;;
-    uint64_t max = 0;
-
     int i;
-#ifndef __USER
-    asm volatile ("cli");
-#endif
+	uint64_t start,end;
+
     for (i = 0; i < THR_CREATE_LOOPS; i++) {
-        //clock_gettime(CLOCK_MONOTONIC, &ts);
-        uint64_t start = rdtscp();
+        rdtscll(start);
     #ifdef __USER
-        pthread_create(&t, NULL, start_test, NULL);
+		pthread_attr_t attr;
+		cpu_set_t cpus;
+		pthread_attr_init(&attr);
+
+		CPU_ZERO(&cpus);
+		CPU_SET(1, &cpus);
+		pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+        pthread_create(&t, &attr, create_test_func, NULL);
     #else
-        nk_thread_start(start_test, NULL, NULL, 0, TSTACK_DEFAULT, &t, 0);
+        nk_thread_start(create_test_func, NULL, NULL, 0, TSTACK_DEFAULT, &t, 1);
     #endif
-        uint64_t end = rdtscp();
-        //clock_gettime(CLOCK_MONOTONIC, &te);
-        //asm volatile ("":::"memory");
+        rdtscll(end);
+
+		DELAY(10000);
+		PRINT("Trial %u %llu \n", i, end-start);
+
         JOIN_FUNC(t, NULL);
 
-#if 0
-        uint64_t diff = (te.tv_sec * BIL + te.tv_nsec) - 
-            (ts.tv_sec * BIL + ts.tv_nsec);
+    }
+}
+
+
+static volatile int thread_run_done = 0;
+
+static FUNC_TYPE
+thread_run_func FUNC_HDR
+{
+	thread_run_done = 1;
+    RETURN;
+}
+
+
+#define RUN_TRIALS 100
+
+void time_thread_run(void);
+void
+time_thread_run (void)
+{
+	THREAD_T t;
+	unsigned i;
+	uint64_t start, end;
+
+	for (i = 0; i < RUN_TRIALS; i++) {
+#ifdef __USER
+		pthread_attr_t attr;
+		cpu_set_t cpus;
+		pthread_attr_init(&attr);
+		CPU_ZERO(&cpus);
+		CPU_SET(1, &cpus);
+		pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+		pthread_create(&t, &attr, thread_run_func, NULL);
+#else
+        nk_thread_start(thread_run_func, NULL, NULL, 0, TSTACK_DEFAULT, &t, 1);
 #endif
-        uint64_t diff = end - start;
 
-        if (diff < min) { 
-            min = diff;
-        }
+		rdtscll(start);
 
-        if (diff > max) { 
-            max = diff;
-        }
+		while (!thread_run_done);
 
-        nsec += diff;
+		rdtscll(end);
+
+		DELAY(100);
+	
+		JOIN_FUNC(t, NULL);
+
+		thread_run_done = 0;
+
+		PRINT("TRIAL %u %llu cycles\n", i, end-start);
+	}
+}
+
+/* this includes both the create and the latency for the thread to actually run */
+void time_thread_both(void);
+void
+time_thread_both (void)
+{
+	THREAD_T t;
+	unsigned i;
+	uint64_t start, end;
+
+	for (i = 0; i < RUN_TRIALS; i++) {
+
+		rdtscll(start);
+
+#ifdef __USER
+		pthread_attr_t attr;
+		cpu_set_t cpus;
+		pthread_attr_init(&attr);
+		CPU_ZERO(&cpus);
+		CPU_SET(1, &cpus);
+		pthread_attr_setaffinity_np(&attr, sizeof(cpu_set_t), &cpus);
+		pthread_create(&t, &attr, thread_run_func, NULL);
+#else
+        nk_thread_start(thread_run_func, NULL, NULL, 0, TSTACK_DEFAULT, &t, 1);
+#endif
+
+		while (!thread_run_done);
+
+		rdtscll(end);
+
+		DELAY(100);
+	
+		JOIN_FUNC(t, NULL);
+
+		thread_run_done = 0;
+
+		PRINT("TRIAL %u %llu cycles\n", i, end-start);
+	}
+}
+
+
+static volatile int done[2];
+static volatile int ready[2];
+static volatile int go;
+#define YIELD_COUNT 100
+#define CTX_SWITCH_TRIALS 100
+
+typedef struct switch_cont {
+	BARRIER_T * b;
+	unsigned char id; /* 0 or 1 */
+} switch_cont_t;
+
+
+static FUNC_TYPE
+thread_switch_func FUNC_HDR
+{
+	switch_cont_t * t = (switch_cont_t*)in;
+
+	ready[t->id] = 1;
+
+	YIELD();
+
+	while (!go) { YIELD(); }
+//BARRIER_WAIT(t->b);
+
+	int i;
+	for (i = 0; i < YIELD_COUNT; i++) {
+		YIELD();
+	}
+
+	done[t->id] = 1;
+
+	RETURN;
+}
+
+
+
+void time_ctx_switch(void);
+void
+time_ctx_switch (void)
+{
+	THREAD_T t[2];
+	BARRIER_T * b = malloc(sizeof(BARRIER_T));
+	switch_cont_t * cont1 = malloc(sizeof(switch_cont_t));
+	switch_cont_t * cont2 = malloc(sizeof(switch_cont_t));
+	uint64_t start = 0;
+	uint64_t end = 0;
+	int i;
+
+	/* setup thread arguments */
+	cont1->b = b;
+	cont1->id = 0;
+	cont2->b = b;
+	cont2->id = 1;
+
+	for (i = 0; i < CTX_SWITCH_TRIALS; i++)  {
+
+		BARRIER_INIT(b, 3);
+
+		// pin them both to core 1
+#ifdef __USER
+		cpu_set_t cpuset;
+		CPU_ZERO(&cpuset);
+		CPU_SET(1, &cpuset);
+
+		pthread_create(&t[0], NULL, thread_switch_func, cont1);
+		pthread_setaffinity_np(t[0], sizeof(cpu_set_t), &cpuset);
+
+		pthread_create(&t[1], NULL, thread_switch_func, cont2);
+		pthread_setaffinity_np(t[1], sizeof(cpu_set_t), &cpuset);
+#else
+		nk_thread_start(thread_switch_func, cont1, NULL, 0, TSTACK_DEFAULT, &t[0], 1);
+		nk_thread_start(thread_switch_func, cont2, NULL, 0, TSTACK_DEFAULT, &t[1], 1);
+
+#endif
+
+		DELAY(10000);
+
+		while ( !(ready[0] && ready[1]) );
+
+		go = 1;
+
+		//BARRIER_WAIT(b);
+
+		rdtscll(start);
+		while ( !(done[0] && done[1]) );
+		rdtscll(end);
+
+		/* is this accurate? */
+		PRINT("TRIAL %u %llu\n", i, (end-start)/(YIELD_COUNT*2));
+
+		JOIN_FUNC(t[0], NULL);
+		JOIN_FUNC(t[1], NULL);
+
+		BARRIER_DESTROY(b);
+
+		done[0] = 0;
+		done[1] = 0;
+		ready[0] = 0;
+		ready[1] = 0;
+		go = 0;
+
+	}
+}
+
+void time_ipi_send (void);
+void
+time_ipi_send(void)
+{
+    int i;
+    struct apic_dev * apic = per_cpu_get(apic);
+    uint64_t start, end;
+    for (i = 0; i < 100; i++) {
+        rdtscll(start);
+
+        apic_ipi(apic, 1, APIC_NULL_KICK_VEC);
+
+        rdtscll(end);
+
+        PRINT("TRIAL %u %llu\n", i, end-start);
+    }
+}
+
+#define TRIALS 100
+static uint64_t int80_end = 0;
+
+static int
+int80_handler (excp_entry_t * excp, excp_vec_t v)
+{
+    rdtscll(int80_end);
+    return 0;
+}
+
+void time_int80 (void);
+void
+time_int80 (void)
+{
+    int i;
+    uint64_t start;
+    register_int_handler(0x80, int80_handler, NULL);
+    sti();
+    for (i = 0; i < TRIALS; i++) {
+        rdtscll(start);
+        asm volatile ("":::"memory");
+        asm volatile ("int $0x80");
+
+        PRINT("TRIAL %u %llu\n", i, int80_end-start);
+
+        int80_end = 0;
+        start = 0;
+    }
+}
+
+uint64_t syscall_end = 0;
+static uint64_t syscall_start = 0;
+
+
+extern void syscall_handler(void);
+
+static void
+syscall_setup (void)
+{
+    uint64_t r;
+
+    /* enable fast syscall */
+    r = msr_read(IA32_MSR_EFER);
+    r |= EFER_SCE;
+    msr_write(IA32_MSR_EFER, r);
+
+    /* SYSCALL and SYSRET CS in upper 32 bits */
+    msr_write(AMD_MSR_STAR, ((0x8llu & 0xffffllu) << 32) | ((0x8llu & 0xffffllu) << 48));
+
+    /* target address */
+    msr_write(AMD_MSR_LSTAR, (uint64_t)syscall_handler);
+}
+
+
+void time_syscall (void);
+void
+time_syscall (void)
+{
+    int i;
+    uint64_t start;
+
+    syscall_setup();
+
+    for (i = 0; i < TRIALS; i++) {
+
+        rdtscll(syscall_start);
+
+        /* the callee will just do a retq, no sysret. Demeted huh? */
+        asm volatile ("pushq $b\n\t"
+                      "syscall\n\t"
+                      "b:\n\t" : : : "memory", "rcx");
+
+
+        PRINT("TRIAL %u %llu\n", i, syscall_end-syscall_start);
+
+        syscall_end  = 0;
 
     }
-    asm volatile ("sti");
 
-    uint64_t avg = nsec / THR_CREATE_LOOPS;
-    //uint64_t leftover = nsec % THR_CREATE_LOOPS;
+}
 
-    PRINT("Thread Create: Avg: %lu cycles Min: %lu cycles Max: %lu cycles\n",
-            avg,
-            min,
-            max);
+static uint64_t nemo_end = 0;
+static volatile int nemo_done = 0;
+static void
+nemo_wakeup (void)
+{
+    rdtscll(nemo_end);
+    nemo_done = 1;
+}
+
+void time_nemo_event (void);
+void
+time_nemo_event (void)
+{
+    unsigned i,j;
+    uint64_t start;
+
+    nemo_init();
+
+    nemo_event_id_t id = nemo_register_event_action(nemo_wakeup, NULL);
+
+    if (id < 0) {
+        printk("couldn't register test nemo task\n");
+        return;
+    }
+
+    for (i = 0; i < NUM_THREADS; i++) {
+
+        if (i == BSP_CORE) continue;
+
+        for (j = 0; j < TRIALS; j++) {
+
+            rdtscll(start);
+
+            nemo_event_notify(id, i);
+
+            while (!nemo_done);
+
+            PRINT("TRIAL %u RC: %u %llu cycles \n",
+                j, 
+                i, 
+                nemo_end-start);
+
+            nemo_done = 0;
+            nemo_end = 0;
+
+        }
+    }
+}
+
+
+static void
+nemo_bcast_wakeup (void)
+{
+    uint64_t tmp;
+    rdtscll(tmp);
+    core_counters[my_cpu_id()] = tmp;
+    bset(my_cpu_id(),(unsigned long*)core_recvd);
+}
+
+
+void time_nemo_bcast (void);
+void
+time_nemo_bcast (void)
+{
+    unsigned i;
+    uint64_t start;
+
+    nemo_init();
+
+    nemo_event_id_t id = nemo_register_event_action(nemo_bcast_wakeup, NULL);
+
+    for (i = 0; i < TRIALS; i++) {
+
+        rdtscll(start);
+
+        nemo_event_broadcast(id);
+
+        cores_wait();
+
+        int j;
+        for (j = 0; j < NUM_THREADS; j++) {
+
+            if (j==BSP_CORE) continue;
+
+            if (start > core_counters[j]) {
+                panic("Strangeness occured in cycle count - start=%llu end=%llu\n", start, core_counters[j]);
+
+            }
+
+            PRINT("TRIAL %u RC: %u %llu cycles \n",
+                    i, 
+                    j, 
+                    core_counters[j] - start);
+
+        }
+
+        memset((void*)core_recvd, 0, sizeof(uint64_t)*4);
+        memset((void*)core_counters, 0, sizeof(uint64_t)*NUM_THREADS);
+
+    }
+}
+
+static volatile int sync_go = 0;
+static volatile int sync_done = 0;
+static uint64_t sync_end = 0;
+
+static FUNC_TYPE
+sync_wakeup FUNC_HDR
+{
+    while (!sync_go);
+
+    rdtscll(sync_end);
+
+    sync_done = 1;
+
+    RETURN;
+}
+
+
+void time_sync_event (void);
+void 
+time_sync_event (void)
+{
+    unsigned i, j;
+    uint64_t start;
+
+    for (i = 0; i < NUM_THREADS; i++) {
+
+        if (i == BSP_CORE) continue;
+
+        for (j = 0; j < TRIALS; j++) {
+
+            THREAD_T t;
+
+            nk_thread_start(sync_wakeup, NULL, NULL, 0, TSTACK_DEFAULT, &t, i);
+
+            DELAY(100000);
+
+            rdtscll(start);
+
+            /* signal */
+            sync_go = 1;
+
+            while (!sync_done);
+
+            PRINT("TRIAL %u RC: %u %llu cycles\n", j, i, sync_end-start);
+
+            sync_go   = 0;
+            sync_end  = 0;
+            sync_done = 0;
+
+            JOIN_FUNC(t, NULL);
+        }
+    }
+}
+
+#ifndef __USER
 #if 0
-    PRINT("Thread Create: Avg: %lu.%lu us Min: %lu.%lu us Max: %lu.%lu us\n",
-            avg / 1000,
-            avg % 1000,
-            min / 1000,
-            min % 1000,
-            max / 1000,
-            min % 1000);
+void page_alloc_test(void);
+void 
+page_alloc_test (void)
+{
+
+#define N 100
+
+	void * x[N];
+	int i, j;
+
+	for (j = 0; j < 10; j++) {
+		printk("Trial %u\n", j);
+
+		for (i = 0; i < N; i++) {
+
+			x[i] = (void*)nk_alloc_pages(16);
+		}
+
+		for (i = 0; i < N; i++) {
+			nk_free_pages(x[i], 16);
+		}
+
+		nk_dump_page_map();
+	}
+
+
+}
 #endif
+
+#undef N
+#define N 10000
+void malloc_test(void);
+void
+malloc_test (void)
+{
+	void * x[N];
+	int i;
+		
+
+	for (i = 0; i < N; i++) {
+		x[i] = malloc(4096);
+		memset(x[i], 0, 4096);
+	}
+
+
+	for (i = 0; i < N; i++) {
+		free(x[i]);
+	}
+
+}
+
+#endif
+
+void run_benchmarks(void);
+void 
+run_benchmarks(void)
+{
+    time_syscall();
 }
 
 #ifdef __USER 
 
 int main () {
-    //ubenchmark();
-    //time_spinlock();
-    //time_threads();
-    //time_threads_long();
-    time_spinlock_long();
+
+#ifdef CREATE
+    time_thread_create();
+#endif
+
+#ifdef CREATE_LONG
+    time_threads_long();
+#endif
+
+#ifdef RUN
+	time_thread_run();
+#endif
+
+#ifdef BOTH
+	time_thread_both();
+#endif
+
+#ifdef CONDVAR
+    time_condvar();
+#endif
+
+#ifdef CONDVAR_BCAST
+    time_cvar_bcast();
+#endif
+
+#ifdef CTX_SWITCH
+    time_ctx_switch();
+#endif
+    return 0;
 }
 
-#define NUM_THREADS 32
 
 #endif
