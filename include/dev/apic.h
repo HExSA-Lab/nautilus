@@ -199,8 +199,23 @@ struct naut_info;
 
 uint32_t apic_get_id(struct apic_dev * apic);
 void apic_do_eoi(void);
-inline void apic_ipi(struct apic_dev * apic, uint_t remote_id, uint_t vector);
-inline void apic_bcast_ipi(struct apic_dev * apic, uint_t vector);
+
+static inline void 
+apic_ipi (struct apic_dev * apic, 
+          uint_t remote_id,
+          uint_t vector) 
+{
+    apic_write(apic, APIC_REG_ICR2, remote_id << APIC_ICR2_DST_SHIFT);
+    apic_write(apic, APIC_REG_ICR, APIC_DEL_MODE_FIXED | vector);
+}
+
+static inline void 
+apic_bcast_ipi (struct apic_dev * apic, uint_t vector)
+{
+    apic_write(apic, APIC_REG_ICR, APIC_IPI_OTHERS | APIC_DEL_MODE_FIXED | vector);
+}
+
+
 void apic_self_ipi (struct apic_dev * apic, uint_t vector);
 void apic_send_iipi(struct apic_dev * apic, uint32_t remote_id);
 void apic_deinit_iipi(struct apic_dev * apic, uint32_t remote_id);

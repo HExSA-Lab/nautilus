@@ -258,27 +258,6 @@ apic_read_timer (struct apic_dev * apic)
 }
 
 
-inline void __always_inline
-apic_ipi (struct apic_dev * apic, 
-          uint_t remote_id,
-          uint_t vector) 
-{
-    uint8_t flags = irq_disable_save();
-    apic_write(apic, APIC_REG_ICR2, remote_id << APIC_ICR2_DST_SHIFT);
-    apic_write(apic, APIC_REG_ICR, APIC_DEL_MODE_FIXED | vector);
-    irq_enable_restore(flags);
-}
-
-inline void __always_inline
-apic_bcast_ipi (struct apic_dev * apic,
-        uint_t vector)
-{
-    uint8_t flags = irq_disable_save();
-    apic_write(apic, APIC_REG_ICR, APIC_IPI_OTHERS | APIC_DEL_MODE_FIXED | vector);
-    irq_enable_restore(flags);
-}
-
-
 void
 apic_self_ipi (struct apic_dev * apic, uint_t vector)
 {
