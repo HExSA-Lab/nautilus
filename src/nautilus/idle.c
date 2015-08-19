@@ -14,12 +14,39 @@
                      ####
 */
 
+
+static inline void 
+idle_delay (unsigned long long n)
+{
+    int i = 0;
+    while (--n) {
+        i += 1;
+        asm volatile ("":::"memory");
+    }
+
+    n = n + i;
+}
+
+
 void 
 idle (void * in, void ** out)
 {
     get_cur_thread()->is_idle = 1;
+
     while (1) {
+
         nk_yield();
+
+#ifdef NAUT_CONFIG_XEON_PHI
+        udelay(1);
+#else
+        idle_delay(100);
+#endif
+
+#ifdef NAUT_CONFIG_HALT_WHILE_IDLE
+        sti();
+        halt();
+#endif
     }
 }
 
