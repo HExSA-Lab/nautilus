@@ -64,6 +64,44 @@ config USE_TICKETLOCKS
       Uses ticketlocks (similar to Linux impl.) instead of
       default spinlocks
     
+
+menu "Performance Optimizations"
+    
+    config KICK_SCHEDULE
+        bool "Kick cores with IPIs on scheduling events"
+        default n
+        help
+          This will reduce the latency and variance of scheduling events
+          by kicking the remote CPU with an IPI, causing a scheduling event
+          to occur immediately, rather than waiting for next timer tick or
+          current thread to yield.
+
+    config HALT_WHILE_IDLE
+        bool "Halt the CPU when idle"
+        default n
+        help
+            This will cause the CPU to go into a halt in an idle thread when
+            there is nothing else important to run. Can potentially reduce
+            memory traffic do to yields(), especially on platforms like the 
+            Xeon Phi.
+
+    config THREAD_OPTIMIZE
+        bool "Optimize threading for performance"
+        default n
+        help
+            Disables paranoid condition checking and optimizes thread functions
+            for maximum performance.
+
+    config USE_IDLE_THREADS
+        bool "Start idle threads on all cores"
+        default n
+        help
+            Enables idle threads to start in addition to the main boot threads. 
+            Usually not needed.
+
+
+endmenu
+
     
 
 menu Debugging
@@ -259,7 +297,6 @@ menu "Build Config"
 
     config TOOLCHAIN_ROOT
       string "Toolchain Root"
-      default /usr
       help 
        Directory where the intended GCC toolchain, binutils, libraries, grub, etc are installed.
 

@@ -98,6 +98,8 @@ struct nk_thread {
     nk_stack_size_t stack_size;
     unsigned long tid;
 
+    int lock;
+
     nk_queue_entry_t runq_node; // formerly q_node
     nk_queue_entry_t thr_list_node;
 

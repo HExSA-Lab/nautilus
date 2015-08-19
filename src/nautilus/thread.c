@@ -454,31 +454,42 @@ nk_thread_create (nk_thread_fun_t fun,
     nk_thread_t * t = NULL;
     void * stack    = NULL;
 
+#ifndef NAUT_CONFIG_THREAD_OPTIMIZE
     ASSERT(cpu < per_cpu_get(system)->num_cpus && cpu != CPU_ANY);
 
     if (cpu >= per_cpu_get(system)->num_cpus && cpu != CPU_ANY) {
         ERROR_PRINT("thread create received invalid CPU id (%u)\n", cpu);
         return -EINVAL;
     }
+#endif
 
     t = malloc(sizeof(nk_thread_t));
 
+#ifndef NAUT_CONFIG_THREAD_OPTIMIZE
     ASSERT(t);
     if (!t) {
         ERROR_PRINT("Could not allocate thread struct\n");
         return -EINVAL;
     }
     memset(t, 0, sizeof(nk_thread_t));
+#endif
 
+
+#ifndef NAUT_CONFIG_THREAD_OPTIMIZE
     if (stack_size) {
-        stack = (void*)malloc(stack_size);
+        stack         = (void*)malloc(stack_size);
         t->stack_size = stack_size;
     } else {
-        stack = (void*)malloc(PAGE_SIZE_4KB);
-        t->stack_size =  PAGE_SIZE_4KB;
+        stack         = (void*)nk_alloc_page();
+        t->stack_size =  PAGE_SIZE;
     }
+#else
+    stack         = malloc(PAGE_SIZE_4KB);
+    t->stack_size = PAGE_SIZE_4KB;
+#endif
 
     stack = (void*)nk_alloc_page();
+    t->stack_size = PAGE_SIZE;
 
     ASSERT(stack);
 
@@ -500,8 +511,11 @@ nk_thread_create (nk_thread_fun_t fun,
     return 0;
 
 out_err1:
-    free(stack);
-//out_err:
+    if (t->stack_size == PAGE_SIZE) {
+        nk_free_page((addr_t)stack);
+    } else {
+        free(stack);
+    }
     free(t);
     return -1;
 }
@@ -544,7 +558,9 @@ nk_thread_start (nk_thread_fun_t fun,
 
     newthread = (nk_thread_t*)newtid;
 
-    *tid = newtid;
+    if (tid) {
+        *tid = newtid;
+    }
 
     thread_setup_init_stack(newthread, fun, input);
 
@@ -555,6 +571,15 @@ nk_thread_start (nk_thread_fun_t fun,
         SCHED_DEBUG("Started thread (%p, tid=%u) on [ANY CPU]\n", newthread, newthread->tid); 
     } else {
         SCHED_DEBUG("Started thread (%p, tid=%u) on cpu %u\n", newthread, newthread->tid, cpu); 
+    }
+#endif
+
+#ifdef NAUT_CONFIG_KICK_SCHEDULE
+    // kick it
+    if (cpu != my_cpu_id()) {
+        apic_ipi(per_cpu_get(apic),
+                nk_get_nautilus_info()->sys.cpus[cpu]->lapic_id,
+                APIC_NULL_KICK_VEC);
     }
 #endif
 
@@ -572,29 +597,7 @@ void
 nk_wake_waiters (void)
 {
     nk_thread_t * me  = get_cur_thread();
-    nk_queue_entry_t * tmp = NULL;
-    nk_queue_entry_t * elm = NULL;
-
-    uint8_t flags = spin_lock_irq_save(&(me->waitq->lock));
-    if (list_empty_careful(&(me->waitq->queue))) {
-        goto out;
-    }
-
-    list_for_each_entry_safe(elm, tmp, &(me->waitq->queue), node) {
-
-        nk_thread_t * t = container_of(elm, nk_thread_t, wait_node);
-
-        if (!t) {
-            continue;
-        }
-
-        nk_enqueue_thread_on_runq(t, t->bound_cpu);
-        nk_dequeue_entry(&(t->wait_node));
-
-    }
-
-out:
-    spin_unlock_irq_restore(&(me->waitq->lock), flags);
+    nk_thread_queue_wake_all(me->waitq);
 }
 
 
@@ -615,23 +618,27 @@ nk_thread_exit (void * retval)
 {
     nk_thread_t * me = get_cur_thread();
 
-    cli();
-
     /* clear any thread local storage that may have been allocated */
     tls_exit();
+    
+    while (__sync_lock_test_and_set(&me->lock, 1));
 
     /* wait for my children to finish */
     nk_join_all_children(NULL);
 
-    /* wake up everyone who is waiting on me */
-    nk_wake_waiters();
-
     me->output      = retval;
     me->status      = NK_THR_EXITED;
+
+    /* wake up everyone who is waiting on me */
+    nk_wake_waiters();
 
     me->refcount--;
 
     SCHED_DEBUG("Thread %p (tid=%u) exiting, joining with children\n", me, me->tid);
+
+    __sync_lock_release(&me->lock);
+
+    cli();
 
     nk_schedule();
 
@@ -668,7 +675,12 @@ nk_thread_destroy (nk_thread_id_t t)
      * (waiters should already have been notified */
     nk_thread_queue_destroy(thethread->waitq);
 
-    free(thethread->stack);
+    if (thethread->stack_size == PAGE_SIZE) {
+        nk_free_page((addr_t)thethread->stack);
+    } else {
+        free(thethread->stack);
+    }
+
     free(thethread);
 }
 
@@ -695,22 +707,30 @@ nk_join (nk_thread_id_t t, void ** retval)
 
     flags = irq_disable_save();
 
+    while (__sync_lock_test_and_set(&thethread->lock, 1));
+
     if (thethread->status == NK_THR_EXITED) {
         if (thethread->output) {
             *retval = thethread->output;
         }
         goto out;
     } else {
-        while (thethread->status != NK_THR_EXITED) {
+        while (*(volatile int*)&thethread->status != NK_THR_EXITED) {
+            __sync_lock_release(&thethread->lock);
+            cli();
             nk_wait(t);
+            sti();
+            while (__sync_lock_test_and_set(&thethread->lock, 1));
         }
     }
 
-    *retval = thethread->output;
-
-    thread_detach(thethread);
+    if (retval) {
+        *retval = thethread->output;
+    }
 
 out:
+    __sync_lock_release(&thethread->lock);
+    thread_detach(thethread);
     irq_enable_restore(flags);
     return 0;
 }
@@ -853,9 +873,10 @@ nk_set_thread_fork_output (void * result)
 int 
 nk_thread_queue_sleep (nk_thread_queue_t * q)
 {
-    uint8_t flags = irq_disable_save();
     nk_thread_t * t = get_cur_thread();
     enqueue_thread_on_waitq(t, q);
+    //cli();
+    uint8_t flags = irq_disable_save();
     nk_schedule();
     irq_enable_restore(flags);
     return 0;
@@ -898,6 +919,15 @@ nk_thread_queue_wake_one (nk_thread_queue_t * q)
 
     nk_enqueue_thread_on_runq(t, t->bound_cpu);
 
+#ifdef NAUT_CONFIG_KICK_SCHEDULE
+    // kick it
+    if (t->bound_cpu != my_cpu_id()) {
+        apic_ipi(per_cpu_get(apic),
+                nk_get_nautilus_info()->sys.cpus[t->bound_cpu]->lapic_id,
+                APIC_NULL_KICK_VEC);
+    }
+#endif
+
 out:
     irq_enable_restore(flags);
     return 0;
@@ -934,6 +964,15 @@ nk_thread_queue_wake_all (nk_thread_queue_t * q)
         ASSERT(t->status == NK_THR_WAITING);
 
         nk_enqueue_thread_on_runq(t, t->bound_cpu);
+
+#ifdef NAUT_CONFIG_KICK_SCHEDULE
+        if (t->bound_cpu != my_cpu_id()) {
+            apic_ipi(per_cpu_get(apic),
+                    nk_get_nautilus_info()->sys.cpus[t->bound_cpu]->lapic_id,
+                    APIC_NULL_KICK_VEC);
+        }
+#endif
+
     }
 
     spin_unlock_irq_restore(&q->lock, flags);
@@ -1215,9 +1254,14 @@ nk_schedule (void)
 
     ASSERT(!irqs_enabled());
 
-    if (unlikely(!(runme = get_runnable_thread_myq()))) {
-        panic("Nothing to run on cpu %u\n", my_cpu_id());
+    while (unlikely(!(runme = get_runnable_thread_myq()))) {
+        SCHED_DEBUG("Core %u sleeping, nothing on the ready queue\n", my_cpu_id());
+#ifdef NAUT_CONFIG_HALT_WHILE_IDLE
+        sti();
+        halt();
+#endif
     }
+
 
 #ifdef NAUT_CONFIG_ENABLE_STACK_CHECK
     // before we switch, make sure we're not
@@ -1303,8 +1347,10 @@ nk_sched_init_ap (void)
     enqueue_thread_on_tlist(me);
 
     // start another idle thread
+#ifdef NAUT_CONFIG_USE_IDLE_THREADS
     SCHED_DEBUG("Starting idle thread for cpu %d\n", id);
     nk_thread_start(idle, NULL, NULL, 0, TSTACK_DEFAULT, NULL, id);
+#endif
 
     irq_enable_restore(flags);
     return 0;
@@ -1391,8 +1437,10 @@ nk_sched_init (void)
 
     enqueue_thread_on_tlist(main);
 
+#ifdef NAUT_CONFIG_USE_IDLE_THREADS
     // the idle thread
     nk_thread_start(idle, NULL, NULL, 0, TSTACK_DEFAULT, NULL, my_cpu->id);
+#endif
 
     irq_enable_restore(flags);
 
