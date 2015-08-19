@@ -11,6 +11,10 @@ typedef struct nk_condvar {
     NK_LOCK_T lock;
     nk_thread_queue_t * wait_queue;
     unsigned nwaiters;
+    unsigned long long wakeup_seq;
+    unsigned long long woken_seq;
+    unsigned long long main_seq;
+    unsigned bcast_seq;
 } nk_condvar_t;
 
 int nk_condvar_init(nk_condvar_t * c);

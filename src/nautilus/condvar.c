@@ -20,6 +20,8 @@ nk_condvar_init (nk_condvar_t * c)
 {
     DEBUG_PRINT("Condvar init\n");
 
+    memset(c, 0, sizeof(nk_condvar_t));
+
     c->wait_queue = nk_thread_queue_create();
     if (!c->wait_queue) {
         ERROR_PRINT("Could not create wait queue for cond var\n");
@@ -27,7 +29,6 @@ nk_condvar_init (nk_condvar_t * c)
     }
 
     NK_LOCK_INIT(&c->lock);
-    c->nwaiters = 0;
 
     return 0;
 }
@@ -38,18 +39,15 @@ nk_condvar_destroy (nk_condvar_t * c)
 {
     DEBUG_PRINT("Destroying condvar (%p)\n", (void*)c);
 
-    //int flags = spin_lock_irq_save(&c->lock);
     NK_LOCK(&c->lock);
     if (c->nwaiters != 0) {
-        //spin_unlock_irq_restore(&c->lock, flags);
         NK_UNLOCK(&c->lock);
         return -EINVAL;
     }
 
     nk_thread_queue_destroy(c->wait_queue);
-    c->nwaiters = 0;
-    //spin_unlock_irq_restore(&c->lock, flags);
     NK_UNLOCK(&c->lock);
+    memset(c, 0, sizeof(nk_condvar_t));
     return 0;
 }
 
@@ -58,21 +56,49 @@ uint8_t
 nk_condvar_wait (nk_condvar_t * c, NK_LOCK_T * l)
 {
     NK_PROFILE_ENTRY();
+
     DEBUG_PRINT("Condvar wait on (%p) mutex=%p\n", (void*)c, (void*)l);
 
-    atomic_inc(c->nwaiters);
+    NK_LOCK(&c->lock);
 
     /* now we can unlock the mutex and go to sleep */
-    //spin_unlock(l);
     NK_UNLOCK(l);
-    nk_thread_queue_sleep(c->wait_queue);
 
-    atomic_dec(c->nwaiters);
+    ++c->nwaiters;
+    ++c->main_seq;
+
+    unsigned long long val;
+    unsigned long long seq;
+    unsigned bc = *(volatile unsigned*)&(c->bcast_seq);
+    val = seq = c->wakeup_seq;
+
+    do {
+
+        NK_UNLOCK(&c->lock);
+        nk_thread_queue_sleep(c->wait_queue);
+        NK_LOCK(&c->lock);
+
+        if (bc != *(volatile unsigned*)&(c->bcast_seq)) {
+            goto bcout;
+        }
+
+        val = *(volatile unsigned long long*)&(c->wakeup_seq);
+
+    } while (val == seq || val == *(volatile unsigned long long*)&(c->woken_seq));
+
+    ++c->woken_seq;
+
+bcout:
+
+    --c->nwaiters;
+
+    NK_UNLOCK(&c->lock);
 
     /* reacquire lock */
-    //spin_lock(l);
     NK_LOCK(l);
+
     NK_PROFILE_EXIT();
+
     return 0;
 }
 
@@ -80,17 +106,27 @@ nk_condvar_wait (nk_condvar_t * c, NK_LOCK_T * l)
 int 
 nk_condvar_signal (nk_condvar_t * c)
 {
-    uint8_t flags;
+    uint64_t start, end;
+
     NK_PROFILE_ENTRY();
-    flags = irq_disable_save();
-    DEBUG_PRINT("Condvar signaling on (%p)\n", (void*)c);
-    if (unlikely(nk_thread_queue_wake_one(c->wait_queue) != 0)) {
-        ERROR_PRINT("Could not signal on condvar\n");
-        return -1;
+
+    NK_LOCK(&c->lock);
+
+    // do we have anyone to signal?
+    if (c->main_seq > c->wakeup_seq) {
+
+        ++c->wakeup_seq;
+
+        DEBUG_PRINT("Condvar signaling on (%p)\n", (void*)c);
+
+        if (unlikely(nk_thread_queue_wake_one(c->wait_queue) != 0)) {
+            ERROR_PRINT("Could not signal on condvar\n");
+            return -1;
+        }
+
     }
-    /* broadcast a timer interrupt to everyone */
-    apic_bcast_ipi(per_cpu_get(apic), 0xfc);
-    irq_enable_restore(flags);
+
+    NK_UNLOCK(&c->lock);
     NK_PROFILE_EXIT();
     return 0;
 }
@@ -99,17 +135,29 @@ nk_condvar_signal (nk_condvar_t * c)
 int
 nk_condvar_bcast (nk_condvar_t * c)
 {
-    uint8_t flags;
     NK_PROFILE_ENTRY();
-    flags = irq_disable_save();
-    DEBUG_PRINT("Condvar broadcasting on (%p)\n", (void*)c);
-    if (unlikely(nk_thread_queue_wake_all(c->wait_queue) != 0)) {
-        ERROR_PRINT("Could not broadcast on condvar\n");
-        return -1;
+
+    NK_LOCK(&c->lock);
+
+    // do we have anyone to wakeup?
+    if (c->main_seq > c->wakeup_seq) {
+
+        c->woken_seq = c->main_seq;
+        c->wakeup_seq = c->main_seq;
+        ++c->bcast_seq;
+
+        NK_UNLOCK(&c->lock);
+
+        DEBUG_PRINT("Condvar broadcasting on (%p) (core=%u)\n", (void*)c, my_cpu_id());
+        if (unlikely(nk_thread_queue_wake_all(c->wait_queue) != 0)) {
+            ERROR_PRINT("Could not broadcast on condvar\n");
+            return -1;
+        }
+        return 0;
+
     }
-    /* broadcast a timer interrupt to everyone */
-    apic_bcast_ipi(per_cpu_get(apic), 0xfc);
-    irq_enable_restore(flags);
+
+    NK_UNLOCK(&c->lock);
     NK_PROFILE_EXIT();
     return 0;
 }
