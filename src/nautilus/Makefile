@@ -29,7 +29,9 @@ obj-y += \
 	shutdown.o \
 	numa.o \
 	hrt.o \
-	libccompat.o 
+	libccompat.o \
+	nemo.o \
+	pmc.o 
 
 obj-$(NAUT_CONFIG_PROFILE) += instrument.o
 
