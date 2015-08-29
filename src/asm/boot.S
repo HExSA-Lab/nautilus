@@ -57,7 +57,7 @@ hdr_end:
     movl $0x10, %eax
     movw %ax, %ds
     movw %ax, %ss
-    movl $boot_stack_end, %esp
+    movl $boot_stack_end-1, %esp
 
     call paging_longmode_setup
 
