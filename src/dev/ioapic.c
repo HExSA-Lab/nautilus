@@ -2,7 +2,7 @@
 #include <nautilus/paging.h>
 #include <dev/ioapic.h>
 #include <nautilus/irq.h>
-#include <lib/liballoc.h>
+#include <nautilus/mm.h>
 
 #ifndef NAUT_CONFIG_DEBUG_IOAPIC
 #undef DEBUG_PRINT
@@ -177,7 +177,7 @@ __ioapic_init (struct ioapic * ioapic, uint8_t ioapic_id)
     int i;
     struct nk_int_entry * ioint = NULL;
 
-    if (nk_map_page_nocache(PAGE_MASK(ioapic->base), PTE_PRESENT_BIT|PTE_WRITABLE_BIT) == -1) {
+    if (nk_map_page_nocache(ROUND_DOWN_TO_PAGE(ioapic->base), PTE_PRESENT_BIT|PTE_WRITABLE_BIT, PS_4K) == -1) {
         panic("Could not map IOAPIC\n");
         return -1;
     }

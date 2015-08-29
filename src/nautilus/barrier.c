@@ -5,8 +5,8 @@
 #include <nautilus/errno.h>
 #include <nautilus/intrinsics.h>
 #include <nautilus/thread.h>
+#include <nautilus/mm.h>
 
-#include <lib/liballoc.h>
 
 #ifndef NAUT_CONFIG_DEBUG_BARRIER
 #undef DEBUG_PRINT

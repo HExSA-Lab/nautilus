@@ -3,6 +3,7 @@
 #include <nautilus/nautilus.h>
 #include <nautilus/naut_types.h>
 #include <nautilus/paging.h>
+#include <nautilus/mm.h>
 
 
 uint_t 
@@ -16,8 +17,7 @@ multiboot_get_size (ulong_t mbd)
 /* 
  * Returns total physical memory in BYTES
  *
- * Multiboot basic memory info doesn't appear to give right num, so
- * better to actually use the e820 map
+ * This includes holes and reserved memory
  */
 addr_t
 multiboot_get_phys_mem (ulong_t mbd)
@@ -52,10 +52,11 @@ multiboot_get_phys_mem (ulong_t mbd)
 }
 
 
-void 
-multiboot_rsv_mem_regions(struct nk_mem_info * mem, ulong_t mbd) 
+ulong_t
+multiboot_get_sys_ram (ulong_t mbd)
 {
     struct multiboot_tag * tag;
+    ulong_t sum = 0;
 
     if (mbd & 7) {
         panic("ERROR: Unaligned multiboot info struct\n");
@@ -77,17 +78,13 @@ multiboot_rsv_mem_regions(struct nk_mem_info * mem, ulong_t mbd)
             mmap = (multiboot_memory_map_t*)((ulong_t)mmap + 
                 ((struct multiboot_tag_mmap*)tag)->entry_size)) {
 
-        addr_t base_addr = mmap->addr;
-        addr_t len       = mmap->len;
-
-        if (mmap->type != MULTIBOOT_MEMORY_AVAILABLE) {
-            DEBUG_PRINT("Reserving pages %d to %d (0x%x - 0x%x) (pg addr=%p)\n", PADDR_TO_PAGE(base_addr), PADDR_TO_PAGE(base_addr+len-1),
-                    base_addr, base_addr+len-1, (void*)PAGE_MASK(base_addr));
-            nk_reserve_range(base_addr, base_addr+len);
+        if (mmap->type == MULTIBOOT_MEMORY_AVAILABLE) {
+            sum += mmap->len;
         }
     }
-}
 
+    return sum;
+}
 
 extern void* malloc(size_t);
 

@@ -3,7 +3,7 @@
 #include <nautilus/spinlock.h>
 #include <nautilus/intrinsics.h>
 #include <nautilus/thread.h>
-#include <lib/liballoc.h>
+#include <nautilus/mm.h>
 
 #ifndef NAUT_CONFIG_DEBUG_SYNCH
 #undef DEBUG_PRINT

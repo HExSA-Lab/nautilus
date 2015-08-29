@@ -7,13 +7,32 @@ extern "C" {
 
 #include <nautilus/list.h>
 
+#define MAX_NUMA_DOMAINS 128
+
 struct numa_domain {
     uint32_t id;
     uint64_t addr_space_size;
     uint32_t num_regions;
 
     struct list_head regions;
+
+    /* list of other domains, ordered by distance */
+    struct list_head adj_list;
 };
+
+struct buddy_mempool;
+
+struct mem_reg_entry {
+    struct mem_region * mem;
+    struct list_head mem_ent;
+};
+
+/* for adjacency lists */
+struct domain_adj_entry {
+    struct numa_domain * domain;
+    struct list_head list_ent;
+};
+
 
 struct mem_region {
     uint32_t domain_id;
@@ -23,14 +42,19 @@ struct mem_region {
     uint8_t  hot_pluggable;
     uint8_t  nonvolatile;
 
+    /* used by the kernel memory allocator */
+    struct buddy_mempool * mm_state;
+
     struct list_head entry;
+
+    struct list_head glob_link;
 };
 
 struct nk_locality_info {
     uint32_t  num_domains;
     uint8_t * numa_matrix;
 
-    struct numa_domain * domains;
+    struct numa_domain * domains[MAX_NUMA_DOMAINS];
 };
 
 struct cpu;

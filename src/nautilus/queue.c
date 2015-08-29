@@ -1,8 +1,8 @@
 #include <nautilus/queue.h>
 #include <nautilus/spinlock.h>
 #include <nautilus/intrinsics.h>
+#include <nautilus/mm.h>
 
-#include <lib/liballoc.h>
 
 
 nk_queue_t*

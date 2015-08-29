@@ -94,12 +94,11 @@ acpi_physical_address acpi_os_get_root_pointer(void)
 void *
 acpi_os_map_memory(acpi_physical_address phys, acpi_size size)
 {
-    ASSERT((phys + size) < (PAGE_MASK(phys) + PAGE_SIZE));
+    ASSERT((phys + size) < (ROUND_DOWN_TO_PAGE(phys) + PAGE_SIZE));
 
-    //printk("ACPI ATTEMPT TO MAP: %p\n", (void*)phys);
+    //printk("ACPI ATTEMPT TO MAP: %p (actuallgy getting [%p-%p])\n", (void*)phys, ROUND_DOWN_TO_PAGE(phys), ROUND_DOWN_TO_PAGE(phys)+PAGE_SIZE-1);
 
-    nk_map_page_nocache(PAGE_MASK(phys), PTE_WRITABLE_BIT|PTE_PRESENT_BIT);
-    nk_reserve_page(PAGE_MASK(phys));
+    nk_map_page_nocache(ROUND_DOWN_TO_PAGE(phys), PTE_WRITABLE_BIT|PTE_PRESENT_BIT, PS_4K);
 
     return (void*)phys;
 }

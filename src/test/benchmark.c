@@ -28,7 +28,6 @@
 #include <nautilus/numa.h>
 #include <nautilus/nemo.h>
 #include <nautilus/pmc.h>
-#include <lib/liballoc.h>
 
 #endif
 

@@ -31,7 +31,9 @@ obj-y += \
 	hrt.o \
 	libccompat.o \
 	nemo.o \
-	pmc.o 
+	pmc.o \
+	mm/
+	
 
 obj-$(NAUT_CONFIG_PROFILE) += instrument.o
 

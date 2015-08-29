@@ -17,13 +17,9 @@ SECTIONS
         pd = .;
         . += 0x1000; 
 
-        . += 0x1000; /* buffer zone */
-
         boot_stack_start = .;
-        . += 0x200000;  /* we start out with a 2MB stack */
+        . += 0x200000;  /* we start out with a 4K stack */
         boot_stack_end = .;
-
-        . += 0x1000; /* buffer zone */
     }
 
 

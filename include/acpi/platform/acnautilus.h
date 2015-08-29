@@ -57,7 +57,7 @@
 #include <nautilus/thread.h>
 #include <nautilus/atomic.h>
 #include <lib/bitops.h>
-#include <lib/liballoc.h>
+#include <nautilus/mm.h>
 //#include <acpi/acpi.h>
 //#include <nautilus/acpi.h>
 #include <nautilus/acpi-x86_64.h>

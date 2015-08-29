@@ -2,7 +2,7 @@
 #include <dev/pci.h>
 #include <nautilus/cpu.h>
 #include <nautilus/intrinsics.h>
-#include <lib/liballoc.h>
+#include <nautilus/mm.h>
 
 #ifndef NAUT_CONFIG_DEBUG_PCI
 #undef DEBUG_PRINT

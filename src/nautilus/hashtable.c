@@ -37,7 +37,7 @@
 #include <nautilus/nautilus.h>
 #include <nautilus/hashtable.h>
 #include <nautilus/naut_string.h>
-#include <lib/liballoc.h>
+#include <nautilus/mm.h>
 
 
 struct nk_hash_entry {

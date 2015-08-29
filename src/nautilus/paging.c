@@ -5,11 +5,13 @@
 #include <nautilus/idt.h>
 #include <nautilus/cpu.h>
 #include <nautilus/errno.h>
+#include <nautilus/cpuid.h>
 #include <nautilus/backtrace.h>
+#include <nautilus/macros.h>
 #include <nautilus/naut_assert.h>
 #include <nautilus/numa.h>
+#include <nautilus/mm.h>
 #include <lib/bitmap.h>
-#include <lib/liballoc.h>
 #include <nautilus/percpu.h>
 
 #ifdef NAUT_CONFIG_XEON_PHI
@@ -22,16 +24,16 @@
 #endif
 
 
-extern addr_t _loadStart;
-extern addr_t _bssEnd;
-extern ulong_t pml4;
-extern ulong_t pdpt;
+extern uint8_t boot_mm_inactive;
 
-/* 
- * KCH BIG NOTE: Most of the following code assumes that we'll
- * be using 2MB pages. This will eventually change, but for now,
- * BE CAREFUL WHEN EDITING THIS CODE! 
- */
+extern ulong_t pml4;
+
+
+static char * ps2str[3] = {
+    [PS_4K] = "4KB",
+    [PS_2M] = "2MB",
+    [PS_1G] = "1GB",
+};
 
 
 /*
@@ -45,11 +47,33 @@ extern ulong_t pdpt;
  * returns the aligned address
  * 
  */
-static ulong_t
+static inline ulong_t
 align_addr (ulong_t addr, ulong_t align) 
 {
     ASSERT(!(align & (align-1)));
     return (~(align - 1)) & (addr + align);
+}
+
+
+static inline int
+gig_pages_supported (void)
+{
+    cpuid_ret_t ret;
+    struct cpuid_amd_edx_flags flags;
+    cpuid(CPUID_AMD_FEATURE_INFO, &ret);
+    flags.val = ret.d;
+    return flags.pg1gb;
+}
+
+
+static page_size_t
+largest_page_size (void)
+{
+    if (gig_pages_supported()) {
+        return PS_1G;
+    }
+
+    return PS_2M;
 }
 
 /*
@@ -159,7 +183,8 @@ drill_pdpt (pdpte_t * pdpt, addr_t addr, addr_t map_addr, uint64_t flags)
     } else {
 
         DEBUG_PRINT("pdpt entry not there, creating a new page directory\n");
-        pd = (pde_t*)nk_alloc_page();
+        pd = (pde_t*)mm_boot_alloc_aligned(PAGE_SIZE_4KB, PAGE_SIZE_4KB);
+        DEBUG_PRINT("page dir allocated at %p\n", pd);
 
         if (!pd) {
             ERROR_PRINT("out of memory in %s\n", __FUNCTION__);
@@ -195,7 +220,7 @@ drill_page_tables (addr_t addr, addr_t map_addr, uint64_t flags)
 
         DEBUG_PRINT("pml4 entry not there, creating a new one\n");
 
-        pdpt = (pdpte_t*)nk_alloc_page();
+        pdpt = (pdpte_t*)mm_boot_alloc_aligned(PAGE_SIZE_4KB, PAGE_SIZE_4KB);
 
         if (!pdpt) {
             ERROR_PRINT("out of memory in %s\n", __FUNCTION__);
@@ -212,7 +237,7 @@ drill_page_tables (addr_t addr, addr_t map_addr, uint64_t flags)
 
 
 /*
- * nk_create_page_mapping
+ * nk_map_page
  *
  * @vaddr: virtual address to map to
  * @paddr: physical address to create mapping for 
@@ -224,10 +249,14 @@ drill_page_tables (addr_t addr, addr_t map_addr, uint64_t flags)
  *
  */
 int 
-nk_create_page_mapping (addr_t vaddr, addr_t paddr, uint64_t flags)
+nk_map_page (addr_t vaddr, addr_t paddr, uint64_t flags, page_size_t ps)
 {
-    /* TODO: implement */
-    return -1;
+    if (drill_page_tables(ROUND_DOWN_TO_PAGE(paddr), ROUND_DOWN_TO_PAGE(paddr), flags) != 0) {
+        ERROR_PRINT("Could not map page at vaddr %p paddr %p\n", (void*)vaddr, (void*)paddr);
+        return -EINVAL;
+    }
+
+    return 0;
 }
 
 
@@ -244,166 +273,15 @@ nk_create_page_mapping (addr_t vaddr, addr_t paddr, uint64_t flags)
  *
  */
 int
-nk_map_page_nocache (addr_t paddr, uint64_t flags)
+nk_map_page_nocache (addr_t paddr, uint64_t flags, page_size_t ps)
 {
-    if (drill_page_tables(PAGE_MASK(paddr), PAGE_MASK(paddr), flags|PTE_CACHE_DISABLE_BIT) != 0) {
-        ERROR_PRINT("error marking page range uncacheable\n");
+    if (nk_map_page(paddr, paddr, flags|PTE_CACHE_DISABLE_BIT, ps) != 0) {
+        ERROR_PRINT("Could not map uncached page\n");
         return -EINVAL;
     }
-    return 0;
-}
-
-
-
-/* 
- * nk_free_page
- *
- * free the page pointed to by addr
- *
- * @addr: the address of the page to free
- *        (must be page aligned)
- *
- * returns -EINVAL on error, 0 on success
- *
- */
-int
-nk_free_page (addr_t addr) 
-{
-    ASSERT((unsigned long)addr % PAGE_SIZE == 0);
-    return nk_free_pages((void*)addr, 1);
-}
-
-
-/* 
- * nk_free_pages
- *
- * free a number of pages 
- *
- * @addr: the address of the starting page (must be page aligned)
- * @num: the number of pages to free (must be power of 2)
- *
- * returns 0 on success
- *
- */
-int 
-nk_free_pages (void * addr, unsigned num)
-{
-    struct nk_mem_info * mem = &(nk_get_nautilus_info()->sys.mem);
-    int order                = get_count_order(num);
-    uint_t pgnum             = PADDR_TO_PAGE((addr_t)addr);
-
-    ASSERT((unsigned long)addr % PAGE_SIZE == 0);
-    ASSERT(!(num & (num-1)));
-
-    bitmap_release_region(mem->page_map, pgnum, order);
 
     return 0;
 }
-
-
-/*
- * nk_alloc_pages
- *
- * alloc n pages
- *
- * @n: the number of pages to allocate
- *
- * returns NULL on error, the address of the page 
- * on success
- *
- */
-addr_t 
-nk_alloc_pages (unsigned n)
-{
-    struct nk_mem_info * mem = &(nk_get_nautilus_info()->sys.mem);
-    int order                = get_count_order(n);
-    int p                    = bitmap_find_free_region(mem->page_map, mem->npages, order);
-
-    if (p < 0) {
-        panic("Could not find %u free pages\n", n);
-        return (addr_t)NULL;
-    } 
-
-    return PAGE_TO_PADDR(p);
-}
-
-
-/* 
- * nk_alloc_pages_cpu
- *
- * allocate n pages in the NUMA domain
- * that this processor belongs to
- *
- * @n: the number of pages to allocate
- * @cpu: Pick from the NUMA domain to which this CPU belongs
- *
- * returns NULL on error, the page address on success
- *
- */
-addr_t
-nk_alloc_pages_cpu (unsigned num, cpu_id_t cpu)
-{
-    struct nk_mem_info * mem = &(nk_get_nautilus_info()->sys.mem);
-    int order                = get_count_order(num);
-    int p;
-    struct mem_region * r = nk_get_base_region_by_cpu(cpu);
-    unsigned page_offset = r->base_addr / PAGE_SIZE;
-
-    if (!r) {
-        panic("Could not find mem region on cpu %u\n", cpu);
-    }
-
-    ulong_t * start = (ulong_t*)(((ulong_t)mem->page_map) + (page_offset/8));
-
-    p = bitmap_find_free_region(start,
-                r->len / PAGE_SIZE,
-                order);
-
-    if (p < 0) {
-        //ERROR_PRINT("Could not find free page\n");
-        return 0;
-    }
-
-    return PAGE_TO_PADDR((p + page_offset));
-}
-
-
-addr_t
-nk_alloc_pages_region (unsigned num, unsigned region)
-{
-    struct nk_mem_info * mem = &(nk_get_nautilus_info()->sys.mem);
-    int order                = get_count_order(num);
-    int p;
-    struct mem_region * r = nk_get_base_region_by_num(region);
-    unsigned page_offset = r->base_addr / PAGE_SIZE;
-
-    printk("allocating pages at region %u\n", region);
-    if (!r) {
-        panic("Could not find mem region %u\n", region);
-    }
-
-    ulong_t * start = (ulong_t*)(((ulong_t)mem->page_map) + (page_offset/8));
-
-    p = bitmap_find_free_region(start,
-                r->len / PAGE_SIZE,
-                order);
-
-    if (p < 0) {
-        ERROR_PRINT("Could not find free page\n");
-        return 0;
-    }
-
-    return PAGE_TO_PADDR((p + page_offset));
-}
-
-
-addr_t
-nk_alloc_page_region (unsigned num)
-{
-    return nk_alloc_pages_region(1, num);
-}
-
-
 
 
 /*
@@ -428,205 +306,290 @@ nk_pf_handler (excp_entry_t * excp,
 }
 
 
-/*
- * nk_reserve_pages
- *
- * mark a range of pages as unusable by heap allocator
- *
- * @paddr: the address of the first page to start reserving at
- * @n: the number of pages
- *
- * returns -1 on error, 0 on success
- *
+/* don't really use the page size here, unless we get bigger pages 
+ * someday
  */
-int 
-nk_reserve_pages (addr_t paddr, unsigned n)
+static void
+__fill_pml (pml4e_t * pml, 
+            page_size_t ps, 
+            ulong_t base_addr,
+            ulong_t nents, 
+            ulong_t flags)
 {
-    struct nk_mem_info * mem = &(nk_get_nautilus_info()->sys.mem);
-    bitmap_set(mem->page_map, PADDR_TO_PAGE(paddr), n);
-    return 0;
-}
+    ulong_t i;
 
+    ASSERT(nents <= NUM_PML4_ENTRIES);
 
-/*
- * nk_reserve_page
- *
- * reserve a single page (cannot be used by heap allocator)
- *
- * @paddr: the start address of the page to reserve
- *
- * returns -1 on error, 0 on success
- *
- */
-int
-nk_reserve_page (addr_t paddr)
-{
-    return nk_reserve_pages(paddr, 1);
-}
-
-
-uint8_t 
-nk_page_free (addr_t paddr)
-{
-    struct nk_mem_info * mem = &(nk_get_nautilus_info()->sys.mem);
-    unsigned pnum = PADDR_TO_PAGE(paddr);
-    ASSERT(pnum < mem->npages);
-    return !(mem->page_map[pnum / BITS_PER_LONG] & (1UL << (pnum % BITS_PER_LONG)));
-}
-
-
-uint8_t
-nk_page_allocated (addr_t paddr)
-{
-    struct nk_mem_info * mem = &(nk_get_nautilus_info()->sys.mem);
-    unsigned pnum = PADDR_TO_PAGE(paddr);
-    ASSERT(pnum < mem->npages);
-    return !!(mem->page_map[pnum / BITS_PER_LONG] & (1UL << (pnum % BITS_PER_LONG)));
-}
-
-
-
-/*
- * nk_reserve_range
- *
- * reserve a range of pages that will overlap the given addresses
- *
- * @start: address of page to start with (will be rounded down to page boundary)
- * @end: end address of the range (this one is rounded up to the next page
- *       boundary)
- *
- * returns -1 on error, 0 on success
- *
- */
-int 
-nk_reserve_range (addr_t start, addr_t end)
-{
-    int npages = (end - PAGE_MASK(start)) / PAGE_SIZE;
-    npages += (end - PAGE_MASK(start)) % PAGE_SIZE ? 1 : 0;
-    return nk_reserve_pages(start, npages);
-}
-
-
-/* TODO: make this account for if we need a new pdpt... */
-static ulong_t
-finish_ident_map (struct nk_mem_info * mem, ulong_t mbd)
-{
-    addr_t kernel_end     = (addr_t)&_bssEnd;
-    ulong_t * pdpt_start  = (ulong_t*)&pdpt;
-    ulong_t * pd_start    = 0;
-    ulong_t * pd_ptr      = 0;
-    ulong_t paddr_start   = (ulong_t)MEM_1GB;
-    uint_t num_pdes       = 0;
-    uint_t num_pds        = 0;
-    int i, j;
-
-    /* make sure not to overwrite multiboot header */
-    /* NOTE: maybe ceil the mbd pointer */
-#ifndef NAUT_CONFIG_HVM_HRT
-    if (mbd >= kernel_end) {
-        pd_start = (ulong_t*)(mbd + multiboot_get_size(mbd));
-    } else {
-        pd_start = (ulong_t*)kernel_end;
+    for (i = 0; i < nents; i++) {
+        pdpte_t * pdpt = NULL;
+        pdpt = mm_boot_alloc_aligned(PAGE_SIZE_4KB, PAGE_SIZE_4KB);
+        if (!pdpt) {
+            ERROR_PRINT("Could not allocate pdpt\n");
+            return;
+        }
+        memset((void*)pdpt, 0, PAGE_SIZE_4KB);
+        pml[i] = (ulong_t)pdpt | flags;
     }
-#else 
-    pd_start = (ulong_t*)kernel_end;
-#endif
 
-    // align the address where I'll lay them out to a page boundary
-    pd_start = (ulong_t*)align_addr((ulong_t)pd_start, PAGE_SIZE_4KB);
+}
 
-    pd_ptr = pd_start;
 
-    /* we've already mapped the first 1GB with 1 PD, 512 PDEs */
-    num_pdes = (mem->phys_mem_avail >> PAGE_SHIFT) - NUM_PD_ENTRIES;
-    num_pds  = (num_pdes % NUM_PD_ENTRIES) ? 
-        (num_pdes / NUM_PD_ENTRIES) + 1 : 
-        (num_pdes / NUM_PD_ENTRIES);
+static void
+__fill_pdpt (pdpte_t * pdpt, 
+             page_size_t ps, 
+             ulong_t base_addr,
+             ulong_t nents,
+             ulong_t flags)
+{
+    ulong_t i;
 
-    for (i = 0; i < num_pds; i++) {
+    ASSERT(nents <= NUM_PDPT_ENTRIES);
 
-        ASSERT(!((ulong_t)pd_ptr % (ulong_t)PAGE_SIZE_4KB));
+    for (i = 0; i < nents; i++) {
 
-        /* point pdpte to new page dir (start at second pdpte)*/
-        pdpt_start[i+1] = (ulong_t)pd_ptr | PTE_PRESENT_BIT | PTE_WRITABLE_BIT;
-
-        /* fill in the new page directory */
-        for (j = 0; j < NUM_PD_ENTRIES && (i * NUM_PD_ENTRIES + j) < num_pdes; j++) {
-
-            *pd_ptr = paddr_start      | 
-                      PTE_PRESENT_BIT  | 
-                      PTE_WRITABLE_BIT | 
-                      PTE_PAGE_SIZE_BIT;
-
-            paddr_start += MEM_2MB;
-            pd_ptr++;
-
+        if (ps == PS_1G) {
+            pdpt[i] = base_addr | flags | PTE_PAGE_SIZE_BIT;
+        } else {
+            pde_t * pd = NULL;
+            pd = mm_boot_alloc_aligned(PAGE_SIZE_4KB, PAGE_SIZE_4KB);
+            if (!pd) {
+                ERROR_PRINT("Could not allocate pd\n");
+                return;
+            }
+            memset(pd, 0, PAGE_SIZE_4KB);
+            pdpt[i] = (ulong_t)pd | flags;
         }
 
+        base_addr += PAGE_SIZE_1GB;
+    }
+}
+
+static void
+__fill_pd (pde_t * pd, 
+           page_size_t ps, 
+           ulong_t base_addr,
+           ulong_t nents,
+           ulong_t flags)
+{
+    ulong_t i;
+
+    ASSERT(nents <= NUM_PD_ENTRIES);
+    ASSERT(ps == PS_2M || ps == PS_4K);
+
+    for (i = 0; i < nents; i++) {
+
+        if (ps == PS_2M) {
+            pd[i] = base_addr | flags | PTE_PAGE_SIZE_BIT;
+        } else {
+            pte_t * pt = NULL;
+            pt = mm_boot_alloc_aligned(PAGE_SIZE_4KB, PAGE_SIZE_4KB);
+            if (!pt) {
+                ERROR_PRINT("Could not allocate pt\n");
+                return;
+            }
+            memset(pt, 0, PAGE_SIZE_4KB);
+            pt[i] = (ulong_t)pt | flags;
+        }
+
+        base_addr += PAGE_SIZE_2MB;
+
+    }
+}
+
+
+static void
+__fill_pt (pte_t * pt, 
+           page_size_t ps, 
+           ulong_t base_addr,
+           ulong_t nents,
+           ulong_t flags)
+{
+    ulong_t i;
+
+    ASSERT(ps == PS_4K);
+    ASSERT(nents <= NUM_PT_ENTRIES);
+
+    for (i = 0; i < nents; i++) {
+        pt[i] = base_addr | flags;
+        base_addr += PAGE_SIZE_4KB;
+    }
+}
+
+static void
+__construct_tables_4k (pml4e_t * pml, ulong_t bytes)
+{
+    ulong_t npages    = (bytes + PAGE_SIZE_4KB - 1)/PAGE_SIZE_4KB;
+    ulong_t num_pts   = (npages + NUM_PT_ENTRIES - 1)/ NUM_PT_ENTRIES;
+    ulong_t num_pds   = (num_pts + NUM_PD_ENTRIES - 1)/NUM_PD_ENTRIES;
+    ulong_t num_pdpts = (num_pds + NUM_PDPT_ENTRIES - 1)/NUM_PDPT_ENTRIES;
+    ulong_t filled_pdpts = 0;
+    ulong_t filled_pds   = 0;
+    ulong_t filled_pts   = 0;
+    ulong_t filled_pgs   = 0;
+    unsigned i, j, k;
+    ulong_t addr = 0;
+
+    __fill_pml(pml, PS_4K, addr, num_pdpts, PTE_PRESENT_BIT | PTE_WRITABLE_BIT);
+
+    for (i = 0; i < NUM_PML4_ENTRIES && filled_pdpts < num_pdpts; i++) {
+
+        pdpte_t * pdpt = (pdpte_t*)PTE_ADDR(pml[i]);
+        __fill_pdpt(pdpt, PS_4K, addr, num_pds, PTE_PRESENT_BIT | PTE_WRITABLE_BIT);
+
+        for (j = 0; j < NUM_PDPT_ENTRIES && filled_pds < num_pds; j++) {
+
+            pde_t * pd = (pde_t*)PTE_ADDR(pdpt[j]);
+            __fill_pd(pd, PS_4K, addr, num_pts, PTE_PRESENT_BIT | PTE_WRITABLE_BIT);
+
+            for (k = 0; k < NUM_PD_ENTRIES && filled_pts < num_pts; k++) {
+
+                pte_t * pt = (pte_t*)PTE_ADDR(pd[k]);
+
+                ulong_t to_fill = ((npages - filled_pgs) > NUM_PT_ENTRIES) ? NUM_PT_ENTRIES : 
+                    npages - filled_pgs;
+
+                __fill_pt(pt, PS_4K, addr, to_fill, PTE_PRESENT_BIT | PTE_WRITABLE_BIT);
+
+                filled_pgs += to_fill;
+                addr += PAGE_SIZE_4KB*to_fill;
+
+                ++filled_pts;
+            }
+
+            ++filled_pds;
+        }
+
+        ++filled_pdpts;
+    }
+}
+
+
+static void
+__construct_tables_2m (pml4e_t * pml, ulong_t bytes)
+{
+    ulong_t npages    = (bytes + PAGE_SIZE_2MB - 1)/PAGE_SIZE_2MB;
+    ulong_t num_pds   = (npages + NUM_PD_ENTRIES - 1)/NUM_PD_ENTRIES;
+    ulong_t num_pdpts = (num_pds + NUM_PDPT_ENTRIES - 1)/NUM_PDPT_ENTRIES;
+    ulong_t filled_pdpts = 0;
+    ulong_t filled_pds   = 0;
+    ulong_t filled_pgs   = 0;
+    unsigned i, j;
+    ulong_t addr = 0;
+
+    __fill_pml(pml, PS_2M, addr, num_pdpts, PTE_PRESENT_BIT | PTE_WRITABLE_BIT);
+
+    for (i = 0; i < NUM_PML4_ENTRIES && filled_pdpts < num_pdpts; i++) {
+
+        pdpte_t * pdpt = (pdpte_t*)PTE_ADDR(pml[i]);
+        __fill_pdpt(pdpt, PS_2M, addr, num_pds, PTE_PRESENT_BIT | PTE_WRITABLE_BIT);
+
+        for (j = 0; j < NUM_PDPT_ENTRIES && filled_pds < num_pds; j++) {
+
+            pde_t * pd = (pde_t*)PTE_ADDR(pdpt[j]);
+
+            ulong_t to_fill = ((npages - filled_pgs) > NUM_PD_ENTRIES) ? NUM_PD_ENTRIES : 
+                npages - filled_pgs;
+
+            __fill_pd(pd, PS_2M, addr, to_fill, PTE_PRESENT_BIT | PTE_WRITABLE_BIT);
+
+            filled_pgs += to_fill;
+            addr += PAGE_SIZE_2MB*to_fill;
+
+            ++filled_pds;
+        }
+
+        ++filled_pdpts;
     }
 
-    return (ulong_t)pd_ptr;
+    ASSERT(filled_pgs == npages);
+}
+
+
+static void
+__construct_tables_1g (pml4e_t * pml, ulong_t bytes)
+{
+    ulong_t npages = (bytes + PAGE_SIZE_1GB - 1)/PAGE_SIZE_1GB;
+    ulong_t num_pdpts = (npages + NUM_PDPT_ENTRIES - 1)/NUM_PDPT_ENTRIES;
+    ulong_t filled_pdpts = 0;
+    ulong_t filled_pgs   = 0;
+    unsigned i;
+    ulong_t addr = 0;
+
+    __fill_pml(pml, PS_1G, addr, num_pdpts, PTE_PRESENT_BIT | PTE_WRITABLE_BIT);
+
+    for (i = 0; i < NUM_PML4_ENTRIES && filled_pdpts < num_pdpts; i++) {
+
+        pdpte_t * pdpt = (pdpte_t*)PTE_ADDR(pml[i]);
+
+        ulong_t to_fill = ((npages - filled_pgs) > NUM_PDPT_ENTRIES) ? NUM_PDPT_ENTRIES : 
+            npages - filled_pgs;
+
+        __fill_pdpt(pdpt, PS_1G, addr, to_fill, PTE_PRESENT_BIT | PTE_WRITABLE_BIT);
+
+        filled_pgs += to_fill;
+        addr += PAGE_SIZE_1GB*to_fill;
+
+        ++filled_pdpts;
+    }
+}
+
+
+static void 
+construct_ident_map (pml4e_t * pml, page_size_t ptype, ulong_t bytes)
+{
+    ulong_t ps = ps_type_to_size(ptype);
+
+    switch (ptype) {
+        case PS_4K:
+            __construct_tables_4k(pml, bytes);
+            break;
+        case PS_2M:
+            __construct_tables_2m(pml, bytes);
+            break;
+        case PS_1G:
+            __construct_tables_1g(pml, bytes);
+            break;
+        default:
+            ERROR_PRINT("Undefined page type (%u)\n", ptype);
+            return;
+    }
+}
+
+
+/* 
+ * Identity map all of physical memory using
+ * the largest pages possible
+ */
+static void
+kern_ident_map (struct nk_mem_info * mem, ulong_t mbd)
+{
+    page_size_t lps  = largest_page_size();
+    ulong_t last_pfn = mm_boot_last_pfn();
+    ulong_t ps       = ps_type_to_size(lps);
+    pml4e_t * pml    = NULL;
+
+    /* create a new PML4 */
+    pml = mm_boot_alloc_aligned(PAGE_SIZE_4KB, PAGE_SIZE_4KB);
+    if (!pml) {
+        ERROR_PRINT("Could not allocate new PML4\n");
+        return;
+    }
+    memset(pml, 0, PAGE_SIZE_4KB);
+
+    printk("Remapping phys mem [%p - %p] with %s pages\n", 
+            (void*)0, 
+            (void*)(last_pfn<<PAGE_SHIFT), 
+            ps2str[lps]);
+
+    construct_ident_map(pml, lps, last_pfn<<PAGE_SHIFT);
+
+    /* install the new tables, this will also flush the TLB */
+    write_cr3((ulong_t)pml);
 }
 
 
 void
 nk_paging_init (struct nk_mem_info * mem, ulong_t mbd)
 {
-    addr_t kernel_start   = (addr_t)&_loadStart;
-    ulong_t page_dir_end  = 0;
-
-    /* how much memory do we have in the machine? */
-#ifdef NAUT_CONFIG_XEON_PHI 
-    INIT_LIST_HEAD(&(mem->mem_zone_list));
-    mem->phys_mem_avail = sfi_parse_phys_mem(mem);
-#else
-    mem->phys_mem_avail = multiboot_get_phys_mem(mbd);
-#endif
-
-    if (mem->phys_mem_avail < MEM_1GB) {
-        panic("Not enough memory to run Nautilus!\n");
-    } 
-
-    printk("Total Memory Available: %lu KB\n", 
-            mem->phys_mem_avail>>10);
-
-
-    if (!(page_dir_end = finish_ident_map(mem, mbd))) {
-        panic("Unable to finish identity map\n");
-    }
-
-    mem->pm_start = (addr_t)page_dir_end;
-    mem->page_map = (ulong_t*)mem->pm_start;
-    mem->npages   = mem->phys_mem_avail >> PAGE_SHIFT;
-
-    // layout the bitmap 
-    mem->pm_end = mem->pm_start + (mem->npages / BITS_PER_LONG)*sizeof(long);
-    mem->pm_end = (mem->npages % BITS_PER_LONG) ? mem->pm_end + 1 : mem->pm_end;
-
-    memset((void*)mem->pm_start, 0, mem->pm_end - mem->pm_start);
-
-#ifndef NAUT_CONFIG_XEON_PHI
-    // set kernel memory + page directories + page frame bitmap as reserved
-    printk("Reserving kernel memory %p - %p (page num %d to %d)\n", kernel_start, mem->pm_end-1,PADDR_TO_PAGE(kernel_start), PADDR_TO_PAGE(mem->pm_end-1));
-    nk_reserve_range(kernel_start, mem->pm_end);
-    
-    DEBUG_PRINT("Setting aside system reserved memory\n");
-    multiboot_rsv_mem_regions(mem, mbd);
-
-    DEBUG_PRINT("Reserving BDA and Real Mode IVT\n");
-    nk_reserve_range((addr_t)0x0, (addr_t)0x4ff);
-
-    DEBUG_PRINT("Reserving APIC/IOAPIC\n");
-    nk_reserve_range((addr_t)0xfec00000, (addr_t)0xfedfffff);
-    
-#endif
-
-#ifdef NAUT_CONFIG_HVM_HRT
-    void * hrt_addr = mb_get_first_hrt_addr(mbd);
-    DEBUG_PRINT("Reserving ROS-only memory (up to %p)\n", hrt_addr);
-    nk_reserve_range((addr_t)0x0, (addr_t)hrt_addr);
-#endif
-
-    DEBUG_PRINT("Reserving Video Memory\n");
-    nk_reserve_range((addr_t)0xa0000, (addr_t)0xfffff);
+    kern_ident_map(mem, mbd);
 }

@@ -2,11 +2,11 @@
 #include <nautilus/irq.h>
 #include <nautilus/cpu.h>
 #include <nautilus/percpu.h>
+#include <nautilus/mm.h>
 
 #include <stddef.h>
 
 #include <dev/timer.h>
-#include <lib/liballoc.h>
 
 #ifndef NAUT_CONFIG_DEBUG_TIMERS
 #undef DEBUG_PRINT

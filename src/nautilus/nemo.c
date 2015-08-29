@@ -3,9 +3,9 @@
 #include <nautilus/cpu.h>
 #include <nautilus/percpu.h>
 #include <nautilus/irq.h>
+#include <nautilus/mm.h>
 #include <nautilus/naut_assert.h>
 
-#include <lib/liballoc.h>
 #include <dev/apic.h>
 
 #define NEMO_DEBUG(fmt, args...) DEBUG_PRINT("NEMO: " fmt, ##args)

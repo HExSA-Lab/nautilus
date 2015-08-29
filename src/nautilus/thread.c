@@ -10,8 +10,8 @@
 #include <nautilus/queue.h>
 #include <nautilus/list.h>
 #include <nautilus/errno.h>
+#include <nautilus/mm.h>
 
-#include <lib/liballoc.h>
 
 extern uint8_t malloc_cpus_ready;
 
@@ -480,16 +480,13 @@ nk_thread_create (nk_thread_fun_t fun,
         stack         = (void*)malloc(stack_size);
         t->stack_size = stack_size;
     } else {
-        stack         = (void*)nk_alloc_page();
+        stack         = (void*)malloc(PAGE_SIZE);
         t->stack_size =  PAGE_SIZE;
     }
 #else
     stack         = malloc(PAGE_SIZE_4KB);
     t->stack_size = PAGE_SIZE_4KB;
 #endif
-
-    stack = (void*)nk_alloc_page();
-    t->stack_size = PAGE_SIZE;
 
     ASSERT(stack);
 
@@ -511,11 +508,7 @@ nk_thread_create (nk_thread_fun_t fun,
     return 0;
 
 out_err1:
-    if (t->stack_size == PAGE_SIZE) {
-        nk_free_page((addr_t)stack);
-    } else {
-        free(stack);
-    }
+    free(stack);
     free(t);
     return -1;
 }
@@ -675,12 +668,7 @@ nk_thread_destroy (nk_thread_id_t t)
      * (waiters should already have been notified */
     nk_thread_queue_destroy(thethread->waitq);
 
-    if (thethread->stack_size == PAGE_SIZE) {
-        nk_free_page((addr_t)thethread->stack);
-    } else {
-        free(thethread->stack);
-    }
-
+    free(thethread->stack);
     free(thethread);
 }
 
@@ -1318,7 +1306,6 @@ nk_sched_init_ap (void)
     }
     memset(me, 0, sizeof(nk_thread_t));
 
-    //my_stack = (void*)nk_alloc_page_cpu(id);
     my_stack = malloc(PAGE_SIZE); 
     if (!my_stack) {
         ERROR_PRINT("Couldn't allocate new stack for CPU (%u)\n", id);

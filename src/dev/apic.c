@@ -6,10 +6,10 @@
 #include <nautilus/nautilus.h>
 #include <nautilus/percpu.h>
 #include <nautilus/intrinsics.h>
+#include <nautilus/mm.h>
 #include <dev/apic.h>
 #include <dev/i8254.h>
 #include <dev/timer.h>
-#include <lib/liballoc.h>
 #include <lib/bitops.h>
 
 #ifndef NAUT_CONFIG_DEBUG_APIC
@@ -677,13 +677,8 @@ apic_init (struct cpu * core)
     apic->base_addr = apic_get_base_addr();
 
     if (core->is_bsp) {
-        APIC_DEBUG("Reserving APIC address space\n");
-        if (nk_reserve_page(apic->base_addr) < 0) {
-            APIC_DEBUG("LAPIC mem region already reserved\n");
-        }
-
         /* map in the lapic as uncacheable */
-        if (nk_map_page_nocache(apic->base_addr, PTE_PRESENT_BIT|PTE_WRITABLE_BIT) == -1) {
+        if (nk_map_page_nocache(apic->base_addr, PTE_PRESENT_BIT|PTE_WRITABLE_BIT, PS_4K) == -1) {
             panic("Could not map APIC\n");
         }
     }

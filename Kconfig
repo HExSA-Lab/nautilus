@@ -146,20 +146,34 @@ menu Debugging
       help
         Turn on debug prints for paging subsystem
 
+    config DEBUG_BOOTMEM
+      bool "Debug Bootmem Allocator"
+      depends on DEBUG_PRINTS
+      default n
+      help
+        Turn on debugging for the boot memory allocator
+
+    config DEBUG_BUDDY
+      bool "Debug Buddy Allocator"
+      depends on DEBUG_PRINTS
+      default n
+      help
+        Turn on debugging for the buddy allocator
+
+    config DEBUG_KMEM
+      bool "Debug Kernel Memory Allocator"
+      depends on DEBUG_PRINTS
+      default n
+      help
+         Turn on debugging for the high-level kernel
+         memory allocator (malloc/free)
+
     config DEBUG_FPU
       bool "Debug FPU"
       depends on DEBUG_PRINTS
       default n
       help
         Turn on debug prints for FPU related code (SIMD,MMX,SSE,etc.)
-
-    config DEBUG_MALLOC
-      bool "Debug Malloc"
-      depends on DEBUG_PRINTS
-      default n
-      help
-        Turn on debug prints for memory allocation library 
-        (currently liballoc)
 
     config DEBUG_SMP
       bool "Debug SMP"

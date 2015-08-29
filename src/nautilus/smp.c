@@ -12,11 +12,11 @@
 #include <nautilus/idle.h>
 #include <nautilus/atomic.h>
 #include <nautilus/numa.h>
+#include <nautilus/mm.h>
 #include <nautilus/percpu.h>
 #include <dev/ioapic.h>
 #include <dev/apic.h>
 #include <dev/timer.h>
-#include <lib/liballoc.h>
 
 #ifdef NAUT_CONFIG_XEON_PHI
 #include <nautilus/sfi.h>
@@ -34,7 +34,6 @@
 #define SMP_DEBUG(fmt, args...) DEBUG_PRINT("SMP: " fmt, ##args)
 
 
-//static struct cpu init_cpus[NAUT_CONFIG_MAX_CPUS];
 
 extern struct cpu * smp_ap_stack_switch(uint64_t, uint64_t, struct cpu*);
 
@@ -71,9 +70,7 @@ parse_mptable_cpu (struct sys_info * sys, struct mp_table_entry_cpu * cpu)
         panic("CPU count exceeded max (check your .config)\n");
     }
 
-    //new_cpu = &init_cpus[sys->num_cpus];
-
-    if(!(new_cpu = malloc(sizeof(struct cpu)))) {
+    if(!(new_cpu = mm_boot_alloc(sizeof(struct cpu)))) {
         panic("Couldn't allocate CPU struct\n");
     } 
     memset(new_cpu, 0, sizeof(struct cpu));
@@ -120,7 +117,7 @@ parse_mptable_ioapic (struct sys_info * sys, struct mp_table_entry_ioapic * ioap
         panic("IOAPIC count exceeded max (change it in .config)\n");
     }
 
-    if (!(ioa = malloc(sizeof(struct ioapic)))) {
+    if (!(ioa = mm_boot_alloc(sizeof(struct ioapic)))) {
         panic("Couldn't allocate IOAPIC struct\n");
     }
     memset(ioa, 0, sizeof(struct ioapic));

@@ -246,9 +246,7 @@ parse_hpet_tbl (struct acpi_table_header * hdr, void * arg)
     HPET_DEBUG("\tFlags: 0x%x\n", hpet_tbl->flags);
 
     /* first map in the page */
-    nk_map_page_nocache(PAGE_MASK(hpet_tbl->address.address), PTE_PRESENT_BIT|PTE_WRITABLE_BIT);
-
-    nk_reserve_page(PAGE_MASK(hpet_tbl->address.address));
+    nk_map_page_nocache(ROUND_DOWN_TO_PAGE(hpet_tbl->address.address), PTE_PRESENT_BIT|PTE_WRITABLE_BIT, PS_4K);
 
     /* get the number of comparators */
     cap = *((volatile uint64_t*)(hpet_tbl->address.address + HPET_GEN_CAP_ID_REG));

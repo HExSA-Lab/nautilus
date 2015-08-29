@@ -19,6 +19,7 @@
 #include <nautilus/random.h>
 #include <nautilus/acpi.h>
 #include <nautilus/atomic.h>
+#include <nautilus/mm.h>
 #include <nautilus/libccompat.h>
 #include <nautilus/barrier.h>
 #include <nautilus/hrt.h>
@@ -31,9 +32,6 @@
 #include <dev/i8254.h>
 #include <dev/kbd.h>
 #include <dev/serial.h>
-
-#include <lib/liballoc_hooks.h>
-#include <lib/liballoc.h>
 
 #ifdef NAUT_CONFIG_NDPC_RT
 #include "ndpc_preempt_threads.h"
@@ -163,8 +161,6 @@ hrt_bsp_init (unsigned long mbd,
 
     nk_paging_init(&(naut->sys.mem), mbd);
 
-    init_liballoc_hooks();
-
     naut->sys.mb_info = multiboot_parse(mbd, magic);
     if (!naut->sys.mb_info) {
         ERROR_PRINT("Problem parsing multiboot header\n");
@@ -268,25 +264,37 @@ init (unsigned long mbd,
 
     detect_cpu();
 
+    /* setup the temporary boot-time allocator */
+    mm_boot_init(mbd);
+
+    /* enumerate CPUs and initialize them */
+    smp_early_init(naut);
+
+    /* this will populate NUMA-related structures and 
+     * also initialize the relevant ACPI tables if they exist */
+    nk_numa_init();
+
+    /* this will finish up the identity map */
     nk_paging_init(&(naut->sys.mem), mbd);
 
-    init_liballoc_hooks();
+    /* setup the main kernel memory allocator */
+    nk_kmem_init();
+
+    // setup per-core area for BSP
+    msr_write(MSR_GS_BASE, (uint64_t)naut->sys.cpus[0]);
+
+    /* now we switch to the real kernel memory allocator, pages
+     * allocated in the boot mem allocator are kept reserved */
+    mm_boot_kmem_init();
 
     naut->sys.mb_info = multiboot_parse(mbd, magic);
     if (!naut->sys.mb_info) {
         ERROR_PRINT("Problem parsing multiboot header\n");
     }
 
-    smp_early_init(naut);
-
-    nk_acpi_init();
-
     disable_8259pic();
 
     i8254_init(naut);
-
-    // setup per-core area for BSP
-    msr_write(MSR_GS_BASE, (uint64_t)naut->sys.cpus[0]);
 
     /* from this point on, we can use percpu macros (even if the APs aren't up) */
 
@@ -310,8 +318,7 @@ init (unsigned long mbd,
 
     smp_setup_xcall_bsp(naut->sys.cpus[0]);
 
-    nk_cpu_topo_discover(naut->sys.cpus[0]);
-
+    nk_cpu_topo_discover(naut->sys.cpus[0]); 
 #ifdef NAUT_CONFIG_HPET
     nk_hpet_init();
 #endif

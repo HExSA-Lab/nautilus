@@ -8,7 +8,7 @@
 
 #include <nautilus/naut_string.h>
 #include <nautilus/naut_types.h>
-#include <lib/liballoc.h>
+#include <nautilus/mm.h>
 
 unsigned char _ctype[] = {
 _C,_C,_C,_C,_C,_C,_C,_C,			/* 0-7 */

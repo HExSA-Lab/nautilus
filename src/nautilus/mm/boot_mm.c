@@ -1,0 +1,547 @@
+/* 
+ * This file is part of the Nautilus AeroKernel developed
+ * by the Hobbes and V3VEE Projects with funding from the 
+ * United States National  Science Foundation and the Department of Energy.  
+ *
+ * The V3VEE Project is a joint project between Northwestern University
+ * and the University of New Mexico.  The Hobbes Project is a collaboration
+ * led by Sandia National Laboratories that includes several national 
+ * laboratories and universities. You can find out more at:
+ * http://www.v3vee.org  and
+ * http://xtack.sandia.gov/hobbes
+ *
+ * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
+ * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
+ *                     The Hobbes Project <http://xstack.sandia.gov/hobbes>
+ * All rights reserved.
+ *
+ * Author: Kyle C. Hale <kh@u.northwestern.edu>
+ *
+ * This is free software.  You are permitted to use,
+ * redistribute, and modify it as specified in the file "LICENSE.txt".
+ */
+#include <nautilus/nautilus.h>
+#include <nautilus/naut_types.h>
+#include <nautilus/mm.h>
+#include <nautilus/mb_utils.h>
+#include <nautilus/paging.h>
+#include <nautilus/multiboot2.h>
+#include <nautilus/macros.h>
+#include <lib/bitmap.h>
+
+#define CACHE_LINE_SIZE_DEFAULT 64
+
+#ifndef NAUT_CONFIG_DEBUG_BOOTMEM
+#undef DEBUG_PRINT
+#define DEBUG_PRINT(fmt, args...)
+#endif
+
+#define BMM_DEBUG(fmt, args...) DEBUG_PRINT("BOOTMEM: " fmt, ##args)
+#define BMM_PRINT(fmt, args...) printk("BOOTMEM: " fmt, ##args)
+#define BMM_WARN(fmt, args...)  WARN_PRINT("BOOTMEM: " fmt, ##args)
+
+static char * mem_region_types[6] = {
+    [0]                                 = "unknown",
+    [MULTIBOOT_MEMORY_AVAILABLE]        = "usable RAM",
+    [MULTIBOOT_MEMORY_RESERVED]         = "reserved",
+    [MULTIBOOT_MEMORY_ACPI_RECLAIMABLE] = "ACPI reclaimable",
+    [MULTIBOOT_MEMORY_NVS]              = "non-volatile storage",
+    [MULTIBOOT_MEMORY_BADRAM]           = "bad RAM",
+};
+
+
+extern addr_t _loadStart;
+extern addr_t _bssEnd;
+extern ulong_t pml4;
+
+static mem_map_entry_t memory_map[MAX_MMAP_ENTRIES];
+static mmap_info_t mm_info;
+static boot_mem_info_t bootmem;
+
+uint8_t boot_mm_inactive = 0;
+
+
+/* 
+ * Sifts through the Multiboot2 memory map
+ * (alternative to e820 table) and records 
+ * each region in the kernel's memory map
+ * TODO: this needs to be arch-specific
+ */
+static void
+detect_mem_map (unsigned long mbd)
+{
+    struct multiboot_tag * tag;
+    uint32_t n = 0;
+
+    if (mbd & 7) {
+        panic("ERROR: Unaligned multiboot info struct\n");
+    }
+
+    tag = (struct multiboot_tag*)(mbd+8);
+    while (tag->type != MULTIBOOT_TAG_TYPE_MMAP) {
+        tag = (struct multiboot_tag*)((multiboot_uint8_t*)tag + ((tag->size+7)&~7));
+    }
+
+    if (tag->type != MULTIBOOT_TAG_TYPE_MMAP) {
+        panic("ERROR: no mmap tag found\n");
+    }
+
+    multiboot_memory_map_t * mmap;
+
+    for (mmap=((struct multiboot_tag_mmap*)tag)->entries;
+            (multiboot_uint8_t*)mmap < (multiboot_uint8_t*)tag + tag->size;
+            mmap = (multiboot_memory_map_t*)((ulong_t)mmap + 
+                ((struct multiboot_tag_mmap*)tag)->entry_size)) {
+
+        ulong_t start,end;
+
+        start = round_up(mmap->addr, PAGE_SIZE);
+        end   = round_down(mmap->addr + mmap->len, PAGE_SIZE);
+
+        memory_map[n].addr = mmap->addr;
+        memory_map[n].len  = mmap->len;
+        memory_map[n].type = mmap->type;
+
+        BMM_PRINT("Memory map[%u] - [%p - %p] <%s>\n", 
+                n, 
+                start,
+                end,
+                mem_region_types[memory_map[n].type]);
+
+        if (mmap->type == MULTIBOOT_MEMORY_AVAILABLE) {
+            mm_info.usable_ram += mmap->len;
+        }
+
+        if (end > (mm_info.last_pfn << PAGE_SHIFT)) {
+            mm_info.last_pfn = end >> PAGE_SHIFT;
+        }
+
+        mm_info.total_mem += mmap->len;
+
+        ++n;
+        ++mm_info.num_regions;
+    }
+
+}
+
+
+struct mem_map_entry * 
+mm_boot_get_region (unsigned i) 
+{
+    if (i >= mm_info.num_regions) {
+        return NULL;
+    }
+    return &memory_map[i];
+}
+
+
+unsigned 
+mm_boot_num_regions (void) 
+{
+    return mm_info.num_regions;
+}
+
+
+/* returns the very last page frame number 
+ * that should be mapped by the paging subsystem
+ */
+ulong_t 
+mm_boot_last_pfn (void)
+{
+    return mm_info.last_pfn;
+}
+
+
+/*
+ * returns amount of *usable* system RAM in bytes
+ */
+uint64_t 
+mm_get_usable_ram (void)
+{
+    return mm_info.usable_ram;
+}
+
+
+/*
+ * returns *all* memory bytes, including I/O holes, 
+ * unusable memory, ACPI reclaimable etc.
+ */
+uint64_t
+mm_get_all_mem (void)
+{
+    return mm_info.total_mem;
+}
+
+
+static void
+free_usable_ram (boot_mem_info_t * mem)
+{
+    unsigned i;
+
+    for (i = 0; i < mm_info.num_regions; i++) {
+        
+        if (memory_map[i].type == MULTIBOOT_MEMORY_AVAILABLE) {
+            mm_boot_free_mem(memory_map[i].addr, memory_map[i].len);
+        }
+
+    }
+}
+
+/* TODO: move this out into separate arch trees */
+static void 
+arch_reserve_boot_regions()
+{
+#ifdef NAUT_CONFIG_HVM_HRT
+    void * hrt_addr = mb_get_first_hrt_addr(mbd);
+    DEBUG_PRINT("Reserving ROS-only memory (up to %p)\n", hrt_addr);
+    nk_reserve_range((addr_t)0x0, (addr_t)hrt_addr);
+#endif
+}
+
+
+int 
+mm_boot_init (ulong_t mbd)
+{
+    addr_t kern_start = (addr_t)&_loadStart;
+    addr_t kern_end   = (addr_t)&_bssEnd;
+    addr_t pm_start   = round_up(kern_end, PAGE_SIZE);
+    boot_mem_info_t * mem = &bootmem;
+    ulong_t npages;
+    ulong_t pm_len;
+
+    DEBUG_PRINT("Setting up boot memory allocator\n");
+
+    /* parse the multiboot2 memory map, filing in 
+     * some global data that we will subsequently use here  */
+    detect_mem_map(mbd);
+
+    npages = mm_info.last_pfn + 1;
+    pm_len = (((npages / BITS_PER_LONG) + 7) / 8) * sizeof(long);
+
+    mem->page_map = (ulong_t*)pm_start;
+    mem->npages   = npages;
+    mem->pm_len   = pm_len;
+
+    /* everything is initially marked as reserved */
+    memset((void*)mem->page_map, 0xff, mem->pm_len);
+
+    /* free up the system RAM  that we can use */
+    free_usable_ram(mem);
+    
+    /* mark as used the kernel and the pages occupying the bitmap */
+    mm_boot_reserve_mem(kern_start, pm_start + pm_len);
+
+    arch_reserve_boot_regions();
+
+    return 0;
+}
+
+
+
+void
+mm_boot_reserve_mem (addr_t start, ulong_t size)
+{
+    uint32_t start_page = PADDR_TO_PAGE(start);
+    uint32_t npages     = (size+PAGE_SIZE-1) / PAGE_SIZE;
+    boot_mem_info_t * bm = &bootmem;
+
+    if (unlikely(boot_mm_inactive)) {
+        panic("Invalid attempt to use boot memory allocator\n");    
+    }
+
+    bitmap_set(bm->page_map, start_page, npages);
+}
+
+
+void
+mm_boot_free_mem (addr_t start, ulong_t size)
+{
+    uint32_t start_page = PADDR_TO_PAGE(start);
+    uint32_t npages     = (size+PAGE_SIZE-1) / PAGE_SIZE;
+    boot_mem_info_t * bm = &bootmem;
+
+    if (unlikely(boot_mm_inactive)) {
+        panic("Invalid attempt to use boot memory allocator\n");
+    }
+
+    bitmap_clear(bm->page_map, start_page, npages);
+}
+
+
+/* 
+ * to be called when we're setting up the kmem allocator
+ */
+void
+mm_boot_free_all_mem (void)
+{
+    if (unlikely(boot_mm_inactive)) {
+        panic("Invalid attempt to use boot memory allocator\n");
+    }
+
+
+    boot_mm_inactive = 1;
+}
+
+
+/*
+ * this is our main boot memory allocator, based on a simple 
+ * bitmap scan. 
+ *
+ * NOTE: this is not thread-safe
+ */
+void *
+__mm_boot_alloc (ulong_t size, ulong_t align, ulong_t goal)
+{
+    ulong_t offset, remaining_size, areasize, preferred;
+    ulong_t i, start = 0, incr, eidx, end_pfn = mm_info.last_pfn;
+    boot_mem_info_t * minfo = &bootmem;
+    void * ret = NULL;
+
+    if (unlikely(boot_mm_inactive)) {
+        panic("Invalid attempt to use boot memory allocator\n");
+    }
+
+    /* we don't accept zero-sized allocations */
+    ASSERT(size);
+
+    /* alignment better be a power of 2 */
+    ASSERT(!(align & (align-1)));
+
+    eidx = end_pfn;
+
+    /* NOTE: we ignore goal for now */
+
+    preferred = 0;
+
+    /* ceil it to page frame count (will usually be one) */
+    areasize = (size + PAGE_SIZE-1)/PAGE_SIZE;
+
+    /* will almost always be 1 (note the GNU extension usage here...) */
+    incr = align >> PAGE_SHIFT ? : 1;
+
+restart_scan:
+    for (i = preferred; i < eidx; i += incr) {
+        ulong_t j;
+        i = find_next_zero_bit(minfo->page_map, eidx+1, i);
+        i = ALIGN(i, incr);
+        if (i >= eidx)
+            break;
+        if (test_bit(i, minfo->page_map))
+            continue;
+        for (j = i + 1; j < i + areasize; ++j) {
+            if (j >= eidx)
+                goto fail_block;
+            if (test_bit(j, minfo->page_map))
+                goto fail_block;
+        }
+
+        start = i;
+        goto found;
+
+    fail_block:
+        i = ALIGN(j, incr);
+    }
+
+    if (preferred > 0) {
+        preferred = 0;
+        goto restart_scan;
+    }
+
+    return NULL;
+
+found:
+    minfo->last_success = start << PAGE_SHIFT;
+    ASSERT(start < eidx);
+
+    /*
+     * Is the next page of the previous allocation-end the start
+     * of this allocation's buffer? If yes then we can 'merge'
+     * the previous partial page with this allocation.
+     */
+    if (align < PAGE_SIZE && 
+        minfo->last_offset && 
+        (minfo->last_pos + 1) == start) {
+
+        offset = ALIGN(minfo->last_offset, align);
+        ASSERT(offset <= PAGE_SIZE);
+        remaining_size = PAGE_SIZE-offset;
+
+        /* does it fit? */
+        if (size < remaining_size) {
+
+            areasize = 0;
+            /* last_pos unchanged */
+            minfo->last_offset = offset + size;
+            ret = (void*)((minfo->last_pos * PAGE_SIZE) + offset);
+
+        } else {
+
+            remaining_size = size - remaining_size;
+            areasize = (remaining_size + PAGE_SIZE - 1)/PAGE_SIZE;
+            ret = (void*)((minfo->last_pos * PAGE_SIZE) + offset);
+            minfo->last_pos = start + areasize - 1;
+            minfo->last_offset = remaining_size;
+
+        }
+
+        minfo->last_offset &= ~PAGE_MASK;
+
+    } else {
+
+        minfo->last_pos = start + areasize - 1;
+        minfo->last_offset = size & ~PAGE_MASK;
+        ret = (void*)(start * PAGE_SIZE);
+
+    }
+
+#ifdef NAUT_CONFIG_DEBUG_BOOTMEM
+    for (i = start; i < start+areasize; i++) {
+        if (unlikely(test_and_set_bit(i, minfo->page_map)))
+            panic("bit not set i not set!\n");
+    }
+#endif
+
+    /* NOTE: we do NOT zero the memory! */
+    return ret;
+    
+}
+
+
+void * 
+mm_boot_alloc (ulong_t size)
+{
+    return __mm_boot_alloc(size, CACHE_LINE_SIZE_DEFAULT, 0);
+}
+
+
+void *
+mm_boot_alloc_aligned (ulong_t size, ulong_t align)
+{
+    return __mm_boot_alloc(size, align, 0);
+}
+
+
+void 
+mm_boot_free (void *addr, ulong_t size)
+{
+    ulong_t i, start, sidx, eidx;
+    boot_mem_info_t * minfo = &bootmem;
+
+    if (unlikely(boot_mm_inactive)) {
+        panic("Invalid attempt to use boot memory allocator\n");
+    }
+
+    /*
+     * round down end of usable mem, partially free pages are
+     * considered reserved.
+     */
+    ulong_t end = ((ulong_t)addr + size)/PAGE_SIZE;
+
+    ASSERT(size);
+    ASSERT(end > 0);
+
+    if ((ulong_t)addr < minfo->last_success)
+        minfo->last_success = (ulong_t)addr;
+
+    /*
+     * Round up the beginning of the address.
+     */
+    start = ((ulong_t)addr + PAGE_SIZE-1) / PAGE_SIZE;
+    sidx = start;
+    eidx = end;
+
+    for (i = sidx; i < eidx; i++) {
+        if (unlikely(!test_and_clear_bit(i, minfo->page_map))) {
+            panic("could not free page\n");
+        }
+    }
+}
+
+
+/* add the unused pages to this mem region's mem-pool */
+static ulong_t
+add_free_pages (struct mem_region * region) 
+{
+    ulong_t count = 0;
+    ulong_t * pm  = bootmem.page_map;
+    ulong_t addr, i, m;
+
+    ASSERT(region);
+
+    ulong_t start_pfn = region->base_addr >> PAGE_SHIFT;
+    ulong_t end_pfn   = (region->base_addr + region->len) >> PAGE_SHIFT;
+
+    ASSERT(end_pfn < bootmem.npages);
+
+    for (i = start_pfn; i < end_pfn; ) {
+
+        ulong_t v = ~pm[i/BITS_PER_LONG];
+        
+        /* we have free pages in this index */
+        if (v) {
+            addr = start_pfn << PAGE_SHIFT;
+            for (m = 1; m && i < end_pfn; m <<= 1, addr += PAGE_SIZE, i++) {
+                if (v & m) {
+                    ++count;
+                    kmem_add_memory(region, addr, PAGE_SIZE);
+                }
+            }
+        } else {
+            i += BITS_PER_LONG;
+        }
+        start_pfn += BITS_PER_LONG;
+    }
+
+    return count*PAGE_SIZE;
+}
+
+/*
+ * this makes the transfer to the kmem allocator, 
+ * we won't be using the boot bitmap allocator anymore
+ * after this point
+ */
+void
+mm_boot_kmem_init (void)
+{
+    unsigned i;
+    ulong_t count = 0;
+    struct nk_locality_info * loc = &(nk_get_nautilus_info()->sys.locality_info);
+
+    /* we walk ALL of the registered memory regions
+     * and add their associated pages in the existing bitmap to the
+     * kernel mem pool */
+    BMM_PRINT("Adding boot memory regions to the kernel memory pool:\n");
+    for (i = 0; i < loc->num_domains; i++) {
+        struct mem_region * region = NULL;
+        unsigned j = 0;
+        list_for_each_entry(region, &(loc->domains[i]->regions), entry) {
+            ulong_t added = add_free_pages(region);
+            BMM_PRINT("    [Domain %02u : Region %02u] (%0lu.%02lu MB)\n", 
+                    i, j,
+                    added / 1000000,
+                    added % 1000000);
+            count += added;
+            j++;
+        }
+    }
+
+    ASSERT(count != 0);
+
+    BMM_PRINT("Reclaiming boot allocator page map\n");
+    kmem_add_memory(kmem_get_region_by_addr((ulong_t)bootmem.page_map),
+            (ulong_t)bootmem.page_map, 
+            bootmem.pm_len);
+
+    printk("BOOTMEM: Reclaiming boot page tables\n");
+    kmem_add_memory(kmem_get_region_by_addr((ulong_t)&pml4), 
+            (ulong_t)(&pml4), 
+            PAGE_SIZE_4KB*3);
+
+    /* TODO: reclaim the whole .boot section */
+
+    /* we no longer need to use the boot allocator */
+    boot_mm_inactive = 1;
+
+    BMM_PRINT("    =======\n");
+    BMM_PRINT("    [TOTAL] (%lu.%lu MB)\n", count/1000000, count%1000000);
+}

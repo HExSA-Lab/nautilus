@@ -68,24 +68,16 @@ struct nk_mem_info {
     struct list_head mem_zone_list;
 };
 
+typedef enum {
+    PS_4K,
+    PS_2M,
+    PS_1G,
+} page_size_t;
 
-int nk_create_page_mapping (addr_t vaddr, addr_t paddr, uint64_t flags);
-int nk_map_page_nocache (addr_t paddr, uint64_t flags);
+
+int nk_map_page (addr_t vaddr, addr_t paddr, uint64_t flags, page_size_t ps);
+int nk_map_page_nocache (addr_t paddr, uint64_t flags, page_size_t ps);
 void nk_paging_init(struct nk_mem_info * mem, ulong_t mbd);
-addr_t nk_alloc_page_region(unsigned cpu);
-int nk_free_page(addr_t addr);
-int nk_reserve_pages(addr_t paddr, unsigned n);
-int nk_reserve_page(addr_t paddr);
-int nk_reserve_range(addr_t start, addr_t end);
-uint8_t nk_page_free(addr_t paddr);
-uint8_t nk_page_allocated(addr_t paddr);
-
-/* hooks */
-int nk_free_pages(void * addr, unsigned num);
-addr_t nk_alloc_pages(unsigned num);
-addr_t nk_alloc_pages_cpu(unsigned num, cpu_id_t cpu);
-addr_t nk_alloc_pages_region(unsigned num, unsigned region);
-
 int nk_pf_handler(excp_entry_t * excp, excp_vec_t vector, addr_t fault_addr);
 
 #define PAGE_SHIFT_4KB 12UL
@@ -97,7 +89,12 @@ int nk_pf_handler(excp_entry_t * excp, excp_vec_t vector, addr_t fault_addr);
 #define PAGE_SIZE_1GB  1073741824UL
 #define PAGE_SIZE      PAGE_SIZE_2MB
 
-#define PAGE_MASK(x)  ((x) & ~((1ULL<<PAGE_SHIFT)-1))
+#define PAGE_MASK     (~(PAGE_SIZE-1))
+
+#define ROUND_DOWN_TO_PAGE(x) ((x) & PAGE_MASK)
+
+#define PFN_ROUND_UP(x)   (((x) + PAGE_SIZE-1) >> PAGE_SHIFT)
+#define PFN_ROUND_DOWN(x) ((x) >> PAGE_SHIFT)
 
 #define MEM_1GB        0x40000000ULL
 #define MEM_2MB        0x200000ULL
@@ -131,6 +128,7 @@ int nk_pf_handler(excp_entry_t * excp, excp_vec_t vector, addr_t fault_addr);
 
 #define PTE_ADDR_MASK (~((1<<12)-1))
 
+#define PTE_ADDR(x) ((x) & PTE_ADDR_MASK)
 
 #define PTE_PRESENT_BIT       1ULL
 #define PTE_WRITABLE_BIT      2ULL
@@ -167,6 +165,22 @@ int nk_pf_handler(excp_entry_t * excp, excp_vec_t vector, addr_t fault_addr);
 
 
 
+static inline ulong_t
+ps_type_to_size (page_size_t size) {
+
+    switch (size) {
+        case PS_4K:
+            return PAGE_SIZE_4KB;
+        case PS_2M:
+            return PAGE_SIZE_2MB;
+        case PS_1G:
+            return PAGE_SIZE_1GB;
+        default:
+            break;
+    }
+    return PAGE_SIZE_2MB;
+}
+
 
 #define PF_ERR_PROT(x)         ((x)&1)       /* fault caused by page-level prot. violation */
 #define PF_ERR_NOT_PRESENT(x)  (~(x)&1)      /* fault caused by not-present page */
@@ -187,39 +201,6 @@ int nk_pf_handler(excp_entry_t * excp, excp_vec_t vector, addr_t fault_addr);
 
 // given a page num, what's the bit number within the byte
 #define PAGE_MAP_BIT_IDX(n)  (n % 8)
-
-
-/*
- * nk_alloc_page
- *
- * allocate a single page
- *
- */
-static inline addr_t 
-nk_alloc_page (void) 
-{
-    return nk_alloc_pages(1);
-}
-
-
-/* 
- * nk_alloc_page_cpu
- *
- * Allocate a page in this CPU's NUMA domain
- *
- * @cpu: The CPU to search for the domain by
- *
- * returns NULL on error, the physical address otherwise
- *
- */
-static inline addr_t
-nk_alloc_page_cpu (cpu_id_t cpu)
-{
-    return nk_alloc_pages_cpu(1, cpu);
-}
-
-
-
 
 #ifdef __cplusplus
 }

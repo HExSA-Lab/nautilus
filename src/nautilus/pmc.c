@@ -2,8 +2,8 @@
 #include <nautilus/nautilus.h>
 #include <nautilus/cpu.h>
 #include <nautilus/pmc.h>
+#include <nautilus/mm.h>
 
-#include <lib/liballoc.h>
 
 #define PMC_DEBUG(fmt, args...) DEBUG_PRINT("PMC: " fmt, ##args)
 #define PMC_INFO(fmt, args...)  printk("PMC: " fmt, ##args)

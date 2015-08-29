@@ -291,6 +291,28 @@ wbinvd (void)
 }
 
 
+/**
+ * Flush all non-global entries in the calling CPU's TLB.
+ *
+ * Flushing non-global entries is the common-case since user-space
+ * does not use global pages (i.e., pages mapped at the same virtual
+ * address in *all* processes).
+ *
+ */
+static inline void
+tlb_flush (void)
+{
+    uint64_t tmpreg;
+
+    asm volatile(
+        "movq %%cr3, %0;  # flush TLB \n"
+        "movq %0, %%cr3;              \n"
+        : "=r" (tmpreg)
+        :: "memory"
+    );
+}
+
+
 static inline void io_delay(void)
 {
     const uint16_t DELAY_PORT = 0x80;

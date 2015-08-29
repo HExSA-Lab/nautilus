@@ -2,7 +2,7 @@
 #include <nautilus/idt.h>
 #include <nautilus/irq.h>
 #include <nautilus/cpu.h>
-#include <lib/liballoc.h>
+#include <nautilus/mm.h>
 
 
 /* NOTE: the APIC organizes interrupt priorities as follows:
@@ -180,7 +180,7 @@ nk_add_bus_entry (const uint8_t bus_id, const char * bus_type)
     struct nk_bus_entry * bus = NULL;
     struct naut_info * naut = nk_get_nautilus_info();
 
-    bus = malloc(sizeof(struct nk_bus_entry));
+    bus = mm_boot_alloc(sizeof(struct nk_bus_entry));
     if (!bus) {
         ERROR_PRINT("Could not allocate bus entry\n");
         return;
@@ -206,7 +206,7 @@ nk_add_int_entry (int_trig_t trig_mode,
     struct nk_int_entry * new = NULL;
     struct naut_info * naut = nk_get_nautilus_info();
 
-    new = malloc(sizeof(struct nk_int_entry));
+    new = mm_boot_alloc(sizeof(struct nk_int_entry));
     if (!new) {
         ERROR_PRINT("Could not allocate IRQ entry\n");
         return;

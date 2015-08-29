@@ -71,6 +71,44 @@ static inline int test_bit(unsigned int nr, const volatile unsigned long *addr)
 }
 
 /**
+ * test_and_set_bit - Set a bit and return its old value
+ * @nr: Bit to set
+ * @addr: Address to count from
+ *
+ * This operation is atomic and cannot be reordered.
+ * It also implies a memory barrier.
+ */
+static __inline__ int test_and_set_bit(int nr, volatile void * addr)
+{
+    int oldbit;
+
+    __asm__ __volatile__(
+        "lock ; btsl %2,%1\n\tsbbl %0,%0"
+        :"=r" (oldbit),"+m" (*(volatile long *)addr)
+        :"dIr" (nr) : "memory");
+    return oldbit;
+}
+
+/**
+ * test_and_clear_bit - Clear a bit and return its old value
+ * @nr: Bit to clear
+ * @addr: Address to count from
+ *
+ * This operation is atomic and cannot be reordered.
+ * It also implies a memory barrier.
+ */
+static __inline__ int test_and_clear_bit(int nr, volatile void * addr)
+{
+    int oldbit;
+
+    __asm__ __volatile__(
+        "lock ; btrl %2,%1\n\tsbbl %0,%0"
+        :"=r" (oldbit),"+m" (*(volatile long *)addr)
+        :"dIr" (nr) : "memory");
+    return oldbit;
+}
+
+/**
  * __change_bit - Toggle a bit in memory
  * @nr: the bit to change
  * @addr: the address to start counting from

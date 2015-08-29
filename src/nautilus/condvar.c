@@ -6,9 +6,9 @@
 #include <nautilus/irq.h>
 #include <nautilus/cpu.h>
 #include <nautilus/atomic.h>
+#include <nautilus/mm.h>
 
 #include <dev/apic.h>
-#include <lib/liballoc.h>
 
 #ifndef NAUT_CONFIG_DEBUG_SYNCH
 #undef DEBUG_PRINT

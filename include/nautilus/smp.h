@@ -19,6 +19,7 @@ uint8_t nk_get_cpu_by_lapicid (uint8_t lapicid);
 
 #include <dev/apic.h>
 #include <nautilus/spinlock.h>
+#include <nautilus/mm.h>
 #include <nautilus/queue.h>
 
 struct naut_info;
@@ -75,7 +76,9 @@ struct cpu {
     /* NUMA info */
     struct nk_topo_params * tp;
     struct nk_cpu_coords * coord;
-    uint32_t numa_domain;
+    struct numa_domain * domain;
+
+    struct kmem_data kmem;
 
 
     struct nk_rand_info * rand;

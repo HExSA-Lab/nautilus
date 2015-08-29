@@ -2,8 +2,8 @@
 #include <nautilus/mb_utils.h>
 #include <nautilus/nautilus.h>
 #include <nautilus/spinlock.h>
+#include <nautilus/mm.h>
 #include <nautilus/hrt.h>
-#include <lib/liballoc.h>
 
 
 int 
@@ -29,7 +29,7 @@ hrt_init_cpus (struct sys_info * sys)
     printk("HRT detected %u CPUs\n", sys->num_cpus);
 
     for (i = 0; i < hrt->num_apics; i++) {
-        struct cpu * new_cpu = malloc(sizeof(struct cpu));
+        struct cpu * new_cpu = mm_boot_alloc(sizeof(struct cpu));
 
         if (!new_cpu) {
             ERROR_PRINT("Could not allocate CPU struct\n");
@@ -72,7 +72,7 @@ hrt_init_ioapics (struct sys_info * sys)
 
         sys->num_ioapics = 1;
 
-        struct ioapic * ioa = malloc(sizeof(struct ioapic));
+        struct ioapic * ioa = mm_boot_alloc(sizeof(struct ioapic));
         if (!ioa) {
             ERROR_PRINT("Could not allocate IOAPIC\n");
             return -1;

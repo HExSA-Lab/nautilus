@@ -95,10 +95,4 @@ nk_acpi_init (void)
 		disable_acpi();
 		return;
 	}
-
-    /* for now, we're doing this with MP Table */
-	//acpi_parse_madt();
-
-	/* Parse the SRAT/SLIT NUMA-related tables */
-	nk_numa_init();
 }

@@ -8,8 +8,8 @@
 
 uint_t multiboot_get_size(ulong_t mbd);
 addr_t multiboot_get_phys_mem(ulong_t mbd);
+ulong_t multiboot_get_sys_ram(ulong_t mbd);
 struct multiboot_info * multiboot_parse(ulong_t mbd, ulong_t magic);
-void multiboot_rsv_mem_regions(struct nk_mem_info * mem, ulong_t mbd);
 int mb_is_hrt_environ (ulong_t mbd);
 void* mb_get_first_hrt_addr (ulong_t mbd);
 
