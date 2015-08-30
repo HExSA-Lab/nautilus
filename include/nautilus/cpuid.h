@@ -243,9 +243,13 @@ typedef struct cpuid_ret {
 static int
 cpuid (uint32_t func, cpuid_ret_t * ret)
 {
-    asm volatile ("cpuid" : 
-                  "=a"(ret->a), "=b"(ret->b), "=c"(ret->c), "=d"(ret->d) : 
-                  "0"(func));
+    asm volatile ("pushq %%rbx;"
+            "movq %%rdi, %%rbx;"
+            "cpuid ;"
+            "movq %%rbx, %%rdi; "
+            "popq %%rbx ;"
+            : "=a"(ret->a), "=D"(ret->b), "=c"(ret->c), "=d"(ret->d)
+            : "0"(func));
 
     return 0;
 }
@@ -254,9 +258,13 @@ cpuid (uint32_t func, cpuid_ret_t * ret)
 static int
 cpuid_sub (uint32_t func, uint32_t sub_func, cpuid_ret_t * ret)
 {
-    asm volatile ("cpuid" : 
-                  "=a"(ret->a), "=b"(ret->b), "=c"(ret->c), "=d"(ret->d) : 
-                  "0"(func), "2"(sub_func));
+    asm volatile ("pushq %%rbx;"
+            "movq %%rdi, %%rbx;"
+            "cpuid ;"
+            "movq %%rbx, %%rdi; "
+            "popq %%rbx ;"
+            : "=a"(ret->a), "=D"(ret->b), "=c"(ret->c), "=d"(ret->d)
+            : "0"(func), "2"(sub_func));
 
     return 0;
 }
