@@ -37,8 +37,10 @@ ulong_t mm_boot_last_pfn(void);
 int mm_boot_init (ulong_t mbd);
 void mm_boot_kmem_init(void);
 
-void mm_boot_reserve_mem (addr_t start, ulong_t size);
+void mm_boot_reserve_mem(addr_t start, ulong_t size);
+void mm_boot_reserve_vmem(addr_t start, ulong_t size);
 void mm_boot_free_mem(addr_t start, ulong_t size);
+void mm_boot_free_vmem(addr_t start, ulong_t size);
 void * __mm_boot_alloc(ulong_t size, ulong_t align, ulong_t goal);
 void * mm_boot_alloc (ulong_t size);
 void * mm_boot_alloc_aligned (ulong_t size, ulong_t align);
@@ -61,5 +63,9 @@ void kmem_add_memory(struct mem_region * mem, ulong_t base_addr, size_t size);
 void * malloc(size_t size);
 void free(const void * addr);
 
+
+/* arch specific */
+void arch_detect_mem_map (mmap_info_t * mm_info, mem_map_entry_t * memory_map, unsigned long mbd);
+void arch_reserve_boot_regions(unsigned long mbd);
 
 #endif /* !__MM_H__! */

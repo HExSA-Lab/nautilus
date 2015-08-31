@@ -34,7 +34,7 @@ extern "C" {
 #define IA32_APIC_BASE_MSR_BSP    0x100 
 #define IA32_APIC_BASE_MSR_ENABLE 0x800
 
-#define APIC_BASE_ADDR_MASK 0xfffff000
+#define APIC_BASE_ADDR_MASK 0xfffffffffffff000ULL
 #define APIC_IS_BSP(x)      ((x) & (1 << 8))
 #define APIC_VERSION(x)     ((x) & 0xffu)
 

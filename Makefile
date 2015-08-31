@@ -334,6 +334,7 @@ CFLAGS:=   $(COMMON_FLAGS) \
 		   -fno-common \
 		   -std=gnu99 \
 		    $(call cc-option, -Wno-unused-but-set-variable,)
+			
 		   #-mno-3dnow \
 		   #-Werror \
 		   #-Wmissing-prototypes \
@@ -615,6 +616,11 @@ endif
 endif
 
 
+quiet_cmd_transform_linkscript__ ?= CC      $@
+	  cmd_transform_linkscript__ ?= $(CC) -E -P \
+	  -DHIHALF_OFFSET=$(NAUT_CONFIG_HRT_HIHALF_OFFSET) \
+	  -x c-header -o link/nautilus.ld.hrt link/hrt.lds
+
 # Rule to link nautilus - also used during CONFIG_CONFIGKALLSYMS
 # May be overridden by /Makefile.$(ARCH)
 quiet_cmd_nautilus__ ?= LD      $@
@@ -639,13 +645,20 @@ quiet_cmd_nautilus_version = GEN     .version
 # Generate System.map and verify that the content is consistent
 # Use + in front of the nautilus rule to silent warning with make -j2
 # First command is ':' to allow us to use + in front of the rule
+ifdef NAUT_CONFIG_HVM_HRT
+define rule_nautilus__
+	:
+	$(call cmd,transform_linkscript__)
+	$(call cmd,nautilus__)
+	$(Q)echo 'cmd_$@ := $(cmd_nautilus__)' > $(@D)/.$(@F).cmd
+endef
+else
 define rule_nautilus__
 	:
 	$(call cmd,nautilus__)
 	$(Q)echo 'cmd_$@ := $(cmd_nautilus__)' > $(@D)/.$(@F).cmd
-
-
 endef
+endif
 
 
 # nautilus image - including updated kernel symbols

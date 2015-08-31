@@ -127,6 +127,9 @@ kmem_get_region_by_addr (ulong_t addr)
  * physical memory associated with it, each of which will have its own zone in 
  * the kernel memory pool.
  *
+ * Note that the zone range will be in the *virtual* address space 
+ * in the case we're compiling this as an HRT for operation in an HVM
+ *
  * Arguments:
  *       [IN] region: The memory region to create a zone for
  *
@@ -139,6 +142,8 @@ create_zone (struct mem_region * region)
     struct buddy_mempool * pool = NULL;
 
     ASSERT(region);
+
+    KMEM_DEBUG("Creating buddy zone for region at %p\n", region->base_addr);
     
     if (region->mm_state) {
         panic("Memory zone already exists for memory region ([%p - %p] domain %u)\n",
@@ -151,7 +156,7 @@ create_zone (struct mem_region * region)
     list_add_tail(&(region->glob_link), &glob_zone_list);
 
     /* Initialize the underlying buddy allocator */
-    return buddy_init(region->base_addr, pool_order, min_order);
+    return buddy_init(pa_to_va(region->base_addr), pool_order, min_order);
 }
 
 
@@ -174,7 +179,8 @@ kmem_add_memory (struct mem_region * mem,
      * Memory is added to it via buddy_free().
      * buddy_free() will panic if there are any problems with the args.
      */
-    buddy_free(mem->mm_state, (void*)base_addr, ilog2(size));
+
+    buddy_free(mem->mm_state, (void*)pa_to_va(base_addr), ilog2(size));
 
     /* Update statistics */
     kmem_bytes_managed += size;
@@ -226,6 +232,10 @@ nk_kmem_init (void)
                 return -1;
             }
             newent->mem = mem;
+            KMEM_DEBUG("Adding region [%p] in domain %u to CPU %u's local region list\n",
+                    mem->base_addr, 
+                    loc_dom->id,
+                    i);
             list_add_tail(&newent->mem_ent, local_regions);
         }
 
@@ -259,7 +269,6 @@ nk_kmem_init (void)
         }
     }
 
-        
     return 0;
 }
 

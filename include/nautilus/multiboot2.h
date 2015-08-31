@@ -367,12 +367,20 @@ struct multiboot_tag_hrt
 {
   multiboot_uint32_t type;
   multiboot_uint32_t size;
-  multiboot_uint32_t num_apics;
+  multiboot_uint32_t total_num_apics;
   multiboot_uint32_t first_hrt_apic_id;
   multiboot_uint32_t have_hrt_ioapic;
   multiboot_uint32_t first_hrt_ioapic_entry;
-  multiboot_uint64_t first_hrt_addr;
-};
+  multiboot_uint64_t cpu_freq_khz;;
+  multiboot_uint64_t hrt_flags;
+  multiboot_uint64_t max_mem_mapped;
+  multiboot_uint64_t first_hrt_gpa;
+  multiboot_uint64_t boot_state_gpa;
+  multiboot_uint64_t gva_offset;
+  multiboot_uint64_t comm_page_gpa;
+  multiboot_uint8_t  hrt_int_vec;
+  multiboot_uint8_t  reserved[7];
+} __attribute__((packed)) ;
 
 #endif /* ! ASM_FILE */
 

@@ -217,6 +217,13 @@ sfi_fill_attrs (char * str, uint64_t attr)
 }
 
 
+unsigned 
+sfi_get_mmap_nentries (struct sfi_mmap_tabl * tbl)
+{
+    return (tbl->hdr.len - sizeof(struct sfi_common_hdr)) / sizeof(efi_mem_desc_t);
+}
+
+
 static uint64_t
 parse_sfi_mmap (struct sfi_mmap_tbl * tbl, struct nk_mem_info * sysmem)
 {
@@ -248,22 +255,6 @@ parse_sfi_mmap (struct sfi_mmap_tbl * tbl, struct nk_mem_info * sysmem)
         sfi_fill_attrs(attrs, mem.attr);
         
         SFI_DEBUG("  Attrs:      %s\n", attrs);
-
-#if 0
-        struct nk_mem_zone * mz = malloc(sizeof(struct nk_mem_zone));
-        if (!mz) {
-            ERROR_PRINT("Could not allocate memory zone\n");
-            return -1;
-        }
-        memset(mz, 0, sizeof(struct nk_mem_zone));
-
-        mz->start  = mem.phys_start;
-        mz->length = mem.num_pages * PAGE_SIZE_4KB;
-        mz->attrs  = mem.attr;
-
-        list_add_tail(&(mz->node), &(sysmem->mem_zone_list));
-#endif
-
     }
 
     return pmem;
@@ -335,6 +326,32 @@ sfi_parse_syst (struct sys_info * sys, struct sfi_sys_tbl * sfi)
     SFI_DEBUG("All SFI SYST entries parsed\n");
     
     return 0;
+}
+
+struct sfi_mmap_tbl *
+sfi_get_mmap (void) 
+{
+    struct sfi_sys_tbl * sfi = sfi_find_syst();
+    unsigned nents = 0;
+    unsigned i;
+
+    if (!sfi) {
+        ERROR_PRINT("Could not find SFI SYST table\n");
+        return -1;
+    }
+
+    nents = (sfi->hdr.len - sizeof(struct sfi_common_hdr))/sizeof(sfi->entries[0]);
+
+    for (i = 0; i < nents; i++) {
+        struct sfi_common_hdr* entry = (struct sfi_common_hdr*)sfi->entries[i];
+        if (entry->sig != SFI_MMAP_SIG) {
+            continue;
+        } else {
+            return (struct sfi_mmap_tbl*)entry;
+        }
+    }
+
+    return NULL;
 }
 
 

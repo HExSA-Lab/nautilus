@@ -18,6 +18,10 @@
 #include <nautilus/sfi.h>
 #endif
 
+#ifdef NAUT_CONFIG_HVM_HRT
+#include <arch/hrt/hrt.h>
+#endif
+
 #ifndef NAUT_CONFIG_DEBUG_PAGING
 #undef DEBUG_PRINT
 #define DEBUG_PRINT(fmt, args...)
@@ -295,7 +299,21 @@ nk_pf_handler (excp_entry_t * excp,
                excp_vec_t     vector,
                addr_t         fault_addr)
 {
-    printk("\n+++ Page Fault +++\nRIP: %p    Fault Address: %p \nError Code: 0x%x    (core=%u)\n", (void*)excp->rip, (void*)fault_addr, excp->error_code, my_cpu_id());
+
+
+#ifdef NAUT_CONFIG_HVM_HRT
+    if (excp->error_code == UPCALL_MAGIC_ERROR) {
+        return nautilus_hrt_upcall_handler(NULL, 0);
+    }
+#endif
+
+    printk("\n+++ Page Fault +++\n"
+            "RIP: %p    Fault Address: 0x%llx \n"
+            "Error Code: 0x%x    (core=%u)\n", 
+            (void*)excp->rip, 
+            fault_addr, 
+            excp->error_code, 
+            my_cpu_id());
 
     struct nk_regs * r = (struct nk_regs*)((char*)excp - 128);
     nk_print_regs(r);

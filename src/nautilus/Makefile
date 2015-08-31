@@ -26,9 +26,7 @@ obj-y += \
 	backtrace.o \
 	cpu.o \
 	acpi.o \
-	shutdown.o \
 	numa.o \
-	hrt.o \
 	libccompat.o \
 	nemo.o \
 	pmc.o \
@@ -36,12 +34,4 @@ obj-y += \
 	
 
 obj-$(NAUT_CONFIG_PROFILE) += instrument.o
-
-ifdef NAUT_CONFIG_XEON_PHI
-obj-y += xeon_phi_nautilus.o \
-		 sfi.o
-else
-obj-y += nautilus.o \
-		 mwait.o
-endif
 

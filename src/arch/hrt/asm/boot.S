@@ -1,0 +1,82 @@
+.code64
+.section .mbhdr
+.align 8
+
+#include <asm/lowlevel.h>
+#include <arch/hrt/hrt.h>
+
+/**
+ * This header makes us multi-boot compliant
+ */
+multiboot_hdr:
+    .long 0xe85250d6
+    .long 0
+    .long hdr_end - multiboot_hdr
+    .long -(0xe85250d6 + 0 + (hdr_end - multiboot_hdr))
+
+    /* BEGIN TAGS */
+
+    /* sections */
+    .word 2, 0
+    .long 24
+    .long multiboot_hdr - NAUT_CONFIG_HRT_HIHALF_OFFSET
+    .long _loadStart - NAUT_CONFIG_HRT_HIHALF_OFFSET
+    .long _loadEnd - NAUT_CONFIG_HRT_HIHALF_OFFSET
+    .long _bssEnd - NAUT_CONFIG_HRT_HIHALF_OFFSET
+
+    /* entry point */
+    .word 3, 0
+    .long 16
+    .long nautilus_entry - NAUT_CONFIG_HRT_HIHALF_OFFSET
+    .long 0
+
+
+/* TODO: slap these into a NAUT_CONFIG */
+
+    /* HRT-specific */
+    .word 0xf00d, 1                         /* bootloader can ignore it if it's not Palacios (flags bit 0 set) */
+    .long 56                                /* length of tag in bytes */
+    .quad HRT_FLAGS                         /* HRT flags (0x200 = want 2 MB Pages) */
+    .quad NAUT_CONFIG_HRT_GPA_MAP_REQ       /* GPA Memory to initially map (8 GB)    */
+    .quad NAUT_CONFIG_HRT_HIHALF_OFFSET     /* GVA Offset - address where GPA 0 is mapped */
+    .quad nautilus_entry                    /* GVA Entry 0=> use MB entry */
+    .quad NAUT_CONFIG_HRT_COMM_PAGE         /* Desired GPA of communication page */
+    .byte NAUT_CONFIG_HVM_INT_VEC           /* Desired interrupt vector for communication */
+    .byte 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 /*padding */
+
+    /* tags end */
+    .word 0, 0
+    .long 8
+hdr_end:
+
+.section .boot
+
+/**
+ * our entry point into the kernel, this is where
+ * GRUB2 will drop us
+ */
+ GLOBAL(nautilus_entry)
+
+    /* get GRUB multiboot info and stash it */
+    movq %rbx, %rdi
+    movq %rax, %rsi
+
+    /* multiboot info is still in rdi and rsi */
+    movabs $main, %rax
+    callq *%rax
+
+    /* shouldn't get here */
+    cli
+    jmp .
+
+
+.align 8
+gdt64:
+    .quad 0x0000000000000000 /* null */
+    .quad 0x00a09a0000000000 /* code (note lme bit) */
+    .quad 0x00a0920000000000 /* data (most entries don't matter) */
+
+.align 8
+GLOBAL(gdtr64)
+    .word 23
+    .quad gdt64

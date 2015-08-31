@@ -91,8 +91,6 @@ struct naut_info {
     struct sys_info sys;
 };
 
-void main (unsigned long mbd, unsigned long magic, unsigned long mycpuid, unsigned long apicid) __attribute__((section (".text")));
-
 #ifdef __NAUTILUS_MAIN__
 struct naut_info nautilus_info;
 #else
@@ -104,6 +102,16 @@ nk_get_nautilus_info (void)
 {
     return &nautilus_info;
 }
+
+#ifdef NAUT_CONFIG_XEON_PHI
+#include <arch/k1om/main.h>
+#elif defined NAUT_CONFIG_HVM_HRT
+#include <arch/hrt/main.h>
+#elif defined NAUT_CONFIG_X86_64_HOST
+#include <arch/x64/main.h>
+#else
+#error "Unsupported architecture"
+#endif
 
 #ifdef __cplusplus
 }

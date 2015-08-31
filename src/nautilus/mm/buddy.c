@@ -120,7 +120,7 @@ block_to_id (struct buddy_mempool *mp, struct block *block)
  * Marks a block as free by setting its tag bit to one.
  */
 static inline void
-mark_available(struct buddy_mempool *mp, struct block *block)
+mark_available (struct buddy_mempool *mp, struct block *block)
 {
     __set_bit(block_to_id(mp, block), mp->tag_bits);
 }
@@ -130,7 +130,7 @@ mark_available(struct buddy_mempool *mp, struct block *block)
  * Marks a block as allocated by setting its tag bit to zero.
  */
 static inline void
-mark_allocated(struct buddy_mempool *mp, struct block *block)
+mark_allocated (struct buddy_mempool *mp, struct block *block)
 {
     __clear_bit(block_to_id(mp, block), mp->tag_bits);
 }
@@ -140,7 +140,7 @@ mark_allocated(struct buddy_mempool *mp, struct block *block)
  * Returns true if block is free, false if it is allocated.
  */
 static inline int
-is_available(struct buddy_mempool *mp, struct block *block)
+is_available (struct buddy_mempool *mp, struct block *block)
 {
     return test_bit(block_to_id(mp, block), mp->tag_bits);
 }
@@ -150,7 +150,7 @@ is_available(struct buddy_mempool *mp, struct block *block)
  * Returns the address of the block's buddy block.
  */
 static void *
-find_buddy(struct buddy_mempool *mp, struct block *block, ulong_t order)
+find_buddy (struct buddy_mempool *mp, struct block *block, ulong_t order)
 {
     ulong_t _block;
     ulong_t _buddy;
@@ -228,7 +228,7 @@ buddy_init (ulong_t base_addr,
  *       Failure: NULL
  */
 void *
-buddy_alloc(struct buddy_mempool *mp, ulong_t order)
+buddy_alloc (struct buddy_mempool *mp, ulong_t order)
 {
     ulong_t j;
     struct list_head *list;

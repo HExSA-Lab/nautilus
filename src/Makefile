@@ -1,5 +1,6 @@
 obj-y += \
 	nautilus/ \
+	arch/ \
 	asm/ \
 	dev/ \
 	acpi/ \

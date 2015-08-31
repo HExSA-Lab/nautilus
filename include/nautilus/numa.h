@@ -80,6 +80,10 @@ struct nk_cpu_coords {
 
 
 
+/* ARCH-SPECIFIC */
+
+int arch_numa_init(struct sys_info* sys);
+
 
 
 #ifdef __cplusplus

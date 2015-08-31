@@ -115,6 +115,10 @@ void smp_ap_entry (struct cpu * core);
 int smp_setup_xcall_bsp (struct cpu * core);
 
 
+/* ARCH-SPECIFIC */
+
+int arch_early_init (struct naut_info * naut);
+
 
 #ifdef __cplusplus
 }

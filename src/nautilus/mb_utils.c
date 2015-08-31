@@ -86,7 +86,7 @@ multiboot_get_sys_ram (ulong_t mbd)
     return sum;
 }
 
-extern void* malloc(size_t);
+extern void* mm_boot_alloc(size_t);
 
 
 int 
@@ -134,7 +134,7 @@ mb_get_first_hrt_addr (ulong_t mbd)
     }
 
     struct multiboot_tag_hrt * hrt = (struct multiboot_tag_hrt*)tag;
-    return (void*)hrt->first_hrt_addr;
+    return (void*)hrt->first_hrt_gpa;
 }
 
 
@@ -143,7 +143,7 @@ multiboot_parse (ulong_t mbd, ulong_t magic)
 {
     uint_t size;
     struct multiboot_tag * tag;
-    struct multiboot_info * mb_info = (struct multiboot_info*)malloc(sizeof(struct multiboot_info));
+    struct multiboot_info * mb_info = (struct multiboot_info*)mm_boot_alloc(sizeof(struct multiboot_info));
     if (!mb_info) {
         ERROR_PRINT("Could not allocate multiboot info struct\n");
         return NULL;
@@ -169,7 +169,7 @@ multiboot_parse (ulong_t mbd, ulong_t magic)
         switch (tag->type) {
             case MULTIBOOT_TAG_TYPE_BOOT_LOADER_NAME: {
                 struct multiboot_tag_string * str = (struct multiboot_tag_string*)tag;
-                mb_info->boot_loader = malloc(str->size);
+                mb_info->boot_loader = mm_boot_alloc(str->size);
                 strncpy(mb_info->boot_loader, str->string, str->size);
                 DEBUG_PRINT("Boot loader: %s\n", ((struct multiboot_tag_string*)tag)->string);
                 break;
@@ -183,6 +183,15 @@ multiboot_parse (ulong_t mbd, ulong_t magic)
                         elf->shndx);
                 break;
                                                   }
+            case MULTIBOOT_TAG_TYPE_MMAP: {
+                DEBUG_PRINT("Multiboot2 memory map detected\n");
+                break;
+                                          }
+
+            case MULTIBOOT_TAG_TYPE_BASIC_MEMINFO: {
+                DEBUG_PRINT("Multiboot2 basic meminfo detected\n");
+                break;
+                                                   }
             case MULTIBOOT_TAG_TYPE_FRAMEBUFFER: {
                 struct multiboot_tag_framebuffer_common * fb = (struct multiboot_tag_framebuffer_common*)tag;
                 DEBUG_PRINT("fb addr: %p, fb_width: %u, fb_height: %u\n", 
@@ -193,7 +202,7 @@ multiboot_parse (ulong_t mbd, ulong_t magic)
                                                  }
             case MULTIBOOT_TAG_TYPE_CMDLINE: {
                 struct multiboot_tag_string* cmd = (struct multiboot_tag_string*)tag;
-                mb_info->boot_cmd_line = malloc(cmd->size);
+                mb_info->boot_cmd_line = mm_boot_alloc(cmd->size);
                 strncpy(mb_info->boot_cmd_line, cmd->string, cmd->size);
                 DEBUG_PRINT("Cmd line: %s\n", mb_info->boot_cmd_line);
                 break;
@@ -201,14 +210,20 @@ multiboot_parse (ulong_t mbd, ulong_t magic)
 #ifdef NAUT_CONFIG_HVM_HRT
             case MULTIBOOT_TAG_TYPE_HRT: {
                 struct multiboot_tag_hrt * hrt = (struct multiboot_tag_hrt*)tag;
-                mb_info->hrt_info = malloc(hrt->size);
+                mb_info->hrt_info = mm_boot_alloc(hrt->size);
                 memcpy(mb_info->hrt_info, hrt, hrt->size);
                 DEBUG_PRINT("HRT Info struct\n");
-                DEBUG_PRINT("  num_apics: %u\n", hrt->num_apics);
+                DEBUG_PRINT("  total_num_apics: %u\n", hrt->total_num_apics);
                 DEBUG_PRINT("  first_hrt_apic_id: %u\n", hrt->first_hrt_apic_id);
                 DEBUG_PRINT("  have_hrt_ioapic: %u\n", hrt->have_hrt_ioapic);
                 DEBUG_PRINT("  first_hrt_ioapic_entry: %u\n", hrt->first_hrt_ioapic_entry);
-                DEBUG_PRINT("  first_hrt_addr: %p\n", (void*)hrt->first_hrt_addr);
+                DEBUG_PRINT("  cpu_freq_khz: %llu\n", (void*)hrt->cpu_freq_khz);
+                DEBUG_PRINT("  hrt_flags: %p\n", (void*)hrt->hrt_flags);
+                DEBUG_PRINT("  max_mem_mapped: %p\n", (void*)hrt->max_mem_mapped);
+                DEBUG_PRINT("  first_hrt_gpa: %p\n", (void*)hrt->first_hrt_gpa);
+                DEBUG_PRINT("  gva_offset: %p\n", (void*)hrt->gva_offset);
+                DEBUG_PRINT("  comm_page_gpa: %p\n", (void*)hrt->comm_page_gpa);
+                DEBUG_PRINT("  hrt_int_vec: %u\n", hrt->hrt_int_vec);
 
                 break;
                                         }

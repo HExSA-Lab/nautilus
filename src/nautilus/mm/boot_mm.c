@@ -23,8 +23,8 @@
 #include <nautilus/nautilus.h>
 #include <nautilus/naut_types.h>
 #include <nautilus/mm.h>
-#include <nautilus/mb_utils.h>
 #include <nautilus/paging.h>
+#include <nautilus/mb_utils.h>
 #include <nautilus/multiboot2.h>
 #include <nautilus/macros.h>
 #include <lib/bitmap.h>
@@ -40,7 +40,7 @@
 #define BMM_PRINT(fmt, args...) printk("BOOTMEM: " fmt, ##args)
 #define BMM_WARN(fmt, args...)  WARN_PRINT("BOOTMEM: " fmt, ##args)
 
-static char * mem_region_types[6] = {
+char * mem_region_types[6] = {
     [0]                                 = "unknown",
     [MULTIBOOT_MEMORY_AVAILABLE]        = "usable RAM",
     [MULTIBOOT_MEMORY_RESERVED]         = "reserved",
@@ -62,66 +62,13 @@ uint8_t boot_mm_inactive = 0;
 
 
 /* 
- * Sifts through the Multiboot2 memory map
- * (alternative to e820 table) and records 
- * each region in the kernel's memory map
- * TODO: this needs to be arch-specific
+ * Sifts through the memory map
+ * and records each region in the kernel's memory map
  */
-static void
+static inline void
 detect_mem_map (unsigned long mbd)
 {
-    struct multiboot_tag * tag;
-    uint32_t n = 0;
-
-    if (mbd & 7) {
-        panic("ERROR: Unaligned multiboot info struct\n");
-    }
-
-    tag = (struct multiboot_tag*)(mbd+8);
-    while (tag->type != MULTIBOOT_TAG_TYPE_MMAP) {
-        tag = (struct multiboot_tag*)((multiboot_uint8_t*)tag + ((tag->size+7)&~7));
-    }
-
-    if (tag->type != MULTIBOOT_TAG_TYPE_MMAP) {
-        panic("ERROR: no mmap tag found\n");
-    }
-
-    multiboot_memory_map_t * mmap;
-
-    for (mmap=((struct multiboot_tag_mmap*)tag)->entries;
-            (multiboot_uint8_t*)mmap < (multiboot_uint8_t*)tag + tag->size;
-            mmap = (multiboot_memory_map_t*)((ulong_t)mmap + 
-                ((struct multiboot_tag_mmap*)tag)->entry_size)) {
-
-        ulong_t start,end;
-
-        start = round_up(mmap->addr, PAGE_SIZE);
-        end   = round_down(mmap->addr + mmap->len, PAGE_SIZE);
-
-        memory_map[n].addr = mmap->addr;
-        memory_map[n].len  = mmap->len;
-        memory_map[n].type = mmap->type;
-
-        BMM_PRINT("Memory map[%u] - [%p - %p] <%s>\n", 
-                n, 
-                start,
-                end,
-                mem_region_types[memory_map[n].type]);
-
-        if (mmap->type == MULTIBOOT_MEMORY_AVAILABLE) {
-            mm_info.usable_ram += mmap->len;
-        }
-
-        if (end > (mm_info.last_pfn << PAGE_SHIFT)) {
-            mm_info.last_pfn = end >> PAGE_SHIFT;
-        }
-
-        mm_info.total_mem += mmap->len;
-
-        ++n;
-        ++mm_info.num_regions;
-    }
-
+    arch_detect_mem_map(&mm_info, memory_map, mbd);
 }
 
 
@@ -181,21 +128,11 @@ free_usable_ram (boot_mem_info_t * mem)
     for (i = 0; i < mm_info.num_regions; i++) {
         
         if (memory_map[i].type == MULTIBOOT_MEMORY_AVAILABLE) {
+            BMM_DEBUG("Freeing memory region @[%p - %p]\n", memory_map[i].addr, memory_map[i].addr + memory_map[i].len);
             mm_boot_free_mem(memory_map[i].addr, memory_map[i].len);
         }
 
     }
-}
-
-/* TODO: move this out into separate arch trees */
-static void 
-arch_reserve_boot_regions()
-{
-#ifdef NAUT_CONFIG_HVM_HRT
-    void * hrt_addr = mb_get_first_hrt_addr(mbd);
-    DEBUG_PRINT("Reserving ROS-only memory (up to %p)\n", hrt_addr);
-    nk_reserve_range((addr_t)0x0, (addr_t)hrt_addr);
-#endif
 }
 
 
@@ -209,11 +146,13 @@ mm_boot_init (ulong_t mbd)
     ulong_t npages;
     ulong_t pm_len;
 
-    DEBUG_PRINT("Setting up boot memory allocator\n");
+    BMM_PRINT("Setting up boot memory allocator\n");
 
     /* parse the multiboot2 memory map, filing in 
      * some global data that we will subsequently use here  */
     detect_mem_map(mbd);
+
+    BMM_PRINT("Detected %llu.%llu MB of usable System RAM\n", mm_info.usable_ram/1000000, mm_info.usable_ram%1000000);
 
     npages = mm_info.last_pfn + 1;
     pm_len = (((npages / BITS_PER_LONG) + 7) / 8) * sizeof(long);
@@ -229,9 +168,13 @@ mm_boot_init (ulong_t mbd)
     free_usable_ram(mem);
     
     /* mark as used the kernel and the pages occupying the bitmap */
+#ifdef NAUT_CONFIG_HVM_HRT
+    mm_boot_reserve_vmem(kern_start, pm_start + pm_len);
+#else
     mm_boot_reserve_mem(kern_start, pm_start + pm_len);
+#endif
 
-    arch_reserve_boot_regions();
+    arch_reserve_boot_regions(mbd);
 
     return 0;
 }
@@ -254,6 +197,13 @@ mm_boot_reserve_mem (addr_t start, ulong_t size)
 
 
 void
+mm_boot_reserve_vmem (addr_t start, ulong_t size)
+{
+    mm_boot_reserve_mem(va_to_pa(start), size);
+}
+
+
+void
 mm_boot_free_mem (addr_t start, ulong_t size)
 {
     uint32_t start_page = PADDR_TO_PAGE(start);
@@ -268,18 +218,10 @@ mm_boot_free_mem (addr_t start, ulong_t size)
 }
 
 
-/* 
- * to be called when we're setting up the kmem allocator
- */
-void
-mm_boot_free_all_mem (void)
+void 
+mm_boot_free_vmem (addr_t start, ulong_t size)
 {
-    if (unlikely(boot_mm_inactive)) {
-        panic("Invalid attempt to use boot memory allocator\n");
-    }
-
-
-    boot_mm_inactive = 1;
+    mm_boot_free_mem(va_to_pa(start), size);
 }
 
 
@@ -402,8 +344,7 @@ found:
 #endif
 
     /* NOTE: we do NOT zero the memory! */
-    return ret;
-    
+    return (void*)pa_to_va((ulong_t)ret);
 }
 
 
@@ -426,6 +367,8 @@ mm_boot_free (void *addr, ulong_t size)
 {
     ulong_t i, start, sidx, eidx;
     boot_mem_info_t * minfo = &bootmem;
+
+    addr = (void*)(va_to_pa((ulong_t)addr));
 
     if (unlikely(boot_mm_inactive)) {
         panic("Invalid attempt to use boot memory allocator\n");
@@ -527,17 +470,19 @@ mm_boot_kmem_init (void)
 
     ASSERT(count != 0);
 
-    BMM_PRINT("Reclaiming boot allocator page map\n");
-    kmem_add_memory(kmem_get_region_by_addr((ulong_t)bootmem.page_map),
-            (ulong_t)bootmem.page_map, 
+    BMM_PRINT("    [Boot alloc. page map] (%0lu.%02lu MB)\n", bootmem.pm_len/1000000, bootmem.pm_len%1000000);
+    kmem_add_memory(kmem_get_region_by_addr(va_to_pa((ulong_t)bootmem.page_map)),
+            va_to_pa((ulong_t)bootmem.page_map), 
             bootmem.pm_len);
 
-    printk("BOOTMEM: Reclaiming boot page tables\n");
-    kmem_add_memory(kmem_get_region_by_addr((ulong_t)&pml4), 
-            (ulong_t)(&pml4), 
+    BMM_PRINT("    [Boot page tables]     (%0lu.%02u MB)\n", PAGE_SIZE_4KB*3/1000000, PAGE_SIZE_4KB%1000000);
+    kmem_add_memory(kmem_get_region_by_addr(va_to_pa((ulong_t)&pml4)), 
+            va_to_pa((ulong_t)(&pml4)), 
             PAGE_SIZE_4KB*3);
 
-    /* TODO: reclaim the whole .boot section */
+    count += PAGE_SIZE_4KB*3 +  bootmem.pm_len;
+
+    /* TODO: reclaim the whole .boot section (after the BSP stack switch) */
 
     /* we no longer need to use the boot allocator */
     boot_mm_inactive = 1;

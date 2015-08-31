@@ -1,47 +1,123 @@
-mainmenu "Nautilus Kernel Configuration"
+mainmenu "Nautilus AeroKernel Configuration"
 
+menu "Platform/Arch Options"
 
-config USE_NAUT_BUILTINS
-    bool "Use GCC Built-in Utility Functions"
-    default y
-    help
-      Compiles the Nuatilus kernel with built-in functions
-      like __builtin_strcpy etc., as opposed to Nautilus
-      versions, the full set of which may not be supported
+    choice
+        prompt "Target Selection"
+        default X86_64_HOST
 
-config MAX_CPUS
-	int "Maximum Number of CPUs"
-	range 1 2048
-	default "256"
-	help 
-	  Specifies the maximum number of hardware CPUs supported by Nautilus 
-	  For uniprocessor environments, set this to 1
+        config X86_64_HOST
+            bool "x86_64 Host"
 
-config MAX_IOAPICS
-    int "Maximum Number of IOAPICS"
-    range 1 255
-    default "16"
-    help
-      Specifies the maximum number of IOAPICS supported by Nautilus
+        config XEON_PHI
+            bool "Intel Xeon Phi Accelerator"
+    
+        config HVM_HRT
+            bool "Hybrid Runtime AeroKernel (HRT)"
 
-config CXX_SUPPORT
-    bool "Enable C++ support"
-    default n
-    help
+    endchoice
+
+    config MAX_CPUS
+        int "Maximum Number of CPUs"
+        range 1 2048
+        default "256"
+        help 
+          Specifies the maximum number of hardware CPUs supported by Nautilus 
+          For uniprocessor environments, set this to 1
+
+    config MAX_IOAPICS
+        int "Maximum Number of IOAPICS"
+        range 1 255
+        default "16"
+        help
+          Specifies the maximum number of IOAPICS supported by Nautilus
+
+    config HRT_HIHALF_OFFSET
+        hex "HRT High-half offset"
+        default 0xffff800000000000
+        depends on HVM_HRT
+        help
+          Sets the fixed virtual-to-physical address mapping for the HRT
+
+    config HRT_GPA_MAP_REQ
+        hex "HRT Max GPA to map"
+        default 0x200000000
+        depends on HVM_HRT
+        help
+          Sets the default amount of physical memory that the VMM should
+          attempt to map for the HRT
+
+    config HRT_COMM_PAGE
+        hex "GPA of HRT/HVM communication page"
+        default 0x1fffff000
+        depends on HVM_HRT
+        help
+          Sets the default page address at which the VMM and HRT will
+          communicate information
+
+    config HVM_INT_VEC
+        int "HVM/HRT Interrupt vector"
+        default 255
+        range 33 255
+        depends on HVM_HRT
+        help
+          Sets the interrupt vector to use for communication between
+          the VMM and the HRT
+
+    choice 
+        prompt "HRT Page Size Request"
+        depends on HVM_HRT
+        default HRT_PS_2M
+        help
+            Requests a given page size to map the initial page tables 
+            from the VMM
+
+        config HRT_PS_512G
+          bool "512GB Pages"
+          
+        config HRT_PS_1G
+          bool "1GB Pages"
+
+        config HRT_PS_2M
+          bool "2MB Pages"
+
+        config HRT_PS_4K
+          bool "4KB Pages"
+
+    endchoice
+            
+        
+
+        
+endmenu
+
+menu "Nautilus AeroKernel Build Config"
+
+    config USE_NAUT_BUILTINS
+        bool "Use GCC Built-in Utility Functions"
+        default y
+        help
+          Compiles the Nuatilus kernel with built-in functions
+          like __builtin_strcpy etc., as opposed to Nautilus
+          versions, the full set of which may not be supported
+
+    config CXX_SUPPORT
+      bool "Enable C++ support"
+      default y
+      help
         Compiles the Nautilus kernel with C++ support. Necessary for,
-        e.g. Legion integration
+        e.g. C++ HRT integration
 
-config HVM_HRT
-    bool "Compile Nautilus as an HRT"
-    default n
-    help
-      Compiles Nautilus in a Hybrid Runtime (HRT) environment
+    config TOOLCHAIN_ROOT
+      string "Toolchain Root"
+      help 
+       Directory where the intended GCC toolchain, binutils, libraries, grub, etc are installed.
 
-config FPU_SAVE
-    bool "Save FPU state on all context switches"
-    default y
-    help
-       Compiles the kernel to save FPU state on every context switch
+
+endmenu
+
+
+menu "Interface Options"
 
 config THREAD_EXIT_KEYCODE
     int "Thread Exit Keycode"
@@ -50,12 +126,9 @@ config THREAD_EXIT_KEYCODE
     help
         uses a special thread exit keycode
 
-config SILENCE_UNDEF_ERR
-    bool "Silence Errors for Undefined Functions"
-    default n
-    help
-      Mutes error prints related to undefined 
-      libc compatibility functions
+endmenu
+
+menu "Nautilus AeroKernel Configuration"
 
 config USE_TICKETLOCKS
     bool "Use Ticket/Bakery locks instead of default spin"
@@ -64,8 +137,17 @@ config USE_TICKETLOCKS
       Uses ticketlocks (similar to Linux impl.) instead of
       default spinlocks
     
+endmenu
 
-menu "Performance Optimizations"
+menu "AeroKernel Performance Optimizations"
+
+    config FPU_SAVE
+      bool "Save FPU state on all context switches"
+      default y
+      help
+        Compiles the kernel to save FPU state on every context switch. 
+        This is not strictly necessary if processors are not virtualized 
+        (by the HRT).
     
     config KICK_SCHEDULE
         bool "Kick cores with IPIs on scheduling events"
@@ -101,7 +183,6 @@ menu "Performance Optimizations"
 
 
 endmenu
-
     
 
 menu Debugging
@@ -110,7 +191,8 @@ menu Debugging
       bool "Compile with Debug Symbols"
       default n
       help
-        Compiles Nautilus with GCC debugging information
+        Compiles Nautilus with GCC debugging information. This
+        is useful for remote debugging with GDB and QEMU/BOCHS.
 
     config DEBUG_PRINTS
   	  bool "Enable Debugging Prints"
@@ -130,6 +212,14 @@ menu Debugging
       default n
       help
         Profile select function entries and exits
+
+    config SILENCE_UNDEF_ERR
+      bool "Silence Errors for Undefined Functions"
+      default n
+      help
+        Mutes error prints related to undefined 
+        libc compatibility functions. Useful when 
+        porting applications to HRT model.
 
     config ENABLE_STACK_CHECK
     bool "Enable Runtime Stack Overrun Checking"
@@ -182,6 +272,13 @@ menu Debugging
       help
         Turn on debug prints for SMP code
 
+    config DEBUG_HRT
+      bool "Debug HRT"
+      depends on DEBUG_PRINTS && HVM_HRT
+      default n
+      help
+        Turn on debug prints for HRT/HVM code
+
     config DEBUG_SFI
       bool "Debug SFI"
       depends on DEBUG_PRINTS
@@ -225,29 +322,14 @@ menu Debugging
       help
         Turns on debug prints for NUMA code
 
-    
-endmenu
-
-menu "Platform Options"
-    choice
-        prompt "Target Selection"
-        default X86_64_HOST
-
-        config X86_64_HOST
-            bool "x86_64 Host"
-
-        config XEON_PHI
-            bool "Intel Xeon Phi Accelerator"
-
-    endchoice
-
 endmenu
 
 
-menu "Parallel Run-time Integration"
+
+menu "Parallel Runtime Integration"
 
     choice 
-        prompt "Selection of Parallel Run-time"
+        prompt "Selection of Parallel Runtime"
         default NO_RT
 
         config LEGION_RT
@@ -258,7 +340,7 @@ menu "Parallel Run-time Integration"
             string "Legion RT Root"
             depends on LEGION_RT
             help 
-              Directory where the intended Legion run-time is installed
+              Directory where the intended Legion runtime is installed
 
         config LEGION_RT_DEBUG
             bool "Legion RT Deep Debugging"
@@ -275,7 +357,7 @@ menu "Parallel Run-time Integration"
             string "NDPC RT Root"
             depends on NDPC_RT
             help 
-              Directory where the intended NDPC run-time is installed
+              Directory where the intended NDPC runtime is installed
 
         config NDPC_RT_TEST_OBJ
             string "NDPC RT Test Object File"
@@ -290,16 +372,16 @@ menu "Parallel Run-time Integration"
             string "NESL RT Root"
             depends on NESL_RT
             help 
-              Directory where the intended NESL run-time is installed
+              Directory where the intended NESL runtime is installed
 
         config NESL_NDPC_RT_ROOT
             string "NESL NDPC RT Root"
             depends on NESL_RT
             help 
-              Directory where the intended NDPC run-time is installed
+              Directory where the intended NDPC runtime is installed
 
         config NO_RT
-          bool "No parallel run-time"
+          bool "No parallel runtime"
           
      endchoice
         
@@ -307,15 +389,6 @@ menu "Parallel Run-time Integration"
 endmenu
 
 
-menu "Build Config"
-
-    config TOOLCHAIN_ROOT
-      string "Toolchain Root"
-      help 
-       Directory where the intended GCC toolchain, binutils, libraries, grub, etc are installed.
-
-
-endmenu
 
 
 source "src/dev/Kconfig"

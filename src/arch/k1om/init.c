@@ -1,4 +1,3 @@
-#define __NAUTILUS_MAIN__
 #include <nautilus/nautilus.h>
 #include <nautilus/cga.h>
 #include <nautilus/paging.h>
@@ -30,9 +29,6 @@
 #include <dev/ioapic.h>
 #include <dev/timer.h>
 #include <dev/xeon_phi.h>
-
-#include <lib/liballoc_hooks.h>
-#include <lib/liballoc.h>
 
 #ifdef NAUT_CONFIG_NDPC_RT
 #include "ndpc_preempt_threads.h"
@@ -107,7 +103,7 @@ out_err:
 
 
 void 
-main (unsigned long mbd, unsigned long magic) 
+init (unsigned long mbd, unsigned long magic) 
 {
     struct naut_info * naut = &nautilus_info;
 
@@ -129,21 +125,26 @@ main (unsigned long mbd, unsigned long magic)
 
     detect_cpu();
 
-    nk_paging_init(&(naut->sys.mem), mbd);
-    
-    init_liballoc_hooks();
+    mm_boot_init(mbd);
 
     smp_early_init(naut);
+
+    nk_numa_init();
+
+    nk_paging_init(&(naut->sys.mem), mbd);
+
+    nk_kmem_init();
     
     // setup per-core area for BSP
     msr_write(MSR_GS_BASE, (uint64_t)naut->sys.cpus[naut->sys.bsp_id]);
+
+    mm_boot_kmem_init();
 
     /* from this point on, we can use percpu macros (even if the APs aren't up) */
 
     sysinfo_init(&(naut->sys));
 
     apic_init(naut->sys.cpus[naut->sys.bsp_id]);
-
 
     fpu_init(naut);
 

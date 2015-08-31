@@ -202,6 +202,32 @@ ps_type_to_size (page_size_t size) {
 // given a page num, what's the bit number within the byte
 #define PAGE_MAP_BIT_IDX(n)  (n % 8)
 
+
+/* TODO: we should get this VA offset from the VMM HRT structures */
+#ifdef NAUT_CONFIG_HVM_HRT
+#define HRT_HIHALF_OFFSET NAUT_CONFIG_HRT_HIHALF_OFFSET
+#else
+#define HRT_HIHALF_OFFSET 0x0
+#endif
+
+/* NOTE: these are identity when HRT not enabled */
+/* NOTE: Ran into a bug in GCC 4.8.3 20140911 wherein 
+ * it would inline this function, and upon using the value
+ * for the APIC base address would truncate it to a 32-bit value!
+ */
+static addr_t __attribute__((noinline))
+va_to_pa (addr_t vaddr) 
+{
+    return vaddr - HRT_HIHALF_OFFSET;
+}
+
+static addr_t __attribute__((noinline))
+pa_to_va (addr_t paddr)
+{
+    return paddr + HRT_HIHALF_OFFSET;
+}
+
+
 #ifdef __cplusplus
 }
 #endif

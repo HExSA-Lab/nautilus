@@ -1401,6 +1401,8 @@ nk_sched_init (void)
     }
     memset(main, 0, sizeof(nk_thread_t));
 
+    /* TODO: we actually need to switch the stack at some point... */
+
     /* 
      * some important notes:
      * 1. The actual stack size is really set in the linker

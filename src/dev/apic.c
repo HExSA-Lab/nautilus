@@ -388,7 +388,8 @@ apic_timer_setup (struct apic_dev * apic, uint32_t quantum)
     apic_write(apic, APIC_REG_LVTT, APIC_TIMER_DISABLE);
 
     /* TODO need to fixup when frequency is way off */
-    busfreq = APIC_TIMER_DIV * NAUT_CONFIG_HZ*(0xffffffff - apic_read(apic, APIC_REG_TMCCT) + 1);
+    //busfreq = APIC_TIMER_DIV * NAUT_CONFIG_HZ*(0xffffffff - apic_read(apic, APIC_REG_TMCCT) + 1);
+    busfreq = 1100000000;
     APIC_DEBUG("Detected APIC 0x%x bus frequency as %u.%u MHz\n", apic->id, busfreq/1000000, busfreq%1000000);
     tmp = busfreq/(1000/quantum)/APIC_TIMER_DIV;
 
@@ -649,6 +650,7 @@ void
 apic_init (struct cpu * core)
 {
     struct apic_dev * apic = NULL;
+    ulong_t base_addr;
     uint32_t val;
 
     apic = (struct apic_dev*)malloc(sizeof(struct apic_dev));
@@ -674,14 +676,19 @@ apic_init (struct cpu * core)
                 (1ULL<<54));
     }
 
-    apic->base_addr = apic_get_base_addr();
+    base_addr       = apic_get_base_addr();
 
+    /* idempotent when not compiled as HRT */
+    apic->base_addr = pa_to_va(base_addr);
+
+#ifndef NAUT_CONFIG_HVM_HRT
     if (core->is_bsp) {
         /* map in the lapic as uncacheable */
         if (nk_map_page_nocache(apic->base_addr, PTE_PRESENT_BIT|PTE_WRITABLE_BIT, PS_4K) == -1) {
             panic("Could not map APIC\n");
         }
     }
+#endif
 
     apic->version   = apic_get_version(apic);
     apic->id        = apic_get_id(apic);

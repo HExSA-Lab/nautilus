@@ -106,7 +106,7 @@ vprintk (const char * fmt, va_list args)
 {
 	struct printk_state state;
 
-    uint8_t flags = spin_lock_irq_save(&printk_lock);
+    //uint8_t flags = spin_lock_irq_save(&printk_lock);
 
 	state.index = 0;
 	_doprnt(fmt, args, 0, printk_char, (char *) &state);
@@ -114,7 +114,7 @@ vprintk (const char * fmt, va_list args)
 	if (state.index != 0)
 	    flush(&state);
 
-    spin_unlock_irq_restore(&printk_lock, flags);
+    //spin_unlock_irq_restore(&printk_lock, flags);
 	/* _doprnt currently doesn't pass back error codes,
 	   so just assume nothing bad happened.  */
 	return 0;
