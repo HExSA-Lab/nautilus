@@ -258,11 +258,7 @@ fprintf (FILE * f, const char * s, ...)
 #else
     va_list arg;
     va_start(arg,s);
-#ifdef NAUT_CONFIG_SERIAL_REDIRECT
-    __serial_print(s, arg);
-#else
     vprintk(s, arg);
-#endif
     va_end(arg);
     return 0;
 #endif
@@ -277,11 +273,7 @@ printf (const char * s, ...)
 #else
     va_list arg;
     va_start(arg,s);
-#ifdef NAUT_CONFIG_SERIAL_REDIRECT
-    __serial_print(s, arg);
-#else
     vprintk(s, arg);
-#endif
     va_end(arg);
     return 0;
 #endif

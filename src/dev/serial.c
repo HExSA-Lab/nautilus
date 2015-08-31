@@ -82,6 +82,7 @@ serial_init_addr (uint16_t io_addr)
   outb(0x08, io_addr + 4);
 }
 
+extern void putchar(char c);
 
 void 
 serial_putchar (uchar_t c)
@@ -90,6 +91,13 @@ serial_putchar (uchar_t c)
     if (serial_io_addr==0) { 
         return;
     }
+
+    if (!serial_device_ready) {
+        putchar(c);
+        return;
+    }
+
+    int flags = spin_lock_irq_save(&serial_lock);
 
     if (c == '\n') { 
 
@@ -100,36 +108,37 @@ serial_putchar (uchar_t c)
         outb('\r', serial_io_addr + 0);
 
         /* wait for transmitter ready */
-    }
+    } 
 
     while( (inb(serial_io_addr + 5) & 0x40) == 0);
 
     /* send char */
     outb(c, serial_io_addr + 0);
+
+    spin_unlock_irq_restore(&serial_lock, flags);
 }
 
 
 void 
-serial_putlnn (char * line, int len) 
+serial_putlnn (const char * line, int len) 
 {
-  int i;
-
-  for (i = 0; i < len && line[i] != 0; i++) { 
-    serial_putchar(line[i]); 
+  while ((*line) && len--) {
+      serial_putchar(*line);
   }
 
+  serial_putchar('\n');
 }
 
 
 void 
-serial_putln (char * line) 
+serial_putln (const char * line) 
 {
-  int i;
-
-  for (i = 0; line[i] != 0; i++) { 
-    serial_putchar(line[i]); 
+  while (*line) {
+      serial_putchar(*line);
+      ++line;
   }
 
+  serial_putchar('\n');
 }
 
 
@@ -204,41 +213,6 @@ __serial_print (const char * format, va_list ap)
 }
 
 
-void
-serial_print_redirect (const char * format, ...) 
-{
-    va_list args;
-    uint8_t iflag = irq_disable_save();
-
-    va_start(args, format);
-    if (serial_device_ready) {
-        __serial_print(format, args);
-    } else {
-        early_printk(format, args);
-    }
-    va_end(args);
-
-    irq_enable_restore(iflag);
-}
-
-void 
-panic_serial (const char * fmt, ...)
-{
-    va_list args;
-
-    va_start(args, fmt);
-    if (serial_device_ready) {
-        __serial_print(fmt, args);
-    } else {
-        early_printk(fmt, args);
-    }
-    va_end(args);
-
-   __asm__ __volatile__ ("cli");
-   while(1);
-}
-
-
 void 
 serial_print (const char * format, ...)
 {
@@ -287,8 +261,6 @@ void
 serial_init (void) 
 {
   serial_print_level = SERIAL_PRINT_DEBUG_LEVEL;
-
-  printk("Initialzing serial device\n");
 
   spinlock_init(&serial_lock);
 

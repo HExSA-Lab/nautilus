@@ -18,15 +18,13 @@
 
 void serial_putchar(unsigned char c);
 
-void serial_print_redirect(const char * format, ...);
 void serial_print(const char * format, ...);
-void panic_serial(const char * fmt, ...);
 void serial_printlevel(int level, const char * format, ...);
 void serial_print_list(const char * format, va_list ap);
 void __serial_print(const char * format, va_list ap);
 
-void serial_putln(char * line); 
-void serial_putlnn(char * line, int len);
+void serial_putln(const char * line); 
+void serial_putlnn(const char * line, int len);
 
 
 void serial_print_hex(unsigned char x);

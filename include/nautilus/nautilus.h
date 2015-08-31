@@ -11,16 +11,9 @@ extern "C" {
 #endif
 
 
-#ifdef NAUT_CONFIG_SERIAL_REDIRECT
-#include <dev/serial.h>
-#define DEBUG_PRINT(fmt, args...)   serial_print_redirect("DEBUG: " fmt, ##args)
-#define ERROR_PRINT(fmt, args...)   serial_print_redirect("ERROR at %s(%d): " fmt, __FILE__, __LINE__, ##args)
-#define WARN_PRINT(fmt, args...)    serial_print_redirect("WARNING: " fmt, ##args)
-#else
 #define DEBUG_PRINT(fmt, args...)   printk("DEBUG: " fmt, ##args)
 #define ERROR_PRINT(fmt, args...)   printk("ERROR at %s(%d): " fmt, __FILE__, __LINE__, ##args)
 #define WARN_PRINT(fmt, args...)    printk("WARNING: " fmt, ##args)
-#endif
 
 #define panic(fmt, args...)         panic("PANIC at %s(%d): " fmt, __FILE__, __LINE__, ##args)
 

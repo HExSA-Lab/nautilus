@@ -145,13 +145,13 @@ init (unsigned long mbd,
 
     spinlock_init(&printk_lock);
 
-    show_splash();
-
     setup_idt();
 
     nk_int_init(&(naut->sys));
 
     serial_init();
+
+    show_splash();
 
     detect_cpu();
 

@@ -44,7 +44,6 @@
 #include <nautilus/errno.h>
 #include <nautilus/math.h>
 
-/* TODO: make serial redirect happen at the character level */
 
 #ifdef NAUT_CONFIG_HVM_HRT
 #define do_putchar(x) do { debug_putc(x);} while (0)
@@ -56,8 +55,8 @@
 
 spinlock_t printk_lock;
 
-extern void __serial_print(const char * format, va_list ap);
-extern void serial_print_redirect(const char * format, ...);
+extern void serial_putchar(uchar_t c);
+extern void serial_putln(const char * ln);
 
 struct printk_state {
 	char buf[PRINTK_BUFMAX];
@@ -70,8 +69,13 @@ flush (struct printk_state *state)
 {
 	int i;
 
-	for (i = 0; i < state->index; i++)
+	for (i = 0; i < state->index; i++) {
+#ifdef NAUT_CONFIG_SERIAL_REDIRECT
+        serial_putchar(state->buf[i]);
+#else
 		do_putchar(state->buf[i]);
+#endif
+    }
 
 	state->index = 0;
 }
@@ -85,13 +89,22 @@ printk_char (char * arg, int c)
 	if (c == '\n')
 	{
 		state->buf[state->index] = 0;
+#ifdef NAUT_CONFIG_SERIAL_REDIRECT
+        serial_putln(state->buf);
+#else
 		do_puts(state->buf);
+#endif
+
 		state->index = 0;
 	}
 	else if ((c == 0) || (state->index >= PRINTK_BUFMAX))
 	{
 		flush(state);
+#ifdef NAUT_CONFIG_SERIAL_REDIRECT
+        serial_putchar(c);
+#else
 		do_putchar(c);
+#endif
 	}
 	else
 	{
@@ -127,11 +140,7 @@ panic (const char * fmt, ...)
     va_list arg;
 
     va_start(arg, fmt);
-#ifdef NAUT_CONFIG_SERIAL_REDIRECT
-    __serial_print(fmt, arg);
-#else
     vprintk(fmt, arg);
-#endif
     va_end(arg);
 
    __asm__ __volatile__ ("cli");
@@ -140,7 +149,6 @@ panic (const char * fmt, ...)
 
 
 
-/* NOTE: this is only to be used by the serial_print_redirect function! */
 int
 early_printk (const char *fmt, va_list args)
 {
@@ -155,11 +163,7 @@ printk (const char *fmt, ...)
 	int err = 0;
 
 	va_start(args, fmt);
-#ifdef NAUT_CONFIG_SERIAL_REDIRECT
-    __serial_print(fmt, args);
-#else 
 	err = vprintk(fmt, args);
-#endif
 	va_end(args);
 
 	return err;
