@@ -20,35 +20,29 @@
  * This is free software.  You are permitted to use,
  * redistribute, and modify it as specified in the file "LICENSE.txt".
  */
-#ifndef __NAUT_ASSERT_H__
-#define __NAUT_ASSERT_H__
+#ifndef __XEON_PHI_H__
+#define __XEON_PHI_H__
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include <nautilus/naut_types.h>
 
-#include <nautilus/nautilus.h>
-
-extern void serial_print_redirect(const char * format, ...);
+#define PHI_SBOX_BASE   0x8007D0000ULL
+#define PHI_BOOT_OK_REG 0xAB28
 
 
-#ifdef NAUT_CONFIG_ENABLE_ASSERTS
-#define ASSERT(cond)                   \
-do {                            \
-    if (!(cond)) {                  \
-    panic("Failed assertion in %s: %s at %s, line %d, RA=%lx\n",\
-        __func__, #cond, __FILE__, __LINE__,    \
-        (ulong_t) __builtin_return_address(0));  \
-    while (1)                   \
-       ;                        \
-    }                           \
-} while (0)
-#else 
-#define ASSERT(cond)
-#endif
+void phi_card_is_up(void);
 
-#ifdef __cplusplus
+static inline uint32_t
+phi_sbox_read (uint32_t offset)
+{
+    return *(volatile uint32_t*)((uint32_t*) PHI_SBOX_BASE + offset);
 }
-#endif
+
+static inline void
+phi_sbox_write (uint32_t offset, uint32_t val)
+{
+    *(volatile uint32_t*)((uint32_t*)PHI_SBOX_BASE + offset) = val;
+}
+
+
 
 #endif

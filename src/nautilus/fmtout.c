@@ -20,7 +20,8 @@
  *    supported type.  Arithmetic on 64 bit types requires runtime support
  *    (at least on x86).
  *
- * See the file LICENSE-klibc for license information.
+ *
+ * Modifications by Kyle Hale 2015 <kh@u.northwestern.edu>
  */
 
 /*

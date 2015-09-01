@@ -22,6 +22,8 @@
  * 
  * any improvements or extensions that they make and grant Carnegie Mellon
  * the rights to redistribute these changes.
+ *
+ * Additions by Kyle Hale 2015 <kh@u.northwestern.edu>
  */
 
 #include <stdarg.h>

@@ -32,7 +32,7 @@
  */
 
 /* Modifications made by Jack Lange <jarusl@cs.northwestern.edu> */
-/* Further modifications by Kyle C. Hale <kh@u.northwestern.edu> */
+/* Further modifications by Kyle C. Hale 2014 <kh@u.northwestern.edu> */
 
 #include <nautilus/nautilus.h>
 #include <nautilus/hashtable.h>
