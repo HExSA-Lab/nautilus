@@ -18,7 +18,7 @@ SECTIONS
         . += 0x1000; 
 
         boot_stack_start = .;
-        . += 0x200000;  /* we start out with a 4K stack */
+        . += 0x200000;  /* we start out with a 2M stack */
         boot_stack_end = .;
     }
 

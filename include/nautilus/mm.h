@@ -36,6 +36,7 @@ uint64_t mm_get_all_mem(void);
 ulong_t mm_boot_last_pfn(void);
 int mm_boot_init (ulong_t mbd);
 void mm_boot_kmem_init(void);
+void mm_boot_kmem_cleanup(void);
 
 void mm_boot_reserve_mem(addr_t start, ulong_t size);
 void mm_boot_reserve_vmem(addr_t start, ulong_t size);

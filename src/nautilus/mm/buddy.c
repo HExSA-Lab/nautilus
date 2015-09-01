@@ -236,7 +236,9 @@ buddy_alloc (struct buddy_mempool *mp, ulong_t order)
     struct block *buddy_block;
 
     ASSERT(mp);
-    ASSERT(order <= mp->pool_order);
+    if (order > mp->pool_order) {
+        return NULL;
+    }
 
     /* Fixup requested order to be at least the minimum supported */
     if (order < mp->min_order) {

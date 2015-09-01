@@ -133,6 +133,8 @@ runtime_init (void)
 }
 
 
+extern struct cpu * smp_ap_stack_switch(uint64_t, uint64_t, struct cpu*);
+
 void
 init (unsigned long mbd,
       unsigned long magic)
@@ -206,6 +208,13 @@ init (unsigned long mbd,
     pci_init(naut);
 
     nk_sched_init();
+
+    /* we now switch away from the boot-time stack in low memory */
+    struct cpu * me = naut->sys.cpus[my_cpu_id()];
+    smp_ap_stack_switch(get_cur_thread()->rsp, get_cur_thread()->rsp, me);
+    *(volatile struct naut_info**)&naut = &nautilus_info;
+
+    mm_boot_kmem_cleanup();
 
     smp_setup_xcall_bsp(naut->sys.cpus[0]);
 

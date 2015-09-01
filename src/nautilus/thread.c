@@ -1366,6 +1366,7 @@ nk_sched_init (void)
     struct nk_sched_state * sched = NULL;
     struct cpu * my_cpu = nk_get_nautilus_info()->sys.cpus[nk_get_nautilus_info()->sys.bsp_id];
     nk_thread_t * main = NULL;
+    void * my_stack = NULL;
     int flags;
 
     flags = irq_disable_save();
@@ -1400,26 +1401,22 @@ nk_sched_init (void)
         goto out_err3;
     }
     memset(main, 0, sizeof(nk_thread_t));
+    
+    my_stack = malloc(PAGE_SIZE);
+    if (!my_stack) {
+        ERROR_PRINT("Couldn't allocate stack for BSP\n");
+        goto out_err4;
+    }
+    memset(my_stack, 0, PAGE_SIZE);
 
-    /* TODO: we actually need to switch the stack at some point... */
+    main->stack_size = PAGE_SIZE;
 
-    /* 
-     * some important notes:
-     * 1. The actual stack size is really set in the linker
-     *    script (nautilus.ld). It defaults to 2MB
-     * 2. boot_stack_start is the *bottom* of the stack.
-     * 3. We're setting rsp to the wrong value here in thread_init, but that's
-     *    okay because it will be overwritten in thread_lowlevel.S 
-     *    when we switch from it to the first spawned thread
-     *
-     */
-    main->stack_size = TSTACK_2MB;
-    thread_init(main, (void*)&boot_stack_start, 1, 0, NULL);
+    thread_init(main, my_stack, 1, 0, NULL);
     main->status = NK_THR_RUNNING;
     main->waitq = nk_thread_queue_create();
     if (!main->waitq) {
         ERROR_PRINT("Could not create main thread's wait queue\n");
-        goto out_err4;
+        goto out_err5;
     }
 
     put_cur_thread(main);
@@ -1435,6 +1432,8 @@ nk_sched_init (void)
 
     return 0;
 
+out_err5:
+    free(main->stack);
 out_err4:
     free(main);
 out_err3:

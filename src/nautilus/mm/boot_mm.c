@@ -53,6 +53,7 @@ char * mem_region_types[6] = {
 extern addr_t _loadStart;
 extern addr_t _bssEnd;
 extern ulong_t pml4;
+extern ulong_t boot_stack_start;
 
 static mem_map_entry_t memory_map[MAX_MMAP_ENTRIES];
 static mmap_info_t mm_info;
@@ -470,22 +471,34 @@ mm_boot_kmem_init (void)
 
     ASSERT(count != 0);
 
+
+    /* we no longer need to use the boot allocator */
+    boot_mm_inactive = 1;
+
+    BMM_PRINT("    =======\n");
+    BMM_PRINT("    [TOTAL] (%lu.%lu MB)\n", count/1000000, count%1000000);
+}
+
+void 
+mm_boot_kmem_cleanup (void)
+{
+    ulong_t count = 0;
+
+    BMM_PRINT("Reclaiming boot sections and data:\n");
+
     BMM_PRINT("    [Boot alloc. page map] (%0lu.%02lu MB)\n", bootmem.pm_len/1000000, bootmem.pm_len%1000000);
     kmem_add_memory(kmem_get_region_by_addr(va_to_pa((ulong_t)bootmem.page_map)),
             va_to_pa((ulong_t)bootmem.page_map), 
             bootmem.pm_len);
 
-    BMM_PRINT("    [Boot page tables]     (%0lu.%02u MB)\n", PAGE_SIZE_4KB*3/1000000, PAGE_SIZE_4KB%1000000);
+    count += bootmem.pm_len;
+
+    BMM_PRINT("    [Boot page tables and stack]     (%0lu.%02u MB)\n", PAGE_SIZE_4KB*3/1000000, PAGE_SIZE_4KB%1000000);
     kmem_add_memory(kmem_get_region_by_addr(va_to_pa((ulong_t)&pml4)), 
             va_to_pa((ulong_t)(&pml4)), 
-            PAGE_SIZE_4KB*3);
+            PAGE_SIZE_4KB*3 + PAGE_SIZE_2MB);
 
-    count += PAGE_SIZE_4KB*3 +  bootmem.pm_len;
-
-    /* TODO: reclaim the whole .boot section (after the BSP stack switch) */
-
-    /* we no longer need to use the boot allocator */
-    boot_mm_inactive = 1;
+    count += PAGE_SIZE_4KB*3 + PAGE_SIZE_2MB;
 
     BMM_PRINT("    =======\n");
     BMM_PRINT("    [TOTAL] (%lu.%lu MB)\n", count/1000000, count%1000000);
