@@ -1,4 +1,3 @@
-
 ```
 
     _   __               __   _  __                
@@ -38,15 +37,18 @@ of the hardware abstractions in a typical HRT, virtualization overheads are much
 significant than in, e.g. a Linux guest. 
 
 # Prerequisites
+
 - gcc cross compiler (more on this to come)
 - grub version >= 2.02
 - xorriso (for CD burning)
 - QEMU recommended if you don't want to run on raw hardware
 
 # Hardware Support
+
 Nautilus works with the following hardware:
+
 - x86_64 machines (AMD and Intel)
-- The Intel Xeon Phi
+- Intel Xeon Phi (see http://philix.halek.co for instructions)
 - as a Hybrid Virtual Machine (HVM) in the Palacios VMM (see http://v3vee.org/palacios)
 
 # Building
