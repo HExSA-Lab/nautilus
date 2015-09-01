@@ -10,7 +10,7 @@
 
 ```
 
-# Nautilus
+# The Nautilus AeroKernel
 
 Nautilus is an example of an AeroKernel, a very thin kernel-layer exposed 
 (much like a library OS, or libOS) directly to the runtime and application. 
@@ -42,6 +42,12 @@ significant than in, e.g. a Linux guest.
 - grub version >= 2.02
 - xorriso (for CD burning)
 - QEMU recommended if you don't want to run on raw hardware
+
+# Hardware Support
+Nautilus works with the following hardware:
+- x86_64 machines (AMD and Intel)
+- The Intel Xeon Phi
+- as a Hybrid Virtual Machine (HVM) in the Palacios VMM (see http://v3vee.org/palacios)
 
 # Building
 
@@ -107,6 +113,26 @@ cpuid: level=6, mmx=1, level=6, x86_64=1, 1g_pages=1
 megs: 2048
 ```
 
+# Resources
+
+You can find publications related to Nautilus and HRTs/HVMs at 
+http://halek.co
+
+Our lab:
+www.presciencelab.org
+
+
+# Acknowledgements
+
+Nautilus was made possible by support from the United States National Science
+Foundation (NSF) via grant CNS-0709168, the Department of Energy (DOE) via
+grant DE-SC0005343, and Sandia National Laboratories through the Hobbes
+Project, which is funded by the 2013 Exascale Operating and Runtime Systems
+Program under the Office of Advanced Scientific Computing Research in the DOE
+Office of Science. Sandia National Laboratories is a multi-program laboratory
+managed and operated by Sandia Corporation, a wholly owned subsidiary of
+Lockheed Martin Corporation, for the U.S. Department of Energy’s National
+Nuclear Security Administration under contract DE-AC04-94AL85000.
 
 Kyle C. Hale (c) 2015
 Northwestern University
