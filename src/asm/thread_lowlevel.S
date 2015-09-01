@@ -172,7 +172,7 @@ popq %rax       ;
 
 #define GPR_LOAD_SKIP_RAX()                     \
 GPR_LOAD_NO_RAX()                                \
-leaq 16(%rsp), %rsp ;                            // This instruction must not affect CCs
+leaq 8(%rsp), %rsp ;                            // This instruction must not affect CCs
 
 #define FPR_SAVE()			// WRITE ME
 #define FPR_LOAD()

@@ -37,6 +37,7 @@ extern "C" {
 
 /* common thread stack sizes */
 #define TSTACK_DEFAULT 0  // will be 4K
+#define TSTACK_4KB     0x001000
 #define TSTACK_1MB     0x100000
 #define TSTACK_2MB     0x200000
 

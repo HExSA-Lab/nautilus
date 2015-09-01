@@ -92,6 +92,7 @@ nk_enqueue_thread_on_runq (nk_thread_t * t, int cpu)
     nk_thread_queue_t * q = NULL;
     struct sys_info * sys = per_cpu_get(system);
 
+    /* TODO: these checks should only occur at creation time */
     if (unlikely(cpu <= CPU_ANY || 
         cpu >= sys->num_cpus)) {
 
@@ -347,7 +348,7 @@ thread_init (nk_thread_t * t,
     }
 
     t->stack      = stack;
-    t->rsp        = (uint64_t)stack + t->stack_size;
+    t->rsp        = (uint64_t)stack + t->stack_size - sizeof(uint64_t);
     t->tid        = atomic_inc(next_tid) + 1;
     t->refcount   = is_detached ? 1 : 2; // thread references itself as well
     t->parent     = parent;
@@ -424,15 +425,15 @@ thread_setup_init_stack (nk_thread_t * t, nk_thread_fun_t fun, void * arg)
      * so we overwrite its RDI
      */  
     if (fun) {
-	*(uint64_t*)(t->rsp-GPR_RDI_OFFSET) = (uint64_t)arg; 
+        *(uint64_t*)(t->rsp-GPR_RDI_OFFSET) = (uint64_t)arg; 
     }
 
     /* 
-     * if this is a thread fork, we return the child's thread_id_t
+     * if this is a thread fork, we return 0 to the child
      * via RAX - note that _fork_return will not restore RAX
      */
     if (!fun) {
-        *(uint64_t*)(t->rsp-GPR_RAX_OFFSET) = (uint64_t)t;
+        *(uint64_t*)(t->rsp-GPR_RAX_OFFSET) = 0;
     }
 
     t->rsp -= GPR_SAVE_SIZE;                             // account for the GPRS;
@@ -476,10 +477,14 @@ nk_thread_create (nk_thread_fun_t fun,
     nk_thread_t * t = NULL;
     void * stack    = NULL;
 
-#ifndef NAUT_CONFIG_THREAD_OPTIMIZE
-    ASSERT(cpu < per_cpu_get(system)->num_cpus && cpu != CPU_ANY);
+    if (cpu == CPU_ANY) {
+        cpu = my_cpu_id();
+    }
 
-    if (cpu >= per_cpu_get(system)->num_cpus && cpu != CPU_ANY) {
+#ifndef NAUT_CONFIG_THREAD_OPTIMIZE
+    ASSERT(cpu < per_cpu_get(system)->num_cpus);
+
+    if (cpu >= per_cpu_get(system)->num_cpus) {
         ERROR_PRINT("thread create received invalid CPU id (%u)\n", cpu);
         return -EINVAL;
     }
@@ -565,6 +570,11 @@ nk_thread_start (nk_thread_fun_t fun,
 {
     nk_thread_id_t newtid   = NULL;
     nk_thread_t * newthread = NULL;
+
+    /* put it on the current CPU */
+    if (cpu == CPU_ANY) {
+        cpu = my_cpu_id();
+    }
 
     if (nk_thread_create(fun, input, output, is_detached, stack_size, &newtid, cpu) < 0) {
         ERROR_PRINT("Could not create thread\n");
@@ -1155,7 +1165,7 @@ nk_get_parent_tid (void)
  * note that this isn't called directly. It is vectored
  * into from an assembly stub
  *
- * new tid is returned both to parent and child
+ * On success, pareant gets child's tid, child gets 0
  */
 nk_thread_id_t 
 __thread_fork (void)
@@ -1166,10 +1176,15 @@ __thread_fork (void)
     uint64_t     rbp1_offset_from_ret0_addr;
     void         *child_stack;
 
+#ifdef NAUT_CONFIG_THREAD_OPTIMIZE 
+    SCHED_WARN("Thread fork may function incorrectly with aggressive threading optimizations\n");
+#endif
+
     void *rbp0      = __builtin_frame_address(0);                   // current rbp, *rbp0 = rbp1
     void *rbp1      = __builtin_frame_address(1);                   // caller rbp, *rbp1 = rbp2  (forker's frame)
     void *rbp_tos   = __builtin_frame_address(STACK_CLONE_DEPTH);   // should scan backward to avoid having this be zero or crazy
     void *ret0_addr = rbp0 + 8;
+
 
     // we're being called with a stack not as deep as STACK_CLONE_DEPTH...
     // fail back to a single frame...
@@ -1225,7 +1240,7 @@ __thread_fork (void)
     thread_setup_init_stack(t, NULL, NULL); 
 
     // put it on the run queue
-    nk_enqueue_thread_on_runq(t, CPU_ANY);
+    nk_enqueue_thread_on_runq(t, t->bound_cpu);
 
     // return child's tid to parent
     return tid;
