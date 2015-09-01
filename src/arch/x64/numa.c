@@ -257,9 +257,8 @@ acpi_parse_slit(struct acpi_table_header *table, void * arg)
 {
     struct nk_locality_info * numa = (struct nk_locality_info*)arg;
     struct acpi_table_slit * slit = (struct acpi_table_slit*)table;
-    unsigned i;
 #ifdef NAUT_CONFIG_DEBUG_NUMA
-    unsigned j;
+    unsigned i, j;
 
     NUMA_DEBUG("Parsing SLIT...\n");
     NUMA_DEBUG("Locality Count: %llu\n", slit->locality_count);

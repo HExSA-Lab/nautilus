@@ -199,7 +199,6 @@ void test_nemo (void);
 void 
 test_nemo (void)
 {
-	int i;
 	NEMO_INFO("Testing nemo\n");
 	nemo_init();
 	nemo_event_id_t id = nemo_register_event_action(dummy, NULL);

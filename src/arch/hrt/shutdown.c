@@ -31,8 +31,6 @@
 void 
 reboot (void) 
 {
-    uint8_t tmp;
-
     /* resetting A20 should be a bit quicker */
     outb(1, 0x92);
 

@@ -297,7 +297,6 @@ int
 pci_init (struct naut_info * naut)
 {
     struct pci_info * pci = NULL;
-    uint16_t bus;
 
     pci = malloc(sizeof(struct pci_info));
     if (!pci) {

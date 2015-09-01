@@ -85,7 +85,7 @@ int nk_numa_init(void);
 void nk_dump_numa_info(void);
 unsigned nk_my_numa_node(void);
 unsigned nk_get_num_domains(void);
-struct mem_region * nk_get_base_region_by_cpu(unsigned cpu);
+struct mem_region * nk_get_base_region_by_cpu(cpu_id_t cpu);
 struct mem_region * nk_get_base_region_by_num (unsigned num);
 
 

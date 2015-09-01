@@ -46,6 +46,7 @@ idle_delay (unsigned long long n)
         asm volatile ("":::"memory");
     }
 
+    /* force compiler to emit */
     n = n + i;
 }
 

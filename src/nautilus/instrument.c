@@ -26,12 +26,11 @@
 #include <nautilus/naut_string.h>
 #include <nautilus/percpu.h>
 #include <nautilus/atomic.h>
+#include <nautilus/mm.h>
 #include <nautilus/libccompat.h>
 #include <nautilus/irq.h>
 
 #include <nautilus/instrument.h>
-
-#include <lib/liballoc.h>
 
 static uint8_t instr_active = 0;
 static uint64_t instr_start_count = 0;

@@ -128,8 +128,6 @@ bcout:
 int 
 nk_condvar_signal (nk_condvar_t * c)
 {
-    uint64_t start, end;
-
     NK_PROFILE_ENTRY();
 
     NK_LOCK(&c->lock);

@@ -289,8 +289,7 @@ malloc (size_t size)
 {
     struct kmem_block_hdr *hdr = NULL;
     struct mem_reg_entry * reg = NULL;
-    unsigned long order;
-    unsigned long flags;
+    ulong_t order;
     cpu_id_t my_id = my_cpu_id();
     struct kmem_data * my_kmem = &(nk_get_nautilus_info()->sys.cpus[my_id]->kmem);
 

@@ -260,7 +260,7 @@ __mm_boot_alloc (ulong_t size, ulong_t align, ulong_t goal)
     areasize = (size + PAGE_SIZE-1)/PAGE_SIZE;
 
     /* will almost always be 1 (note the GNU extension usage here...) */
-    incr = align >> PAGE_SHIFT ? : 1;
+    incr = (align >> PAGE_SHIFT) ? : 1;
 
 restart_scan:
     for (i = preferred; i < eidx; i += incr) {

@@ -484,12 +484,9 @@ nk_get_base_region_by_num (unsigned num)
 
 
 struct mem_region * 
-nk_get_base_region_by_cpu (unsigned cpu)
+nk_get_base_region_by_cpu (cpu_id_t cpu)
 {
-    ASSERT(cpu >= 0);
-
     struct numa_domain * domain = nk_get_nautilus_info()->sys.cpus[cpu]->domain;
-
     struct list_head * first = domain->regions.next;
     return list_entry(first, struct mem_region, entry);
 }
@@ -538,9 +535,7 @@ nk_get_num_domains (void)
 int
 nk_numa_init (void)
 {
-
     struct sys_info * sys = &(nk_get_nautilus_info()->sys);
-    unsigned i;
 
     if (arch_numa_init(sys) != 0) {
         ERROR_PRINT("Error initializing arch-specific NUMA\n");

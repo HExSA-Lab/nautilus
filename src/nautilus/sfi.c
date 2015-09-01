@@ -27,9 +27,9 @@
 #include <nautilus/msr.h>
 #include <nautilus/paging.h>
 #include <nautilus/cpuid.h>
+#include <nautilus/mm.h>
 #include <dev/apic.h>
 #include <dev/ioapic.h>
-#include <lib/liballoc.h>
 
 
 #if NAUT_CONFIG_DEBUG_SFI
@@ -359,7 +359,7 @@ sfi_get_mmap (void)
 
     if (!sfi) {
         ERROR_PRINT("Could not find SFI SYST table\n");
-        return -1;
+        return NULL;
     }
 
     nents = (sfi->hdr.len - sizeof(struct sfi_common_hdr))/sizeof(sfi->entries[0]);

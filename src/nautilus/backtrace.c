@@ -45,7 +45,7 @@ __do_backtrace (void ** fp, unsigned depth)
  * dump memory in 16 byte chunks
  */
 void 
-nk_dump_mem (void * addr, ulong_t n)
+nk_dump_mem (const void * addr, ulong_t n)
 {
     int i, j;
     ulong_t new = (n % 16 == 0) ? n : ((n+16) & ~0xf);
@@ -66,6 +66,7 @@ void
 nk_stack_dump (ulong_t n)
 {
     void * rsp = NULL;
+
     asm volatile ("movq %%rsp, %[_r]" : [_r] "=r" (rsp));
 
     if (!rsp) {
