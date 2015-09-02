@@ -20,6 +20,7 @@
  * This is free software.  You are permitted to use,
  * redistribute, and modify it as specified in the file "LICENSE.txt".
  */
+#define __NAUTILUS_MAIN__
 #include <nautilus/nautilus.h>
 #include <nautilus/cga.h>
 #include <nautilus/paging.h>

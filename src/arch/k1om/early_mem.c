@@ -74,7 +74,10 @@ memtype_efi2mb (efi_mem_type_t efi_type)
 void
 arch_reserve_boot_regions (unsigned long mbd)
 {
-    /* nothing to do here */
+	/* We reserve the zero page so it doesn't look like 
+     * allocations failed when they return zero! */
+	BMM_PRINT("Reserving zero page\n");
+	mm_boot_reserve_mem(0, PAGE_SIZE);
 }
 
 

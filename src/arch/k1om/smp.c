@@ -21,9 +21,9 @@
  * redistribute, and modify it as specified in the file "LICENSE.txt".
  */
 #include <nautilus/nautilus.h>
-#include <nautilus/sfi.h>
 #include <nautilus/mm.h>
-#include <arch/hrt/hrt.h>
+#include <arch/k1om/k1omsfi.h>
+#include <arch/k1om/xeon_phi.h>
 
 int 
 arch_early_init (struct naut_info * naut)

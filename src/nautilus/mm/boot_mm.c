@@ -136,6 +136,16 @@ free_usable_ram (boot_mem_info_t * mem)
     }
 }
 
+void
+mm_dump_page_map (void) 
+{
+	ulong_t i = 0;
+
+	BMM_PRINT("Dumping page map:\n");
+	for (i = 0; i < bootmem.npages/BITS_PER_LONG; i++) {
+		printk("  [%016llx]\n", bootmem.page_map[i]);
+	}
+}
 
 int 
 mm_boot_init (ulong_t mbd)
@@ -172,7 +182,7 @@ mm_boot_init (ulong_t mbd)
 #ifdef NAUT_CONFIG_HVM_HRT
     mm_boot_reserve_vmem(kern_start, pm_start + pm_len);
 #else
-    mm_boot_reserve_mem(kern_start, pm_start + pm_len);
+    mm_boot_reserve_mem(kern_start, pm_start - kern_start + pm_len);
 #endif
 
     arch_reserve_boot_regions(mbd);
@@ -265,7 +275,7 @@ __mm_boot_alloc (ulong_t size, ulong_t align, ulong_t goal)
 restart_scan:
     for (i = preferred; i < eidx; i += incr) {
         ulong_t j;
-        i = find_next_zero_bit(minfo->page_map, eidx+1, i);
+        i = i + find_next_zero_bit(minfo->page_map, eidx+1, i);
         i = ALIGN(i, incr);
         if (i >= eidx)
             break;
@@ -340,13 +350,14 @@ found:
 #ifdef NAUT_CONFIG_DEBUG_BOOTMEM
     for (i = start; i < start+areasize; i++) {
         if (unlikely(test_and_set_bit(i, minfo->page_map)))
-            panic("bit not set i not set!\n");
+            panic("bit %u not set!\n", i);
     }
 #endif
 
     /* NOTE: we do NOT zero the memory! */
     return (void*)pa_to_va((ulong_t)ret);
 }
+
 
 
 void * 

@@ -111,7 +111,7 @@ parse_sfi_ioapic (struct sfi_ioapic_tbl * tbl, struct sys_info * sys)
             panic("IOAPIC count exceeded max (change it in .config)\n");
         }
 
-        if (!(ioa = boot_mm_alloc(sizeof(struct ioapic)))) {
+        if (!(ioa = mm_boot_alloc(sizeof(struct ioapic)))) {
             panic("Couldn't allocate struct for IOAPIC %u\n", i);
         }
         memset(ioa, 0, sizeof(struct ioapic));
@@ -166,7 +166,8 @@ parse_sfi_cpu (struct sfi_cpu_tbl * tbl, struct sys_info * sys)
             panic("CPU count exceeded max (check your .config)\n");
         }
 
-        if (!(new_cpu = boot_mm_alloc(sizeof(struct cpu)))) {
+		new_cpu = mm_boot_alloc(sizeof(struct cpu));
+        if (!new_cpu) {
             panic("Couldn't allocate new CPU struct (%u)\n", sys->num_cpus);
         }
         memset(new_cpu, 0, sizeof(struct cpu));
@@ -240,7 +241,7 @@ sfi_fill_attrs (char * str, uint64_t attr)
 
 
 unsigned 
-sfi_get_mmap_nentries (struct sfi_mmap_tabl * tbl)
+sfi_get_mmap_nentries (struct sfi_mmap_tbl * tbl)
 {
     return (tbl->hdr.len - sizeof(struct sfi_common_hdr)) / sizeof(efi_mem_desc_t);
 }

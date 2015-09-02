@@ -207,7 +207,7 @@ nk_kmem_init (void)
         list_for_each_entry(ent, &(numa_info->domains[i]->regions), entry) {
             ent->mm_state = create_zone(ent);
             if (!ent->mm_state) {
-                ERROR_PRINT("Could not create kmem zone for region %u in domain %u\n", j, i);
+                panic("Could not create kmem zone for region %u in domain %u\n", j, i);
                 return -1;
             }
             ++j;

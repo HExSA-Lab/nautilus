@@ -314,7 +314,9 @@ __ioapic_init (struct ioapic * ioapic, uint8_t ioapic_id)
     /* we unmask serial interrupts initially. This
      * should probably be done somewhere else
      */
+#ifndef NAUT_CONFIG_XEON_PHI
     nk_unmask_irq(serial_get_irq());
+#endif
 
     ioapic_dump(ioapic);
 

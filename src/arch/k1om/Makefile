@@ -3,5 +3,6 @@ obj-y += asm/ \
 		 main.o \
 		 numa.o \
 		 smp.o \
+		 sfi.o \
 		 early_mem.o \
 		 xeon_phi.o 

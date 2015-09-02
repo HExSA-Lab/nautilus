@@ -60,6 +60,8 @@ int mm_boot_init (ulong_t mbd);
 void mm_boot_kmem_init(void);
 void mm_boot_kmem_cleanup(void);
 
+void mm_dump_page_map(void);
+
 void mm_boot_reserve_mem(addr_t start, ulong_t size);
 void mm_boot_reserve_vmem(addr_t start, ulong_t size);
 void mm_boot_free_mem(addr_t start, ulong_t size);
