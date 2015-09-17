@@ -86,7 +86,7 @@ null_excp_handler (excp_entry_t * excp,
                    addr_t fault_addr)
 {
     printk("\n+++ UNHANDLED EXCEPTION +++\n");
-    if (vector >= 0 && vector < 32) {
+    if (vector < 32) {
         printk("[%s] (0x%x) error=0x%x <%s>\n    RIP=%p      (core=%u, thread=%u)\n", 
                 excp_codes[vector][EXCP_NAME],
                 vector,

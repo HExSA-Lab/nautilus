@@ -76,18 +76,20 @@ void
 __cxa_finalize (void *f)
 {
     unsigned i = __atexit_func_count;
+    /* "If f is NULL, it shall call all the termination funtions." */
     if (!f) {
         while (i--) {
             if (__atexit_funcs[i].destructor_func) {
                 (*__atexit_funcs[i].destructor_func)(__atexit_funcs[i].obj_ptr);
             }
         }
-    } 
+    } else {
 
-    for (; i >=0 ; --i) {
-        if (__atexit_funcs[i].destructor_func == f) {
-            (*__atexit_funcs[i].destructor_func)(__atexit_funcs[i].obj_ptr);
-            __atexit_funcs[i].destructor_func = NULL;
+        for (; i != 0 ; --i) {
+            if (__atexit_funcs[i].destructor_func == f) {
+                (*__atexit_funcs[i].destructor_func)(__atexit_funcs[i].obj_ptr);
+                __atexit_funcs[i].destructor_func = NULL;
+            }
         }
     }
 }

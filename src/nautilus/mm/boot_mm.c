@@ -272,7 +272,6 @@ __mm_boot_alloc (ulong_t size, ulong_t align, ulong_t goal)
     /* will almost always be 1 (note the GNU extension usage here...) */
     incr = (align >> PAGE_SHIFT) ? : 1;
 
-restart_scan:
     for (i = preferred; i < eidx; i += incr) {
         ulong_t j;
         i = i + find_next_zero_bit(minfo->page_map, eidx+1, i);
@@ -293,11 +292,6 @@ restart_scan:
 
     fail_block:
         i = ALIGN(j, incr);
-    }
-
-    if (preferred > 0) {
-        preferred = 0;
-        goto restart_scan;
     }
 
     return NULL;

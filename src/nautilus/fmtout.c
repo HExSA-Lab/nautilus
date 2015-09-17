@@ -421,7 +421,7 @@ int Format_Output(struct Output_Sink *q, const char *format, va_list ap)
 
 	is_integer:
 	  sz = format_int(q, val, flags, base, width, prec);
-	  q += sz; o += sz;
+	  o += sz;
 	  break;
 
 	case 'c':		/* Character */

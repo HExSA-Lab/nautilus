@@ -245,7 +245,7 @@ strncasecmp (const char * s1, const char * s2, size_t limit)
 char * 
 strdup (const char * s)
 {
-    const unsigned len = strlen(s);
+    const unsigned len = strlen(s) + 1;
     char * new = malloc(len);
     memcpy(new, s, len);
     return new;

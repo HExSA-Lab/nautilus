@@ -243,6 +243,7 @@ serial_print (const char * format, ...)
   va_list args;
   uint8_t iflag = irq_disable_save();
 
+  va_start(args, format);
   __serial_print(format, args);
   va_end(args);
 

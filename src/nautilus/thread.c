@@ -46,7 +46,8 @@ extern uint8_t malloc_cpus_ready;
 #define SCHED_WARN(fmt, args...)  WARN_PRINT("SCHED: " fmt, ##args)
 
 static unsigned long next_tid = 0;
-static nk_thread_queue_t * global_thread_list;
+
+static struct nk_sched_state * glob_sched_state;
 
 extern addr_t boot_stack_start;
 extern void nk_thread_switch(nk_thread_t*);
@@ -166,8 +167,10 @@ nk_dequeue_thread_from_runq (nk_thread_t * t)
 static inline void
 enqueue_thread_on_tlist (nk_thread_t * t)
 {
-    nk_thread_queue_t * q = global_thread_list;
+    nk_thread_queue_t * q = glob_sched_state->thread_list;
     nk_enqueue_entry_atomic(q, &(t->thr_list_node));
+
+    glob_sched_state->num_threads++;
 }
 
 
@@ -177,9 +180,11 @@ dequeue_thread_from_tlist (nk_thread_t * t)
     nk_queue_entry_t * elm = NULL;
     nk_thread_t * ret = NULL;
 
-    nk_thread_queue_t * q = global_thread_list;
+    nk_thread_queue_t * q = glob_sched_state->thread_list;
     elm = nk_dequeue_entry_atomic(q, &(t->thr_list_node));
     ret = container_of(elm, nk_thread_t, thr_list_node);
+
+    glob_sched_state->num_threads--;
 
     return ret;
 }
@@ -1428,8 +1433,8 @@ nk_sched_init (void)
         ERROR_PRINT("Could not create thread list\n");
         goto out_err2;
     }
-    global_thread_list = sched->thread_list;
 
+    glob_sched_state = sched;
 
     // first we need to add our current thread as the current thread
     main  = malloc(sizeof(nk_thread_t));
@@ -1503,12 +1508,12 @@ tls_dummy (void * in, void ** out)
     for (i = 0; i < TLS_MAX_KEYS; i++) {
         if (nk_tls_key_create(&keys[i], NULL) != 0) {
             ERROR_PRINT("Could not create TLS key (%u)\n", i);
-            return;
+            goto out_err;
         }
 
         if (nk_tls_set(keys[i], (const void *)(i + 100L)) != 0) {
             ERROR_PRINT("Could not set TLS key (%u)\n", i);
-            return;
+            goto out_err;
         }
 
     }
@@ -1516,26 +1521,29 @@ tls_dummy (void * in, void ** out)
     for (i = 0; i < TLS_MAX_KEYS; i++) {
         if (nk_tls_get(keys[i]) != (void*)(i + 100L)) {
             ERROR_PRINT("Mismatched TLS val! Got %p, should be %p\n", nk_tls_get(keys[i]), (void*)(i+100L));
-            return;
+            goto out_err;
         }
 
         if (nk_tls_key_delete(keys[i]) != 0) {
             ERROR_PRINT("Could not delete TLS key %u\n", i);
-            return;
+            goto out_err;
         }
     }
 
     if (nk_tls_key_create(&keys[0], NULL) != 0) {
         ERROR_PRINT("2nd key create failed\n");
-        return;
+        goto out_err;
     }
     
     if (nk_tls_key_delete(keys[0]) != 0) {
         ERROR_PRINT("2nd key delete failed\n");
-        return;
+        goto out_err;
     }
 
     printk("Thread local storage test succeeded\n");
+
+out_err:
+    free(keys);
 }
 
 

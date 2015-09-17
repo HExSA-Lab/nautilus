@@ -235,7 +235,7 @@ nk_cpu_topo_discover (struct cpu * me)
     tp = (struct nk_topo_params*)malloc(sizeof(struct nk_topo_params));
     if (!tp) {
         ERROR_PRINT("Could not allocate param struct for CPU %u\n", my_cpu_id());
-        return -1;
+        goto out_err;
     }
     memset(tp, 0, sizeof(struct nk_topo_params));
 
@@ -248,6 +248,10 @@ nk_cpu_topo_discover (struct cpu * me)
     me->coord = coord;
 
     return 0;
+
+out_err:
+    free(coord);
+    return -1;
 }
 
 

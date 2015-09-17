@@ -58,7 +58,7 @@ pci_cfg_readw (uint8_t bus,
 }
 
 
-uint16_t 
+uint32_t 
 pci_cfg_readl (uint8_t bus, 
                uint8_t slot,
                uint8_t fun,

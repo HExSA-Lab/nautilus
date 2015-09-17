@@ -580,6 +580,11 @@ void _doprnt (register const char * fmt,
 
 		    if (truncate) u = (long)((int)(u));
 
+            /* KCH: if we get passed 0 */
+            if (!base) {
+                base = 10;
+            }
+
 		    if (u != 0 && altfmt) {
 			if (base == 8)
 			    prefix = "0";

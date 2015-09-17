@@ -286,7 +286,7 @@ void nk_rb_erase(struct rb_node *node, struct rb_root *root)
 	root->rb_node = child;
 
  color:
-    if (color == RB_BLACK)
+    if (color == RB_BLACK && parent)
 	__rb_erase_color(child, parent, root);
 }
 

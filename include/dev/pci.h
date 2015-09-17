@@ -180,7 +180,7 @@ struct pci_info {
 
 
 uint16_t pci_cfg_readw(uint8_t bus, uint8_t slot, uint8_t fun, uint8_t off);
-uint16_t pci_cfg_readl(uint8_t bus, uint8_t slot, uint8_t fun, uint8_t off);
+uint32_t pci_cfg_readl(uint8_t bus, uint8_t slot, uint8_t fun, uint8_t off);
 int pci_init (struct naut_info * naut);
 
 

@@ -231,6 +231,11 @@ nk_create_htable (uint_t min_size,
         }
     }
 
+    /* couldn't get a big enough table */
+    if (prime_index == prime_table_length) {
+        return NULL;
+    }
+
     htable = (struct nk_hashtable *)malloc(sizeof(struct nk_hashtable));
 
     if (htable == NULL) {
