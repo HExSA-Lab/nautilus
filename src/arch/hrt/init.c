@@ -60,6 +60,7 @@
 #endif
 
 
+extern struct cpu * smp_ap_stack_switch(uint64_t, uint64_t, struct cpu*);
 extern spinlock_t printk_lock;
 
 static int hrt_core_sync = 0;

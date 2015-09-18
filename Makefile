@@ -313,7 +313,8 @@ COMMON_FLAGS := -O2 \
 			   -ffreestanding \
 			   -fno-stack-protector \
 			   -fno-strict-aliasing \
-			   -mno-red-zone 
+			   -mno-red-zone \
+			   -mcmodel=large
 			  
 
 CXXFLAGS := $(COMMON_FLAGS) \
