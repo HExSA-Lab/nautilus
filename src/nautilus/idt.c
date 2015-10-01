@@ -35,6 +35,8 @@ extern ulong_t handler_table[NUM_IDT_ENTRIES];
 
 struct gate_desc64 idt64[NUM_IDT_ENTRIES] __align(8);
 
+extern uint8_t cpu_info_ready;
+
 #define EXCP_NAME 0
 #define EXCP_MNEMONIC 1
 const char * excp_codes[NUM_EXCEPTIONS][2] = {
@@ -85,7 +87,12 @@ null_excp_handler (excp_entry_t * excp,
                    excp_vec_t vector,
                    addr_t fault_addr)
 {
+    cpu_id_t cpu_id = cpu_info_ready ? my_cpu_id() : 0xffffffff;
+    /* TODO: this should be based on scheduler initialization, not CPU */
+    unsigned tid = cpu_info_ready ? get_cur_thread()->tid : 0xffffffff;
+
     printk("\n+++ UNHANDLED EXCEPTION +++\n");
+
     if (vector < 32) {
         printk("[%s] (0x%x) error=0x%x <%s>\n    RIP=%p      (core=%u, thread=%u)\n", 
                 excp_codes[vector][EXCP_NAME],
@@ -93,12 +100,12 @@ null_excp_handler (excp_entry_t * excp,
                 excp->error_code,
                 excp_codes[vector][EXCP_MNEMONIC],
                 (void*)excp->rip, 
-                my_cpu_id(), get_cur_thread()->tid);
+                cpu_id, tid);
     } else {
         printk("[Unknown Exception] (vector=0x%x)\n    RIP=(%p)     (core=%u)\n", 
                 vector,
                 (void*)excp->rip,
-                my_cpu_id());
+                cpu_id);
     }
 
     struct nk_regs * r = (struct nk_regs*)((char*)excp - 128);

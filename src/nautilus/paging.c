@@ -62,6 +62,8 @@ static char * ps2str[3] = {
 };
 
 
+extern uint8_t cpu_info_ready;
+
 /*
  * align_addr
  *
@@ -322,6 +324,7 @@ nk_pf_handler (excp_entry_t * excp,
                addr_t         fault_addr)
 {
 
+    cpu_id_t id = cpu_info_ready ? my_cpu_id() : 0xffffffff;
 
 #ifdef NAUT_CONFIG_HVM_HRT
     if (excp->error_code == UPCALL_MAGIC_ERROR) {
@@ -335,7 +338,7 @@ nk_pf_handler (excp_entry_t * excp,
             (void*)excp->rip, 
             fault_addr, 
             excp->error_code, 
-            my_cpu_id());
+            id);
 
     struct nk_regs * r = (struct nk_regs*)((char*)excp - 128);
     nk_print_regs(r);

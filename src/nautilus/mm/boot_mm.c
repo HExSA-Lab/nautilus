@@ -179,11 +179,17 @@ mm_boot_init (ulong_t mbd)
     free_usable_ram(mem);
     
     /* mark as used the kernel and the pages occupying the bitmap */
+    uint64_t kern_size = pm_start + pm_len - kern_start;
+    kern_size = (PAGE_SIZE <= kern_size) ?  kern_size : PAGE_SIZE;
+
 #ifdef NAUT_CONFIG_HVM_HRT
-    mm_boot_reserve_vmem(kern_start, pm_start + pm_len);
+    mm_boot_reserve_vmem(kern_start, kern_size);
 #else
-    mm_boot_reserve_mem(kern_start, pm_start - kern_start + pm_len);
+    mm_boot_reserve_mem(kern_start, kern_size);
 #endif
+
+    /* reserve the zero page */
+    mm_boot_reserve_mem(0, PAGE_SIZE);
 
     arch_reserve_boot_regions(mbd);
 
@@ -196,6 +202,7 @@ void
 mm_boot_reserve_mem (addr_t start, ulong_t size)
 {
     uint32_t start_page = PADDR_TO_PAGE(start);
+    size += start - PAGE_TO_PADDR(start_page);
     uint32_t npages     = (size+PAGE_SIZE-1) / PAGE_SIZE;
     boot_mem_info_t * bm = &bootmem;
 
@@ -341,12 +348,10 @@ found:
 
     }
 
-#ifdef NAUT_CONFIG_DEBUG_BOOTMEM
     for (i = start; i < start+areasize; i++) {
         if (unlikely(test_and_set_bit(i, minfo->page_map)))
             panic("bit %u not set!\n", i);
     }
-#endif
 
     /* NOTE: we do NOT zero the memory! */
     return (void*)pa_to_va((ulong_t)ret);

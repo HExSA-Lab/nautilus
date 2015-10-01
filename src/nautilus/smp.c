@@ -55,6 +55,7 @@ static volatile unsigned smp_core_count = 1; // assume BSP is booted
 extern addr_t init_smp_boot;
 extern addr_t end_smp_boot;
 
+uint8_t cpu_info_ready = 0;
 
 
 
@@ -235,6 +236,9 @@ smp_bringup_aps (struct naut_info * naut)
     BARRIER_WHILE(smp_core_count != naut->sys.num_cpus);
 
     SMP_DEBUG("ALL CPUS BOOTED\n");
+
+    /* we can now use gs-based percpu data */
+    cpu_info_ready = 1;
 
     return (status|err);
 }
