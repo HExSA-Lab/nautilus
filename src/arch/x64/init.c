@@ -58,6 +58,10 @@
 #include "ndpc_preempt_threads.h"
 #endif
 
+#ifdef NAUT_CONFIG_PALACIOS
+#include "palacios.h"
+#endif
+
 
 extern spinlock_t printk_lock;
 
@@ -262,6 +266,24 @@ init (unsigned long mbd,
     sti();
 
     runtime_init();
+
+ #ifdef NAUT_CONFIG_PALACIOS
+ 	printk("HI!!!!\n");
+     palacios_vmm_init(2000000000, "");
+     printk("HELLO\n");
+     extern int guest_start, guest_end;
+     unsigned int cpu_mask = 0xffffffff;
+     printk("guest_start at %p\n", &guest_start);
+     void* vm = v3_create_vm(&guest_start, 0, "test_vm", cpu_mask);
+     printk("v3_create_vm done %p\n", vm);
+     if(vm) {
+ 	    if(v3_start_vm(vm, cpu_mask)) {
+ 		    printk("failed to start VM\n");
+ 	    } else {
+ 		    printk("successfully started VM\n");
+ 	    }
+     }
+ #endif
 
     printk("Nautilus boot thread yielding (indefinitely)\n");
     /* we don't come back from this */
