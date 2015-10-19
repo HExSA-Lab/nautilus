@@ -77,6 +77,7 @@ nk_detect_cpu_freq (uint32_t cpu)
         goto out_err;
     }
 
+    irq_enable_restore(flags);
     return khz;
 
 out_err:
