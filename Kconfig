@@ -1,5 +1,6 @@
 mainmenu "Nautilus AeroKernel Configuration"
 
+
 menu "Platform/Arch Options"
 
     choice
@@ -87,6 +88,17 @@ menu "Platform/Arch Options"
     endchoice
             
         
+    config PALACIOS
+    	bool "Support for creating VMs using Palacios"
+        depends on X86_64_HOST
+        default 0
+    config PALACIOS_DIR
+        depends on PALACIOS
+        string "Path to Palacios VMM tree"
+            default "../palacios"
+            help
+              Path to the Palacios VMM build.  Palacios must be built for
+              Nautilus, and both palacios/libv3vee.a and libnautilus.a must exist
 
         
 endmenu

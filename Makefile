@@ -334,7 +334,6 @@ CFLAGS:=   $(COMMON_FLAGS) \
 		   -fno-common \
 		   -std=gnu99 \
 		    $(call cc-option, -Wno-unused-but-set-variable,)
-			
 		   #-mno-3dnow \
 		   #-Werror \
 		   #-Wmissing-prototypes \
@@ -343,7 +342,8 @@ CFLAGS:=   $(COMMON_FLAGS) \
 # NOTE: We MUST have max-page-size set to this here. Otherwise things
 # go off the rails for the Grub multiboot setup because the linker
 # does strange things...
-LDFLAGS         := -z max-page-size=0x1000 
+LDFLAGS         := -z max-page-size=0x1000
+
 
 ifeq ($(call cc-option-yn, -fgnu89-inline),y)
 CFLAGS		+= -fgnu89-inline
@@ -533,6 +533,14 @@ endif # NAUT_CONFIG_CXX_SUPPORT
 
 			   #/usr/lib64/libc.a \
 
+ifdef NAUT_CONFIG_PALACIOS
+  PALACIOS_DIR=$(subst ",,$(NAUT_CONFIG_PALACIOS_DIR))
+  CFLAGS += -I$(PALACIOS_DIR)/nautilus -I$(PALACIOS_DIR)/palacios/include
+  libs-y += $(PALACIOS_DIR)/libv3vee.a $(PALACIOS_DIR)/libnautilus.a
+  LDFLAGS         +=  --whole-archive -dp
+# image attachement here somewhere for testing, probably via a linker script
+endif
+
 
 # The all: target is the default when no target is given on the
 # command line.
@@ -611,10 +619,13 @@ else
 ifdef NAUT_CONFIG_HVM_HRT
 LD_SCRIPT:=link/nautilus.ld.hrt
 else
+ifdef NAUT_CONFIG_PALACIOS
+LD_SCRIPT:=link/nautilus.ld.palacios
+else
 LD_SCRIPT:=link/nautilus.ld
 endif
 endif
-
+endif
 
 quiet_cmd_transform_linkscript__ ?= CC      $@
 	  cmd_transform_linkscript__ ?= $(CC) -E -P \
