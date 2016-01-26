@@ -93,4 +93,7 @@ void free(const void * addr);
 void arch_detect_mem_map (mmap_info_t * mm_info, mem_map_entry_t * memory_map, unsigned long mbd);
 void arch_reserve_boot_regions(unsigned long mbd);
 
+
+void kmem_dump_my_view();
+
 #endif /* !__MM_H__! */

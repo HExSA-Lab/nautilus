@@ -47,7 +47,9 @@ struct buddy_mempool {
 
 struct buddy_mempool * buddy_init(ulong_t base_addr, ulong_t pool_order, ulong_t min_order);
 
-void buddy_free(struct buddy_mempool * mp, const void * addr, ulong_t order);
+void buddy_free(struct buddy_mempool * mp, void * addr, ulong_t order);
 void * buddy_alloc(struct buddy_mempool * mp, ulong_t order);
+
+void buddy_dump_mempool(struct buddy_mempool *mp);
 
 #endif

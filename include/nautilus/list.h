@@ -38,7 +38,8 @@ extern "C" {
         (type *)( (char *)__mptr - offsetof(type,member) );})
 
 
-static inline void prefetch(const void *x) {const void * foo; foo = x;}
+    //static inline void prefetch(const void *x) {const void * foo; foo = x;}
+#define prefetch(x) __builtin_prefetch(x)
 
 /*
  * These are non-NULL pointers that will result in page faults

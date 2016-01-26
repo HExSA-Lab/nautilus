@@ -240,7 +240,7 @@ static inline int fls(int x)
  */
 static inline int fls64(uint64_t x)
 {
-	int bitpos = -1;
+	long bitpos = -1;
 	/*
 	 * AMD64 says BSRQ won't clobber the dest reg if x==0; Intel64 says the
 	 * dest reg is undefined if x==0, but their CPU architect says its
