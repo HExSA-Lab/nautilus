@@ -272,7 +272,7 @@ term_clear (void)
 
 
 /* NOTE: should be holding a lock while in this function */
-static void 
+void 
 term_scrollup (void) 
 {
     int i;

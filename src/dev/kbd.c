@@ -30,6 +30,8 @@
 #define DEBUG_PRINT(fmt, args...) 
 #endif
 
+static void (*callback)(uint8_t scancode, uint8_t status) = 0;
+
 static int 
 kbd_handler (excp_entry_t * excp, excp_vec_t vec)
 {
@@ -43,10 +45,17 @@ kbd_handler (excp_entry_t * excp, excp_vec_t vec)
 
     io_delay();
 
+    DEBUG_PRINT("Keyboard: status=0x%x\n",status);
+
     if ((status & STATUS_OUTPUT_FULL) != 0) {
       scan  = inb(KBD_DATA_REG);
       DEBUG_PRINT("Keyboard: status=0x%x, scancode=0x%x\n", status, scan);
       io_delay();
+
+      if (callback) { 
+	  callback(scan,status);
+	  goto out;
+      }
 
       if (!(scan & KBD_RELEASE)) {
           goto out;
@@ -69,11 +78,23 @@ out:
     return 0;
 }
 
+int 
+kbd_register_callback(void (*handler)(uint8_t scancode, uint8_t status)) 
+{
+    if (callback) { 
+	return -1;
+    } else {
+	callback=handler;
+	return 0;
+    }
+}
+
 int
 kbd_init (struct naut_info * naut)
 {
     printk("Initialize keyboard\n");
     register_irq_handler(1, kbd_handler, NULL);
+    nk_unmask_irq(1);
     return 0;
 }
 

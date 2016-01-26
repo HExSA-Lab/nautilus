@@ -49,6 +49,6 @@
 struct naut_info;
 
 int kbd_init(struct naut_info * naut);
-
+int kbd_register_callback(void (*handler)(uint8_t scancode, uint8_t status)) ;
 
 #endif
