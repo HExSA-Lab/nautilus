@@ -74,6 +74,7 @@ nk_thread_queue_create (void)
 
 
 
+
 /* NOTE: this does not delete the threads in the queue, just
  * their entries in the queue
  */
@@ -529,6 +530,10 @@ nk_thread_create (nk_thread_fun_t fun,
 
     t->status = NK_THR_INIT;
     
+    t->fun = fun;
+    t->input = input;
+    t->output = output;
+    
     enqueue_thread_on_tlist(t);
 
     if (tid) {
@@ -614,6 +619,39 @@ nk_thread_start (nk_thread_fun_t fun,
 #endif
 
     return 0;
+}
+
+int nk_thread_run(nk_thread_id_t t)
+{
+  nk_thread_t * newthread = (nk_thread_t*)t;
+  printk("Trying to execute thread %p (tid %lu)", newthread,newthread->tid);
+  
+  printk("RUN: Function: %llu\n", newthread->fun);
+  printk("RUN: Bound_CPU: %llu\n", newthread->bound_cpu);
+  
+  thread_setup_init_stack(newthread, newthread->fun, newthread->input);
+  
+  nk_enqueue_thread_on_runq(newthread, newthread->bound_cpu);
+
+#ifdef NAUT_CONFIG_DEBUG_THREADS
+  if (newthread->bound_cpu == CPU_ANY) {
+    SCHED_DEBUG("Running thread (%p, tid=%u) on [ANY CPU]\n", newthread, newthread->tid); 
+  } else {
+    SCHED_DEBUG("Newthread thread (%p, tid=%u) on cpu %u\n", newthread, newthread->tid, newthread->bound_cpu); 
+  }
+#endif
+  
+#ifdef NAUT_CONFIG_KICK_SCHEDULE
+  // kick it
+  // this really should not fire on CPU_ANY....
+  if (newthread->bound_cpu != my_cpu_id()) {
+    apic_ipi(per_cpu_get(apic),
+	     nk_get_nautilus_info()->sys.cpus[newthread->bound_cpu]->lapic_id,
+	     APIC_NULL_KICK_VEC);
+  }
+#endif
+
+  return 0;
 }
 
 
@@ -846,6 +884,7 @@ nk_yield (void)
     uint8_t flags       = irq_disable_save();
 
     if (nk_queue_empty(per_cpu_get(run_q))) {
+	irq_enable_restore(flags);
         return;
     }
     /* only put myself on the run queue if there 

@@ -56,6 +56,10 @@ nk_thread_create (nk_thread_fun_t fun,
                  nk_stack_size_t stack_size,
                  nk_thread_id_t * tid,
                  int cpu);
+
+int
+nk_thread_run(nk_thread_id_t tid);
+
 int
 nk_thread_start (nk_thread_fun_t fun, 
                  void * input,
@@ -145,6 +149,8 @@ struct nk_thread {
     uint8_t is_idle;
 
     void * output;
+    void * input;
+    nk_thread_fun_t fun;
 
     const void * tls[TLS_MAX_KEYS];
 
