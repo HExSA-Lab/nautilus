@@ -79,6 +79,52 @@ pci_cfg_readl (uint8_t bus,
     return inl(PCI_CFG_DATA_PORT);
 }
 
+void
+pci_cfg_writew (uint8_t bus, 
+		uint8_t slot,
+		uint8_t fun,
+		uint8_t off,
+		uint16_t val)
+{
+    uint32_t addr;
+    uint32_t lbus  = (uint32_t)bus;
+    uint32_t lslot = (uint32_t)slot;
+    uint32_t lfun  = (uint32_t)fun;
+    uint32_t ret;
+
+    addr = (lbus  << PCI_BUS_SHIFT) | 
+           (lslot << PCI_SLOT_SHIFT) | 
+           (lfun  << PCI_FUN_SHIFT) |
+           PCI_REG_MASK(off) | 
+           PCI_ENABLE_BIT;
+
+    outl(addr, PCI_CFG_ADDR_PORT);
+    outw(val,PCI_CFG_DATA_PORT);
+}
+
+
+void
+pci_cfg_writel (uint8_t bus, 
+		uint8_t slot,
+		uint8_t fun,
+		uint8_t off,
+		uint32_t val)
+{
+    uint32_t addr;
+    uint32_t lbus  = (uint32_t)bus;
+    uint32_t lslot = (uint32_t)slot;
+    uint32_t lfun  = (uint32_t)fun;
+
+    addr = (lbus  << PCI_BUS_SHIFT) | 
+           (lslot << PCI_SLOT_SHIFT) | 
+           (lfun  << PCI_FUN_SHIFT) |
+           PCI_REG_MASK(off) | 
+           PCI_ENABLE_BIT;
+
+    outl(addr, PCI_CFG_ADDR_PORT);
+    outl(val, PCI_CFG_DATA_PORT);
+}
+
 
 static inline uint16_t
 pci_dev_valid (uint8_t bus, uint8_t slot)
@@ -143,6 +189,16 @@ pci_add_dev_to_bus (struct pci_dev * dev,
     list_add(&(dev->dev_node), &(bus->dev_list));
 }
 
+static void
+pci_copy_cfg_space(struct pci_dev *dev, struct pci_bus *bus)
+{
+  uint32_t i;
+  // 4 bytes at a time
+  for (i=0;i<sizeof(dev->cfg);i+=4) {
+    ((uint32_t*)(&dev->cfg))[i/4] = pci_cfg_readl(bus->num,dev->num,0,i);
+  }
+}
+
 
 static struct pci_dev*
 pci_dev_create (uint32_t num, struct pci_bus * bus)
@@ -157,6 +213,8 @@ pci_dev_create (uint32_t num, struct pci_bus * bus)
 
     dev->num = num;
 
+    pci_copy_cfg_space(dev,bus);
+
     pci_add_dev_to_bus(dev, bus);
 
     return dev;
@@ -167,7 +225,7 @@ static void
 pci_add_bus (struct pci_bus * bus, struct pci_info * pci)
 {
     pci->num_buses++;
-    list_add(&(pci->bus_list), &(bus->bus_node));
+    list_add( &(bus->bus_node), &(pci->bus_list));
 }
 
 
@@ -221,6 +279,7 @@ pci_dev_probe (struct pci_bus * bus, uint8_t dev)
 
     /* multi-function device */
     if ((hdr_type & 0x80) != 0) {
+      PCI_PRINT("Multifunction Device\n");
         for (fun = 1; fun < PCI_MAX_FUN; fun++) {
             if (pci_get_vendor_id(bus->num, dev, fun) != 0xffff) {
                 pci_fun_probe(bus->pci, bus->num, dev, fun);
@@ -304,6 +363,8 @@ pci_init (struct naut_info * naut)
         return -1;
     }
     memset(pci, 0, sizeof(struct pci_info));
+
+    INIT_LIST_HEAD(&(pci->bus_list));
 
     PCI_PRINT("Probing PCI bus...\n");
     pci_bus_scan(pci);
