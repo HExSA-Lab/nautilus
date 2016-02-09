@@ -77,6 +77,21 @@ config HZ
     help
         Specifies the default scheduler tick 
         frequency
+
+
+config VIRTIO_PCI
+    bool "Core Virtio PCI Driver"
+    depends on X86_64_HOST
+    default n
+    help
+      Adds the basic Virtio PCI interface
+
+config DEBUG_VIRTIO_PCI
+    bool "Debug Virtio PCI"
+    depends on DEBUG_PRINTS && VIRTIO_PCI
+    default n
+    help
+      Turn on debug prints for the Virtio 
 endmenu
 
     
