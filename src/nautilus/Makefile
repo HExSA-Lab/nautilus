@@ -29,6 +29,7 @@ obj-y += \
 	libccompat.o \
 	nemo.o \
 	pmc.o \
+        vc.o \
 	mm/
 	
 

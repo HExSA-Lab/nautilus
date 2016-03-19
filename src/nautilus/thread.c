@@ -114,7 +114,7 @@ nk_enqueue_thread_on_runq (nk_thread_t * t, int cpu)
     NK_PROFILE_EXIT();
 }
 
-
+/*
 static inline void 
 enqueue_thread_on_waitq (nk_thread_t * waiter, nk_thread_queue_t * waitq)
 {
@@ -124,7 +124,7 @@ enqueue_thread_on_waitq (nk_thread_t * waiter, nk_thread_queue_t * waitq)
 
     nk_enqueue_entry_atomic(waitq, &(waiter->wait_node));
 }
-
+*/
 
 static inline nk_thread_t*
 dequeue_thread_from_waitq (nk_thread_t * waiter, nk_thread_queue_t * waitq)

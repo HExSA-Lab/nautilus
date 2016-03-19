@@ -30,15 +30,15 @@
 #define KBD_LED_CODE 0xed
 #define KBD_RELEASE  0x80
 
-#define KEY_SPECIAL_FLAG 0x0100
+//#define KEY_SPECIAL_FLAG 0x0100
 
-#define SPECIAL_KEY(x) (KEY_SPECIAL_FLAG | (x))
+//#define SPECIAL_KEY(x) (KEY_SPECIAL_FLAG | (x))
 #define KEY_CTRL_C   0x2e03
 
-#define KEY_LCTRL    SPECIAL_KEY(13)
-#define KEY_RCTRL    SPECIAL_KEY(14)
-#define KEY_LSHIFT   SPECIAL_KEY(15)
-#define KEY_RSHIFT   SPECIAL_KEY(16)
+//#define KEY_LCTRL    SPECIAL_KEY(13)
+//#define KEY_RCTRL    SPECIAL_KEY(14)
+//#define KEY_LSHIFT   SPECIAL_KEY(15)
+//#define KEY_RSHIFT   SPECIAL_KEY(16)
 
 #define KBD_BIT_KDATA 0 /* keyboard data in buffer */
 #define KBD_BIT_UDATA 1 /* user data in buffer */
@@ -47,6 +47,8 @@
 #define STATUS_OUTPUT_FULL 0x1
 
 struct naut_info;
+
+ushort_t kbd_translator(unsigned char cur_input);
 
 int kbd_init(struct naut_info * naut);
 int kbd_register_callback(void (*handler)(uint8_t scancode, uint8_t status)) ;
