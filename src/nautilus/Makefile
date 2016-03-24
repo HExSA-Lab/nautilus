@@ -29,9 +29,9 @@ obj-y += \
 	libccompat.o \
 	nemo.o \
 	pmc.o \
-        vc.o \
 	mm/
-	
 
 obj-$(NAUT_CONFIG_PROFILE) += instrument.o
 obj-$(NAUT_CONFIG_XEON_PHI) += sfi.o
+
+obj-$(NAUT_CONFIG_VIRTUAL_CONSOLE) += vc.o 

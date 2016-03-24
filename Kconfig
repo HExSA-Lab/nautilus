@@ -148,7 +148,22 @@ config USE_TICKETLOCKS
     help
       Uses ticketlocks (similar to Linux impl.) instead of
       default spinlocks
-    
+
+config VIRTUAL_CONSOLE
+    bool "Use Virtual Console To Interact With User"
+    default n
+    depends on X86_64_HOST
+    help
+	Allows multiple consoles multiplexed on the 
+	main display and keyboard
+
+config DEBUG_VIRTUAL_CONSOLE
+    bool "Debug Virtual Console"
+    default n
+    depends on VIRTUAL_CONSOLE
+    help
+        Turn on debug output for VC
+
 endmenu
 
 menu "AeroKernel Performance Optimizations"

@@ -32,7 +32,6 @@ extern "C" {
 #include <nautilus/spinlock.h>
 #include <nautilus/queue.h>
 #include <nautilus/intrinsics.h>
-#include <nautilus/vc.h>
 
 #define CPU_ANY       -1
 
@@ -154,7 +153,9 @@ struct nk_thread {
     void * input;
     nk_thread_fun_t fun;
 
-    struct virtual_console *vc;
+#ifdef NAUT_CONFIG_VIRTUAL_CONSOLE
+    struct nk_virtual_console *vc;
+#endif
 
     const void * tls[TLS_MAX_KEYS];
 
@@ -210,15 +211,6 @@ put_cur_thread (nk_thread_t * t)
     per_cpu_put(cur_thread, t);
 }
 
-static inline void 
-enqueue_thread_on_waitq (nk_thread_t * waiter, nk_thread_queue_t * waitq)
-{
-    ASSERT(waiter->status != NK_THR_WAITING);
-
-    waiter->status = NK_THR_WAITING;
-
-    nk_enqueue_entry_atomic(waitq, &(waiter->wait_node));
-}
 
 #endif /* !__ASSEMBLER */
 

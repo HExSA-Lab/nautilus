@@ -15,18 +15,20 @@
  *                     The Hobbes Project <http://xstack.sandia.gov/hobbes>
  * All rights reserved.
  *
- * Author: Kyle C. Hale <kh@u.northwestern.edu>
- *
+ * Authors: Kyle C. Hale <kh@u.northwestern.edu>
+ *          Yang Wu, Fei Luo and Yuanhui Yang
+ *          {YangWu2015, FeiLuo2015, YuanhuiYang2015}@u.northwestern.edu
  * This is free software.  You are permitted to use,
  * redistribute, and modify it as specified in the file "LICENSE.txt".
  */
+
 #include <nautilus/nautilus.h>
 #include <nautilus/irq.h>
 #include <nautilus/thread.h>
-#include <nautilus/vc.h>
 #include <dev/kbd.h>
-
-#include <stdio.h>
+#ifdef NAUT_CONFIG_VIRTUAL_CONSOLE
+#include <nautilus/vc.h>
+#endif
 
 #ifndef NAUT_CONFIG_DEBUG_KBD
 #undef DEBUG_PRINT
@@ -36,7 +38,6 @@
 
 int g_switch_state;
 uint8_t switcher_scancode[5];
-
 
 #define LEFT_SHIFT  0x01
 #define RIGHT_SHIFT 0x02
@@ -226,14 +227,15 @@ Event 3: ScancodeWithShiftWithCapsLock;
 // #define KEY_RSHIFT  _SPECIAL(16)
 // #define KEY_CAPSLOCK _SPECIAL(20)
 
-int translator_prev_state;
-unsigned char translator_prev_input;
-unsigned short cur_output;
+static int translator_prev_state;
+static unsigned char translator_prev_input;
+static unsigned short cur_output;
 
+// Feed with scancodes, do conversion to cooked output
 ushort_t kbd_translator(unsigned char cur_input) {
     switch (translator_prev_state) {
         case DEFAULT: {
-            if (cur_input == KB_KEY_RELEASE) {
+            if (cur_input & KB_KEY_RELEASE) {
                 cur_output = 0x0000;
                 translator_prev_state = DEFAULT;
             }
@@ -254,7 +256,7 @@ ushort_t kbd_translator(unsigned char cur_input) {
             break;
         }
         case NoShiftNoCapsLock: {
-            if (cur_input == KB_KEY_RELEASE) {
+            if (cur_input & KB_KEY_RELEASE) {
                 cur_output = ScancodeNoShiftNoCapsLock[translator_prev_input];
                 translator_prev_state = DEFAULT;
             }
@@ -268,7 +270,7 @@ ushort_t kbd_translator(unsigned char cur_input) {
                 translator_prev_state = WithShiftNoCapsLock;
             }
             else {
-                if (translator_prev_input != KB_KEY_RELEASE 
+	      if (!(translator_prev_input & KB_KEY_RELEASE)
                     && translator_prev_input != KEY_CAPSLOCK 
                     && translator_prev_input != KEY_LSHIFT 
                     && translator_prev_input != KEY_RSHIFT) {
@@ -284,7 +286,7 @@ ushort_t kbd_translator(unsigned char cur_input) {
             break;
         }
         case WithShiftNoCapsLock: {
-            if (cur_input == KB_KEY_RELEASE) {
+            if (cur_input & KB_KEY_RELEASE) {
                 if (translator_prev_input == KEY_CAPSLOCK) {
                     cur_output = 0x0000;
                     translator_prev_state = WithShiftNoCapsLock;
@@ -295,7 +297,7 @@ ushort_t kbd_translator(unsigned char cur_input) {
                     translator_prev_state = DEFAULT;
                 }
                 else {
-                    if (translator_prev_input != KB_KEY_RELEASE 
+		  if (!(translator_prev_input & KB_KEY_RELEASE )
                         && translator_prev_input != KEY_CAPSLOCK 
                         && translator_prev_input != KEY_LSHIFT 
                         && translator_prev_input != KEY_RSHIFT) {
@@ -395,7 +397,7 @@ ushort_t kbd_translator(unsigned char cur_input) {
             break;
         }
         case NoShiftWithCapsLock: {
-            if (cur_input == KB_KEY_RELEASE) {
+            if (cur_input & KB_KEY_RELEASE) {
                 if (translator_prev_input == KB_KEY_RELEASE) {
                     cur_output = 0x0000;
                     translator_prev_state = NoShiftWithCapsLock;
@@ -414,7 +416,7 @@ ushort_t kbd_translator(unsigned char cur_input) {
                     translator_prev_state = NoShiftWithCapsLock;
                 }
                 else {
-                    if (translator_prev_input != KB_KEY_RELEASE 
+		  if (!(translator_prev_input & KB_KEY_RELEASE)
                         && translator_prev_input != KEY_CAPSLOCK 
                         && translator_prev_input != KEY_LSHIFT 
                         && translator_prev_input != KEY_RSHIFT) {
@@ -428,7 +430,7 @@ ushort_t kbd_translator(unsigned char cur_input) {
                 }
             }
             else if (cur_input == KEY_CAPSLOCK) {
-                if (translator_prev_input == KB_KEY_RELEASE) {
+                if (translator_prev_input & KB_KEY_RELEASE) {
                     cur_output = 0x0000;
                     translator_prev_state = DEFAULT;
                 }
@@ -442,7 +444,7 @@ ushort_t kbd_translator(unsigned char cur_input) {
                     translator_prev_state = DEFAULT;
                 }
                 else {
-                    if (translator_prev_input != KB_KEY_RELEASE 
+		  if (!(translator_prev_input & KB_KEY_RELEASE)
                         && translator_prev_input != KEY_CAPSLOCK 
                         && translator_prev_input != KEY_LSHIFT 
                         && translator_prev_input != KEY_RSHIFT) {
@@ -456,7 +458,7 @@ ushort_t kbd_translator(unsigned char cur_input) {
                 }
             }
             else if (cur_input == KEY_LSHIFT || cur_input == KEY_RSHIFT) {
-                if (translator_prev_input == KB_KEY_RELEASE) {
+                if (translator_prev_input & KB_KEY_RELEASE) {
                     cur_output = 0x0000;
                     translator_prev_state = WithShiftWithCapsLock;
                 }
@@ -470,7 +472,7 @@ ushort_t kbd_translator(unsigned char cur_input) {
                     translator_prev_state = WithShiftWithCapsLock;
                 }
                 else {
-                    if (translator_prev_input != KB_KEY_RELEASE 
+		  if (!(translator_prev_input & KB_KEY_RELEASE)
                         && translator_prev_input != KEY_CAPSLOCK 
                         && translator_prev_input != KEY_LSHIFT 
                         && translator_prev_input != KEY_RSHIFT) {
@@ -484,7 +486,7 @@ ushort_t kbd_translator(unsigned char cur_input) {
                 }
             }
             else {
-                if (translator_prev_input != KB_KEY_RELEASE 
+                if (translator_prev_input & KB_KEY_RELEASE 
                     && translator_prev_input != KEY_CAPSLOCK 
                     && translator_prev_input != KEY_LSHIFT 
                     && translator_prev_input != KEY_RSHIFT) {
@@ -500,8 +502,8 @@ ushort_t kbd_translator(unsigned char cur_input) {
             break;
         }
         case WithShiftWithCapsLock: {
-            if (cur_input == KB_KEY_RELEASE) {
-                if (translator_prev_input == KB_KEY_RELEASE) {
+            if (cur_input & KB_KEY_RELEASE) {
+                if (translator_prev_input & KB_KEY_RELEASE) {
                     cur_output = 0x0000;
                     translator_prev_state = WithShiftWithCapsLock;
                 }
@@ -515,7 +517,7 @@ ushort_t kbd_translator(unsigned char cur_input) {
                     translator_prev_state = NoShiftWithCapsLock;
                 }
                 else {
-                    if (translator_prev_input != KB_KEY_RELEASE 
+                    if (translator_prev_input & KB_KEY_RELEASE 
                         && translator_prev_input != KEY_CAPSLOCK 
                         && translator_prev_input != KEY_LSHIFT 
                         && translator_prev_input != KEY_RSHIFT) {
@@ -529,7 +531,7 @@ ushort_t kbd_translator(unsigned char cur_input) {
                 }
             }
             else if (cur_input == KEY_CAPSLOCK) {
-                if (translator_prev_input == KB_KEY_RELEASE) {
+                if (translator_prev_input & KB_KEY_RELEASE) {
                     cur_output = 0x0000;
                     translator_prev_state = WithShiftNoCapsLock;
                 }
@@ -543,7 +545,7 @@ ushort_t kbd_translator(unsigned char cur_input) {
                     translator_prev_state = WithShiftWithCapsLock;
                 }
                 else {
-                    if (translator_prev_input != KB_KEY_RELEASE 
+		  if (!(translator_prev_input & KB_KEY_RELEASE )
                         && translator_prev_input != KEY_CAPSLOCK 
                         && translator_prev_input != KEY_LSHIFT 
                         && translator_prev_input != KEY_RSHIFT) {
@@ -557,7 +559,7 @@ ushort_t kbd_translator(unsigned char cur_input) {
                 }
             }
             else if (cur_input == KEY_LSHIFT || cur_input == KEY_RSHIFT) {
-                if (translator_prev_input == KB_KEY_RELEASE) {
+                if (translator_prev_input & KB_KEY_RELEASE) {
                     cur_output = 0x0000;
                     translator_prev_state = WithShiftWithCapsLock;
                 }
@@ -571,7 +573,7 @@ ushort_t kbd_translator(unsigned char cur_input) {
                     translator_prev_state = WithShiftWithCapsLock;
                 }
                 else {
-                    if (translator_prev_input != KB_KEY_RELEASE 
+		  if (!(translator_prev_input & KB_KEY_RELEASE )
                         && translator_prev_input != KEY_CAPSLOCK 
                         && translator_prev_input != KEY_LSHIFT 
                         && translator_prev_input != KEY_RSHIFT) {
@@ -585,7 +587,7 @@ ushort_t kbd_translator(unsigned char cur_input) {
                 }
             }
             else {
-                if (translator_prev_input != KB_KEY_RELEASE 
+	      if (!(translator_prev_input & KB_KEY_RELEASE )
                     && translator_prev_input != KEY_CAPSLOCK 
                     && translator_prev_input != KEY_LSHIFT 
                     && translator_prev_input != KEY_RSHIFT) {
@@ -607,7 +609,7 @@ ushort_t kbd_translator(unsigned char cur_input) {
 
 int switcher(uint8_t scan) {
     //Switch Console State Machine
-    if(g_switch_state == 0) {
+    if (g_switch_state == 0) {
         if(scan == 0x38) {
             g_switch_state = 1;
             switcher_scancode[0] = scan;
@@ -616,7 +618,7 @@ int switcher(uint8_t scan) {
             switcher_scancode[0] = scan;
         } else {
             g_switch_state = 0;
-            nk_en_console(scan);
+            nk_vc_handle_input(scan);
         }
     } else if(g_switch_state == 1) {
         if(scan == 0x3B || scan == 0x3C) {
@@ -624,8 +626,8 @@ int switcher(uint8_t scan) {
             switcher_scancode[1] = scan;
         } else {
             g_switch_state = 0;
-            nk_en_console(switcher_scancode[0]);
-            nk_en_console(scan);
+            nk_vc_handle_input(switcher_scancode[0]);
+            nk_vc_handle_input(scan);
         }
     } else if(g_switch_state == 2) {
         if(scan == 0xB8) {
@@ -636,9 +638,9 @@ int switcher(uint8_t scan) {
             switcher_scancode[2] = scan;
         } else {
             g_switch_state = 0;
-            nk_en_console(switcher_scancode[0]);
-            nk_en_console(switcher_scancode[1]);
-            nk_en_console(scan);
+            nk_vc_handle_input(switcher_scancode[0]);
+            nk_vc_handle_input(switcher_scancode[1]);
+            nk_vc_handle_input(scan);
           }
     } else if(g_switch_state == 3) {
         if(scan == 0xBB && (switcher_scancode[1] == 0x3B)) {
@@ -649,10 +651,10 @@ int switcher(uint8_t scan) {
             g_switch_state = 0;
         } else {
             g_switch_state = 0;
-            nk_en_console(switcher_scancode[0]);
-            nk_en_console(switcher_scancode[1]);
-            nk_en_console(switcher_scancode[2]);
-            nk_en_console(scan);
+            nk_vc_handle_input(switcher_scancode[0]);
+            nk_vc_handle_input(switcher_scancode[1]);
+            nk_vc_handle_input(switcher_scancode[2]);
+            nk_vc_handle_input(scan);
         }
     } else if(g_switch_state == 4) {
         if(scan == 0xB8) {
@@ -665,10 +667,10 @@ int switcher(uint8_t scan) {
             }
         } else {
             g_switch_state = 0;
-            nk_en_console(switcher_scancode[0]);
-            nk_en_console(switcher_scancode[1]);
-            nk_en_console(switcher_scancode[2]);
-            nk_en_console(scan);
+            nk_vc_handle_input(switcher_scancode[0]);
+            nk_vc_handle_input(switcher_scancode[1]);
+            nk_vc_handle_input(switcher_scancode[2]);
+            nk_vc_handle_input(scan);
         }
     } else if(g_switch_state == 5) {
         if(scan == 0x38) {
@@ -676,8 +678,8 @@ int switcher(uint8_t scan) {
             switcher_scancode[1] = scan;
         } else {
             g_switch_state = 0;
-            nk_en_console(switcher_scancode[0]);
-            nk_en_console(scan);
+            nk_vc_handle_input(switcher_scancode[0]);
+            nk_vc_handle_input(scan);
         }
     } else if(g_switch_state == 6) {
         if(scan == 0x3B || scan == 0x3C) {
@@ -685,9 +687,9 @@ int switcher(uint8_t scan) {
             switcher_scancode[2] = scan;
         } else {
             g_switch_state = 0;
-            nk_en_console(switcher_scancode[0]);
-            nk_en_console(switcher_scancode[1]);
-            nk_en_console(scan);
+            nk_vc_handle_input(switcher_scancode[0]);
+            nk_vc_handle_input(switcher_scancode[1]);
+            nk_vc_handle_input(scan);
         }
     } else if(g_switch_state == 7) {
         if(scan == 0xE0) {
@@ -698,10 +700,10 @@ int switcher(uint8_t scan) {
             switcher_scancode[3] = scan;
         } else {
             g_switch_state = 0;
-            nk_en_console(switcher_scancode[0]);
-            nk_en_console(switcher_scancode[1]);
-            nk_en_console(switcher_scancode[2]);
-            nk_en_console(scan);
+            nk_vc_handle_input(switcher_scancode[0]);
+            nk_vc_handle_input(switcher_scancode[1]);
+            nk_vc_handle_input(switcher_scancode[2]);
+            nk_vc_handle_input(scan);
         }
     } else if(g_switch_state == 8) {
         if(scan == 0xB8) {
@@ -709,11 +711,11 @@ int switcher(uint8_t scan) {
             switcher_scancode[4] = scan;
         } else {
             g_switch_state = 0;
-            nk_en_console(switcher_scancode[0]);
-            nk_en_console(switcher_scancode[1]);
-            nk_en_console(switcher_scancode[2]);
-            nk_en_console(switcher_scancode[3]);
-            nk_en_console(scan);
+            nk_vc_handle_input(switcher_scancode[0]);
+            nk_vc_handle_input(switcher_scancode[1]);
+            nk_vc_handle_input(switcher_scancode[2]);
+            nk_vc_handle_input(switcher_scancode[3]);
+            nk_vc_handle_input(scan);
         }
     } else if(g_switch_state == 9) {
         if(scan == 0xBB && (switcher_scancode[2] == 0x3B)) {
@@ -724,12 +726,12 @@ int switcher(uint8_t scan) {
             g_switch_state = 0;
         } else {
             g_switch_state = 0;
-            nk_en_console(switcher_scancode[0]);
-            nk_en_console(switcher_scancode[1]);
-            nk_en_console(switcher_scancode[2]);
-            nk_en_console(switcher_scancode[3]);
-            nk_en_console(switcher_scancode[4]);
-            nk_en_console(scan);
+            nk_vc_handle_input(switcher_scancode[0]);
+            nk_vc_handle_input(switcher_scancode[1]);
+            nk_vc_handle_input(switcher_scancode[2]);
+            nk_vc_handle_input(switcher_scancode[3]);
+            nk_vc_handle_input(switcher_scancode[4]);
+            nk_vc_handle_input(scan);
         }
     } else if(g_switch_state == 10) {
         if(scan == 0xE0) {
@@ -737,11 +739,11 @@ int switcher(uint8_t scan) {
             switcher_scancode[4] = scan;
         } else {
             g_switch_state = 0;
-            nk_en_console(switcher_scancode[0]);
-            nk_en_console(switcher_scancode[1]);
-            nk_en_console(switcher_scancode[2]);
-            nk_en_console(switcher_scancode[3]);
-            nk_en_console(scan);
+            nk_vc_handle_input(switcher_scancode[0]);
+            nk_vc_handle_input(switcher_scancode[1]);
+            nk_vc_handle_input(switcher_scancode[2]);
+            nk_vc_handle_input(switcher_scancode[3]);
+            nk_vc_handle_input(scan);
         }
     } else if(g_switch_state == 11) {
         if(scan == 0xB8) {
@@ -754,12 +756,12 @@ int switcher(uint8_t scan) {
             }
         } else {
             g_switch_state = 0;
-            nk_en_console(switcher_scancode[0]);
-            nk_en_console(switcher_scancode[1]);
-            nk_en_console(switcher_scancode[2]);
-            nk_en_console(switcher_scancode[3]);
-            nk_en_console(switcher_scancode[4]);
-            nk_en_console(scan);
+            nk_vc_handle_input(switcher_scancode[0]);
+            nk_vc_handle_input(switcher_scancode[1]);
+            nk_vc_handle_input(switcher_scancode[2]);
+            nk_vc_handle_input(switcher_scancode[3]);
+            nk_vc_handle_input(switcher_scancode[4]);
+            nk_vc_handle_input(scan);
         }
     }
     return 0; 
@@ -787,25 +789,23 @@ kbd_handler (excp_entry_t * excp, excp_vec_t vec)
       DEBUG_PRINT("Keyboard: status=0x%x, scancode=0x%x\n", status, scan);
       io_delay();
 
-      if (callback) { 
-	  callback(scan,status);
-	  goto out;
-      }
-
+#ifndef NAUT_CONFIG_VIRTUAL_CONSOLE
+//What's key release here??
+#if NAUT_CONFIG_THREAD_EXIT_KEYCODE == 0xc4
       if (!(scan & KBD_RELEASE)) {
           goto out;
       }
-
-    switcher(scan);
-
-//What's key release here??
-#if NAUT_CONFIG_THREAD_EXIT_KEYCODE == 0xc4
       /* this is a key release */
       if (scan == 0xc4) {
           void * ret = NULL;
           IRQ_HANDLER_END();
           nk_thread_exit(ret);
       }
+#endif
+#else
+
+    switcher(scan);
+
 #endif
       
     }

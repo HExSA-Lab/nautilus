@@ -114,7 +114,6 @@ nk_enqueue_thread_on_runq (nk_thread_t * t, int cpu)
     NK_PROFILE_EXIT();
 }
 
-/*
 static inline void 
 enqueue_thread_on_waitq (nk_thread_t * waiter, nk_thread_queue_t * waitq)
 {
@@ -124,7 +123,6 @@ enqueue_thread_on_waitq (nk_thread_t * waiter, nk_thread_queue_t * waitq)
 
     nk_enqueue_entry_atomic(waitq, &(waiter->wait_node));
 }
-*/
 
 static inline nk_thread_t*
 dequeue_thread_from_waitq (nk_thread_t * waiter, nk_thread_queue_t * waitq)
@@ -884,7 +882,7 @@ nk_yield (void)
     uint8_t flags       = irq_disable_save();
 
     if (nk_queue_empty(per_cpu_get(run_q))) {
-	irq_enable_restore(flags);
+        irq_enable_restore(flags);
         return;
     }
     /* only put myself on the run queue if there 
