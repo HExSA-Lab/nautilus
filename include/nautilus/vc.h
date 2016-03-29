@@ -11,12 +11,14 @@
  * http://xtack.sandia.gov/hobbes
  *
  * Copyright (c) 2016, Yang Wu, Fei Luo and Yuanhui Yang
+ * Copyright (c) 2016, Peter Dinda
  * Copyright (c) 2016, The V3VEE Project  <http://www.v3vee.org> 
  *                     The Hobbes Project <http://xstack.sandia.gov/hobbes>
  * All rights reserved.
  *
  * Authors: Yang Wu, Fei Luo and Yuanhui Yang
  *          {YangWu2015, FeiLuo2015, YuanhuiYang2015}@u.northwestern.edu
+ *          Peter Dinda <pdinda@northwestern.edu>
  *
  * This is free software.  You are permitted to use,
  * redistribute, and modify it as specified in the file "LICENSE.txt".
@@ -25,13 +27,8 @@
 #ifndef __NK_VC
 #define __NK_VC
 
-// Keys and scancodes are represented internally as 16 bits
-// so we can indicate nonexistence (via -1)
-typedef uint16_t nk_keycode_t;
-typedef uint16_t nk_scancode_t;
 
-#define NO_KEY ((nk_keycode_t)(0xffff))
-#define NO_SCANCODE ((nk_scancode_t)(0xffff))
+#include <dev/kbd.h>
 
 enum nk_vc_type {RAW, COOKED, RAW_NOQUEUE};
 struct nk_virtual_console;
@@ -51,6 +48,8 @@ int nk_switch_to_next_vc();
 
 int nk_vc_putchar(uint8_t c);
 int nk_vc_puts(char *s); 
+int nk_vc_printf(char *fmt, ...);
+
 int nk_vc_setattr(uint8_t attr);
 int nk_vc_clear(uint8_t attr);
 int nk_vc_scrollup (struct nk_virtual_console *vc);
@@ -61,11 +60,14 @@ int nk_vc_enqueue_keycode(struct nk_virtual_console *vc, nk_keycode_t key);
 nk_scancode_t nk_vc_dequeue_scancode(struct nk_virtual_console *vc);
 nk_keycode_t  nk_vc_dequeue_keycode(struct nk_virtual_console *vc);
 
-nk_keycode_t nk_vc_getchar();
+nk_keycode_t  nk_vc_get_keycode();
 nk_scancode_t nk_vc_get_scancode();
 
-int nk_vc_handle_input(uint8_t scan);
+int nk_vc_getchar();
+
+int nk_vc_handle_input(nk_scancode_t scan);
 
 int nk_vc_init();
+int nk_vc_is_active();
 int nk_vc_deinit();
 #endif

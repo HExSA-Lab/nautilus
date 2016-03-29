@@ -11,12 +11,14 @@
  * http://xtack.sandia.gov/hobbes
  *
  * Copyright (c) 2016, Yang Wu, Fei Luo and Yuanhui Yang
+ * Copyright (c) 2016, Peter Dinda
  * Copyright (c) 2016, The V3VEE Project  <http://www.v3vee.org> 
  *                     The Hobbes Project <http://xstack.sandia.gov/hobbes>
  * All rights reserved.
  *
  * Authors: Yang Wu, Fei Luo and Yuanhui Yang
  *          {YangWu2015, FeiLuo2015, YuanhuiYang2015}@u.northwestern.edu
+ *          Peter Dinda <pdinda@northwestern.edu>
  *
  * This is free software.  You are permitted to use,
  * redistribute, and modify it as specified in the file "LICENSE.txt".
@@ -29,6 +31,7 @@
 #include <nautilus/cga.h>
 #include <dev/kbd.h>
 #include <nautilus/vc.h>
+#include <nautilus/printk.h>
 
 #ifndef NAUT_CONFIG_DEBUG_VIRTUAL_CONSOLE
 #undef DEBUG_PRINT
@@ -314,6 +317,7 @@ int nk_vc_putchar(uint8_t c)
   int rc;
   struct nk_virtual_console *vc = get_cur_thread()->vc;
   if (!vc) { 
+    // dump interrupt handler stuff to default console
     vc = default_vc;
   }
   spin_lock(&vc->buf_lock);
@@ -337,6 +341,20 @@ int nk_vc_puts(char *s)
   _vc_putchar('\n');
   spin_unlock(&vc->buf_lock);
   return 0;
+}
+
+int nk_vc_printf(char *fmt, ...)
+{
+  char buf[256];
+
+  va_list args;
+  int i;
+
+  va_start(args, fmt);
+  i=vsnprintf(buf,256,fmt,args);
+  va_end(args);
+  nk_vc_puts(buf);
+  return i;
 }
 
 int nk_vc_setattr(uint8_t attr)
@@ -503,7 +521,7 @@ void nk_vc_wait()
 }
 
 
-nk_keycode_t nk_vc_getchar() 
+nk_keycode_t nk_vc_get_keycode() 
 {
   struct nk_virtual_console *vc = get_cur_thread()->vc;
 
@@ -512,17 +530,76 @@ nk_keycode_t nk_vc_getchar()
   }
 
   if (vc->type != COOKED) {
-    ERROR("Incorrect type of VC for getchar\n");
+    ERROR("Incorrect type of VC for get_keycode\n");
     return NO_KEY;
   }
 
   while (1) { 
     nk_keycode_t k = nk_dequeue_keycode(vc);
     if (k!=NO_KEY) { 
-      printk("Returning %x\n",k);
+      DEBUG("Returning keycode 0x%x\n",k);
       return k;
     } 
     nk_vc_wait();
+  }
+}
+
+int nk_vc_getchar()
+{
+  nk_keycode_t key;
+
+  while (1) { 
+    key = nk_vc_get_keycode();
+    
+    switch (key) { 
+    case KEY_UNKNOWN:
+    case KEY_LCTRL:
+    case KEY_RCTRL:
+    case KEY_LSHIFT:
+    case KEY_RSHIFT:
+    case KEY_PRINTSCRN:
+    case KEY_LALT:
+    case KEY_RALT:
+    case KEY_CAPSLOCK:
+    case KEY_F1:
+    case KEY_F2:
+    case KEY_F3:
+    case KEY_F4:
+    case KEY_F5:
+    case KEY_F6:
+    case KEY_F7:
+    case KEY_F8:
+    case KEY_F9:
+    case KEY_F10:
+    case KEY_F11:
+    case KEY_F12:
+    case KEY_NUMLOCK:
+    case KEY_SCRLOCK:
+    case KEY_KPHOME:
+    case KEY_KPUP:
+    case KEY_KPMINUS:
+    case KEY_KPLEFT:
+    case KEY_KPCENTER:
+    case KEY_KPRIGHT:
+    case KEY_KPPLUS:
+    case KEY_KPEND:
+    case KEY_KPDOWN:
+    case KEY_KPPGDN:
+    case KEY_KPINSERT:
+    case KEY_KPDEL:
+    case KEY_SYSREQ:
+      DEBUG("Ignoring special key 0x%x\n",key);
+      continue;
+      break;
+    default: {
+      int c = key&0xff;
+      if (c=='\r') { 
+	c='\n';
+      }
+      DEBUG("Regular key 0x%x ('%c')\n", c, c);
+      return c;
+    }
+    }
   }
 }
 
@@ -550,14 +627,14 @@ nk_scancode_t nk_vc_get_scancode()
 
 static int enqueue_scancode_as_keycode(struct nk_virtual_console *cur_vc, uint8_t scan)
 {
-  nk_keycode_t key = kbd_translator(scan);
-  if(key != 0x0000) {
+  nk_keycode_t key = kbd_translate(scan);
+  if(key != NO_KEY) {
     nk_enqueue_keycode(cur_vc, key);
   }
   return 0;
 }
 
-int nk_vc_handle_input(uint8_t scan) 
+int nk_vc_handle_input(nk_scancode_t scan) 
 {
   DEBUG("Input: %x\n",scan);
   if(cur_vc->type == RAW) {
@@ -581,8 +658,13 @@ int nk_vc_init() {
 
   cur_vc = default_vc;
   copy_display_to_vc(cur_vc);
-  nk_vc_puts("Welcome to Nautilus Virtual Console System.\n--Yang Wu, Fei Luo, Yuanhui Yang.");
+  nk_vc_printf("Welcome to Nautilus Virtual Console System.\n--Yang Wu, Fei Luo, Yuanhui Yang.");
   return 0;
+}
+
+int nk_vc_is_active()
+{
+  return cur_vc!=0;
 }
 
 int nk_vc_deinit()
