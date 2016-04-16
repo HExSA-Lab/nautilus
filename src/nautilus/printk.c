@@ -34,7 +34,6 @@
 #include <nautilus/naut_string.h>
 #include <nautilus/naut_types.h>
 #include <nautilus/doprnt.h>
-#include <nautilus/cga.h>
 #include <nautilus/spinlock.h>
 #include <nautilus/printk.h>
 #include <nautilus/backtrace.h>
@@ -43,15 +42,12 @@
 #include <nautilus/paging.h>
 #include <nautilus/errno.h>
 #include <nautilus/math.h>
+#include <nautilus/term.h>
+#include <nautilus/vc.h>
 
-
-#ifdef NAUT_CONFIG_HVM_HRT
-#define do_putchar(x) do { debug_putc(x);} while (0)
-#define do_puts(x) do {debug_puts(x);} while (0)
-#else
-#define do_putchar(x) do {putchar(x);} while (0)
-#define do_puts(x)    do {puts(x);} while (0)
-#endif
+// All output is handled via the virtual console
+#define do_putchar(x) do { nk_vc_putchar(x);} while (0)
+#define do_puts(x)    do { nk_vc_puts(x); } while (0)
 
 spinlock_t printk_lock;
 
@@ -70,12 +66,8 @@ flush (struct printk_state *state)
 	int i;
 
 	for (i = 0; i < state->index; i++) {
-#ifdef NAUT_CONFIG_SERIAL_REDIRECT
-        serial_putchar(state->buf[i]);
-#else
-		do_putchar(state->buf[i]);
-#endif
-    }
+	  do_putchar(state->buf[i]);
+	}
 
 	state->index = 0;
 }
@@ -89,22 +81,13 @@ printk_char (char * arg, int c)
 	if (c == '\n')
 	{
 		state->buf[state->index] = 0;
-#ifdef NAUT_CONFIG_SERIAL_REDIRECT
-        serial_putln(state->buf);
-#else
 		do_puts(state->buf);
-#endif
-
 		state->index = 0;
 	}
 	else if ((c == 0) || (state->index >= PRINTK_BUFMAX))
 	{
 		flush(state);
-#ifdef NAUT_CONFIG_SERIAL_REDIRECT
-        serial_putchar(c);
-#else
 		do_putchar(c);
-#endif
 	}
 	else
 	{
@@ -167,30 +150,6 @@ printk (const char *fmt, ...)
 	va_end(args);
 
 	return err;
-}
-
-int 
-printk_color (uint8_t color, const char *fmt, ...)
-{
-    va_list args;
-    int err;
-    uint8_t old_color = term_getcolor();
-
-    term_setcolor(color);
-
-	va_start(args, fmt);
-	err = vprintk(fmt, args);
-	va_end(args);
-
-    term_setcolor(old_color);
-
-	return err;
-}
-
-void 
-show_splash (void)
-{
-    printk_color(COLOR_LIGHT_GREEN, NAUT_WELCOME);
 }
 
 const char hex_asc[] = "0123456789abcdef";

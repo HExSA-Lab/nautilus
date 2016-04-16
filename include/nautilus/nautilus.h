@@ -27,15 +27,16 @@
 #include <dev/serial.h>
 #include <nautilus/naut_types.h>
 #include <nautilus/instrument.h>
+#include <nautilus/vc.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-
-#define DEBUG_PRINT(fmt, args...)   printk("DEBUG: " fmt, ##args)
-#define ERROR_PRINT(fmt, args...)   printk("ERROR at %s(%d): " fmt, __FILE__, __LINE__, ##args)
-#define WARN_PRINT(fmt, args...)    printk("WARNING: " fmt, ##args)
+#define DEBUG_PRINT(fmt, args...)   nk_vc_log_wrap("DEBUG: " fmt, ##args)
+#define ERROR_PRINT(fmt, args...)   nk_vc_log_wrap("ERROR at %s(%d): " fmt, __FILE__, __LINE__, ##args)
+#define WARN_PRINT(fmt, args...)    nk_vc_log_wrap("WARNING: " fmt, ##args)
+#define INFO_PRINT(fmt, args...)    nk_vc_log_wrap(fmt, ##args)
 
 #define panic(fmt, args...)         panic("PANIC at %s(%d): " fmt, __FILE__, __LINE__, ##args)
 

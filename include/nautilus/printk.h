@@ -35,8 +35,6 @@ void panic (const char * fmt, ...);
 int printk (const char * fmt, ...);
 int vprintk(const char * fmt, va_list args);
 int early_printk (const char * fmt, va_list args);
-int printk_color (uint8_t color, const char * fmt, ...);
-void show_splash(void);
 unsigned long simple_strtoul(const char*, char**, unsigned int);
 long simple_strtol(const char*, char**, unsigned int);
 unsigned long long simple_strtoull(const char*, char**, unsigned int);
@@ -56,16 +54,6 @@ int sscanf(const char * buf, const char * fmt, ...);
 
 void warn_slowpath(const char * file, int line, const char * fmt, ...);
 
-#define NAUT_WELCOME \
-"Welcome to                                         \n" \
-"    _   __               __   _  __                \n" \
-"   / | / /____ _ __  __ / /_ (_)/ /__  __ _____    \n" \
-"  /  |/ // __ `// / / // __// // // / / // ___/    \n" \
-" / /|  // /_/ // /_/ // /_ / // // /_/ /(__  )     \n" \
-"/_/ |_/ \\__,_/ \\__,_/ \\__//_//_/ \\__,_//____/  \n" \
-"+===============================================+  \n" \
-" Kyle C. Hale (c) 2014 | Northwestern University   \n" \
-"+===============================================+  \n\n"
 
 #ifdef __cplusplus
 }
