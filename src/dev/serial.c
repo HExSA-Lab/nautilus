@@ -106,8 +106,6 @@ serial_init_addr (uint16_t io_addr)
   outb(0x08, io_addr + 4);
 }
 
-extern void putchar(char c);
-
 void 
 serial_putchar (uchar_t c)
 {
@@ -117,7 +115,6 @@ serial_putchar (uchar_t c)
     }
 
     if (!serial_device_ready) {
-        putchar(c);
         return;
     }
 
@@ -155,13 +152,18 @@ serial_putlnn (const char * line, int len)
 
 
 void 
-serial_putln (const char * line) 
+serial_write (const char *buf) 
 {
-  while (*line) {
-      serial_putchar(*line);
-      ++line;
+  while (*buf) {
+      serial_putchar(*buf);
+      ++buf;
   }
+}
 
+void 
+serial_puts( const char *buf)
+{
+  serial_write(buf);
   serial_putchar('\n');
 }
 
