@@ -30,10 +30,14 @@
 
 #include <dev/kbd.h>
 
+struct nk_thread;
+
 enum nk_vc_type {RAW, COOKED, RAW_NOQUEUE};
 struct nk_virtual_console;
 
-struct nk_virtual_console *nk_create_vc(enum nk_vc_type new_vc_type,
+struct nk_virtual_console *nk_create_vc(char *name,
+					enum nk_vc_type new_vc_type,
+					uint8_t attr,
 					void (*raw_noqueue_callback)(nk_scancode_t)); 
 
 int nk_destroy_vc(struct nk_virtual_console *vc);
@@ -45,10 +49,14 @@ int nk_release_vc(struct nk_thread *thread);
 int nk_switch_to_vc(struct nk_virtual_console *vc);
 int nk_switch_to_prev_vc();
 int nk_switch_to_next_vc();
+int nk_switch_to_vc_list();
 
 int nk_vc_putchar(uint8_t c);
-int nk_vc_puts(char *s); 
+int nk_vc_print(char *s); 
+int nk_vc_puts(char *s);
 int nk_vc_printf(char *fmt, ...);
+int nk_vc_log(char *fmt, ...);
+
 
 int nk_vc_setattr(uint8_t attr);
 int nk_vc_clear(uint8_t attr);
@@ -60,9 +68,10 @@ int nk_vc_enqueue_keycode(struct nk_virtual_console *vc, nk_keycode_t key);
 nk_scancode_t nk_vc_dequeue_scancode(struct nk_virtual_console *vc);
 nk_keycode_t  nk_vc_dequeue_keycode(struct nk_virtual_console *vc);
 
-nk_keycode_t  nk_vc_get_keycode();
-nk_scancode_t nk_vc_get_scancode();
+nk_keycode_t  nk_vc_get_keycode(int wait);
+nk_scancode_t nk_vc_get_scancode(int wait);
 
+int nk_vc_getchar_extended(int wait);
 int nk_vc_getchar();
 
 int nk_vc_handle_input(nk_scancode_t scan);
@@ -70,4 +79,30 @@ int nk_vc_handle_input(nk_scancode_t scan);
 int nk_vc_init();
 int nk_vc_is_active();
 int nk_vc_deinit();
+
+
+/* 
+   These wrappers can be used instead of 
+   the log and printf functions in code that
+   may run before the thread stack is coherent
+*/
+
+#define nk_vc_log_wrap(fmt, args...)		\
+do {						\
+ if (nk_vc_is_active()) {			\
+   nk_vc_log(fmt, ##args);			\
+ } else {					\
+   printk(fmt, ##args);				\
+ }                                              \
+} while (0)
+
+#define nk_vc_printf_wrap(fmt, args...)		\
+do {						\
+ if (nk_vc_is_active()) {			\
+   nk_vc_printf(fmt, ##args);			\
+ } else {					\
+   printk(fmt, ##args);				\
+ }                                              \
+} while (0)
+
 #endif
