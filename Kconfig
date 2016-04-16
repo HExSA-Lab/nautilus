@@ -149,20 +149,25 @@ config USE_TICKETLOCKS
       Uses ticketlocks (similar to Linux impl.) instead of
       default spinlocks
 
-config VIRTUAL_CONSOLE
-    bool "Use Virtual Console To Interact With User"
+config VIRTUAL_CONSOLE_SERIAL_MIRROR
+    bool "Mirror virtual console log output to serial"
     default n
-    depends on X86_64_HOST
     help
-	Allows multiple consoles multiplexed on the 
-	main display and keyboard
+	Writes any log output 
+        traffic to serial port in addition to its
+        target virtual console
 
-config DEBUG_VIRTUAL_CONSOLE
-    bool "Debug Virtual Console"
+config VIRTUAL_CONSOLE_SERIAL_MIRROR_ALL
+    bool "Mirror all virtual console output to serial"
     default n
-    depends on VIRTUAL_CONSOLE
+    depends on VIRTUAL_CONSOLE_SERIAL_MIRROR
     help
-        Turn on debug output for VC
+	Writes all printfs, logs, puts, putchars, etc
+        traffic to serial port in addition to their
+        target virtual consoles;  direct displays
+        (screen clears, display char, etc) are not
+        currently mirrored.
+
 
 endmenu
 
@@ -348,6 +353,12 @@ menu Debugging
       default n
       help
         Turns on debug prints for NUMA code
+
+    config DEBUG_VIRTUAL_CONSOLE
+      bool "Debug Virtual Console"
+      default n
+      help
+        Turn on debug output for VC
 
 endmenu
 

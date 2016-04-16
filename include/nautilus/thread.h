@@ -153,9 +153,7 @@ struct nk_thread {
     void * input;
     nk_thread_fun_t fun;
 
-#ifdef NAUT_CONFIG_VIRTUAL_CONSOLE
     struct nk_virtual_console *vc;
-#endif
 
     const void * tls[TLS_MAX_KEYS];
 

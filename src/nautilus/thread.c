@@ -41,7 +41,7 @@ extern uint8_t malloc_cpus_ready;
 #undef  DEBUG_PRINT
 #define DEBUG_PRINT(fmt, args...)
 #endif
-#define SCHED_PRINT(fmt, args...) printk("SCHED: " fmt, ##args)
+#define SCHED_PRINT(fmt, args...) INFO_PRINT("SCHED: " fmt, ##args)
 #define SCHED_DEBUG(fmt, args...) DEBUG_PRINT("SCHED: " fmt, ##args)
 #define SCHED_WARN(fmt, args...)  WARN_PRINT("SCHED: " fmt, ##args)
 

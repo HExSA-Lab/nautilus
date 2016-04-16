@@ -27,23 +27,21 @@
 #include <nautilus/irq.h>
 #include <nautilus/thread.h>
 #include <dev/kbd.h>
-#ifdef NAUT_CONFIG_VIRTUAL_CONSOLE
 #include <nautilus/vc.h>
-#endif
 
 #ifndef NAUT_CONFIG_DEBUG_KBD
 #undef DEBUG_PRINT
 #define DEBUG_PRINT(fmt, args...) 
 #endif
 
-#define ERROR(fmt, args...) printk("kbd: ERROR: " fmt, ##args)
-#define DEBUG(fmt, args...) DEBUG_PRINT("vc: DEBUG: " fmt, ##args)
-#define INFO(fmt, args...) printk("kbd: " fmt, ##args)
+#define ERROR(fmt, args...) ERROR_PRINT("kbd: " fmt, ##args)
+#define DEBUG(fmt, args...) DEBUG_PRINT("kbd: " fmt, ##args)
+#define INFO(fmt, args...)  INFO_PRINT("kbd: " fmt, ##args)
 
 
 #define SCAN_MAX_QUEUE 16
 
-static enum { VC_START, VC_CONTEXT, VC_PREV, VC_NEXT, VC_PREV_ALT, VC_NEXT_ALT}  switch_state = VC_START;
+static enum { VC_START, VC_CONTEXT, VC_PREV, VC_NEXT, VC_MENU, VC_PREV_ALT, VC_NEXT_ALT, VC_MENU_ALT}  switch_state = VC_START;
 static uint8_t switcher_num_queued=0;
 static nk_scancode_t switcher_scancode_queue[SCAN_MAX_QUEUE];
 
@@ -175,11 +173,9 @@ static void dequeue_scancodes()
 {
   int i;
 
-#ifdef NAUT_CONFIG_VIRTUAL_CONSOLE
   for (i=0;i<switcher_num_queued;i++) { 
     nk_vc_handle_input(switcher_scancode_queue[i]);
   }
-#endif
 
   switcher_num_queued=0;
 }
@@ -268,12 +264,12 @@ nk_keycode_t kbd_translate(nk_scancode_t scan)
   }
 }
 
-#ifdef NAUT_CONFIG_VIRTUAL_CONSOLE
 
 #define ALT 0x38
 #define ONE 0x2
 #define TWO 0x3
-
+#define TILDE 0x29
+ 
 /*
   Special case handling of scancodes relating to virtual
   console switching.  This happens regardless of whether
@@ -304,6 +300,9 @@ static int switcher(nk_scancode_t scan)
     } else if (scan==TWO) { 
       DEBUG("VC NEXT\n");
       switch_state = VC_NEXT;
+    } else if (scan==TILDE) {
+      DEBUG("VC MENU\n");
+      switch_state = VC_MENU;
     } else {
       DEBUG("VC RESTART\n");
       dequeue_scancodes();
@@ -324,6 +323,16 @@ static int switcher(nk_scancode_t scan)
     if (scan==(TWO | KB_KEY_RELEASE)) { 
       DEBUG("VC NEXT ALT\n");
       switch_state = VC_NEXT_ALT;
+    } else {
+      DEBUG("VC RESTART\n");
+      switch_state = VC_START;
+      dequeue_scancodes();
+    }
+    break;
+  case VC_MENU:
+    if (scan==(TILDE | KB_KEY_RELEASE)) { 
+      DEBUG("VC MENU ALT\n");
+      switch_state = VC_MENU_ALT;
     } else {
       DEBUG("VC RESTART\n");
       switch_state = VC_START;
@@ -353,6 +362,18 @@ static int switcher(nk_scancode_t scan)
       dequeue_scancodes();
       switch_state = VC_START;
     }
+    break;  
+  case VC_MENU_ALT:
+    if (scan==(ALT | KB_KEY_RELEASE)) { 
+      DEBUG("VC SWITCH TO MENU\n");
+      nk_switch_to_vc_list();
+      switch_state = VC_START;
+      flush_scancodes();
+    } else {
+      DEBUG("VC RESTART\n");
+      dequeue_scancodes();
+      switch_state = VC_START;
+    }
     break;
   default:
     DEBUG("VC HUH?\n");
@@ -363,7 +384,6 @@ static int switcher(nk_scancode_t scan)
   return 0;
 }
 
-#endif
 
 static int 
 kbd_handler (excp_entry_t * excp, excp_vec_t vec)
@@ -394,9 +414,7 @@ kbd_handler (excp_entry_t * excp, excp_vec_t vec)
     }
 #endif
     
-#ifdef NAUT_CONFIG_VIRTUAL_CONSOLE
     switcher(scan);
-#endif
     
   }
   

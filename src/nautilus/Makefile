@@ -2,6 +2,7 @@ obj-y += \
 	fmtout.o \
 	printk.o \
 	doprnt.o \
+	vc.o \
 	idt.o \
 	queue.o \
 	irq.o \
@@ -34,4 +35,3 @@ obj-y += \
 obj-$(NAUT_CONFIG_PROFILE) += instrument.o
 obj-$(NAUT_CONFIG_XEON_PHI) += sfi.o
 
-obj-$(NAUT_CONFIG_VIRTUAL_CONSOLE) += vc.o 

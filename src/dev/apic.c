@@ -40,7 +40,7 @@
 #endif
 
 #define APIC_DEBUG(fmt, args...) DEBUG_PRINT("APIC: " fmt, ##args)
-#define APIC_PRINT(fmt, args...) printk("APIC: " fmt, ##args)
+#define APIC_PRINT(fmt, args...) INFO_PRINT("APIC: " fmt, ##args)
 #define APIC_WARN(fmt, args...)  WARN_PRINT("APIC: " fmt, ##args)
 
 
@@ -414,7 +414,6 @@ apic_timer_setup (struct apic_dev * apic, uint32_t quantum)
     busfreq = 1100000000;
     APIC_DEBUG("Detected APIC 0x%x bus frequency as %u.%u MHz\n", apic->id, busfreq/1000000, busfreq%1000000);
     tmp = busfreq/(1000/quantum)/APIC_TIMER_DIV;
-
     APIC_DEBUG("Setting APIC timer Initial Count Reg to %u\n", tmp);
     apic_write(apic, APIC_REG_TMICT, (tmp < APIC_TIMER_DIV) ? APIC_TIMER_DIV : tmp);
     apic_write(apic, APIC_REG_LVTT, 0 | APIC_DEL_MODE_FIXED | APIC_TIMER_INT_VEC | APIC_TIMER_PERIODIC);

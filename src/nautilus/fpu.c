@@ -28,7 +28,6 @@
 #include <nautilus/idt.h>
 #include <nautilus/irq.h>
 #include <nautilus/msr.h>
-#include <nautilus/cga.h>
 
 #ifndef NAUT_CONFIG_DEBUG_FPU
 #undef DEBUG_PRINT
