@@ -304,6 +304,28 @@ __early_init_hrt (struct naut_info * naut)
     return 0;
 }
 
+void 
+hrt_putchar (char c)
+{ 
+    outb(c, 0xc0c0);
+}
+
+
+void 
+hrt_print (const char * s) 
+{
+    while (*s) {
+        hrt_putchar(*s);
+        s++;
+    }
+}
+
+void 
+hrt_puts (const char *s)
+{
+   hrt_print(s); 
+   hrt_putchar('\n');
+}
 
 int
 hvm_hrt_init (void)

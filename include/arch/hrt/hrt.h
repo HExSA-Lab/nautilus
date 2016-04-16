@@ -100,6 +100,10 @@ int nautilus_hrt_upcall_handler (excp_entry_t * excp, excp_vec_t vec);
 int __early_init_hrt (struct naut_info * naut);
 int hrt_init_cpus (struct sys_info * sys);
 int hrt_init_ioapics (struct sys_info * sys);
+
+void hrt_putchar (char c);
+void hrt_puts (const char * s);
+
 int hvm_hrt_init (void);
 
 

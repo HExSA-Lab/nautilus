@@ -45,4 +45,14 @@ phi_sbox_write (uint32_t offset, uint32_t val)
 
 
 
+uint32_t phi_cons_read_reg(uint32_t off);
+void     phi_cons_write_reg (uint32_t off, uint32_t val);
+void     phi_cons_wait_for_out_cmpl (void);
+void     phi_cons_notify_redraw (void);
+void     phi_cons_notify_scrollup (void);
+void     phi_cons_notify_char_write (uint16_t x, uint16_t y);
+void     phi_cons_notify_line_draw (unsigned row);
+void     phi_cons_write_fb_and_notify (uint16_t x, uint16_t y, char c, uint8_t color);
+    
+
 #endif
