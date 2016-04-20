@@ -23,7 +23,7 @@
 #define __NAUTILUS_MAIN__
 
 #include <nautilus/nautilus.h>
-#include <nautilus/cga.h>
+#include <nautilus/vc.h>
 #include <nautilus/paging.h>
 #include <nautilus/idt.h>
 #include <nautilus/spinlock.h>
@@ -158,6 +158,17 @@ runtime_init (void)
 #endif
 }
 
+#define NAUT_WELCOME \
+"Welcome to                                         \n" \
+"    _   __               __   _  __                \n" \
+"   / | / /____ _ __  __ / /_ (_)/ /__  __ _____    \n" \
+"  /  |/ // __ `// / / // __// // // / / // ___/    \n" \
+" / /|  // /_/ // /_/ // /_ / // // /_/ /(__  )     \n" \
+"/_/ |_/ \\__,_/ \\__,_/ \\__//_//_/ \\__,_//____/  \n" \
+"+===============================================+  \n" \
+" Kyle C. Hale (c) 2014 | Northwestern University   \n" \
+"+===============================================+  \n\n"
+
 
 void
 hrt_bsp_init (unsigned long mbd, 
@@ -168,12 +179,9 @@ hrt_bsp_init (unsigned long mbd,
 
     memset(naut, 0, sizeof(struct naut_info));
 
-    /* THIS will be arch-specific */
-    term_init();
-
     spinlock_init(&printk_lock);
 
-    show_splash();
+    nk_vc_print(NAUT_WELCOME);
 
     setup_idt();
 
@@ -235,6 +243,8 @@ hrt_bsp_init (unsigned long mbd,
     nk_cxx_init();
 #endif 
 
+    nk_vc_init();
+
     /* interrupts on */
     sti();
 
@@ -271,11 +281,7 @@ default_init (unsigned long mbd,
 
     memset(naut, 0, sizeof(struct naut_info));
 
-    term_init();
-
     spinlock_init(&printk_lock);
-
-    show_splash();
 
     setup_idt();
 
@@ -358,6 +364,8 @@ default_init (unsigned long mbd,
     // Assuming we don't encounter C++ before here
     nk_cxx_init();
 #endif 
+
+    nk_vc_init();
 
     /* interrupts on */
     sti();

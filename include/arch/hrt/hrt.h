@@ -102,6 +102,7 @@ int hrt_init_cpus (struct sys_info * sys);
 int hrt_init_ioapics (struct sys_info * sys);
 
 void hrt_putchar (char c);
+void hrt_print(const char *s);
 void hrt_puts (const char * s);
 
 int hvm_hrt_init (void);

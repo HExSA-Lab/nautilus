@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
@@ -23,7 +23,6 @@
 #define __NAUTILUS_MAIN__
 
 #include <nautilus/nautilus.h>
-#include <nautilus/cga.h>
 #include <nautilus/paging.h>
 #include <nautilus/idt.h>
 #include <nautilus/spinlock.h>
@@ -44,6 +43,7 @@
 #include <nautilus/mm.h>
 #include <nautilus/libccompat.h>
 #include <nautilus/barrier.h>
+#include <nautilus/vc.h>
 
 #include <dev/apic.h>
 #include <dev/pci.h>
@@ -53,8 +53,7 @@
 #include <dev/i8254.h>
 #include <dev/kbd.h>
 #include <dev/serial.h>
-
-#include <nautilus/vc.h>
+#include <dev/vga.h>
 
 #ifdef NAUT_CONFIG_NDPC_RT
 #include "ndpc_preempt_threads.h"
@@ -160,6 +159,58 @@ runtime_init (void)
 #endif
 }
 
+#define NAUT_WELCOME \
+"Welcome to                                         \n" \
+"    _   __               __   _  __                \n" \
+"   / | / /____ _ __  __ / /_ (_)/ /__  __ _____    \n" \
+"  /  |/ // __ `// / / // __// // // / / // ___/    \n" \
+" / /|  // /_/ // /_/ // /_ / // // /_/ /(__  )     \n" \
+"/_/ |_/ \\__,_/ \\__,_/ \\__//_//_/ \\__,_//____/  \n" \
+"+===============================================+  \n" \
+" Kyle C. Hale (c) 2014 | Northwestern University   \n" \
+"+===============================================+  \n\n"
+
+
+void shell(void *in, void **out)
+{
+  struct nk_virtual_console *vc = nk_create_vc("shell",COOKED, 0x9f, 0);
+  
+  if (!vc) { 
+    printk("Cannot create virtual console for shell\n");
+    return;
+  }
+  
+  if (nk_bind_vc(get_cur_thread(), vc)) { 
+    printk("Cannot bind virtual console for shell\n");
+    return;
+  }
+   
+  nk_switch_to_vc(vc);
+  
+  nk_vc_clear(0x9f);
+   
+  nk_vc_puts(NAUT_WELCOME);
+  
+  while (1) {  
+    nk_keycode_t k = nk_vc_getchar();
+    if (k!=-1) {
+      nk_vc_putchar(k);
+    }
+  }
+}
+
+int start_shell()
+{
+  nk_thread_id_t tid;
+
+  nk_thread_start(shell, 0, 0, 0, PAGE_SIZE, &tid, -1);
+  
+  printk("Shell launched\n");
+
+  return 0;
+}
+
+
 
 extern struct naut_info * smp_ap_stack_switch(uint64_t, uint64_t, struct naut_info*);
 
@@ -171,7 +222,7 @@ init (unsigned long mbd,
 
     memset(naut, 0, sizeof(struct naut_info));
 
-    term_init();
+    vga_init();
 
     spinlock_init(&printk_lock);
 
@@ -180,10 +231,10 @@ init (unsigned long mbd,
     nk_int_init(&(naut->sys));
 
     serial_init();
-
-    show_splash();
-
+    
     detect_cpu();
+
+    serial_puts("Here");
 
     /* setup the temporary boot-time allocator */
     mm_boot_init(mbd);
@@ -237,6 +288,7 @@ init (unsigned long mbd,
 
     nk_sched_init();
 
+
     /* we now switch away from the boot-time stack in low memory */
     naut = smp_ap_stack_switch(get_cur_thread()->rsp, get_cur_thread()->rsp, naut);
 
@@ -267,9 +319,12 @@ init (unsigned long mbd,
     /* interrupts on */
     sti();
 
+    nk_vc_init();
+
+    start_shell();
+
     runtime_init();
 
-    nk_vc_init();
     
     printk("Nautilus boot thread yielding (indefinitely)\n");
 

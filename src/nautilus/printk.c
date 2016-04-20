@@ -42,7 +42,6 @@
 #include <nautilus/paging.h>
 #include <nautilus/errno.h>
 #include <nautilus/math.h>
-#include <nautilus/term.h>
 #include <nautilus/vc.h>
 
 // All output is handled via the virtual console

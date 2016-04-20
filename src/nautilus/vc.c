@@ -28,7 +28,6 @@
 #include <nautilus/thread.h>
 #include <nautilus/queue.h>
 #include <nautilus/list.h>
-#include <nautilus/term.h>
 #include <dev/kbd.h>
 #include <nautilus/vc.h>
 #include <nautilus/printk.h>
@@ -478,10 +477,10 @@ int nk_vc_print(char *s)
     vga_print(s);
 #endif
 #ifdef NAUT_CONFIG_HVM_HRT
-    hrt_print(c);
+    hrt_print(s);
 #endif
 #ifdef NAUT_CONFIG_XEON_PHI
-    phi_cons_print(c);
+    phi_cons_print(s);
 #endif
 
   }
