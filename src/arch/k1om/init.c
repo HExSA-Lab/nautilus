@@ -22,7 +22,6 @@
  */
 #define __NAUTILUS_MAIN__
 #include <nautilus/nautilus.h>
-#include <nautilus/cga.h>
 #include <nautilus/paging.h>
 #include <nautilus/idt.h>
 #include <nautilus/spinlock.h>
@@ -40,6 +39,7 @@
 #include <nautilus/random.h>
 #include <nautilus/numa.h>
 #include <nautilus/atomic.h>
+#include <nautilus/vc.h>
 
 #include <nautilus/libccompat.h>
 
@@ -134,11 +134,9 @@ init (unsigned long mbd, unsigned long magic)
     
     memset(naut, 0, sizeof(struct naut_info));
 
-    term_init();
+    phi_cons_init();
 
     spinlock_init(&printk_lock);
-    
-    show_splash();
     
     setup_idt();
 
@@ -175,6 +173,8 @@ init (unsigned long mbd, unsigned long magic)
 
     nk_sched_init();
 
+    naut = smp_ap_stack_switch(get_cur_thread()->rsp, get_cur_thread()->rsp, naut);
+
     smp_setup_xcall_bsp(naut->sys.cpus[naut->sys.bsp_id]);
 
     nk_cpu_topo_discover(naut->sys.cpus[naut->sys.bsp_id]);
@@ -193,6 +193,8 @@ init (unsigned long mbd, unsigned long magic)
 
     /* interrupts on */
     sti();
+
+    nk_vc_init();
 
 #ifdef NAUT_CONFIG_LEGION_RT
 

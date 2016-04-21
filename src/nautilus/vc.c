@@ -213,6 +213,8 @@ int nk_switch_to_vc(struct nk_virtual_console *vc)
     copy_vc_to_display(cur_vc);
 #ifdef NAUT_CONFIG_X86_64_HOST
     vga_set_cursor(cur_vc->cur_x, cur_vc->cur_y);
+#elif NAUT_CONFIG_XEON_PHI
+    phi_cons_set_cursor(cur_vc->cur_x, cur_vc->cur_y);
 #endif
   }
   UNLOCK();
@@ -309,6 +311,7 @@ static int _vc_display_char_specific(struct nk_virtual_console *vc, uint8_t c, u
 #endif
 #ifdef NAUT_CONFIG_XEON_PHI
       vga_write_screen(x,y,val);
+      phi_cons_set_cursor(cur_vc->cur_x, cur_vc->cur_y);
 #endif
 
     }
@@ -369,6 +372,8 @@ static int _vc_putchar_specific(struct nk_virtual_console *vc, uint8_t c)
     if (vc==cur_vc) {
 #ifdef NAUT_CONFIG_X86_64_HOST
       vga_set_cursor(vc->cur_x,vc->cur_y);
+#elif NAUT_CONFIG_XEON_PHI
+      phi_cons_set_cursor(vc->cur_x,vc->cur_y);
 #endif
     }
     return 0;
@@ -391,6 +396,8 @@ static int _vc_putchar_specific(struct nk_virtual_console *vc, uint8_t c)
   if (vc==cur_vc) { 
 #ifdef NAUT_CONFIG_X86_64_HOST
     vga_set_cursor(vc->cur_x, vc->cur_y);
+#elif NAUT_CONFIG_XEON_PHI
+      phi_cons_set_cursor(vc->cur_x,vc->cur_y);
 #endif
   }
   return 0;
@@ -943,6 +950,10 @@ int nk_vc_init()
   vga_get_cursor(&(cur_vc->cur_x),&(cur_vc->cur_y));
   vga_init_screen();
   vga_set_cursor(cur_vc->cur_x,cur_vc->cur_y);
+#elif NAUT_CONFIG_XEON_PHI
+  phi_cons_get_cursor(&(cur_vc->cur_x), &(cur_vc->cur_y));
+  phi_cons_clear_screen();
+  phi_cons_set_cursor(cur_vc->cur_x, cur_vc->cur_y);
 #endif
 
   return 0;

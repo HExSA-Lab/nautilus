@@ -43,16 +43,16 @@ phi_sbox_write (uint32_t offset, uint32_t val)
     *(volatile uint32_t*)((uint32_t*)PHI_SBOX_BASE + offset) = val;
 }
 
+void phi_cons_get_cursor(uint8_t * x, uint8_t * y);
+void phi_cons_set_cursor(uint8_t x, uint8_t y);
+void phi_cons_notify_scrollup(void);
+void phi_cons_notify_line_draw(unsigned row);
+void phi_cons_notify_redraw(void);
 
+void phi_cons_clear_screen(void);
+void phi_cons_init(void);
+void phi_cons_print(char *buf);
+void phi_cons_putchar(char c);
 
-uint32_t phi_cons_read_reg(uint32_t off);
-void     phi_cons_write_reg (uint32_t off, uint32_t val);
-void     phi_cons_wait_for_out_cmpl (void);
-void     phi_cons_notify_redraw (void);
-void     phi_cons_notify_scrollup (void);
-void     phi_cons_notify_char_write (uint16_t x, uint16_t y);
-void     phi_cons_notify_line_draw (unsigned row);
-void     phi_cons_write_fb_and_notify (uint16_t x, uint16_t y, char c, uint8_t color);
-    
 
 #endif
