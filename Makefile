@@ -338,7 +338,7 @@ CFLAGS:=   $(COMMON_FLAGS) \
 		   #-Werror \
 		   #-Wmissing-prototypes \
 		   #-Wstrict-prototypes \
-		   
+
 # NOTE: We MUST have max-page-size set to this here. Otherwise things
 # go off the rails for the Grub multiboot setup because the linker
 # does strange things...
@@ -506,6 +506,7 @@ NM		= $(CROSS_COMPILE)k1om-mpss-linux-nm
 STRIP		= $(CROSS_COMPILE)k1om-mpss-linux-strip
 OBJCOPY		= $(CROSS_COMPILE)k1om-mpss-linux-objcopy
 OBJDUMP		= $(CROSS_COMPILE)k1om-mpss-linux-objdump
+CFLAGS += -fno-optimize-sibling-calls
 endif
 
 #
