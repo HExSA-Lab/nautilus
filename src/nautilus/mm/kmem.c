@@ -477,7 +477,7 @@ malloc (size_t size)
  *       kmem_alloc().
  */
 void
-free (const void * addr)
+free (void * addr)
 {
     struct kmem_block_hdr *hdr;
     struct buddy_mempool * zone;
