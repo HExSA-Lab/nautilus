@@ -40,7 +40,8 @@
 #endif
 
 #define KMEM_DEBUG(fmt, args...) DEBUG_PRINT("KMEM: " fmt, ##args)
-#define KMEM_PRINT(fmt, args...) printk("KMEM: " fmt, ##args)
+#define KMEM_ERROR(fmt, args...) ERROR_PRINT("KMEM: " fmt, ##args)
+#define KMEM_PRINT(fmt, args...) INFO_PRINT("KMEM: " fmt, ##args)
 #define KMEM_WARN(fmt, args...)  WARN_PRINT("KMEM: " fmt, ##args)
 
 /**
@@ -50,12 +51,11 @@
  */
 #define MIN_ORDER   5  /* 32 bytes */
 
+// The factor by which to reduce the hash table size
+// next_prime(total_mem >> 5 / BLOAT) is the maximum number of
+// blocks we can allocate with malloc
+#define BLOAT  1024
 
-/**
- * Magic value used for sanity checking. Every block of memory allocated via
- * kmem_alloc() has this value in its block header.
- */
-#define KMEM_MAGIC  0xF0F0F0F0F0F0F0F0UL
 
 
 /**
@@ -75,23 +75,141 @@ static struct list_head glob_zone_list;
 
 
 /**
- * Each block of memory allocated from the kernel memory pool has one of these
- * structures at its head. The structure contains information needed to free
- * the block and return it to the underlying memory allocator.
- *
- * When a block is allocated, the address returned to the caller is
- * sizeof(struct kmem_block_hdr) bytes greater than the block allocated from
- * the underlying memory allocator.
- *
- * WARNING: This structure is defined to be exactly 16 bytes in size.
- *          Do not change this unless you really know what you are doing.
+ * Each block of memory allocated from the kernel memory pool has 
+ * associated with it one of these structures.   The structure 
+ * maps the address handed out by malloc to the order of the block
+ * that was allocated and the buddy allocator that provided the
+ * block 
  */
 struct kmem_block_hdr {
+    void *   addr;   /* address of block */
     uint64_t order;  /* order of the block allocated from buddy system */
-    uint64_t magic;  /* magic value used as sanity check */
     struct buddy_mempool * zone; /* zone to which this block belongs */
 } __packed;
 
+
+static struct kmem_block_hdr *block_hash_entries=0;
+static uint64_t               block_hash_num_entries=0;
+
+// roughly power-of-two primes
+static const uint64_t primes[] = 
+{ 
+    53, 97, 193, 389,
+    769, 1543, 3079, 6151,
+    12289, 24593, 49157, 98317,
+    196613, 393241, 786433, 1572869,
+    3145739, 6291469, 12582917, 25165843,
+    50331653, 100663319, 201326611, 402653189,
+    805306457, 1610612741 
+};
+
+static uint64_t next_prime(uint64_t n)
+{
+  uint64_t i;
+  for (i=0;i<sizeof(primes)/sizeof(primes[0]);i++) {
+    if (primes[i]>=n) { 
+      return primes[i];
+    }
+  }
+  KMEM_DEBUG("next_prime: %lu is too big, returning maximum prime in table (%lu)\n",primes[i-1]);
+
+  return primes[i-1];
+}
+
+static int block_hash_init(uint64_t bytes)
+{
+  uint64_t num_entries = next_prime((bytes >> MIN_ORDER) / BLOAT);
+  uint64_t entry_size = sizeof(*block_hash_entries);
+  
+  KMEM_DEBUG("block_hash_init with %lu entries each of size %lu bytes (%lu bytes)\n",
+	     num_entries, entry_size, num_entries*entry_size);
+
+  block_hash_entries = mm_boot_alloc(num_entries*entry_size);
+
+  if (!block_hash_entries) { 
+    KMEM_ERROR("block_hash_init failed\n");
+    return -1;
+  }
+
+  memset(block_hash_entries,0,num_entries*entry_size);
+  
+  block_hash_num_entries = num_entries;
+
+  return 0;
+}
+
+static inline uint64_t block_hash_hash(const void *ptr)
+{
+  uint64_t n = ((uint64_t) ptr)>>MIN_ORDER;
+
+  n =  n ^ (n>>1) ^ (n<<2) ^ (n>>3) ^ (n<<5) ^ (n>>7)
+    ^ (n<<11) ^ (n>>13) ^ (n<<17) ^ (n>>19) ^ (n<<23) 
+    ^ (n>>29) ^ (n<<31) ^ (n>>37) ^ (n<<41) ^ (n>>43)
+    ^ (n<<47) ^ (n<<53) ^ (n>>59) ^ (n<<61);
+
+  n = n % block_hash_num_entries;
+
+  KMEM_DEBUG("hash of %p returns 0x%lx\n",ptr, n);
+  
+  return n;
+}
+    
+static inline struct kmem_block_hdr * block_hash_find_entry(const void *ptr)
+{
+  uint64_t i;
+  uint64_t start = block_hash_hash(ptr);
+  
+  for (i=start;i<block_hash_num_entries;i++) { 
+    if (block_hash_entries[i].addr == ptr) { 
+      KMEM_DEBUG("Find entry scanned %lu entries\n", i-start+1);
+      return &block_hash_entries[i];
+    }
+  }
+  for (i=0;i<start;i++) { 
+    if (block_hash_entries[i].addr == ptr) { 
+      KMEM_DEBUG("Find entry scanned %lu entries\n", block_hash_num_entries-start + i + 1);
+      return &block_hash_entries[i];
+    }
+  }
+  return 0;
+}
+
+static inline struct kmem_block_hdr * block_hash_alloc(void *ptr)
+{
+  uint64_t i;
+  uint64_t start = block_hash_hash(ptr);
+  
+  for (i=start;i<block_hash_num_entries;i++) { 
+    if (__sync_bool_compare_and_swap(&block_hash_entries[i].order,0,1)) {
+      KMEM_DEBUG("Allocation scanned %lu entries\n", i-start+1);
+      return &block_hash_entries[i];
+    }
+  }
+  for (i=0;i<start;i++) { 
+    if (__sync_bool_compare_and_swap(&block_hash_entries[i].order,0,1)) {
+      KMEM_DEBUG("Allocation scanned %lu entries\n", block_hash_num_entries-start + i + 1);
+      return &block_hash_entries[i];
+    }
+  }
+  return 0;
+}
+
+static inline void block_hash_free_entry(struct kmem_block_hdr *b)
+{
+  __sync_fetch_and_and (&b->order,0);
+}
+
+static inline int block_hash_free(void *ptr)
+{
+  struct kmem_block_hdr *b = block_hash_find_entry(ptr);
+
+  if (!b) { 
+    return -1;
+  } else {
+    block_hash_free_entry(b);
+    return 0;
+  }
+}
 
 
 struct mem_region *
@@ -198,6 +316,7 @@ nk_kmem_init (void)
     struct nk_locality_info * numa_info = &(nk_get_nautilus_info()->sys.locality_info);
     struct mem_region * ent = NULL;
     unsigned i = 0, j = 0;
+    uint64_t total_mem=0;
     
     /* initialize the global zone list */
     INIT_LIST_HEAD(&glob_zone_list);
@@ -258,6 +377,7 @@ nk_kmem_init (void)
 
     }
 
+    total_mem = 0;
     /* just to make sure */
     for (i = 0; i < sys->num_cpus; i++) {
         struct list_head * local_regions = &(sys->cpus[i]->kmem.ordered_regions);
@@ -266,7 +386,15 @@ nk_kmem_init (void)
         KMEM_PRINT("CPU %u region affinity list:\n", i);
         list_for_each_entry(reg, local_regions, mem_ent) {
             KMEM_PRINT("    [Domain=%u, %p-%p]\n", reg->mem->domain_id, reg->mem->base_addr, reg->mem->base_addr + reg->mem->len);
+	    total_mem += reg->mem->len;
         }
+    }
+    
+    KMEM_PRINT("Malloc configured to support a maximum of: 0x%lx bytes\n", total_mem);
+
+    if (block_hash_init(total_mem)) { 
+      KMEM_ERROR("Failed to initialize block hash\n");
+      return -1;
     }
 
     return 0;
@@ -287,14 +415,13 @@ nk_kmem_init (void)
 void *
 malloc (size_t size)
 {
+    void *block = 0;
     struct kmem_block_hdr *hdr = NULL;
     struct mem_reg_entry * reg = NULL;
     ulong_t order;
     cpu_id_t my_id = my_cpu_id();
     struct kmem_data * my_kmem = &(nk_get_nautilus_info()->sys.cpus[my_id]->kmem);
 
-    /* Make room for block header */
-    size += sizeof(struct kmem_block_hdr);
 
     /* Calculate the block order needed */
     order = ilog2(roundup_pow_of_two(size));
@@ -308,10 +435,19 @@ malloc (size_t size)
 
         /* Allocate memory from the underlying buddy system */
         uint8_t flags = spin_lock_irq_save(&zone->lock);
-        hdr = buddy_alloc(zone, order);
+        block = buddy_alloc(zone, order);
         spin_unlock_irq_restore(&zone->lock, flags);
 
+	if (block) {
+	  hdr = block_hash_alloc(block);
+	  if (!hdr) {
+	    buddy_free(zone,block,order);
+	  }
+	}
+
         if (hdr) {
+	    hdr->addr = block;
+	    hdr->order = order;
             hdr->zone = zone;
             break;
         }
@@ -324,12 +460,8 @@ malloc (size_t size)
         return NULL;
     }
 
-    /* Initialize the block header */
-    hdr->order = order;       /* kmem_free() needs this to free the block */
-    hdr->magic = KMEM_MAGIC;  /* used for sanity check */
-
-    /* Return address of first byte after block header to caller */
-    return hdr + 1;
+    /* Return address of the block */
+    return block;
 }
 
 
@@ -354,19 +486,20 @@ free (const void * addr)
         return;
     }
 
-    ASSERT((unsigned long)addr >= sizeof(struct kmem_block_hdr));
+    hdr = block_hash_find_entry(addr);
 
-    /* Find the block header */
-    hdr = (struct kmem_block_hdr *)addr - 1;
-
-    ASSERT(hdr->magic == KMEM_MAGIC);
+    if (!hdr) { 
+      KMEM_DEBUG("Failed to find entry for block %p\n",addr);
+      return;
+    }
 
     zone = hdr->zone;
 
     /* Return block to the underlying buddy system */
     uint8_t flags = spin_lock_irq_save(&zone->lock);
     kmem_bytes_allocated -= (1UL << hdr->order);
-    buddy_free(zone, hdr, hdr->order);
+    buddy_free(zone, addr, hdr->order);
     spin_unlock_irq_restore(&zone->lock, flags);
+    block_hash_free_entry(hdr);
 }
 
