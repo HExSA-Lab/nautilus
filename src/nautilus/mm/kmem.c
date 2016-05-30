@@ -196,6 +196,8 @@ static inline struct kmem_block_hdr * block_hash_alloc(void *ptr)
 
 static inline void block_hash_free_entry(struct kmem_block_hdr *b)
 {
+  b->addr = 0;
+  b->zone = 0;
   __sync_fetch_and_and (&b->order,0);
 }
 
