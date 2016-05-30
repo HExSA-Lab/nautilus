@@ -38,7 +38,7 @@ struct nk_virtual_console;
 struct nk_virtual_console *nk_create_vc(char *name,
 					enum nk_vc_type new_vc_type,
 					uint8_t attr,
-					void (*raw_noqueue_callback)(nk_scancode_t)); 
+					void (*raw_noqueue_callback)(nk_scancode_t, void *private), void *priv); 
 
 int nk_destroy_vc(struct nk_virtual_console *vc);
 
@@ -61,7 +61,11 @@ int nk_vc_log(char *fmt, ...);
 int nk_vc_setattr(uint8_t attr);
 int nk_vc_clear(uint8_t attr);
 int nk_vc_scrollup (struct nk_virtual_console *vc);
+int nk_vc_setpos(uint8_t x, uint8_t y);
+int nk_vc_setpos_specific(struct nk_virtual_console *vc, uint8_t x, uint8_t y);
 int nk_vc_display_char(uint8_t c, uint8_t attr, uint8_t x, uint8_t y);
+int nk_vc_display_char_specific(struct nk_virtual_console *vc,
+				uint8_t c, uint8_t attr, uint8_t x, uint8_t y);
 
 int nk_vc_enqueue_scancode(struct nk_virtual_console *vc, nk_scancode_t scan);
 int nk_vc_enqueue_keycode(struct nk_virtual_console *vc, nk_keycode_t key);

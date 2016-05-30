@@ -81,7 +81,8 @@ struct nk_virtual_console {
   uint16_t BUF[VGA_WIDTH * VGA_HEIGHT];
   uint8_t cur_x, cur_y, cur_attr;
   uint16_t head, tail;
-  void    (*raw_noqueue_callback)(nk_scancode_t);
+  void    (*raw_noqueue_callback)(nk_scancode_t, void *priv);
+  void     *raw_noqueue_callback_priv;
   uint32_t num_threads;
   struct list_head vc_node;
   nk_thread_queue_t *waiting_threads;
@@ -121,7 +122,7 @@ static inline void copy_vc_to_display(struct nk_virtual_console *vc)
 }
 
 
-struct nk_virtual_console *nk_create_vc(char *name, enum nk_vc_type new_vc_type, uint8_t attr, void (*callback)(nk_scancode_t)) 
+struct nk_virtual_console *nk_create_vc(char *name, enum nk_vc_type new_vc_type, uint8_t attr, void (*callback)(nk_scancode_t, void *priv), void *priv_data) 
 {
   int i;
 
@@ -134,7 +135,8 @@ struct nk_virtual_console *nk_create_vc(char *name, enum nk_vc_type new_vc_type,
   memset(new_vc, 0, sizeof(struct nk_virtual_console));
   new_vc->type = new_vc_type;
   strncpy(new_vc->name,name,32);
-  new_vc->raw_noqueue_callback = callback;
+  new_vc->raw_noqueue_callback = callback;  
+  new_vc->raw_noqueue_callback_priv = priv_data;
   new_vc->cur_attr = attr;
   spinlock_init(&new_vc->queue_lock);
   spinlock_init(&new_vc->buf_lock);
@@ -158,10 +160,16 @@ struct nk_virtual_console *nk_create_vc(char *name, enum nk_vc_type new_vc_type,
 
 int nk_destroy_vc(struct nk_virtual_console *vc) 
 {
+
   if (vc->num_threads || !nk_queue_empty_atomic(vc->waiting_threads)) { 
     ERROR("Cannot destroy virtual console that has threads\n");
     return -1;
   }
+
+  if (vc==cur_vc) { 
+    nk_switch_to_vc_list();
+  }
+
   LOCK();
   list_del(&vc->vc_node);
   UNLOCK();
@@ -332,6 +340,19 @@ static int _vc_display_char(uint8_t c, uint8_t attr, uint8_t x, uint8_t y)
   }
 }
 
+int nk_vc_display_char_specific(struct nk_virtual_console *vc,
+				uint8_t c, uint8_t attr, uint8_t x, uint8_t y)
+{
+  int rc = -1;
+
+  if (vc) { 
+    spin_lock(&vc->buf_lock);
+    rc = _vc_display_char_specific(vc, c, attr, x, y);
+    spin_unlock(&vc->buf_lock);
+  }
+  return rc;
+}
+
 int nk_vc_display_char(uint8_t c, uint8_t attr, uint8_t x, uint8_t y) 
 {
   int rc=0;
@@ -349,6 +370,75 @@ int nk_vc_display_char(uint8_t c, uint8_t attr, uint8_t x, uint8_t y)
   return rc;
 }
   
+
+static int _vc_setpos(uint8_t x, uint8_t y) 
+{
+  int rc=0;
+  struct nk_virtual_console *vc = get_cur_thread()->vc;
+
+  if (!vc) { 
+    vc = default_vc;
+  }
+  if (vc) { 
+    vc->cur_x = x;
+    vc->cur_y = y;
+#ifdef NAUT_CONFIG_X86_64_HOST
+    if (vc==cur_vc) { 
+      vga_set_cursor(cur_vc->cur_x, cur_vc->cur_y);
+    }
+#endif
+  }
+  return 0;
+}
+
+
+int nk_vc_setpos(uint8_t x, uint8_t y) 
+{
+  int rc=0;
+  struct nk_virtual_console *vc = get_cur_thread()->vc;
+
+  if (!vc) { 
+    vc = default_vc;
+  }
+  if (vc) { 
+    spin_lock(&vc->buf_lock);
+    rc = _vc_setpos(x,y);
+    spin_unlock(&vc->buf_lock);
+  }
+
+  return rc;
+}
+
+static int _vc_setpos_specific(struct nk_virtual_console *vc, uint8_t x, uint8_t y) 
+{
+  int rc=0;
+
+  if (vc) { 
+    vc->cur_x = x;
+    vc->cur_y = y;
+#ifdef NAUT_CONFIG_X86_64_HOST
+    if (vc==cur_vc) { 
+      vga_set_cursor(cur_vc->cur_x, cur_vc->cur_y);
+    }
+#endif
+  }
+
+  return rc;
+}
+
+
+int nk_vc_setpos_specific(struct nk_virtual_console *vc, uint8_t x, uint8_t y) 
+{
+  int rc=0;
+
+  if (vc) { 
+    spin_lock(&vc->buf_lock);
+    rc = _vc_setpos_specific(vc,x,y);
+    spin_unlock(&vc->buf_lock);
+  }
+
+  return rc;
+}
 
 
 // display scrolling or explicitly on screen at a given location
@@ -634,7 +724,7 @@ int nk_enqueue_scancode(struct nk_virtual_console *vc, nk_scancode_t scan)
   uint8_t flags;
 
   if (vc->type==RAW_NOQUEUE) { 
-    vc->raw_noqueue_callback(scan);
+    vc->raw_noqueue_callback(scan, vc->raw_noqueue_callback_priv);
     return 0;
   }
 
@@ -922,20 +1012,20 @@ int nk_vc_init()
   INIT_LIST_HEAD(&vc_list);
 
 
-  default_vc = nk_create_vc("default", COOKED, 0x0f, 0);
+  default_vc = nk_create_vc("default", COOKED, 0x0f, 0, 0);
   if(!default_vc) {
     ERROR("Cannot create default console...\n");
     return -1;
   }
 
-  log_vc = nk_create_vc("system-log", COOKED, 0x0a, 0);
+  log_vc = nk_create_vc("system-log", COOKED, 0x0a, 0, 0);
   if(!log_vc) {
     ERROR("Cannot create log console...\n");
     return -1;
   }
   
 
-  list_vc = nk_create_vc("vc-list", COOKED, 0xf9, 0);
+  list_vc = nk_create_vc("vc-list", COOKED, 0xf9, 0, 0);
   if(!list_vc) {
     ERROR("Cannot create vc list console...\n");
     return -1;
