@@ -44,6 +44,7 @@
 #include <nautilus/libccompat.h>
 #include <nautilus/barrier.h>
 #include <nautilus/vc.h>
+#include <nautilus/shell.h>
 
 #include <dev/apic.h>
 #include <dev/pci.h>
@@ -60,9 +61,8 @@
 #endif
 
 #ifdef NAUT_CONFIG_PALACIOS
-#include "palacios.h"
+#include <nautilus/vmm.h>
 #endif
-
 
 extern spinlock_t printk_lock;
 
@@ -159,6 +159,34 @@ runtime_init (void)
 #endif
 }
 
+
+
+#ifdef NAUT_CONFIG_PALACIOS_MGMT_VM
+static void *mgmt_vm;
+#endif
+
+static int launch_vmm_environment()
+{
+#ifdef NAUT_CONFIG_PALACIOS
+  nk_vmm_init("none");
+
+#ifdef NAUT_CONFIG_PALACIOS_MGMT_VM
+  extern int guest_start;
+  mgmt_vm = nk_vmm_start_vm("management-vm",&guest_start,0xffffffff);
+  if (!mgmt_vm) { 
+    ERROR_PRINT("Failed to start embedded management VM\n");
+    return -1;
+  }
+
+#endif
+  printk("VM environment launched\n");
+#endif
+  return 0;
+}
+  
+
+
+
 #define NAUT_WELCOME \
 "Welcome to                                         \n" \
 "    _   __               __   _  __                \n" \
@@ -170,45 +198,6 @@ runtime_init (void)
 " Kyle C. Hale (c) 2014 | Northwestern University   \n" \
 "+===============================================+  \n\n"
 
-
-void shell(void *in, void **out)
-{
-  struct nk_virtual_console *vc = nk_create_vc("shell",COOKED, 0x9f, 0);
-  
-  if (!vc) { 
-    printk("Cannot create virtual console for shell\n");
-    return;
-  }
-  
-  if (nk_bind_vc(get_cur_thread(), vc)) { 
-    printk("Cannot bind virtual console for shell\n");
-    return;
-  }
-   
-  nk_switch_to_vc(vc);
-  
-  nk_vc_clear(0x9f);
-   
-  nk_vc_puts(NAUT_WELCOME);
-  
-  while (1) {  
-    nk_keycode_t k = nk_vc_getchar();
-    if (k!=-1) {
-      nk_vc_putchar(k);
-    }
-  }
-}
-
-int start_shell()
-{
-  nk_thread_id_t tid;
-
-  nk_thread_start(shell, 0, 0, 0, PAGE_SIZE, &tid, -1);
-  
-  printk("Shell launched\n");
-
-  return 0;
-}
 
 
 
@@ -231,10 +220,10 @@ init (unsigned long mbd,
     nk_int_init(&(naut->sys));
 
     serial_init();
+
+    nk_vc_print(NAUT_WELCOME);
     
     detect_cpu();
-
-    serial_puts("Here");
 
     /* setup the temporary boot-time allocator */
     mm_boot_init(mbd);
@@ -321,11 +310,12 @@ init (unsigned long mbd,
 
     nk_vc_init();
 
-    start_shell();
+    launch_vmm_environment();
+
+    nk_launch_shell("root-shell",-1);
 
     runtime_init();
 
-    
     printk("Nautilus boot thread yielding (indefinitely)\n");
 
     /* we don't come back from this */

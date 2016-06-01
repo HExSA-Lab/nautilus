@@ -99,7 +99,20 @@ menu "Platform/Arch Options"
             help
               Path to the Palacios VMM build.  Palacios must be built for
               Nautilus, and both palacios/libv3vee.a and libnautilus.a must exist
-
+    config PALACIOS_EMBED_VM_IMG
+    	bool "Embed VM image"
+        depends on PALACIOS
+        default 0
+    config PALACIOS_EMBEDDED_VM_IMG
+        depends on PALACIOS
+        string "Path to Palacios VM image to embed"
+            default "management_vm.img"
+            help
+              Path to the image that will be embedded
+    config PALACIOS_MGMT_VM
+    	bool "Launch embedded VM at boot as Management VM"
+        depends on PALACIOS
+        default 0
         
 endmenu
 
