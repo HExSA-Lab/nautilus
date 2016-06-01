@@ -47,9 +47,9 @@ int nk_bind_vc(struct nk_thread *thread, struct nk_virtual_console * cons);
 int nk_release_vc(struct nk_thread *thread);
 
 int nk_switch_to_vc(struct nk_virtual_console *vc);
-int nk_switch_to_prev_vc();
-int nk_switch_to_next_vc();
-int nk_switch_to_vc_list();
+int nk_switch_to_prev_vc(void);
+int nk_switch_to_next_vc(void);
+int nk_switch_to_vc_list(void);
 
 int nk_vc_putchar(uint8_t c);
 int nk_vc_print(char *s); 
@@ -59,8 +59,11 @@ int nk_vc_log(char *fmt, ...);
 
 
 int nk_vc_setattr(uint8_t attr);
+int nk_vc_setattr_specific(struct nk_virtual_console *vc, uint8_t attr);
 int nk_vc_clear(uint8_t attr);
-int nk_vc_scrollup (struct nk_virtual_console *vc);
+int nk_vc_clear_specific(struct nk_virtual_console *vc, uint8_t attr);
+int nk_vc_scrollup(void);
+int nk_vc_scrollup_specific(struct nk_virtual_console *vc);
 int nk_vc_setpos(uint8_t x, uint8_t y);
 int nk_vc_setpos_specific(struct nk_virtual_console *vc, uint8_t x, uint8_t y);
 int nk_vc_display_char(uint8_t c, uint8_t attr, uint8_t x, uint8_t y);
@@ -77,12 +80,13 @@ nk_scancode_t nk_vc_get_scancode(int wait);
 
 int nk_vc_getchar_extended(int wait);
 int nk_vc_getchar();
+int nk_vc_gets(char *buf, int n, int display);
 
 int nk_vc_handle_input(nk_scancode_t scan);
 
-int nk_vc_init();
-int nk_vc_is_active();
-int nk_vc_deinit();
+int nk_vc_init(void);
+int nk_vc_is_active(void);
+int nk_vc_deinit(void);
 
 
 /* 
