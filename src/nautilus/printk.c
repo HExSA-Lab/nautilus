@@ -509,7 +509,8 @@ static __noinline char* put_dec(char *buf, unsigned long long num)
 		unsigned rem;
 		if (num < 100000)
 			return put_dec_trunc(buf, num);
-		rem = do_div(num, 100000);
+		rem = (unsigned) (num % 100000);
+		num = num / 100000;
 		buf = put_dec_full(buf, rem);
 	}
 }
