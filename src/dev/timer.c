@@ -80,8 +80,8 @@ timer_notify_event (struct nk_timer_event * te)
 }
 
 
-int
-nk_timer_handler (excp_entry_t * excp, excp_vec_t vec)
+uint64_t
+nk_timer_handler (void)
 {
 
     struct sys_info  * sys = per_cpu_get(system);
@@ -96,9 +96,8 @@ nk_timer_handler (excp_entry_t * excp, excp_vec_t vec)
             } 
         }
     }
-
-    IRQ_HANDLER_END();
-    return 0;
+    
+    return 1000000000/NAUT_CONFIG_HZ;
 }
 
 

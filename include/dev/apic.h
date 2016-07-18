@@ -28,7 +28,7 @@
 #ifdef __cplusplus 
 extern "C" {
 #endif
-
+    
 #define APIC_SPUR_INT_VEC      0xff
 #define APIC_TIMER_INT_VEC     0xf0
 #define APIC_ERROR_INT_VEC     0xf1
@@ -37,7 +37,7 @@ extern "C" {
 #define APIC_CMCR_INT_VEC      0xf4
 #define APIC_EXT_LVT_DUMMY_VEC 0xf5
 #define APIC_NULL_KICK_VEC     0xfc
-
+    
 #define APIC_TIMER_DIV 16
 
 #define APIC_TIMER_DIV_1   0xb
@@ -50,16 +50,16 @@ extern "C" {
 #define APIC_TIMER_DIV_128 0xa
 
 #define APIC_TIMER_DIVCODE APIC_TIMER_DIV_16
-
+    
 #define APIC_BASE_MSR        0x0000001b
-
+    
 #define IA32_APIC_BASE_MSR_BSP    0x100 
 #define IA32_APIC_BASE_MSR_ENABLE 0x800
-
+    
 #define APIC_BASE_ADDR_MASK 0xfffffffffffff000ULL
 #define APIC_IS_BSP(x)      ((x) & (1 << 8))
 #define APIC_VERSION(x)     ((x) & 0xffu)
-
+    
 #define APIC_IPI_SELF          0x40000
 #define APIC_IPI_ALL           0x80000
 #define APIC_IPI_OTHERS        0xC0000
@@ -67,20 +67,20 @@ extern "C" {
 #define APIC_SPIV_SW_ENABLE    (1u << 8)
 #define APIC_SPIV_VEC_MASK     0xffu
 #define APIC_SPIV_CORE_FOCUS  (1u << 9)
-
+    
 #define ICR_DEL_MODE_LOWEST  (1 << 8)
 #define ICR_DEL_MODE_SMI     (2 << 8)
 #define ICR_DEL_MODE_NMI     (4 << 8)
 #define ICR_DEL_MODE_INIT    (5 << 8)
 #define ICR_DEL_MODE_STARTUP (6 << 8)
-
+    
 #define ICR_DST_MODE_LOG      (1 << 11)
 #define ICR_SEND_PENDING      (1 << 12)
 #define ICR_LEVEL_ASSERT      (1 << 14)
 #define ICR_TRIG_MODE_LEVEL   (1 << 15)
-
-
-
+    
+    
+    
 #ifdef NAUT_CONFIG_XEON_PHI
 #define APIC_ID_SHIFT 16
 #define APIC_ICR2_DST_SHIFT 16
@@ -89,7 +89,7 @@ extern "C" {
 #define APIC_ICR2_DST_SHIFT 24
 #endif
 
-
+    
 #define APIC_REG_ID       0x20
 #define   APIC_GET_ID(x) (((x) >> 24) & 0xffu)
 #define APIC_REG_LVR      0x30
@@ -135,10 +135,10 @@ extern "C" {
 #define   APIC_EXFC_SN_EN        0x2
 #define   APIC_EXFC_IERN         0x1
 #define   APIC_GET_EXT_ID(x)     (((x) >> 24) & 0xffu)
-
+    
 /* Extended LVT entries */
 #define APIC_REG_EXTLVT(n) (0x500 + 0x10*(n))
-
+    
     /* for LVT entries */
 #define APIC_DEL_MODE_FIXED  0x00000
 #define APIC_DEL_MODE_LOWEST 0x00100
@@ -151,11 +151,11 @@ extern "C" {
 #define APIC_GET_DEL_MODE(x) (((x) >> 8) & 0x7)
 #define APIC_LVT_VEC_MASK    0xffu
 #define APIC_LVT_DISABLED 0x10000
-
+    
 
 #define APIC_DFR_FLAT     0xfffffffful
 #define APIC_DFR_CLUSTER  0x0ffffffful
-
+    
 #ifdef NAUT_CONFIG_XEON_PHI
 #define APIC_LDR_MASK       (0xffu<<16)
 #else
@@ -196,6 +196,10 @@ struct apic_dev {
     uint_t   id;
     uint64_t spur_int_cnt;
     uint64_t err_int_cnt;
+    uint64_t bus_freq_hz;
+    uint64_t ps_per_tick;
+    uint64_t cycles_per_tick;
+    uint64_t current_ticks; // timeout currently being computed
 };
 
 
@@ -252,6 +256,19 @@ void apic_init(struct cpu * core);
 int apic_get_maxlvt(struct apic_dev * apic);
 int apic_read_timer(struct apic_dev * apic);
 uint32_t apic_wait_for_send(struct apic_dev* apic);
+
+
+uint32_t apic_cycles_to_ticks(struct apic_dev *apic, uint64_t cycles);
+uint32_t apic_realtime_to_ticks(struct apic_dev *apic, uint64_t ns);
+
+void     apic_set_oneshot_timer(struct apic_dev *apic, uint32_t ticks);
+
+// updating the timer using this function is intended to be 
+// done in interrupt context
+typedef enum {UNCOND, IF_EARLIER, IF_LATER} nk_timer_condition_t;
+void     apic_update_oneshot_timer(struct apic_dev *apic,  uint64_t ticks, 
+				   nk_timer_condition_t cond);
+			       
 
 
 #ifdef __cplusplus 

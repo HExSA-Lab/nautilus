@@ -37,7 +37,9 @@ struct nk_timer_event {
 };
 
 #include <nautilus/idt.h>
-int nk_timer_handler(excp_entry_t *, excp_vec_t);
+// handler returns ns from return time when it must be 
+// called again at the latest 
+uint64_t nk_timer_handler(void);
 int nk_timer_init (struct naut_info * naut);
 void nk_sleep (uint_t msec);
 

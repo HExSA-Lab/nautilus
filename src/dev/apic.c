@@ -42,7 +42,7 @@
 #define APIC_DEBUG(fmt, args...) DEBUG_PRINT("APIC: " fmt, ##args)
 #define APIC_PRINT(fmt, args...) INFO_PRINT("APIC: " fmt, ##args)
 #define APIC_WARN(fmt, args...)  WARN_PRINT("APIC: " fmt, ##args)
-
+#define APIC_ERROR(fmt, args...) ERROR_PRINT("APIC: " fmt, ##args)
 
 static const char * apic_err_codes[8] = {
     "[Send Checksum Error]",
@@ -345,6 +345,9 @@ apic_bcast_sipi (struct apic_dev * apic, uint8_t target)
     irq_enable_restore(flags);
 }
 
+static void calibrate_apic_timer(struct apic_dev *apic);
+static int apic_timer_handler(excp_entry_t * excp, excp_vec_t vec);
+
 
 void
 apic_timer_setup (struct apic_dev * apic, uint32_t quantum)
@@ -353,71 +356,30 @@ apic_timer_setup (struct apic_dev * apic, uint32_t quantum)
     uint32_t tmp;
     uint8_t  tmp2;
     cpuid_ret_t ret;
+    int x2apic, tscdeadline, arat; 
 
     APIC_DEBUG("Setting up Local APIC timer for APIC 0x%x\n", apic->id);
 
+    cpuid(0x1, &ret);
+  
+    x2apic = (ret.c >> 21) & 0x1;
+    tscdeadline = (ret.c >> 24) & 0x1;
+
     cpuid(0x6, &ret);
-    if (ret.a & 0x4) {
-        APIC_DEBUG("\t[APIC Supports Constant Tick Rate]\n");
-    }
+    arat = (ret.a >> 2) & 0x1;
+
+    APIC_DEBUG("APIC timer has:  x2apic=%d tscdeadline=%d arat=%d\n",
+	       x2apic, tscdeadline, arat);
 
     if (register_int_handler(APIC_TIMER_INT_VEC,
-            nk_timer_handler,
+            apic_timer_handler,
             NULL) != 0) {
         panic("Could not register APIC timer handler\n");
     }
 
-    /* run the APIC timer in one-shot mode, it shouldn't get to 0 */
-    apic_write(apic, APIC_REG_LVTT, APIC_TIMER_ONESHOT | APIC_DEL_MODE_FIXED | APIC_TIMER_INT_VEC);
+    calibrate_apic_timer(apic);
 
-    /* set up the divider */
-    apic_write(apic, APIC_REG_TMDCR, APIC_TIMER_DIVCODE);
-
-
-
-    /* set PIT channel 2 to "out" mode */
-    outb((inb(KB_CTRL_PORT_B) & 0xfd) | 0x1, 
-          KB_CTRL_PORT_B);
-
-    /* configure the PIT channel 2 for one-shot */
-    outb(PIT_MODE(PIT_MODE_ONESHOT) |
-         PIT_CHAN(PIT_CHAN_SEL_2)   |
-         PIT_ACC_MODE(PIT_ACC_MODE_BOTH),
-         PIT_CMD_REG);
-
-    /* LSB  (PIT rate) */
-    outb((PIT_RATE/NAUT_CONFIG_HZ) & 0xff,
-         PIT_CHAN2_DATA);
-    inb(KB_CTRL_DATA_OUT);
-
-    /* MSB */
-    outb((uint8_t)((PIT_RATE/NAUT_CONFIG_HZ)>>8),
-                PIT_CHAN2_DATA);
-
-    /* clear and reset bit 0 of kbd ctrl port to reload
-     * current cnt on chan 2 with the new value */
-    tmp2 = inb(KB_CTRL_PORT_B) & 0xfe;
-    outb(tmp2, KB_CTRL_PORT_B);
-    outb(tmp2 | 1, KB_CTRL_PORT_B);
-
-    /* reset timer to our count down value */
-    apic_write(apic, APIC_REG_TMICT, 0xffffffff);
-
-/* TODO: need to calibrate timers with TSC on the Phi */
-    while (!(inb(KB_CTRL_PORT_B) & 0x20));
-
-    /* disable the timer */
-    apic_write(apic, APIC_REG_LVTT, APIC_TIMER_DISABLE);
-
-    /* TODO need to fixup when frequency is way off */
-    //busfreq = APIC_TIMER_DIV * NAUT_CONFIG_HZ*(0xffffffff - apic_read(apic, APIC_REG_TMCCT) + 1);
-    busfreq = 1100000000;
-    APIC_DEBUG("Detected APIC 0x%x bus frequency as %u.%u MHz\n", apic->id, busfreq/1000000, busfreq%1000000);
-    tmp = busfreq/(1000/quantum)/APIC_TIMER_DIV;
-    APIC_DEBUG("Setting APIC timer Initial Count Reg to %u\n", tmp);
-    apic_write(apic, APIC_REG_TMICT, (tmp < APIC_TIMER_DIV) ? APIC_TIMER_DIV : tmp);
-    apic_write(apic, APIC_REG_LVTT, 0 | APIC_DEL_MODE_FIXED | APIC_TIMER_INT_VEC | APIC_TIMER_PERIODIC);
-    apic_write(apic, APIC_REG_TMDCR, APIC_TIMER_DIVCODE);
+    apic_set_oneshot_timer(apic,apic_realtime_to_ticks(apic,1000000000/NAUT_CONFIG_HZ));
 }
 
 
@@ -795,3 +757,207 @@ apic_init (struct cpu * core)
     apic_dump(apic);
 }
 
+
+
+void apic_set_oneshot_timer(struct apic_dev *apic, uint32_t ticks) 
+{
+    apic_write(apic, APIC_REG_LVTT, APIC_TIMER_ONESHOT | APIC_DEL_MODE_FIXED | APIC_TIMER_INT_VEC);
+    apic_write(apic, APIC_REG_TMDCR, APIC_TIMER_DIVCODE);
+    if (!ticks) {
+	ticks=1; 
+    }
+    apic_write(apic, APIC_REG_TMICT, ticks);
+    apic->current_ticks = ticks;
+}
+
+void apic_update_oneshot_timer(struct apic_dev *apic, uint64_t ticks,
+			       nk_timer_condition_t cond)
+{
+    switch (cond) { 
+    case UNCOND:
+	apic_set_oneshot_timer(apic,ticks);
+	break;
+    case IF_EARLIER:
+	if (ticks < apic->current_ticks) { apic_set_oneshot_timer(apic,ticks);}
+	break;
+    case IF_LATER:
+	if (ticks > apic->current_ticks) { apic_set_oneshot_timer(apic,ticks);}
+	break;
+    }
+}
+	    
+
+
+
+uint32_t apic_cycles_to_ticks(struct apic_dev *apic, uint64_t cycles)
+{
+    return cycles/apic->cycles_per_tick;
+}
+
+uint32_t apic_realtime_to_ticks(struct apic_dev *apic, uint64_t ns)
+{
+    return ((ns*1000)/apic->ps_per_tick);
+}
+
+
+uint64_t apic_realtime_to_cycles(struct apic_dev *apic, uint64_t ns)
+{
+    return apic_realtime_to_ticks(apic,ns)*apic->cycles_per_tick;
+}
+
+
+// this is 10 ms (1/100)
+#define TEST_TIME_SEC_RECIP 100
+
+static void calibrate_apic_timer(struct apic_dev *apic) 
+{
+    uint64_t start, end;
+    uint16_t pit_count;
+    uint8_t tmp2;
+
+    // First determine the APIC's bus frequency by calibrating it
+    // against a known clock (the PIT).   We do not know the base
+    // rate of this APIC, but we do know the base rate of all PITs.
+    // The PIT counts at about 1193180 Hz (~1.2 MHz)
+
+    pit_count = 1193180 / TEST_TIME_SEC_RECIP;
+    
+
+    // Use APIC in one shot mode with the divider we will use 
+    // in normal execution.  We will count down from a large number
+    // and do not expect interrupts because it should not hit zero.
+    apic_write(apic, APIC_REG_LVTT, APIC_TIMER_ONESHOT | APIC_DEL_MODE_FIXED | APIC_TIMER_INT_VEC);
+    apic_write(apic, APIC_REG_TMDCR, APIC_TIMER_DIVCODE);
+
+    // Now configure the PIT to count down the test period
+
+    /* set PIT channel 2 to "out" mode */
+    outb((inb(KB_CTRL_PORT_B) & 0xfd) | 0x1, 
+          KB_CTRL_PORT_B);
+
+    /* configure the PIT channel 2 for one-shot */  // 0x02 | 0x80 | 0x30 = > 10110010
+    outb(PIT_MODE(PIT_MODE_ONESHOT) |
+         PIT_CHAN(PIT_CHAN_SEL_2)   |
+         PIT_ACC_MODE(PIT_ACC_MODE_BOTH),
+         PIT_CMD_REG);
+
+    /* LSB */ 
+    outb(pit_count & 0xff,
+	 PIT_CHAN2_DATA);
+
+    // delay
+    inb(KB_CTRL_DATA_OUT);
+
+    /* MSB  */
+    outb((uint8_t)(pit_count>>8),
+	 PIT_CHAN2_DATA);
+
+    /* clear and reset bit 0 of kbd ctrl port to reload
+     * current cnt on chan 2 with the new value */
+    tmp2 = inb(KB_CTRL_PORT_B) & 0xfe;
+    outb(tmp2, KB_CTRL_PORT_B);
+    outb(tmp2 | 1, KB_CTRL_PORT_B);
+
+    // The PIT is now running, so we need to make the APIC start
+
+    /* reset timer to our count down value */
+    apic_write(apic, APIC_REG_TMICT, 0xffffffff);
+
+/* TODO: need to calibrate timers with TSC on the Phi */
+
+    start = rdtsc();
+    // we are now waiting for the PIT to finish
+    while (!(inb(KB_CTRL_PORT_B) & 0x20)) {
+	// intentionally empty
+    }
+    end = rdtsc();
+
+    // a known amount of real-time
+    // has now finished
+
+    /* stop the APIC timer */
+    apic_write(apic, APIC_REG_LVTT, APIC_TIMER_DISABLE);
+
+    // Now we have 1/TEST_TIME_SEC_RECIP seconds of real time in APIC timer ticks
+    uint32_t apic_timer_ticks = 0xffffffff - apic_read(apic,APIC_REG_TMCCT) + 1;
+
+    APIC_DEBUG("One test period (1/%u sec) took %u APIC ticks, pit_count=%u, and %lu cycles\n",
+	       TEST_TIME_SEC_RECIP,apic_timer_ticks,(unsigned) pit_count, end-start);
+
+    apic->bus_freq_hz = APIC_TIMER_DIV * apic_timer_ticks * TEST_TIME_SEC_RECIP;
+
+    APIC_DEBUG("Detected APIC 0x%x bus frequency as %u Hz\n", apic->id, apic->bus_freq_hz);
+
+    // picoseconds are used to try to keep precision
+    apic->ps_per_tick = (1000000000000ULL / apic->bus_freq_hz) * APIC_TIMER_DIV;
+
+    APIC_DEBUG("Detected APIC 0x%x real time per tick as %u ps\n", apic->id, apic->ps_per_tick);
+
+    /////////////////////////////////////////////////////////////////
+    // Now we will determine the calibration of the TSC to APIC time
+    ////////////////////////////////////////////////////////////////
+
+    const uint64_t num_trials = 50;
+    uint64_t tsc_diff;
+    uint64_t apic_diff;
+    uint64_t scale_sum = 0;
+    uint64_t scale_min = -1;
+    uint64_t scale;
+
+    int i = 0;
+
+    extern void nk_simple_timing_loop(uint64_t iter_count);
+
+    for (i = 0; i < num_trials; i++) {
+	// set APIC for a long countdown time, longer than our test 
+	apic_write(apic, APIC_REG_LVTT, APIC_TIMER_ONESHOT | APIC_DEL_MODE_FIXED | APIC_TIMER_INT_VEC);
+	apic_write(apic, APIC_REG_TMDCR, APIC_TIMER_DIVCODE);
+	// start it
+	apic_write(apic, APIC_REG_TMICT, 0xffffffff);
+	start = rdtsc();
+
+	// now time a random amount of cycle burning
+	// with both the tsc and the apic timer
+	nk_simple_timing_loop(1000000);
+
+	// now collect time using both
+	end = rdtsc();
+	apic_write(apic, APIC_REG_LVTT, APIC_TIMER_DISABLE);
+	tsc_diff = (end - start);
+	apic_diff = (0xffffffff - apic_read(apic, APIC_REG_TMCCT) + 1);
+	
+	scale = tsc_diff / apic_diff;
+	scale_sum += scale;
+
+	if (scale<scale_min) { 
+	    scale_min=scale; 
+	}
+    }
+
+    apic->cycles_per_tick = scale_sum/num_trials;
+
+    APIC_DEBUG("Detected APIC 0x%x CPU cycles per tick as %lu cycles (min was %lu)\n", apic->id, apic->cycles_per_tick,scale_min);
+
+}
+
+
+static int apic_timer_handler(excp_entry_t * excp, excp_vec_t vec)
+{
+    struct apic_dev * apic = (struct apic_dev*)per_cpu_get(apic);
+    uint64_t time_to_next_ns;
+
+    // do all our callbacks
+
+    time_to_next_ns = nk_timer_handler();
+
+    // note that the low-level interrupt handler code in excp_early.S
+    // takes care of invoking the scheduler if needed, and the scheduler
+    // will in turn change the time after we leave - it may set the
+    // timer to expire earlier
+
+    apic_set_oneshot_timer(apic,apic_realtime_to_ticks(apic,time_to_next_ns));
+    
+    IRQ_HANDLER_END();
+    
+    return 0;
+}
