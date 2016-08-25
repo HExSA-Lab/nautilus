@@ -162,7 +162,7 @@ apic_is_bsp (struct apic_dev * apic)
 {
     uint64_t data;
     data = msr_read(APIC_BASE_MSR);
-    return APIC_IS_BSP(data);
+    return !!APIC_IS_BSP(data);
 }
 
 
@@ -349,7 +349,7 @@ static void calibrate_apic_timer(struct apic_dev *apic);
 static int apic_timer_handler(excp_entry_t * excp, excp_vec_t vec);
 
 
-void
+static void
 apic_timer_setup (struct apic_dev * apic, uint32_t quantum)
 {
     uint32_t busfreq;
@@ -767,22 +767,27 @@ void apic_set_oneshot_timer(struct apic_dev *apic, uint32_t ticks)
 	ticks=1; 
     }
     apic_write(apic, APIC_REG_TMICT, ticks);
+    apic->timer_set = 1;
     apic->current_ticks = ticks;
 }
 
 void apic_update_oneshot_timer(struct apic_dev *apic, uint64_t ticks,
 			       nk_timer_condition_t cond)
 {
-    switch (cond) { 
-    case UNCOND:
+    if (!apic->timer_set) { 
 	apic_set_oneshot_timer(apic,ticks);
-	break;
-    case IF_EARLIER:
-	if (ticks < apic->current_ticks) { apic_set_oneshot_timer(apic,ticks);}
-	break;
-    case IF_LATER:
-	if (ticks > apic->current_ticks) { apic_set_oneshot_timer(apic,ticks);}
-	break;
+    } else {
+	switch (cond) { 
+	case UNCOND:
+	    apic_set_oneshot_timer(apic,ticks);
+	    break;
+	case IF_EARLIER:
+	    if (ticks < apic->current_ticks) { apic_set_oneshot_timer(apic,ticks);}
+	    break;
+	case IF_LATER:
+	    if (ticks > apic->current_ticks) { apic_set_oneshot_timer(apic,ticks);}
+	    break;
+	}
     }
 }
 	    
@@ -802,7 +807,12 @@ uint32_t apic_realtime_to_ticks(struct apic_dev *apic, uint64_t ns)
 
 uint64_t apic_realtime_to_cycles(struct apic_dev *apic, uint64_t ns)
 {
-    return apic_realtime_to_ticks(apic,ns)*apic->cycles_per_tick;
+    return (ns*apic->cycles_per_us)/1000;
+}
+
+uint64_t apic_cycles_to_realtime(struct apic_dev *apic, uint64_t cycles)
+{
+    return 1000*(cycles/(apic->cycles_per_us));
 }
 
 
@@ -811,10 +821,30 @@ uint64_t apic_realtime_to_cycles(struct apic_dev *apic, uint64_t ns)
 
 static void calibrate_apic_timer(struct apic_dev *apic) 
 {
+
+#ifndef NAUT_CONFIG_APIC_TIMER_CALIBRATE_INDEPENDENTLY
+    if (!apic_is_bsp(apic)) {
+	// clone core bsp, assuming it is already up
+	//extern struct naut_info nautilus_info;
+	struct apic_dev *bsp_apic = nautilus_info.sys.cpus[0]->apic;
+	apic->bus_freq_hz = bsp_apic->bus_freq_hz;
+	apic->ps_per_tick = bsp_apic->ps_per_tick;
+	apic->cycles_per_us = bsp_apic->cycles_per_us;
+	apic->cycles_per_tick = bsp_apic->cycles_per_tick;
+	
+	APIC_DEBUG("AP APIC id=0x%x cloned BSP APIC's timer configuration\n",
+		   apic->id);
+
+	return;
+    }
+
+#endif
+
     uint64_t start, end;
     uint16_t pit_count;
     uint8_t tmp2;
 
+ try_once:
     // First determine the APIC's bus frequency by calibrating it
     // against a known clock (the PIT).   We do not know the base
     // rate of this APIC, but we do know the base rate of all PITs.
@@ -884,14 +914,33 @@ static void calibrate_apic_timer(struct apic_dev *apic)
     APIC_DEBUG("One test period (1/%u sec) took %u APIC ticks, pit_count=%u, and %lu cycles\n",
 	       TEST_TIME_SEC_RECIP,apic_timer_ticks,(unsigned) pit_count, end-start);
 
+    // occasionally, real hardware can provide surprise
+    // results here, probably due to an SMI.   Additionally,
+    // QEMU provides loony results and it is worth repeating
+    // until we at least get something that's internally consistent
+    if (end-start < 1000000 || apic_timer_ticks<100) { 
+	APIC_DEBUG("Test Period is impossible - trying again\n");
+	goto try_once;
+    }
+
     apic->bus_freq_hz = APIC_TIMER_DIV * apic_timer_ticks * TEST_TIME_SEC_RECIP;
 
-    APIC_DEBUG("Detected APIC 0x%x bus frequency as %u Hz\n", apic->id, apic->bus_freq_hz);
+    APIC_DEBUG("Detected APIC 0x%x bus frequency as %lu Hz\n", apic->id, apic->bus_freq_hz);
 
-    // picoseconds are used to try to keep precision
+    // picoseconds are used to try to keep precision for ns and cycle -> tick conversions
     apic->ps_per_tick = (1000000000000ULL / apic->bus_freq_hz) * APIC_TIMER_DIV;
 
-    APIC_DEBUG("Detected APIC 0x%x real time per tick as %u ps\n", apic->id, apic->ps_per_tick);
+    APIC_DEBUG("Detected APIC 0x%x real time per tick as %lu ps\n", apic->id, apic->ps_per_tick);
+
+    // us are used here to also keep precision for cycle->ns and ns->cycles conversions
+    apic->cycles_per_us = ((end - start) * TEST_TIME_SEC_RECIP)/1000000ULL;
+
+    APIC_DEBUG("Detected APIC 0x%x cycles per us as %lu (core at %lu Hz)\n",apic->id,apic->cycles_per_us,apic->cycles_per_us*1000000); 
+    
+    if (!apic->bus_freq_hz || !apic->ps_per_tick || !apic->cycles_per_us) { 
+	APIC_DEBUG("Detected numbers cannot be zero.... trying again\n");
+	goto try_once;
+    }
 
     /////////////////////////////////////////////////////////////////
     // Now we will determine the calibration of the TSC to APIC time
@@ -944,7 +993,12 @@ static void calibrate_apic_timer(struct apic_dev *apic)
 static int apic_timer_handler(excp_entry_t * excp, excp_vec_t vec)
 {
     struct apic_dev * apic = (struct apic_dev*)per_cpu_get(apic);
+
     uint64_t time_to_next_ns;
+
+    apic->timer_count++;
+
+    apic->timer_set = 0;
 
     // do all our callbacks
 
@@ -955,9 +1009,10 @@ static int apic_timer_handler(excp_entry_t * excp, excp_vec_t vec)
     // will in turn change the time after we leave - it may set the
     // timer to expire earlier
 
+
     apic_set_oneshot_timer(apic,apic_realtime_to_ticks(apic,time_to_next_ns));
-    
+
     IRQ_HANDLER_END();
-    
+
     return 0;
 }

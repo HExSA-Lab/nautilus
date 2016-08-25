@@ -14,6 +14,15 @@ config SERIAL_PORT
     help
       Specifies which serial port to use. E.g. 1 is COM1.
 
+config APIC_TIMER_CALIBRATE_INDEPENDENTLY
+    bool "Calibrate APIC timer independently on each core"
+    default n
+    help
+      If set, each core's APIC timer is independently calibrated
+      If not set, only the BSP core's timer is calibrated and
+      other cores clone its calibration
+
+
 config DEBUG_APIC
     bool "Debug APIC"
     depends on DEBUG_PRINTS

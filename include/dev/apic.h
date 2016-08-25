@@ -198,8 +198,11 @@ struct apic_dev {
     uint64_t err_int_cnt;
     uint64_t bus_freq_hz;
     uint64_t ps_per_tick;
+    uint64_t cycles_per_us;
     uint64_t cycles_per_tick;
+    uint8_t  timer_set;
     uint64_t current_ticks; // timeout currently being computed
+    uint64_t timer_count;
 };
 
 
@@ -259,7 +262,12 @@ uint32_t apic_wait_for_send(struct apic_dev* apic);
 
 
 uint32_t apic_cycles_to_ticks(struct apic_dev *apic, uint64_t cycles);
+
 uint32_t apic_realtime_to_ticks(struct apic_dev *apic, uint64_t ns);
+
+uint64_t apic_realtime_to_cycles(struct apic_dev *apic, uint64_t ns);
+// ns
+uint64_t apic_cycles_to_realtime(struct apic_dev *apic, uint64_t cycles);
 
 void     apic_set_oneshot_timer(struct apic_dev *apic, uint32_t ticks);
 

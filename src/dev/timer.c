@@ -97,7 +97,7 @@ nk_timer_handler (void)
         }
     }
     
-    return 1000000000/NAUT_CONFIG_HZ;
+    return 1000000000ULL/NAUT_CONFIG_HZ;
 }
 
 
