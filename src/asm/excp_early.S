@@ -95,7 +95,7 @@ GLOBAL(early_irq_common)
 
     // we're back from the irq handler
     // do we need to switch to someone else?
-    callq nk_need_resched
+    callq nk_sched_need_resched
     testq %rax, %rax
     jz thr_return
     movq %rax, %rdi

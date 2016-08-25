@@ -155,6 +155,12 @@ endmenu
 
 menu "Nautilus AeroKernel Configuration"
 
+config MAX_THREADS
+    int "Maximum number of threads in system"
+    default 1024
+    help
+      Maximum number of threads in system (or any core) at once
+
 config USE_TICKETLOCKS
     bool "Use Ticket/Bakery locks instead of default spin"
     default n
@@ -181,7 +187,95 @@ config VIRTUAL_CONSOLE_SERIAL_MIRROR_ALL
         (screen clears, display char, etc) are not
         currently mirrored.
 
+  menu "Scheduler Options"
 
+    config UTILIZATION_LIMIT
+    int "Utilization limit (%)"
+    range 0 100
+    default 99
+    help
+       The maximum percent utilization the scheduler will allow
+       on a core.   This gives headroom for the scheduler itself.
+
+    config SPORADIC_RESERVATION
+    int "Sporadic reservation (%)"
+    range 0 100
+    default 10
+    help
+       The percentage utilization the scheduler will dedicate
+       to sporadic threads and tasks on each core.  Sporadic
+       tasks that exceed this are not admitted, even if 
+       there is time available. 
+
+    config APERIODIC_RESERVATION
+    int "Aperiodic reservation (%)"
+    range 0 100
+    default 10
+    help
+       The percentage utilization the scheduler will dedicate
+       to aperiodic threads on each core.   Aperiodic threads
+       can exceed this - they also soak up any time not being
+       used by RT threads. 
+
+    config HZ
+       int "Timer Interrupt Frequency"
+       range 10 10000
+       default "10"
+       help
+        Specifies the tick rate for timers and aperiodic
+        scheduling.  The reciprical of this number is 
+        the scheduling quantum for aperiodic (but not RT)
+        threads.
+
+    config AUTO_REAP
+       bool "Reap threads"
+       default n
+       help
+        Should core zero periodically reap the global
+        thread list of dead detached threads?  Only core 0
+        does this. 
+
+    config AUTO_REAP_PERIOD_MS
+       depends on AUTO_REAP
+       int "Reaping Period (ms)"
+       range 10 10000
+       default "1000"
+       help
+        The target period between reaping the global
+        thread list of dead detached threads. 
+
+    choice
+        prompt "Scheduling Model For Aperiodic Threads"
+        default APERIODIC_ROUND_ROBIN
+
+        config APERIODIC_DYNAMIC_QUANTUM
+            bool "Dynamic, Quantum-based Priority"
+            help 
+               Aperiodic threads have dynamic priority based on a 
+               fixed priority and their runtime within a scheduling quantum.  
+               Longer runtime means lower priority.
+
+        config APERIODIC_DYNAMIC_LIFETIME
+            bool "Dynamic, Lifetime-based Priority"
+            help  
+               Aperiodic threads have dynamic priority based on a 
+               fixed priority and their total runtime.  
+               Longer runtime means lower priority.
+
+        config APERIODIC_LOTTERY
+            bool "Lottery scheduling"
+            help 
+               Aperiodic threads are given a random priority based on 
+               the fixed priorities of all aperiodic threads on the core.
+ 
+        config APERIODIC_ROUND_ROBIN 
+            bool "Round-robin scheduling"
+            help 
+               Aperiodic threads are scheduled round-robbin
+      
+
+    endchoice
+  endmenu
 endmenu
 
 menu "AeroKernel Performance Optimizations"
@@ -343,7 +437,15 @@ menu Debugging
       depends on DEBUG_PRINTS
       default n
       help
-        Turn on debug prints for the scheduler/threads
+        Turn on debug prints for threads
+
+    config DEBUG_SCHED
+      bool "Debug Scheduler"
+      depends on DEBUG_PRINTS
+      default n
+      help
+        Turn on debug prints for the scheduler
+
 
     config DEBUG_SYNCH
       bool "Debug Synchronization"

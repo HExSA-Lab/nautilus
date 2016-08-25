@@ -65,6 +65,18 @@ extern spinlock_t printk_lock;
 
 static int hrt_core_sync = 0;
 
+
+#define QUANTUM_IN_NS (1000000000ULL/NAUT_CONFIG_HZ)
+
+struct nk_sched_config sched_cfg = {
+    .util_limit = NAUT_CONFIG_UTILIZATION_LIMIT*10000ULL, // convert percent to 10^-6 units
+    .sporadic_reservation =  NAUT_CONFIG_SPORADIC_RESERVATION*10000ULL, // ..
+    .aperiodic_reservation = NAUT_CONFIG_APERIODIC_RESERVATION*10000ULL, // ..
+    .aperiodic_quantum = QUANTUM_IN_NS,
+    .aperiodic_default_priority = QUANTUM_IN_NS,
+};
+
+
 #ifdef NAUT_CONFIG_NDPC_RT
 void ndpc_rt_test()
 {
@@ -220,7 +232,6 @@ hrt_bsp_init (unsigned long mbd,
 
     nk_rand_init(naut->sys.cpus[0]);
 
-    nk_sched_init();
 
     /* we now switch away from the boot-time stack in low memory */
     struct cpu * me = naut->sys.cpus[my_cpu_id()];
@@ -341,7 +352,7 @@ default_init (unsigned long mbd,
 
     pci_init(naut);
 
-    nk_sched_init();
+    nk_sched_init(&sched_cfg);
 
     smp_setup_xcall_bsp(naut->sys.cpus[0]);
 

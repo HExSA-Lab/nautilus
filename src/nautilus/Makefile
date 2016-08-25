@@ -22,6 +22,7 @@ obj-y += \
 	smp.o \
 	idle.o \
 	thread.o \
+        scheduler.o \
 	barrier.o \
 	backtrace.o \
 	cpu.o \

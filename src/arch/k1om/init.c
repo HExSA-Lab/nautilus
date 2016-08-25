@@ -59,6 +59,15 @@
 
 extern spinlock_t printk_lock;
 
+#define QUANTUM_IN_NS (1000000000ULL/NAUT_CONFIG_HZ)
+
+struct nk_sched_config sched_cfg = {
+    .util_limit = NAUT_CONFIG_UTILIZATION_LIMIT*10000ULL, // convert percent to 10^-6 units
+    .sporadic_reservation =  NAUT_CONFIG_SPORADIC_RESERVATION*10000ULL, // ..
+    .aperiodic_reservation = NAUT_CONFIG_APERIODIC_RESERVATION*10000ULL, // ..
+    .aperiodic_quantum = QUANTUM_IN_NS,
+    .aperiodic_default_priority = QUANTUM_IN_NS,
+};
 
 
 #ifdef NAUT_CONFIG_NDPC_RT
@@ -171,7 +180,7 @@ init (unsigned long mbd, unsigned long magic)
 
     nk_rand_init(naut->sys.cpus[naut->sys.bsp_id]);
 
-    nk_sched_init();
+    nk_sched_init(&sched_cfg);
 
     naut = smp_ap_stack_switch(get_cur_thread()->rsp, get_cur_thread()->rsp, naut);
 

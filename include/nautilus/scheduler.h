@@ -30,118 +30,111 @@
 
 #include <nautilus/thread.h>
 
-struct periodic_constraints {
-    uint64_t period, slice;
+// All time units are in nanoseconds stored in a 64 bit word
+// Time 0 is machine start time
+// Absolute time is kept for about 585 years
+//
+// For a 2 GHz TSC, the cycle counter will roll over in 
+// about 292 years
+
+// Configuration occurs per-core
+struct nk_sched_config {
+    uint64_t util_limit;                 // utilization available in 10^-6 units
+    uint64_t sporadic_reservation;       // utilization in 10^-6 units
+    uint64_t aperiodic_reservation;      // utilization in 10^-6 units
+    uint64_t aperiodic_quantum;          // in nanoseconds 
+    uint64_t aperiodic_default_priority; 
 };
 
-struct sporadic_constraints {
-    uint64_t work;
+struct nk_sched_periodic_constraints {
+    uint64_t phase;  // time of first arrival relative to time of admission
+    uint64_t period; // how frequently it arrives (arrival+period=deadline)
+    uint64_t slice;  // how much RT computation when it arrives
 };
 
-struct aperiodic_constraints {
-    uint64_t priority;
+struct nk_sched_sporadic_constraints {
+    uint64_t phase;    // time of arrival relative to admission
+    uint64_t size;     // length of RT computation
+    uint64_t deadline; // deadline for RT computation
+    uint64_t aperiodic_priority; // what priority once it it is complete
 };
 
-typedef union rt_constraints {
-    struct periodic_constraints     periodic;
-    struct sporadic_constraints     sporadic;
-    struct aperiodic_constraints    aperiodic;
-} rt_constraints;
+struct nk_sched_aperiodic_constraints {
+    uint64_t priority;  // higher number = lower priority; essentially quantum
+};
 
-typedef enum { APERIODIC = 0, SPORADIC = 1, PERIODIC = 2} rt_type;
-typedef enum { RUNNABLE_QUEUE = 0, PENDING_QUEUE = 1, APERIODIC_QUEUE = 2} queue_type;
-typedef enum { ARRIVED = 0, ADMITTED = 1, TOBO_REMOVED = 2, REMOVED = 3, SLEEPING = 4, DENIED = 5} rt_status;
+typedef enum { APERIODIC = 0, SPORADIC = 1, PERIODIC = 2} nk_sched_constraint_type_t;
+struct nk_sched_constraints {
+    nk_sched_constraint_type_t type;
+    union  {
+	struct nk_sched_periodic_constraints     periodic;
+	struct nk_sched_sporadic_constraints     sporadic;
+	struct nk_sched_aperiodic_constraints    aperiodic;
+    } ;
+} ;
 
-struct rt_thread;
+// Call these on the BSP and APs at boot time
+int nk_sched_init(struct nk_sched_config *cfg);
+int nk_sched_init_ap(struct nk_sched_config *cfg);
 
-typedef struct rt_node {
-    struct rt_thread *thread;
-    struct rt_node *next;
-    struct rt_node *prev;
-} rt_node;
-
-typedef struct rt_list {
-    rt_node *head;
-    rt_node *tail;
-} rt_list;
-
-typedef struct rt_thread {
-    rt_type type;
-    queue_type q_type;
-    rt_status status;
-    rt_constraints *constraints;
-    uint64_t start_time; 
-    uint64_t run_time;
-    uint64_t deadline;
-    uint64_t exit_time;
-    struct nk_thread *thread;
-
-    rt_list *holding;
-    rt_list *waiting;
-
-    struct rt_thread *parent;
-    rt_list *children;
-
-} rt_thread;
-
-rt_thread* rt_thread_init(int type,
-                          rt_constraints *constraints,
-                          uint64_t deadline,
-                          struct nk_thread *thread
-                          );
-
-typedef struct rt_queue {
-    queue_type type;
-    uint64_t size;
-    rt_thread *threads[0];
-} rt_queue ;
-
-typedef struct tsc_info {
-    uint64_t set_time;
-    uint64_t start_time;
-    uint64_t end_time;
-    uint64_t elapsed_time;
-    uint64_t error;
-} tsc_info;
-
-typedef struct rt_scheduler {
-    rt_queue *runnable;
-    rt_queue *pending;
-    rt_queue *aperiodic;
-
-    rt_list *sleeping;
-    rt_list *arrival;
-    rt_list *exited;
-
-    rt_thread *main_thread;
-    uint64_t run_time;
-    tsc_info *tsc;
-} rt_scheduler;
-
-rt_scheduler* rt_scheduler_init(rt_thread *main_thread);
-struct nk_thread* rt_need_resched();
-void rt_start(uint64_t sched_slice_time, uint64_t sched_period);
-
-void enqueue_thread(rt_queue *queue, rt_thread *thread);
-rt_thread* dequeue_thread(rt_queue *queue);
-
-void rt_thread_dump(rt_thread *thread);
-
-uint64_t cur_time();
+// Initialize the scheduling state of a new thread
+// It will have the defaults (aperiodic, medium priority) if
+// the constraints argument is null
+struct nk_sched_thread_state* nk_sched_thread_state_init(struct nk_thread *thread,
+							 struct nk_sched_constraints *constraints);
+void nk_sched_thread_state_deinit(struct nk_thread *thread);
 
 
-int rt_admit(rt_scheduler *scheduler, rt_thread *thread);
-void wait_on(rt_thread *A, rt_thread *B);
-void wake_up(rt_thread *A, rt_thread *B);
-void wake_up_all(rt_thread *A);
-void list_enqueue(rt_list *l, rt_thread *t);
+// call after thread creation is complete, but before it is first run
+int nk_sched_thread_post_create(struct nk_thread *thread);
+// call before thread destruction is started
+int nk_sched_thread_pre_destroy(struct nk_thread *thread);
 
-rt_thread* list_dequeue(rt_list *l);
-rt_thread* list_remove(rt_list *l, rt_thread *t);
-rt_thread* remove_thread(rt_thread *thread);
-void rt_thread_exit(rt_thread *thread);
-int rt_list_empty(rt_list *l);
+// Change the scheduling state of the calling thread
+// nonzero return => failed
+int    nk_sched_thread_change_constraints(struct nk_sched_constraints *constraints);
 
+// Make the thread schedulable - generally only called by thread.c
+// When the thread is first launched admit=1 is used to do admisson on the 
+// designated CPU
+// nonzero return => failed
+int    nk_sched_make_runnable(struct nk_thread *thread, int cpu, int admit);
+
+// put this thread back into the appropriate runnable queue
+int     nk_sched_suspend(struct nk_thread *thread);
+
+// Put the thread to sleep / awaken it
+void    nk_sched_sleep();
+#define nk_sched_awaken(thread,cpu) nk_sched_make_runnable(thread,cpu,0)
+// Have the thread yield to another, if appropriate
+void              nk_sched_yield(void);
+#define           nk_sched_schedule() nk_sched_yield()
+
+// Thread exit - will not return!
+void    nk_sched_exit();
+
+// clean up after detached threads
+void    nk_sched_reap();
+
+// return ns
+uint64_t nk_sched_get_realtime();
+
+// Print out threads on cpu
+// -1 => all CPUs
+void nk_sched_dump_threads(int cpu);
+
+// print out scheduler info on the cpu
+// -1 => all CPUs
+void nk_sched_dump_cores(int cpu);
+
+// print out timer info on the cpu
+// -1 => all CPUs
+void nk_sched_dump_time(int cpu);
+
+// Invoked by interrupt handler wrapper and other code
+// to cause thread context switches
+// Do not call this unless you know what you are doing
+struct nk_thread *nk_sched_need_resched(void);
 
 
 #endif /* _SCHEDULER_H */

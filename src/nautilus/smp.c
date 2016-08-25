@@ -299,7 +299,9 @@ smp_ap_setup (struct cpu * core)
         return -1;
     }
 
-    if (nk_sched_init_ap() != 0) {
+    extern struct nk_sched_config sched_cfg;
+
+    if (nk_sched_init_ap(&sched_cfg) != 0) {
         ERROR_PRINT("Could not setup scheduling for core %u\n", core->id);
         return -1;
     }

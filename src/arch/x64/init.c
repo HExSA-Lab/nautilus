@@ -66,6 +66,19 @@
 
 extern spinlock_t printk_lock;
 
+
+
+#define QUANTUM_IN_NS (1000000000ULL/NAUT_CONFIG_HZ)
+
+struct nk_sched_config sched_cfg = {
+    .util_limit = NAUT_CONFIG_UTILIZATION_LIMIT*10000ULL, // convert percent to 10^-6 units
+    .sporadic_reservation =  NAUT_CONFIG_SPORADIC_RESERVATION*10000ULL, // ..
+    .aperiodic_reservation = NAUT_CONFIG_APERIODIC_RESERVATION*10000ULL, // ..
+    .aperiodic_quantum = QUANTUM_IN_NS,
+    .aperiodic_default_priority = QUANTUM_IN_NS,
+};
+
+
 #ifdef NAUT_CONFIG_NDPC_RT
 void ndpc_rt_test()
 {
@@ -183,7 +196,6 @@ static int launch_vmm_environment()
 #endif
   return 0;
 }
-  
 
 
 
@@ -197,8 +209,6 @@ static int launch_vmm_environment()
 "+===============================================+  \n" \
 " Kyle C. Hale (c) 2014 | Northwestern University   \n" \
 "+===============================================+  \n\n"
-
-
 
 
 extern struct naut_info * smp_ap_stack_switch(uint64_t, uint64_t, struct naut_info*);
@@ -275,8 +285,7 @@ init (unsigned long mbd,
 
     pci_init(naut);
 
-    nk_sched_init();
-
+    nk_sched_init(&sched_cfg);
 
     /* we now switch away from the boot-time stack in low memory */
     naut = smp_ap_stack_switch(get_cur_thread()->rsp, get_cur_thread()->rsp, naut);
