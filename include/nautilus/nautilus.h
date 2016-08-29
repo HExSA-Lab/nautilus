@@ -47,7 +47,6 @@ extern "C" {
 
 
 #include <dev/ioapic.h>
-#include <dev/timer.h>
 #include <nautilus/smp.h>
 #include <nautilus/paging.h>
 #include <nautilus/limits.h>
@@ -89,9 +88,6 @@ struct sys_info {
     uint32_t bsp_id;
 
     uint8_t pic_mode_enabled;
-
-    uint_t num_tevents;
-    struct nk_timer_event * time_events;
 
     struct pci_info * pci;
     struct hpet_dev * hpet;

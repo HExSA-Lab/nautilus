@@ -32,6 +32,7 @@
 #include <nautilus/smp.h>
 #include <nautilus/irq.h>
 #include <nautilus/thread.h>
+#include <nautilus/timer.h>
 #include <nautilus/idle.h>
 #include <nautilus/percpu.h>
 #include <nautilus/errno.h>
@@ -50,7 +51,6 @@
 #include <dev/apic.h>
 #include <dev/pci.h>
 #include <dev/ioapic.h>
-#include <dev/timer.h>
 #include <arch/k1om/xeon_phi.h>
 
 #ifdef NAUT_CONFIG_NDPC_RT

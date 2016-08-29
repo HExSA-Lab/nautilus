@@ -100,12 +100,13 @@ int    nk_sched_thread_change_constraints(struct nk_sched_constraints *constrain
 // nonzero return => failed
 int    nk_sched_make_runnable(struct nk_thread *thread, int cpu, int admit);
 
-// put this thread back into the appropriate runnable queue
-int     nk_sched_suspend(struct nk_thread *thread);
-
 // Put the thread to sleep / awaken it
+// these signal the scheduler that the thread is now on a 
+// non-scheduler queue (sleep) or is to be returned to a scheduler 
+// queue (awaken)
 void    nk_sched_sleep();
 #define nk_sched_awaken(thread,cpu) nk_sched_make_runnable(thread,cpu,0)
+
 // Have the thread yield to another, if appropriate
 void              nk_sched_yield(void);
 #define           nk_sched_schedule() nk_sched_yield()

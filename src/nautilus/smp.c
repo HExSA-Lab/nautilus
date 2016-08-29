@@ -37,7 +37,6 @@
 #include <nautilus/percpu.h>
 #include <dev/ioapic.h>
 #include <dev/apic.h>
-#include <dev/timer.h>
 
 #ifndef NAUT_CONFIG_DEBUG_SMP
 #undef DEBUG_PRINT

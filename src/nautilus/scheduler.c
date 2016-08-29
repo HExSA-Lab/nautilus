@@ -42,13 +42,13 @@
 
 #include <nautilus/nautilus.h>
 #include <nautilus/thread.h>
+#include <nautilus/timer.h>
 #include <nautilus/scheduler.h>
 #include <nautilus/irq.h>
 #include <nautilus/cpu.h>
 #include <nautilus/cpuid.h>
 #include <nautilus/random.h>
 #include <dev/apic.h>
-#include <dev/timer.h>
 
 
 #define SANITY_CHECKS 1
@@ -1881,7 +1881,6 @@ nk_sched_sleep(void)
     handle_special_switch(SLEEPING);
 }
 
-
 static int rt_thread_check_deadlines(rt_thread *t, rt_scheduler *s, uint64_t now)
 {
     if (now > t->deadline) {
@@ -2448,11 +2447,8 @@ static void reaper(void *in, void **out)
     nk_sched_thread_change_constraints(&c);
     
     while (1) {
-	// ideally we would sleep here, but 
-	// nk_sleep is not functonal at this point
-	// so this is a gruesome hack
-	// nk_sleep(NAUT_CONFIG_AUTO_REAP_PERIOD_MS);	
-	udelay(NAUT_CONFIG_AUTO_REAP_PERIOD_MS*1000ULL);
+	DEBUG("Reaper sleeping\n");
+	nk_sleep(NAUT_CONFIG_AUTO_REAP_PERIOD_MS*1000000ULL);	
 	DEBUG("Reaping threads\n");
 	nk_sched_reap();
     }

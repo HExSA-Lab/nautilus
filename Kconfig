@@ -228,7 +228,7 @@ config VIRTUAL_CONSOLE_SERIAL_MIRROR_ALL
         threads.
 
     config AUTO_REAP
-       bool "Reap threads"
+       bool "Reap threads automatically"
        default n
        help
         Should core zero periodically reap the global
@@ -446,6 +446,12 @@ menu Debugging
       help
         Turn on debug prints for the scheduler
 
+    config DEBUG_TIMERS
+      bool "Debug Timers"
+      depends on DEBUG_PRINTS
+      default n
+      help
+        Turn on debug prints for timer subsystem
 
     config DEBUG_SYNCH
       bool "Debug Synchronization"

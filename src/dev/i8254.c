@@ -25,7 +25,6 @@
 #include <nautilus/math.h>
 #include <nautilus/irq.h>
 #include <dev/i8254.h>
-#include <dev/timer.h>
 
 
 #ifndef NAUT_CONFIG_DEBUG_PIT

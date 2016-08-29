@@ -51,13 +51,6 @@ config DEBUG_KBD
     help
         Turn on debug prints for the keyboard
 
-config DEBUG_TIMERS
-    bool "Debug Timers"
-    depends on DEBUG_PRINTS
-    default n
-    help
-      Turn on debug prints for timer subsystem
-
 config DEBUG_PIT
     bool "Debug PIT"
     depends on DEBUG_PRINTS

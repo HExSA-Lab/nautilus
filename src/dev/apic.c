@@ -29,9 +29,9 @@
 #include <nautilus/percpu.h>
 #include <nautilus/intrinsics.h>
 #include <nautilus/mm.h>
+#include <nautilus/timer.h>
 #include <dev/apic.h>
 #include <dev/i8254.h>
-#include <dev/timer.h>
 #include <lib/bitops.h>
 
 #ifndef NAUT_CONFIG_DEBUG_APIC
@@ -1009,8 +1009,12 @@ static int apic_timer_handler(excp_entry_t * excp, excp_vec_t vec)
     // will in turn change the time after we leave - it may set the
     // timer to expire earlier
 
-
-    apic_set_oneshot_timer(apic,apic_realtime_to_ticks(apic,time_to_next_ns));
+    if (time_to_next_ns == -1) { 
+	// indicates "infinite", which we turn into the maximum timer count
+	apic_set_oneshot_timer(apic,-1);
+    } else {
+	apic_set_oneshot_timer(apic,apic_realtime_to_ticks(apic,time_to_next_ns));
+    }
 
     IRQ_HANDLER_END();
 

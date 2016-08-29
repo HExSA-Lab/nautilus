@@ -33,6 +33,7 @@
 #include <nautilus/smp.h>
 #include <nautilus/irq.h>
 #include <nautilus/thread.h>
+#include <nautilus/timer.h>
 #include <nautilus/idle.h>
 #include <nautilus/percpu.h>
 #include <nautilus/errno.h>
@@ -50,7 +51,6 @@
 #include <dev/pci.h>
 #include <dev/hpet.h>
 #include <dev/ioapic.h>
-#include <dev/timer.h>
 #include <dev/i8254.h>
 #include <dev/kbd.h>
 #include <dev/serial.h>
@@ -273,7 +273,7 @@ init (unsigned long mbd,
 
     ioapic_init(&(naut->sys));
 
-    nk_timer_init(naut);
+    nk_timer_init();
 
     apic_init(naut->sys.cpus[0]);
 
