@@ -91,9 +91,12 @@ static int launch_aperiodic_burner(char *name, uint64_t size_ns, uint64_t priori
     a->constraints.type=APERIODIC;
     a->constraints.aperiodic.priority=priority;
 
-    nk_thread_start(burner, (void*)a , NULL, 1, PAGE_SIZE, &tid, -1);
-    
-    return 0;
+    if (nk_thread_start(burner, (void*)a , NULL, 1, PAGE_SIZE_4KB, &tid, -1)) { 
+	free(a);
+	return -1;
+    } else {
+	return 0;
+    }
 }
 
 static int launch_sporadic_burner(char *name, uint64_t size_ns, uint64_t phase, uint64_t size, uint64_t deadline, uint64_t aperiodic_priority)
@@ -115,9 +118,12 @@ static int launch_sporadic_burner(char *name, uint64_t size_ns, uint64_t phase, 
     a->constraints.sporadic.deadline = deadline;
     a->constraints.sporadic.aperiodic_priority = aperiodic_priority;
 
-    nk_thread_start(burner, (void*)a , NULL, 1, PAGE_SIZE, &tid, -1);
-    
-    return 0;
+    if (nk_thread_start(burner, (void*)a , NULL, 1, PAGE_SIZE_4KB, &tid, -1)) {
+	free(a);
+	return -1;
+    } else {
+	return 0;
+    }
 }
 
 static int launch_periodic_burner(char *name, uint64_t size_ns, uint64_t phase, uint64_t period, uint64_t slice)
@@ -138,9 +144,12 @@ static int launch_periodic_burner(char *name, uint64_t size_ns, uint64_t phase, 
     a->constraints.periodic.period = period;
     a->constraints.periodic.slice = slice;
 
-    nk_thread_start(burner, (void*)a , NULL, 1, PAGE_SIZE, &tid, -1);
-    
-    return 0;
+    if (nk_thread_start(burner, (void*)a , NULL, 1, PAGE_SIZE_4KB, &tid, -1)) {
+	free(a);
+	return -1;
+    } else {
+	return 0;
+    }
 }
 
 static int handle_cmd(char *buf, int n)
@@ -316,11 +325,13 @@ nk_thread_id_t nk_launch_shell(char *name, int cpu)
   strncpy(n,name,32);
   n[31]=0;
   
-  nk_thread_start(shell, (void*)n, 0, 1, PAGE_SIZE, &tid, cpu);
-
-  INFO_PRINT("Shell %s launched on cpu %d as %p\n",name,cpu,tid);
-
-  return tid;
+  if (nk_thread_start(shell, (void*)n, 0, 1, PAGE_SIZE_4KB, &tid, cpu)) { 
+      free(n);
+      return 0;
+  } else {
+      INFO_PRINT("Shell %s launched on cpu %d as %p\n",name,cpu,tid);
+      return tid;
+  }
 }
 
 

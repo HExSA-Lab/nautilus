@@ -84,8 +84,8 @@ struct nk_sched_thread_state* nk_sched_thread_state_init(struct nk_thread *threa
 							 struct nk_sched_constraints *constraints);
 void nk_sched_thread_state_deinit(struct nk_thread *thread);
 
-
 // call after thread creation is complete, but before it is first run
+// this will also select the initial cpu, setting current_cpu
 int nk_sched_thread_post_create(struct nk_thread *thread);
 // call before thread destruction is started
 int nk_sched_thread_pre_destroy(struct nk_thread *thread);
@@ -93,6 +93,21 @@ int nk_sched_thread_pre_destroy(struct nk_thread *thread);
 // Change the scheduling state of the calling thread
 // nonzero return => failed
 int    nk_sched_thread_change_constraints(struct nk_sched_constraints *constraints);
+
+// Move the thread to the new cpu
+// a thread cannot move itself
+// a running thread cannot be moved
+// currently only aperiodic threads can be moved
+// block=1 => will keep trying until successful
+int    nk_sched_thread_move(struct nk_thread *thread, int new_cpu, int block);
+
+//
+// Have this CPU attempt to steal at most max threads from cpu
+// Stealable threads are runnable aperiodic threads 
+// cpu==-1 means the scheduler will select a cpu
+// This makes a single pass, and there is no guarantee 
+// any threads are stolen
+int    nk_sched_cpu_mug(int cpu, uint64_t max, uint64_t *actual);
 
 // Make the thread schedulable - generally only called by thread.c
 // When the thread is first launched admit=1 is used to do admisson on the 
@@ -137,5 +152,7 @@ void nk_sched_dump_time(int cpu);
 // Do not call this unless you know what you are doing
 struct nk_thread *nk_sched_need_resched(void);
 
-
+// how much time has this thread spent executing?
+// ns
+uint64_t nk_sched_get_runtime(struct nk_thread *t);
 #endif /* _SCHEDULER_H */

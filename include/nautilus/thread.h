@@ -52,12 +52,12 @@ typedef uint64_t nk_stack_size_t;
 
 int
 nk_thread_create (nk_thread_fun_t fun, 
-                 void * input,
-                 void ** output,
-                 uint8_t is_detached,
-                 nk_stack_size_t stack_size,
-                 nk_thread_id_t * tid,
-                 int cpu);
+		  void * input,
+		  void ** output,
+		  uint8_t is_detached,
+		  nk_stack_size_t stack_size,
+		  nk_thread_id_t * tid,
+		  int bound_cpu);  // -1 => not bound
 
 int
 nk_thread_run(nk_thread_id_t tid);
@@ -69,7 +69,7 @@ nk_thread_start (nk_thread_fun_t fun,
                  uint8_t is_detached,
                  nk_stack_size_t stack_size,
                  nk_thread_id_t * tid,
-                 int cpu);
+                 int bound_cpu); // -1 => not bound
 
 int nk_thread_name(nk_thread_id_t tid, char *name);
 
@@ -153,6 +153,8 @@ struct nk_thread {
 
     int bound_cpu;
 
+    int current_cpu;
+
     uint8_t is_idle;
 
     void * output;
@@ -179,7 +181,7 @@ int
 _nk_thread_init (nk_thread_t * t, 
 		 void * stack, 
 		 uint8_t is_detached, 
-		 int cpu, 
+		 int bound_cpu, // -1 => not bound
 		 nk_thread_t * parent);
 
 

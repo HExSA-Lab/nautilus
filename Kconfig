@@ -244,6 +244,34 @@ config VIRTUAL_CONSOLE_SERIAL_MIRROR_ALL
         The target period between reaping the global
         thread list of dead detached threads. 
 
+    config WORK_STEALING
+       bool "Work stealing"
+       default n
+       help
+        If enabled an idle cpu will attempt to steal
+        runnable threads from other cpus.  
+
+    config WORK_STEALING_INTERVAL_MS
+       depends on WORK_STEALING
+       int "Work stealing interval (ms)"
+       range 1 10000
+       default "10"
+       help
+        The target period between work-stealing attempts
+	by the idle thread.  This is in terms of 
+        the amount of time the idle thread itself executes
+	not the real-
+
+    config WORK_STEALING_AMOUNT
+       depends on WORK_STEALING
+       int "Work stealing amount"
+       range 1 100
+       default "4"
+       help
+        The number of threads the idle thread will
+        attempt to steal every time work stealing is
+	run.
+
     choice
         prompt "Scheduling Model For Aperiodic Threads"
         default APERIODIC_ROUND_ROBIN

@@ -1120,7 +1120,10 @@ int nk_switch_to_vc_list()
 static int start_list()
 {
 
-  nk_thread_start(list, 0, 0, 1, PAGE_SIZE, &list_tid, -1);
+  if (nk_thread_start(list, 0, 0, 1, PAGE_SIZE_4KB, &list_tid, -1)) {
+    ERROR("Failed to launch VC list\n");
+    return -1;
+  }
   
   INFO("List launched\n");
 
@@ -1153,7 +1156,10 @@ int nk_vc_init()
     return -1;
   }
 
-  start_list();
+  if (start_list()) { 
+    ERROR("Cannot create vc list thread\n");
+    return -1;
+  }
 
   cur_vc = default_vc;
   copy_display_to_vc(cur_vc);

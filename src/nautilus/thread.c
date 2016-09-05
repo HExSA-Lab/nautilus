@@ -43,9 +43,10 @@ extern uint8_t malloc_cpus_ready;
 #undef  DEBUG_PRINT
 #define DEBUG_PRINT(fmt, args...)
 #endif
-#define SCHED_PRINT(fmt, args...) INFO_PRINT("SCHED: " fmt, ##args)
-#define SCHED_DEBUG(fmt, args...) DEBUG_PRINT("SCHED: " fmt, ##args)
-#define SCHED_WARN(fmt, args...)  WARN_PRINT("SCHED: " fmt, ##args)
+#define THREAD_INFO(fmt, args...) INFO_PRINT("Thread: " fmt, ##args)
+#define THREAD_ERROR(fmt, args...) ERROR_PRINT("Thread: " fmt, ##args)
+#define THREAD_DEBUG(fmt, args...) DEBUG_PRINT("Thread: " fmt, ##args)
+#define THREAD_WARN(fmt, args...)  WARN_PRINT("Thread: " fmt, ##args)
 
 static unsigned long next_tid = 0;
 
@@ -67,7 +68,7 @@ nk_thread_queue_create (void)
     q = nk_queue_create();
 
     if (!q) {
-        ERROR_PRINT("Could not allocate thread queue\n");
+        THREAD_ERROR("Could not allocate thread queue\n");
         return NULL;
     }
     return q;
@@ -83,7 +84,7 @@ void
 nk_thread_queue_destroy (nk_thread_queue_t * q)
 {
     // free any remaining entries
-    SCHED_DEBUG("Destroying thread queue\n");
+    THREAD_DEBUG("Destroying thread queue\n");
     nk_queue_destroy(q, 1);
 }
 
@@ -114,28 +115,6 @@ dequeue_thread_from_waitq (nk_thread_t * waiter, nk_thread_queue_t * waitq)
     return t;
 }
 
-
-inline nk_thread_t*
-nk_dequeue_thread_from_runq (nk_thread_t * t)
-{
-    nk_thread_queue_t * q = t->cur_run_q;
-    nk_queue_entry_t * elm = NULL;
-    nk_thread_t * ret = NULL;
-
-    /* bail if the run queue doesn't exist */
-    if (!q) {
-        ERROR_PRINT("Attempt to dequeue thread not on run queue (cpu=%u)\n", my_cpu_id());
-        return NULL;
-    }
-
-    elm = nk_dequeue_entry_atomic(q, &(t->runq_node));
-    ret = container_of(elm, nk_thread_t, runq_node);
-
-    t->status    = NK_THR_SUSPENDED;
-    t->cur_run_q = NULL;
-
-    return ret;
-}
 
 
 
@@ -198,21 +177,28 @@ int
 _nk_thread_init (nk_thread_t * t, 
 		 void * stack, 
 		 uint8_t is_detached, 
-		 int cpu, 
+		 int bound_cpu, 
 		 nk_thread_t * parent)
 {
+    struct sys_info * sys = per_cpu_get(system);
 
     if (!t) {
-        ERROR_PRINT("Given NULL thread pointer...\n");
+        THREAD_ERROR("Given NULL thread pointer...\n");
         return -EINVAL;
     }
+
+    if (bound_cpu>=0 && bound_cpu>=sys->num_cpus) {
+	THREAD_ERROR("Impossible CPU binding %d\n",bound_cpu);
+	return -EINVAL;
+    }
+
 
     t->stack      = stack;
     t->rsp        = (uint64_t)stack + t->stack_size - sizeof(uint64_t);
     t->tid        = atomic_inc(next_tid) + 1;
     t->refcount   = is_detached ? 1 : 2; // thread references itself as well
     t->parent     = parent;
-    t->bound_cpu  = cpu;
+    t->bound_cpu  = bound_cpu;
     t->fpu_state_offset = offsetof(struct nk_thread, fpu_state);
 
     INIT_LIST_HEAD(&(t->children));
@@ -223,13 +209,14 @@ _nk_thread_init (nk_thread_t * t,
     }
 
     if (!(t->sched_state = nk_sched_thread_state_init(t,0))) { 
-	ERROR_PRINT("Could not create scheduler state for thread\n");
+	THREAD_ERROR("Could not create scheduler state for thread\n");
 	return -EINVAL;
     }
 
     t->waitq = nk_thread_queue_create();
+
     if (!t->waitq) {
-        ERROR_PRINT("Could not create thread's wait queue\n");
+        THREAD_ERROR("Could not create thread's wait queue\n");
         return -EINVAL;
     }
 
@@ -240,7 +227,7 @@ _nk_thread_init (nk_thread_t * t,
 static void
 thread_cleanup (void)
 {
-    SCHED_DEBUG("Thread (%d) exiting on core %d\n", get_cur_thread()->tid, my_cpu_id());
+    THREAD_DEBUG("Thread (%d) exiting on core %d\n", get_cur_thread()->tid, my_cpu_id());
     nk_thread_exit(0);
 }
 
@@ -325,7 +312,7 @@ thread_setup_init_stack (nk_thread_t * t, nk_thread_fun_t fun, void * arg)
  *               die immediately when it exits)
  * @stack_size: size of the thread's stack. 0 => let us decide
  * @tid: opaque user object for the thread to be set (this is the output)
- * @cpu: cpu on which to bind the thread. CPU_ANY means any CPU
+ * @bound_cpu: cpu on which to bind the thread. CPU_ANY means any CPU
  *
  * return: on error returns -EINVAL, returns 0 on success
  *
@@ -337,54 +324,38 @@ nk_thread_create (nk_thread_fun_t fun,
                   uint8_t is_detached,
                   nk_stack_size_t stack_size,
                   nk_thread_id_t * tid,
-                  int cpu)
+                  int bound_cpu)
 {
+    struct sys_info * sys = per_cpu_get(system);
     nk_thread_t * t = NULL;
-    void * stack    = NULL;
-
-    if (cpu == CPU_ANY) {
-        cpu = my_cpu_id();
-    }
-
-#ifndef NAUT_CONFIG_THREAD_OPTIMIZE
-    ASSERT(cpu < per_cpu_get(system)->num_cpus);
-
-    if (cpu >= per_cpu_get(system)->num_cpus) {
-        ERROR_PRINT("thread create received invalid CPU id (%u)\n", cpu);
-        return -EINVAL;
-    }
-#endif
+    int current_cpu = -1;
 
     t = malloc(sizeof(nk_thread_t));
 
-#ifndef NAUT_CONFIG_THREAD_OPTIMIZE
-    ASSERT(t);
     if (!t) {
-        ERROR_PRINT("Could not allocate thread struct\n");
+        THREAD_ERROR("Could not allocate thread struct\n");
         return -EINVAL;
     }
+
     memset(t, 0, sizeof(nk_thread_t));
-#endif
 
-
-#ifndef NAUT_CONFIG_THREAD_OPTIMIZE
     if (stack_size) {
-        stack         = (void*)malloc(stack_size);
+        t->stack      = (void*)malloc(stack_size);
         t->stack_size = stack_size;
     } else {
-        stack         = (void*)malloc(PAGE_SIZE);
+        t->stack      = (void*)malloc(PAGE_SIZE);
         t->stack_size =  PAGE_SIZE;
     }
-#else
-    stack         = malloc(PAGE_SIZE_4KB);
-    t->stack_size = PAGE_SIZE_4KB;
-#endif
 
-    ASSERT(stack);
+    if (!t->stack) { 
+	THREAD_ERROR("Failed to allocate a stack\n");
+	free(t);
+	return -EINVAL;
+    }
 
-    if (_nk_thread_init(t, stack, is_detached, cpu, get_cur_thread()) < 0) {
-        ERROR_PRINT("Could not initialize thread\n");
-        goto out_err1;
+    if (_nk_thread_init(t, t->stack, is_detached, bound_cpu, get_cur_thread()) < 0) {
+        THREAD_ERROR("Could not initialize thread\n");
+        goto out_err;
     }
 
     t->status = NK_THR_INIT;
@@ -394,22 +365,22 @@ nk_thread_create (nk_thread_fun_t fun,
     t->output = output;
     
     if (nk_sched_thread_post_create(t)) {
-	ERROR_PRINT("Scheduler does not accept thread creation\n");
-	goto out_err1;
+	THREAD_ERROR("Scheduler does not accept thread creation\n");
+	goto out_err;
     }
 
     if (tid) {
         *tid = (nk_thread_id_t)t;
     }
 
-    SCHED_DEBUG("Thread create creating new thread with t=%p, tid=%lu\n", t, t->tid);
+    THREAD_DEBUG("Thread create creating new thread with t=%p, tid=%lu\n", t, t->tid);
 
     return 0;
 
-out_err1:
-    free(stack);
+out_err:
+    free(t->stack);
     free(t);
-    return -1;
+    return -EINVAL;
 }
 
 
@@ -426,7 +397,7 @@ out_err1:
  *               die immediately when it exits)
  * @stack_size: size of the thread's stack. 0 => let us decide
  * @tid: the opaque pointer passed to the user (output variable)
- * @cpu: cpu on which to bind the thread. CPU_ANY means any CPU 
+ * @bound_cpu: cpu on which to bind the thread. CPU_ANY means any CPU 
  *
  *
  * on error, returns -EINVAL, otherwise 0
@@ -438,20 +409,16 @@ nk_thread_start (nk_thread_fun_t fun,
                  uint8_t is_detached,
                  nk_stack_size_t stack_size,
                  nk_thread_id_t * tid,
-                 int cpu)
+                 int bound_cpu)
 {
     nk_thread_id_t newtid   = NULL;
     nk_thread_t * newthread = NULL;
 
 
-    DEBUG_PRINT("Start thread, caller %p\n", __builtin_return_address(0));
-    /* put it on the current CPU */
-    if (cpu == CPU_ANY) {
-        cpu = my_cpu_id();
-    }
+    THREAD_DEBUG("Start thread, caller %p\n", __builtin_return_address(0));
 
-    if (nk_thread_create(fun, input, output, is_detached, stack_size, &newtid, cpu) < 0) {
-        ERROR_PRINT("Could not create thread\n");
+    if (nk_thread_create(fun, input, output, is_detached, stack_size, &newtid, bound_cpu) < 0) {
+        THREAD_ERROR("Could not create thread\n");
         return -1;
     }
 
@@ -461,64 +428,41 @@ nk_thread_start (nk_thread_fun_t fun,
         *tid = newtid;
     }
 
-    thread_setup_init_stack(newthread, fun, input);
-
-    if (nk_sched_make_runnable(newthread,cpu,1)) { 
-	ERROR_PRINT("Scheduler failed to run thread (%p, tid=%u) on cpu %u\n",
-		    newthread, newthread->tid, cpu);
-	return -1;
-    }
-
-#ifdef NAUT_CONFIG_DEBUG_THREADS
-    if (cpu == CPU_ANY) {
-        SCHED_DEBUG("Started thread (%p, tid=%u) on [ANY CPU]\n", newthread, newthread->tid); 
-    } else {
-        SCHED_DEBUG("Started thread (%p, tid=%u) on cpu %u\n", newthread, newthread->tid, cpu); 
-    }
-#endif
-
-#ifdef NAUT_CONFIG_KICK_SCHEDULE
-    // kick it
-    if (cpu != my_cpu_id()) {
-        apic_ipi(per_cpu_get(apic),
-                nk_get_nautilus_info()->sys.cpus[cpu]->lapic_id,
-                APIC_NULL_KICK_VEC);
-    }
-#endif
-
-    return 0;
+    return nk_thread_run(newthread);
 }
 
 int nk_thread_run(nk_thread_id_t t)
 {
   nk_thread_t * newthread = (nk_thread_t*)t;
-  printk("Trying to execute thread %p (tid %lu)", newthread,newthread->tid);
+
+  THREAD_DEBUG("Trying to execute thread %p (tid %lu)", newthread,newthread->tid);
   
-  printk("RUN: Function: %llu\n", newthread->fun);
-  printk("RUN: Bound_CPU: %llu\n", newthread->bound_cpu);
+  THREAD_DEBUG("RUN: Function: %llu\n", newthread->fun);
+  THREAD_DEBUG("RUN: Bound_CPU: %llu\n", newthread->bound_cpu);
+  THREAD_DEBUG("RUN: Current_CPU: %llu\n", newthread->current_cpu);
   
   thread_setup_init_stack(newthread, newthread->fun, newthread->input);
   
-  if (nk_sched_make_runnable(newthread, newthread->bound_cpu,1)) { 
-      ERROR_PRINT("Scheduler failed to run thread (%p, tid=%u) on cpu %u\n",
-		  newthread, newthread->tid, newthread->bound_cpu);
+  if (nk_sched_make_runnable(newthread, newthread->current_cpu,1)) { 
+      THREAD_ERROR("Scheduler failed to run thread (%p, tid=%u) on cpu %u\n",
+		  newthread, newthread->tid, newthread->current_cpu);
       return -1;
   }
 
 #ifdef NAUT_CONFIG_DEBUG_THREADS
   if (newthread->bound_cpu == CPU_ANY) {
-    SCHED_DEBUG("Running thread (%p, tid=%u) on [ANY CPU]\n", newthread, newthread->tid); 
+      THREAD_DEBUG("Running thread (%p, tid=%u) on [ANY CPU] current_cpu=%d\n", newthread, newthread->tid,newthread->current_cpu); 
   } else {
-    SCHED_DEBUG("Newthread thread (%p, tid=%u) on cpu %u\n", newthread, newthread->tid, newthread->bound_cpu); 
+      THREAD_DEBUG("Running thread (%p, tid=%u) on bound cpu %u\n", newthread, newthread->tid, newthread->current_cpu); 
   }
 #endif
   
 #ifdef NAUT_CONFIG_KICK_SCHEDULE
   // kick it
   // this really should not fire on CPU_ANY....
-  if (newthread->bound_cpu != my_cpu_id()) {
+  if (newthread->current_cpu != my_cpu_id()) {
     apic_ipi(per_cpu_get(apic),
-	     nk_get_nautilus_info()->sys.cpus[newthread->bound_cpu]->lapic_id,
+	     nk_get_nautilus_info()->sys.cpus[newthread->current_cpu]->lapic_id,
 	     APIC_NULL_KICK_VEC);
   }
 #endif
@@ -550,7 +494,7 @@ nk_wake_waiters (void)
 
 void nk_yield()
 {
-    //    SCHED_DEBUG("NK YIELD!\n");
+    //    THREAD_DEBUG("NK YIELD!\n");
     nk_sched_yield();
 }
 
@@ -587,7 +531,7 @@ nk_thread_exit (void * retval)
 
     me->refcount--;
 
-    SCHED_DEBUG("Thread %p (tid=%u) exiting, joining with children\n", me, me->tid);
+    THREAD_DEBUG("Thread %p (tid=%u) exiting, joining with children\n", me, me->tid);
 
     __sync_lock_release(&me->lock);
 
@@ -614,7 +558,7 @@ nk_thread_destroy (nk_thread_id_t t)
 {
     nk_thread_t * thethread = (nk_thread_t*)t;
 
-    SCHED_DEBUG("Destroying thread (%p, tid=%lu)\n", (void*)thethread, thethread->tid);
+    THREAD_DEBUG("Destroying thread (%p, tid=%lu)\n", (void*)thethread, thethread->tid);
 
     ASSERT(!irqs_enabled());
 
@@ -709,14 +653,14 @@ nk_join_all_children (int (*func)(void * res))
     list_for_each_entry_safe(elm, tmp, &(me->children), child_node) {
 
         if (nk_join(elm, &res) < 0) {
-            ERROR_PRINT("Could not join child thread (t=%p)\n", elm);
+            THREAD_ERROR("Could not join child thread (t=%p)\n", elm);
             ret = -1;
             continue;
         }
 
         if (func) {
             if (func(res) < 0) {
-                ERROR_PRINT("Could not invoke destructo for child thread (t=%p)\n", elm);
+                THREAD_ERROR("Could not invoke destructo for child thread (t=%p)\n", elm);
                 ret = -1;
                 continue;
             }
@@ -785,7 +729,7 @@ nk_thread_queue_sleep (nk_thread_queue_t * q)
 {
     nk_thread_t * t = get_cur_thread();
 
-    SCHED_DEBUG("SLEEP ON WAIT QUEUE\n");
+    THREAD_DEBUG("SLEEP ON WAIT QUEUE\n");
 
     enqueue_thread_on_waitq(t, q);
 
@@ -793,7 +737,7 @@ nk_thread_queue_sleep (nk_thread_queue_t * q)
     
     nk_sched_sleep();
 
-    SCHED_DEBUG("WAKE UP FROM WAIT QUEUE\n");
+    THREAD_DEBUG("WAKE UP FROM WAIT QUEUE\n");
 
     return 0;
 }
@@ -816,7 +760,7 @@ nk_thread_queue_wake_one (nk_thread_queue_t * q)
     nk_thread_t * t = NULL;
     uint8_t flags = irq_disable_save();
 
-    SCHED_DEBUG("Thread queue wake one (q=%p)\n", (void*)q);
+    THREAD_DEBUG("Thread queue wake one (q=%p)\n", (void*)q);
 
     ASSERT(q);
 
@@ -824,7 +768,7 @@ nk_thread_queue_wake_one (nk_thread_queue_t * q)
 
     /* no one is sleeping on this queue */
     if (!elm) {
-        SCHED_DEBUG("No waiters on wait queue\n");
+        THREAD_DEBUG("No waiters on wait queue\n");
         goto out;
     }
 
@@ -833,16 +777,16 @@ nk_thread_queue_wake_one (nk_thread_queue_t * q)
     ASSERT(t);
     ASSERT(t->status == NK_THR_WAITING);
 
-    if (nk_sched_awaken(t, t->bound_cpu)) { 
-	ERROR_PRINT("Failed to awaken thread\n");
+    if (nk_sched_awaken(t, t->current_cpu)) { 
+	THREAD_ERROR("Failed to awaken thread\n");
 	goto out;
     }
 
 #ifdef NAUT_CONFIG_KICK_SCHEDULE
     // kick it
-    if (t->bound_cpu != my_cpu_id()) {
+    if (t->current_cpu != my_cpu_id()) {
         apic_ipi(per_cpu_get(apic),
-                nk_get_nautilus_info()->sys.cpus[t->bound_cpu]->lapic_id,
+                nk_get_nautilus_info()->sys.cpus[t->current_cpu]->lapic_id,
                 APIC_NULL_KICK_VEC);
     }
 #endif
@@ -870,7 +814,7 @@ nk_thread_queue_wake_all (nk_thread_queue_t * q)
     nk_thread_t * t = NULL;
     uint8_t flags;
 
-    SCHED_DEBUG("Waking all waiters on thread queue (q=%p)\n", (void*)q);
+    THREAD_DEBUG("Waking all waiters on thread queue (q=%p)\n", (void*)q);
 
     ASSERT(q);
 
@@ -882,15 +826,15 @@ nk_thread_queue_wake_all (nk_thread_queue_t * q)
         ASSERT(t);
         ASSERT(t->status == NK_THR_WAITING);
 
-	if (nk_sched_awaken(t, t->bound_cpu)) { 
-	    ERROR_PRINT("Failed to awaken thread\n");
+	if (nk_sched_awaken(t, t->current_cpu)) { 
+	    THREAD_ERROR("Failed to awaken thread\n");
 	    goto out;
 	}
 
 #ifdef NAUT_CONFIG_KICK_SCHEDULE
-        if (t->bound_cpu != my_cpu_id()) {
+        if (t->current_cpu != my_cpu_id()) {
             apic_ipi(per_cpu_get(apic),
-                    nk_get_nautilus_info()->sys.cpus[t->bound_cpu]->lapic_id,
+                    nk_get_nautilus_info()->sys.cpus[t->current_cpu]->lapic_id,
                     APIC_NULL_KICK_VEC);
         }
 #endif
@@ -1080,7 +1024,7 @@ __thread_fork (void)
     void         *child_stack;
 
 #ifdef NAUT_CONFIG_THREAD_OPTIMIZE 
-    SCHED_WARN("Thread fork may function incorrectly with aggressive threading optimizations\n");
+    THREAD_WARN("Thread fork may function incorrectly with aggressive threading optimizations\n");
 #endif
 
     void *rbp0      = __builtin_frame_address(0);                   // current rbp, *rbp0 = rbp1
@@ -1112,7 +1056,7 @@ __thread_fork (void)
                          &tid,        // give me a thread id
                          CPU_ANY)     // not bound to any particular CPU
             < 0) {
-        ERROR_PRINT("Could not fork thread\n");
+        THREAD_ERROR("Could not fork thread\n");
         return 0;
     }
 
@@ -1142,9 +1086,9 @@ __thread_fork (void)
     // we provide null for thread func to indicate this is a fork
     thread_setup_init_stack(t, NULL, NULL); 
 
-    if (nk_sched_make_runnable(t,t->bound_cpu,1)) { 
-	ERROR_PRINT("Scheduler failed to run thread (%p, tid=%u) on cpu %u\n",
-		    t, t->tid, t->bound_cpu);
+    if (nk_sched_make_runnable(t,t->current_cpu,1)) { 
+	THREAD_ERROR("Scheduler failed to run thread (%p, tid=%u) on cpu %u\n",
+		    t, t->tid, t->current_cpu);
 	return 0;
     }
 
@@ -1163,21 +1107,21 @@ tls_dummy (void * in, void ** out)
     unsigned i;
     nk_tls_key_t * keys = NULL;
 
-    //printk("Beginning test of thread local storage...\n");
+    //THREAD_INFO("Beginning test of thread local storage...\n");
     keys = malloc(sizeof(nk_tls_key_t)*TLS_MAX_KEYS);
     if (!keys) {
-        ERROR_PRINT("could not allocate keys\n");
+        THREAD_ERROR("could not allocate keys\n");
         return;
     }
 
     for (i = 0; i < TLS_MAX_KEYS; i++) {
         if (nk_tls_key_create(&keys[i], NULL) != 0) {
-            ERROR_PRINT("Could not create TLS key (%u)\n", i);
+            THREAD_ERROR("Could not create TLS key (%u)\n", i);
             goto out_err;
         }
 
         if (nk_tls_set(keys[i], (const void *)(i + 100L)) != 0) {
-            ERROR_PRINT("Could not set TLS key (%u)\n", i);
+            THREAD_ERROR("Could not set TLS key (%u)\n", i);
             goto out_err;
         }
 
@@ -1185,27 +1129,27 @@ tls_dummy (void * in, void ** out)
 
     for (i = 0; i < TLS_MAX_KEYS; i++) {
         if (nk_tls_get(keys[i]) != (void*)(i + 100L)) {
-            ERROR_PRINT("Mismatched TLS val! Got %p, should be %p\n", nk_tls_get(keys[i]), (void*)(i+100L));
+            THREAD_ERROR("Mismatched TLS val! Got %p, should be %p\n", nk_tls_get(keys[i]), (void*)(i+100L));
             goto out_err;
         }
 
         if (nk_tls_key_delete(keys[i]) != 0) {
-            ERROR_PRINT("Could not delete TLS key %u\n", i);
+            THREAD_ERROR("Could not delete TLS key %u\n", i);
             goto out_err;
         }
     }
 
     if (nk_tls_key_create(&keys[0], NULL) != 0) {
-        ERROR_PRINT("2nd key create failed\n");
+        THREAD_ERROR("2nd key create failed\n");
         goto out_err;
     }
     
     if (nk_tls_key_delete(keys[0]) != 0) {
-        ERROR_PRINT("2nd key delete failed\n");
+        THREAD_ERROR("2nd key delete failed\n");
         goto out_err;
     }
 
-    printk("Thread local storage test succeeded\n");
+    THREAD_INFO("Thread local storage test succeeded\n");
 
 out_err:
     free(keys);
