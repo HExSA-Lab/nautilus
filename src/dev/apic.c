@@ -761,8 +761,10 @@ apic_init (struct cpu * core)
 
 void apic_set_oneshot_timer(struct apic_dev *apic, uint32_t ticks) 
 {
+
     apic_write(apic, APIC_REG_LVTT, APIC_TIMER_ONESHOT | APIC_DEL_MODE_FIXED | APIC_TIMER_INT_VEC);
     apic_write(apic, APIC_REG_TMDCR, APIC_TIMER_DIVCODE);
+
     if (!ticks) {
 	ticks=1; 
     }
@@ -771,7 +773,7 @@ void apic_set_oneshot_timer(struct apic_dev *apic, uint32_t ticks)
     apic->current_ticks = ticks;
 }
 
-void apic_update_oneshot_timer(struct apic_dev *apic, uint64_t ticks,
+void apic_update_oneshot_timer(struct apic_dev *apic, uint32_t ticks,
 			       nk_timer_condition_t cond)
 {
     if (!apic->timer_set) { 
@@ -789,6 +791,8 @@ void apic_update_oneshot_timer(struct apic_dev *apic, uint64_t ticks,
 	    break;
 	}
     }
+    // note that this is set at the entry to apic_timer_handler
+    apic->in_timer_interrupt=0;
 }
 	    
 
@@ -996,18 +1000,30 @@ static int apic_timer_handler(excp_entry_t * excp, excp_vec_t vec)
 
     uint64_t time_to_next_ns;
 
+    apic->in_timer_interrupt=1;
+
     apic->timer_count++;
 
     apic->timer_set = 0;
 
     // do all our callbacks
-
+    // note that currently all cores see the events
     time_to_next_ns = nk_timer_handler();
 
     // note that the low-level interrupt handler code in excp_early.S
     // takes care of invoking the scheduler if needed, and the scheduler
     // will in turn change the time after we leave - it may set the
-    // timer to expire earlier
+    // timer to expire earlier.  The scheduler can refer to 
+    // the apic to determine that it is being invoked in timer interrupt
+    // context.   In this way, it can differentiate:
+    //   1. invocation from a thread
+    //   2. invocation from a interrupt context for some other interrupt
+    //   3. invocation from a timer interrupt context
+    // This is important as a flaky APIC timer (we're looking at you, QEMU)
+    // can fire before the expected elapsed time expires.  If the scheduler
+    // doesn't reset the timer when this happens, the scheduler may be delayed
+    // as far as the next interrupt or cooperative rescheduling request,
+    // breaking real-time semantics.  
 
     if (time_to_next_ns == -1) { 
 	// indicates "infinite", which we turn into the maximum timer count

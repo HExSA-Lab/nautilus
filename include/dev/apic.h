@@ -201,8 +201,9 @@ struct apic_dev {
     uint64_t cycles_per_us;
     uint64_t cycles_per_tick;
     uint8_t  timer_set;
-    uint64_t current_ticks; // timeout currently being computed
+    uint32_t current_ticks; // timeout currently being computed
     uint64_t timer_count;
+    int      in_timer_interrupt;
 };
 
 
@@ -271,10 +272,13 @@ uint64_t apic_cycles_to_realtime(struct apic_dev *apic, uint64_t cycles);
 
 void     apic_set_oneshot_timer(struct apic_dev *apic, uint32_t ticks);
 
-// updating the timer using this function is intended to be 
-// done in interrupt context
+// updating the timer 
+// also resets the "in_timer_interrupt flag so it should be done 
+// only once in interrupt context
+// the intent is that it is once of the last things the scheduler
+// invokes on any reschedule path
 typedef enum {UNCOND, IF_EARLIER, IF_LATER} nk_timer_condition_t;
-void     apic_update_oneshot_timer(struct apic_dev *apic,  uint64_t ticks, 
+void     apic_update_oneshot_timer(struct apic_dev *apic,  uint32_t ticks, 
 				   nk_timer_condition_t cond);
 			       
 
