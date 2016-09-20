@@ -115,6 +115,9 @@ int    nk_sched_cpu_mug(int cpu, uint64_t max, uint64_t *actual);
 // nonzero return => failed
 int    nk_sched_make_runnable(struct nk_thread *thread, int cpu, int admit);
 
+// force a scheduling event on the CPU
+void   nk_sched_kick_cpu(int cpu);
+
 // Put the thread to sleep / awaken it
 // these signal the scheduler that the thread is now on a 
 // non-scheduler queue (sleep) or is to be returned to a scheduler 

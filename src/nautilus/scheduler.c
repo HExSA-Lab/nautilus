@@ -1370,7 +1370,7 @@ struct nk_thread *_sched_need_resched(int have_lock)
 
     rt_c->resched_count++;
 
-    if (!timed_out && (!apic->in_timer_interrupt) 
+    if (!timed_out && (!apic->in_timer_interrupt && (!apic->in_kick_interrupt)) 
 	&& CUR_IS_NOT_SPECIAL 
 	&& !yielding 
 	&& !idle) { 
@@ -1382,9 +1382,10 @@ struct nk_thread *_sched_need_resched(int have_lock)
 	goto out_good_early;
     }
 
-    // We have either timed out the current task, or it is 
-    // in the middle of a state transation, or it is yielding,
-    // or it is the idle task, which we will always re-examine
+    // We have either timed out the current task, or we are being
+    // kicked, or it is in the middle of a state transation, or it is
+    // yielding, or it is the idle task, which we will always
+    // re-examine
 
     DEBUG("need_resched (now=%llu cur=%llu, idle=%d, sleep=%d, exit=%d, changing=%d yielding=%d status=%d rt_status=%d)\n", now, c->tid, idle, going_to_sleep,going_to_exit, changing, yielding, rt_c->thread->status, rt_c->status);
     //DEBUG_DUMP(rt_c,"Current");
@@ -2173,6 +2174,21 @@ int nk_sched_cpu_mug(int old_cpu, uint64_t maxcount, uint64_t *actualcount)
 
     return 0;
 
+}
+
+
+void    nk_sched_kick_cpu(int cpu)
+{
+#ifdef NAUT_CONFIG_KICK_SCHEDULE
+    if (cpu != my_cpu_id()) {
+        apic_ipi(per_cpu_get(apic),
+		 nk_get_nautilus_info()->sys.cpus[cpu]->lapic_id,
+		 APIC_NULL_KICK_VEC);
+    } else {
+	// we do not reschedule here since
+	// we do not know if it is safe to do so 
+    }
+#endif
 }
 
 extern void nk_thread_switch(nk_thread_t*);

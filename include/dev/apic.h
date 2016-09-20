@@ -204,6 +204,7 @@ struct apic_dev {
     uint32_t current_ticks; // timeout currently being computed
     uint64_t timer_count;
     int      in_timer_interrupt;
+    int      in_kick_interrupt;
 };
 
 

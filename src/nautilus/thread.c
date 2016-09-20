@@ -456,16 +456,8 @@ int nk_thread_run(nk_thread_id_t t)
       THREAD_DEBUG("Running thread (%p, tid=%u) on bound cpu %u\n", newthread, newthread->tid, newthread->current_cpu); 
   }
 #endif
-  
-#ifdef NAUT_CONFIG_KICK_SCHEDULE
-  // kick it
-  // this really should not fire on CPU_ANY....
-  if (newthread->current_cpu != my_cpu_id()) {
-    apic_ipi(per_cpu_get(apic),
-	     nk_get_nautilus_info()->sys.cpus[newthread->current_cpu]->lapic_id,
-	     APIC_NULL_KICK_VEC);
-  }
-#endif
+
+  nk_sched_kick_cpu(newthread->current_cpu);
 
   return 0;
 }
@@ -782,17 +774,11 @@ nk_thread_queue_wake_one (nk_thread_queue_t * q)
 	goto out;
     }
 
-#ifdef NAUT_CONFIG_KICK_SCHEDULE
-    // kick it
-    if (t->current_cpu != my_cpu_id()) {
-        apic_ipi(per_cpu_get(apic),
-                nk_get_nautilus_info()->sys.cpus[t->current_cpu]->lapic_id,
-                APIC_NULL_KICK_VEC);
-    }
-#endif
+    nk_sched_kick_cpu(t->current_cpu);
 
 out:
     irq_enable_restore(flags);
+
     return 0;
 }
 
@@ -831,14 +817,7 @@ nk_thread_queue_wake_all (nk_thread_queue_t * q)
 	    goto out;
 	}
 
-#ifdef NAUT_CONFIG_KICK_SCHEDULE
-        if (t->current_cpu != my_cpu_id()) {
-            apic_ipi(per_cpu_get(apic),
-                    nk_get_nautilus_info()->sys.cpus[t->current_cpu]->lapic_id,
-                    APIC_NULL_KICK_VEC);
-        }
-#endif
-
+	nk_sched_kick_cpu(t->current_cpu);
     }
 
  out:

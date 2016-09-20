@@ -73,6 +73,13 @@ spur_int_handler (excp_entry_t * excp, excp_vec_t v)
 static int
 null_kick (excp_entry_t * excp, excp_vec_t v)
 {
+    struct apic_dev * apic = (struct apic_dev*)per_cpu_get(apic);
+    
+    // this communicates that we are in a kick to the scheduler
+    // the scheduler will then set this to zero as a side-effect
+    // of calling apic_update_oneshot_timer
+    apic->in_kick_interrupt = 1;
+
     IRQ_HANDLER_END();
     return 0;
 }
@@ -746,6 +753,33 @@ apic_init (struct cpu * core)
 
     apic_assign_spiv(apic, APIC_SPUR_INT_VEC);
 
+    /*
+
+      The presence of the APIC Extended Space area is indicated by bit 31 of the APIC Version Register (at offset 30h in APIC space).
+      The presence of the IER and SEOI functionality is identified by bits 0 and 1, respectively, of the APIC Extended Feature Register (located at offset 400h in APIC space). IER and SEOI are enabled by setting bits 0 and 1, respectively, of the APIC Extended Control Register (located at offset 410h).
+    */
+
+    {
+	if (nk_is_amd()) {
+	    if (amd_has_ext_lvt(apic)) {
+		APIC_PRINT("AMD APIC has extended space area\n");
+		uint32_t e = apic_read(apic, APIC_REG_EXFR);
+		if (e & 0x1) { 
+		    APIC_PRINT("AMD APIC has IER\n");
+		} else {
+		    APIC_PRINT("AMD APIC does NOT have IER\n");
+		}
+	    } else {
+		APIC_PRINT("AMD APIC does NOT have extended space area\n");
+	    }
+	} else {
+	    APIC_PRINT("Not an AMD APIC\n");
+	} 
+	
+    }
+    
+
+
     /* turn it on */
     apic_sw_enable(apic);
 
@@ -793,6 +827,8 @@ void apic_update_oneshot_timer(struct apic_dev *apic, uint32_t ticks,
     }
     // note that this is set at the entry to apic_timer_handler
     apic->in_timer_interrupt=0;
+    // note that this is set at the entry to null_kick
+    apic->in_kick_interrupt=0;
 }
 	    
 
