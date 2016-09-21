@@ -384,13 +384,13 @@ static void print_thread(rt_thread *r, void *priv)
 	
 	switch (r->constraints.type) {
 	case APERIODIC:
-	    nk_vc_printf(" aperiodic(%llu)", CO(r->constraints.aperiodic.priority));
+	    nk_vc_printf(" aperiodic(%utp, %llu)", r->constraints.interrupt_priority_class,CO(r->constraints.aperiodic.priority));
 	    break;
 	case SPORADIC:
-	    nk_vc_printf(" sporadic(%llu)", CO(r->constraints.sporadic.size));
+	    nk_vc_printf(" sporadic(%utp, %llu)", r->constraints.interrupt_priority_class,CO(r->constraints.sporadic.size));
 	    break;
 	case PERIODIC:
-	    nk_vc_printf(" periodic(%llu,%llu)", CO(r->constraints.periodic.period), CO(r->constraints.periodic.slice));
+	    nk_vc_printf(" periodic(%utp, %llu,%llu)", r->constraints.interrupt_priority_class,CO(r->constraints.periodic.period), CO(r->constraints.periodic.slice));
 	    break;
 	}
 	
@@ -442,10 +442,11 @@ void nk_sched_dump_cores(int cpu_arg)
 
 	    s = sys->cpus[cpu]->sched_state;
 	    LOCAL_LOCK(s);
-	    nk_vc_printf("%dc %lut %s %lup %lur %lua %lum (%s) (%luul %lusp %luap %luaq %luadp) (%luapic)\n",
+	    nk_vc_printf("%dc %lut %s %utp %lup %lur %lua %lum (%s) (%luul %lusp %luap %luaq %luadp) (%luapic)\n",
 			 cpu, 
 			 s->current->thread->tid, 
 			 s->current->thread->is_idle ? "(idle)" : s->current->thread->name[0] ? s->current->thread->name : "(noname)",
+			 s->current->thread->sched_state->constraints.interrupt_priority_class,
 			 s->pending.size, s->runnable.size, s->aperiodic.size,
 			 s->num_thefts,
 
@@ -1837,6 +1838,10 @@ struct nk_thread *_sched_need_resched(int have_lock)
 	      
 	// we are switching threads, start accounting for the new one
 	rt_n->cur_run_time=0;
+
+	// instate our interrupt priority class
+	write_cr8((uint64_t)rt_n->constraints.interrupt_priority_class);
+
 	if (!have_lock) {
 	    LOCAL_UNLOCK(scheduler);
 	}
@@ -2558,12 +2563,19 @@ static int rt_thread_admit(rt_scheduler *scheduler, rt_thread *thread, uint64_t 
     uint64_t spor_res = scheduler->cfg.sporadic_reservation;
     uint64_t per_res = util_limit - aper_res - spor_res;
 
-    DEBUG("Admission: %s util_limit=%llu aper_res=%llu spor_res=%llu per_res=%llu\n",
+    DEBUG("Admission: %s tpr=%u util_limit=%llu aper_res=%llu spor_res=%llu per_res=%llu\n",
 	  thread->constraints.type==APERIODIC ? "Aperiodic" :
 	  thread->constraints.type==PERIODIC ? "Periodic" :
 	  thread->constraints.type==SPORADIC ? "Sporadic" : "Unknown",
+	  thread->constraints.interrupt_priorty_class,
 	  util_limit,aper_res,spor_res,per_res);
 
+    if (thread->constraints.interrupt_priority_class > 0xe) {
+	DEBUG("Rejecting thread with too high of an interrupt priorty class (%u)\n", thread->constraints.interrupt_priority_class);
+	return -1;
+    }
+	
+    
     switch (thread->constraints.type) {
     case APERIODIC:
 	// APERIODIC always admitted

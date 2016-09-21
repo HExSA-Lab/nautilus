@@ -75,7 +75,7 @@ static void burner(void *in, void **out)
     }
 }
 
-static int launch_aperiodic_burner(char *name, uint64_t size_ns, uint64_t priority)
+static int launch_aperiodic_burner(char *name, uint64_t size_ns, uint32_t tpr, uint64_t priority)
 {
     nk_thread_id_t tid;
     struct burner_args *a;
@@ -89,6 +89,7 @@ static int launch_aperiodic_burner(char *name, uint64_t size_ns, uint64_t priori
     a->vc = get_cur_thread()->vc;
     a->size_ns = size_ns;
     a->constraints.type=APERIODIC;
+    a->constraints.interrupt_priority_class = (uint8_t) tpr;
     a->constraints.aperiodic.priority=priority;
 
     if (nk_thread_start(burner, (void*)a , NULL, 1, PAGE_SIZE_4KB, &tid, -1)) { 
@@ -99,7 +100,7 @@ static int launch_aperiodic_burner(char *name, uint64_t size_ns, uint64_t priori
     }
 }
 
-static int launch_sporadic_burner(char *name, uint64_t size_ns, uint64_t phase, uint64_t size, uint64_t deadline, uint64_t aperiodic_priority)
+static int launch_sporadic_burner(char *name, uint64_t size_ns, uint32_t tpr, uint64_t phase, uint64_t size, uint64_t deadline, uint64_t aperiodic_priority)
 {
     nk_thread_id_t tid;
     struct burner_args *a;
@@ -113,6 +114,7 @@ static int launch_sporadic_burner(char *name, uint64_t size_ns, uint64_t phase, 
     a->vc = get_cur_thread()->vc;
     a->size_ns = size_ns;
     a->constraints.type=SPORADIC;
+    a->constraints.interrupt_priority_class = (uint8_t) tpr;
     a->constraints.sporadic.phase = phase;
     a->constraints.sporadic.size = size;
     a->constraints.sporadic.deadline = deadline;
@@ -126,7 +128,7 @@ static int launch_sporadic_burner(char *name, uint64_t size_ns, uint64_t phase, 
     }
 }
 
-static int launch_periodic_burner(char *name, uint64_t size_ns, uint64_t phase, uint64_t period, uint64_t slice)
+static int launch_periodic_burner(char *name, uint64_t size_ns, uint32_t tpr, uint64_t phase, uint64_t period, uint64_t slice)
 {
     nk_thread_id_t tid;
     struct burner_args *a;
@@ -140,6 +142,7 @@ static int launch_periodic_burner(char *name, uint64_t size_ns, uint64_t phase, 
     a->vc = get_cur_thread()->vc;
     a->size_ns = size_ns;
     a->constraints.type=PERIODIC;
+    a->constraints.interrupt_priority_class = (uint8_t) tpr;
     a->constraints.periodic.phase = phase;
     a->constraints.periodic.period = period;
     a->constraints.periodic.slice = slice;
@@ -156,6 +159,7 @@ static int handle_cmd(char *buf, int n)
 {
   char name[MAX_CMD];
   uint64_t size_ns;
+  uint32_t tpr;
   uint64_t priority, phase;
   uint64_t period, slice;
   uint64_t size, deadline;
@@ -173,9 +177,9 @@ static int handle_cmd(char *buf, int n)
     nk_vc_printf("help\nexit\nvcs\ncores [n]\ntime [n]\nthreads [n]\n");
     nk_vc_printf("shell name\n");
     nk_vc_printf("reap\n");
-    nk_vc_printf("burn a name size_ms priority\n");
-    nk_vc_printf("burn s name size_ms phase size deadline priority\n");
-    nk_vc_printf("burn p name size_ms phase period slice\n");
+    nk_vc_printf("burn a name size_ms tpr priority\n");
+    nk_vc_printf("burn s name size_ms tpr phase size deadline priority\n");
+    nk_vc_printf("burn p name size_ms tpr phase period slice\n");
     nk_vc_printf("vm name [embedded image]\n");
     return 0;
   }
@@ -195,30 +199,30 @@ static int handle_cmd(char *buf, int n)
     return 0;
   }
 
-  if (sscanf(buf,"burn a %s %llu %llu", name, &size_ns, &priority)==3) { 
-    nk_vc_printf("Starting aperiodic burner %s with size %llu ms and priority %llu\n",name,size_ns,priority);
+  if (sscanf(buf,"burn a %s %llu %u %llu", name, &size_ns, &tpr, &priority)==4) { 
+    nk_vc_printf("Starting aperiodic burner %s with tpr %u, size %llu ms.and priority %llu\n",name,size_ns,priority);
     size_ns *= 1000000;
-    launch_aperiodic_burner(name,size_ns,priority);
+    launch_aperiodic_burner(name,size_ns,tpr,priority);
     return 0;
   }
 
-  if (sscanf(buf,"burn s %s %llu %llu %llu %llu %llu", name, &size_ns, &phase, &size, &deadline, &priority)==6) { 
-    nk_vc_printf("Starting sporadic burner %s with size %llu ms phase %llu from now size %llu ms deadline %llu ms from now and priority %lu\n",name,size_ns,phase,size,deadline,priority);
+  if (sscanf(buf,"burn s %s %llu %u %llu %llu %llu %llu", name, &size_ns, &tpr, &phase, &size, &deadline, &priority)==7) { 
+    nk_vc_printf("Starting sporadic burner %s with size %llu ms tpr %u phase %llu from now size %llu ms deadline %llu ms from now and priority %lu\n",name,size_ns,tpr,phase,size,deadline,priority);
     size_ns *= 1000000;
     phase   *= 1000000; 
     size    *= 1000000;
     deadline*= 1000000; deadline+= nk_sched_get_realtime();
-    launch_sporadic_burner(name,size_ns,phase,size,deadline,priority);
+    launch_sporadic_burner(name,size_ns,tpr,phase,size,deadline,priority);
     return 0;
   }
 
-  if (sscanf(buf,"burn p %s %llu %llu %llu %llu", name, &size_ns, &phase, &period, &slice)==5) { 
-    nk_vc_printf("Starting periodic burner %s with size %llu ms phase %llu from now period %llu ms slice %llu ms\n",name,size_ns,phase,period,slice);
+  if (sscanf(buf,"burn p %s %llu %u %llu %llu %llu", name, &size_ns, &tpr, &phase, &period, &slice)==6) { 
+    nk_vc_printf("Starting periodic burner %s with size %llu ms tpr %u phase %llu from now period %llu ms slice %llu ms\n",name,size_ns,tpr,phase,period,slice);
     size_ns *= 1000000;
     phase   *= 1000000; 
     period  *= 1000000;
     slice   *= 1000000;
-    launch_periodic_burner(name,size_ns,phase,period,slice);
+    launch_periodic_burner(name,size_ns,tpr,phase,period,slice);
     return 0;
   }
 

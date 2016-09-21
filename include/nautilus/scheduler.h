@@ -66,6 +66,15 @@ struct nk_sched_aperiodic_constraints {
 typedef enum { APERIODIC = 0, SPORADIC = 1, PERIODIC = 2} nk_sched_constraint_type_t;
 struct nk_sched_constraints {
     nk_sched_constraint_type_t type;
+    // the interrupt priority class that must be exceeded
+    // in order for this task to be interrupted
+    // default: 0x0 => all interrupts
+    // 0xf => no interrupts
+    // 0xe => interrupts 0xf? only
+    // Note that in Nautilus, timer, kick, and all APIC emergency
+    // interrupts are 0xf?
+    // This does not affect NMIs, PMIs, or SMIs
+    uint8_t                    interrupt_priority_class; 
     union  {
 	struct nk_sched_periodic_constraints     periodic;
 	struct nk_sched_sporadic_constraints     sporadic;
