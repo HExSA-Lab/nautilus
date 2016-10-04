@@ -32,6 +32,9 @@
 #endif
 
 #define PCI_PRINT(fmt, args...) printk("PCI: " fmt, ##args)
+#define PCI_DEBUG(fmt, args...) DEBUG_PRINT("PCI: " fmt, ##args)
+#define PCI_WARN(fmt, args...)  WARN_PRINT("PCI: " fmt, ##args)
+#define PCI_ERROR(fmt, args...) ERROR_PRINT("PCI: " fmt, ##args)
 
 
 uint16_t 
@@ -78,6 +81,7 @@ pci_cfg_readl (uint8_t bus,
     outl(addr, PCI_CFG_ADDR_PORT);
     return inl(PCI_CFG_DATA_PORT);
 }
+
 
 void
 pci_cfg_writew (uint8_t bus, 
@@ -206,7 +210,7 @@ pci_dev_create (uint32_t num, struct pci_bus * bus)
     struct pci_dev * dev = NULL;
     dev = malloc(sizeof(struct pci_dev));
     if (!dev) {
-        ERROR_PRINT("Could not allocate PCI device\n");
+        PCI_ERROR("Could not allocate PCI device\n");
         return NULL;
     }
     memset(dev, 0, sizeof(struct pci_dev));
@@ -235,7 +239,7 @@ pci_bus_create (uint32_t num, struct pci_info * pci)
     struct pci_bus * bus = NULL;
     bus = malloc(sizeof(struct pci_bus));
     if (!bus) {
-        ERROR_PRINT("Could not allocate PCI bus\n");
+        PCI_ERROR("Could not allocate PCI bus\n");
         return NULL;
     }
     memset(bus, 0, sizeof(struct pci_bus));
@@ -250,6 +254,14 @@ pci_bus_create (uint32_t num, struct pci_info * pci)
 
 static void pci_fun_probe(struct pci_info * pci, uint8_t bus, uint8_t dev, uint8_t fun);
 
+
+/*
+ *
+ * This function probes a particular device on a PCI bus,
+ * first by checking if it is indeed a present device, then
+ * by checking whether or not it has multiple functions.
+ *
+ */
 static void
 pci_dev_probe (struct pci_bus * bus, uint8_t dev)
 {
@@ -260,6 +272,8 @@ pci_dev_probe (struct pci_bus * bus, uint8_t dev)
     fun = 0;
 
     vendor_id = pci_get_vendor_id(bus->num, dev, fun);
+
+    /* No device present */
     if (vendor_id == 0xffff) {
         return;
     }
@@ -268,20 +282,27 @@ pci_dev_probe (struct pci_bus * bus, uint8_t dev)
             pci_get_dev_id(bus->num, dev, fun), 
             pci_get_rev_id(bus->num, dev, fun));
 
+    /* create a logical representation of the device */
     if (pci_dev_create(dev, bus) == NULL) {
-        ERROR_PRINT("Could not create PCI device\n");
+        PCI_ERROR("Could not create PCI device\n");
         return;
     }
 
+    /* does it have multiple functions? */ 
     pci_fun_probe(bus->pci, bus->num, dev, fun);
 
     hdr_type = pci_get_hdr_type(bus->num, dev, fun);
 
     /* multi-function device */
     if ((hdr_type & 0x80) != 0) {
-      PCI_PRINT("Multifunction Device\n");
+
+        PCI_PRINT("[%04d:%02d.%d] Multifunction Device detected\n", 
+                bus->num, dev, vendor_id);
+
+        /* probe the other device functions */
         for (fun = 1; fun < PCI_MAX_FUN; fun++) {
             if (pci_get_vendor_id(bus->num, dev, fun) != 0xffff) {
+                PCI_DEBUG("[%04d:%02d.%d] Probing function %02d\n", fun);
                 pci_fun_probe(bus->pci, bus->num, dev, fun);
             }
         }
@@ -289,6 +310,13 @@ pci_dev_probe (struct pci_bus * bus, uint8_t dev)
 }
 
 
+/*
+ *
+ * This function checks to see if there are devices
+ * on this PCI bus, and if there are, it probes 
+ * all possible devices.
+ *
+ */
 static void 
 pci_bus_probe (struct pci_info * pci, uint8_t bus)
 {
@@ -297,6 +325,7 @@ pci_bus_probe (struct pci_info * pci, uint8_t bus)
     struct pci_bus * bus_ptr = NULL;
 
 
+    /* make sure we actually have at least one device on this bus */
     for (dev = 0; dev < PCI_MAX_DEV; dev++) {
         if (pci_get_vendor_id(bus, dev, 0) != 0xffff) {
             dev_found = 1;
@@ -304,10 +333,11 @@ pci_bus_probe (struct pci_info * pci, uint8_t bus)
         }
     }
 
+    /* create a logical bus if we found devices here */
     if (dev_found) {
         bus_ptr = pci_bus_create(bus, pci);
         if (!bus_ptr) {
-            ERROR_PRINT("Could not create PCI bus\n");
+            PCI_ERROR("Could not create PCI bus\n");
             return;
         }
 
@@ -319,6 +349,12 @@ pci_bus_probe (struct pci_info * pci, uint8_t bus)
 
 
 
+/* 
+ * 
+ * This function checks a device's functions to see if it is
+ * a PCI-PCI bridge. If so, we need to probe that secondary bus
+ *
+ */
 static void
 pci_fun_probe (struct pci_info * pci, uint8_t bus, uint8_t dev, uint8_t fun)
 {
@@ -330,12 +366,23 @@ pci_fun_probe (struct pci_info * pci, uint8_t bus, uint8_t dev, uint8_t fun)
     sub_class = pci_get_sub_class(bus, dev, fun);
 
     if (base_class == PCI_CLASS_BRIDGE && sub_class == PCI_SUBCLASS_BRIDGE_PCI) {
+        PCI_DEBUG("[%04d.%02d.%02d] PCI-PCI bridge detected, probing secondary bus\n",
+                bus, dev, fun);
         sec_bus = pci_get_sec_bus(bus, dev, fun);
         pci_bus_probe(pci, sec_bus);
     }
 }
 
 
+
+/*
+ *
+ * This function is the top-level PCI probe. This checks to see if we have one
+ * or more PCI host controllers. We only currently support a single PCI host
+ * controller. If there is indeed only one, we probe the single bus further for
+ * devices by calling pci_bus_probe().
+ *
+ */
 static void 
 pci_bus_scan (struct pci_info * pci)
 {
@@ -347,11 +394,17 @@ pci_bus_scan (struct pci_info * pci)
         pci_bus_probe(pci, 0);
 
     } else {
-        ERROR_PRINT("Host with multiple PCI host controllers not supported\n");
+        panic("Hosts with multiple PCI host controllers not supported\n");
     }
 }
 
 
+/*
+ *
+ * This function initializes the PCI subsystem by scanning
+ * for devices on the PCI bus.
+ *
+ */
 int 
 pci_init (struct naut_info * naut)
 {
@@ -359,7 +412,7 @@ pci_init (struct naut_info * naut)
 
     pci = malloc(sizeof(struct pci_info));
     if (!pci) {
-        ERROR_PRINT("Could not allocate PCI struct\n");
+        PCI_ERROR("Could not allocate PCI struct\n");
         return -1;
     }
     memset(pci, 0, sizeof(struct pci_info));
