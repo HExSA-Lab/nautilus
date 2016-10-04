@@ -23,6 +23,7 @@
 #ifndef __NAUTILUS_H__
 #define __NAUTILUS_H__
 
+#include <nautilus/percpu.h>
 #include <nautilus/printk.h>
 #include <dev/serial.h>
 #include <nautilus/naut_types.h>
@@ -33,10 +34,10 @@
 extern "C" {
 #endif
 
-#define DEBUG_PRINT(fmt, args...)   nk_vc_log_wrap("DEBUG: " fmt, ##args)
-#define ERROR_PRINT(fmt, args...)   nk_vc_log_wrap("ERROR at %s(%d): " fmt, __FILE__, __LINE__, ##args)
-#define WARN_PRINT(fmt, args...)    nk_vc_log_wrap("WARNING: " fmt, ##args)
-#define INFO_PRINT(fmt, args...)    nk_vc_log_wrap(fmt, ##args)
+#define DEBUG_PRINT(fmt, args...)   nk_vc_log_wrap("CPU %d: DEBUG: " fmt, my_cpu_id(),##args)
+#define ERROR_PRINT(fmt, args...)   nk_vc_log_wrap("CPU %d: ERROR at %s: " fmt, my_cpu_id(),  __FILE__, __LINE__, ##args)
+#define WARN_PRINT(fmt, args...)    nk_vc_log_wrap("CPU %d: WARNING: " fmt, my_cpu_id(), ##args)
+#define INFO_PRINT(fmt, args...)    nk_vc_log_wrap("CPU %d: " fmt, my_cpu_id(), ##args)
 
 #define panic(fmt, args...)         panic("PANIC at %s(%d): " fmt, __FILE__, __LINE__, ##args)
 
@@ -47,7 +48,6 @@ extern "C" {
 
 
 #include <dev/ioapic.h>
-#include <dev/timer.h>
 #include <nautilus/smp.h>
 #include <nautilus/paging.h>
 #include <nautilus/limits.h>
@@ -89,9 +89,6 @@ struct sys_info {
     uint32_t bsp_id;
 
     uint8_t pic_mode_enabled;
-
-    uint_t num_tevents;
-    struct nk_timer_event * time_events;
 
     struct pci_info * pci;
     struct hpet_dev * hpet;

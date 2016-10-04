@@ -1,7 +1,6 @@
 obj-y += apic.o \
 	 ioapic.o \
 	 i8254.o \
-	 timer.o \
 	 kbd.o \
 	 pci.o \
          vga.o \

@@ -51,9 +51,17 @@
 
 static spinlock_t state_lock;
 
-#define LOCK() spin_lock(&state_lock)
-#define UNLOCK() spin_unlock(&state_lock);
+#define STATE_LOCK_CONF uint8_t _state_lock_flags
+#define STATE_LOCK() _state_lock_flags = spin_lock_irq_save(&state_lock)
+#define STATE_UNLOCK() spin_unlock_irq_restore(&state_lock, _state_lock_flags);
 
+#define BUF_LOCK_CONF uint8_t _buf_lock_flags
+#define BUF_LOCK(cons) _buf_lock_flags = spin_lock_irq_save(&cons->buf_lock)
+#define BUF_UNLOCK(cons) spin_unlock_irq_restore(&cons->buf_lock, _buf_lock_flags);
+
+#define QUEUE_LOCK_CONF uint8_t _queue_lock_flags
+#define QUEUE_LOCK(cons) _queue_lock_flags = spin_lock_irq_save(&cons->queue_lock)
+#define QUEUE_UNLOCK(cons) spin_unlock_irq_restore(&cons->queue_lock, _queue_lock_flags);
 
 
 static struct list_head vc_list;
@@ -124,6 +132,7 @@ static inline void copy_vc_to_display(struct nk_virtual_console *vc)
 
 struct nk_virtual_console *nk_create_vc(char *name, enum nk_vc_type new_vc_type, uint8_t attr, void (*callback)(nk_scancode_t, void *priv), void *priv_data) 
 {
+  STATE_LOCK_CONF;
   int i;
 
   struct nk_virtual_console *new_vc = malloc(sizeof(struct nk_virtual_console));
@@ -150,9 +159,9 @@ struct nk_virtual_console *nk_create_vc(char *name, enum nk_vc_type new_vc_type,
     new_vc->BUF[i] = vga_make_entry(' ', new_vc->cur_attr);
   }
 
-  LOCK();
+  STATE_LOCK();
   list_add_tail(&new_vc->vc_node, &vc_list);
-  UNLOCK();
+  STATE_UNLOCK();
   return new_vc;
 }
 
@@ -195,24 +204,26 @@ static int _destroy_vc(struct nk_virtual_console *vc)
 
 int nk_destroy_vc(struct nk_virtual_console *vc) 
 {
+  STATE_LOCK_CONF;
   int rc;
 
-  LOCK();
+  STATE_LOCK();
   rc=_destroy_vc(vc);
-  UNLOCK();
+  STATE_UNLOCK();
   return rc;
 }
 
 
 int nk_bind_vc(nk_thread_t *thread, struct nk_virtual_console * cons)
 {
+  STATE_LOCK_CONF;
   if (!cons) { 
     return -1;
   }
-  LOCK();
+  STATE_LOCK();
   thread->vc = cons;
   cons->num_threads++;
-  UNLOCK();
+  STATE_UNLOCK();
   return 0;
 }
 
@@ -220,10 +231,12 @@ int nk_bind_vc(nk_thread_t *thread, struct nk_virtual_console * cons)
 //except that the default vc is never destroyed
 int nk_release_vc(nk_thread_t *thread) 
 {
+  STATE_LOCK_CONF;
+
   if (!thread || !thread->vc) { 
     return 0;
   }
-  LOCK();
+  STATE_LOCK();
   thread->vc->num_threads--;
   if(thread->vc->num_threads == 0) {
     if(thread->vc != default_vc) {//And it shouldn't be the default vc
@@ -231,17 +244,18 @@ int nk_release_vc(nk_thread_t *thread)
     }
   }
   thread->vc = NULL;
-  UNLOCK();
+  STATE_UNLOCK();
   return 0;
 }
 
 int nk_switch_to_vc(struct nk_virtual_console *vc) 
 {
   int rc;
+  STATE_LOCK_CONF;
 
-  LOCK();
+  STATE_LOCK();
   rc = _switch_to_vc(vc);
-  UNLOCK();
+  STATE_UNLOCK();
   
   return rc;
 }
@@ -307,13 +321,14 @@ static int _vc_scrollup_specific(struct nk_virtual_console *vc)
 
 int nk_vc_scrollup_specific(struct nk_virtual_console *vc) 
 {
+  BUF_LOCK_CONF;
   int rc;
   if (!vc) { 
     return 0;
   }
-  spin_lock(&vc->buf_lock);
+  BUF_LOCK(vc);
   rc = _vc_scrollup_specific(vc);
-  spin_unlock(&vc->buf_lock);
+  BUF_UNLOCK(vc);
   return rc;
 }
 
@@ -326,9 +341,10 @@ int nk_vc_scrollup()
     vc = default_vc;
   }
   if (vc) { 
-    spin_lock(&vc->buf_lock);
+    BUF_LOCK_CONF;
+    BUF_LOCK(vc);
     rc = _vc_scrollup_specific(vc);
-    spin_unlock(&vc->buf_lock);
+    BUF_UNLOCK(vc);
   }
 
   return rc;
@@ -380,9 +396,10 @@ int nk_vc_display_char_specific(struct nk_virtual_console *vc,
   int rc = -1;
 
   if (vc) { 
-    spin_lock(&vc->buf_lock);
+    BUF_LOCK_CONF;
+    BUF_LOCK(vc);
     rc = _vc_display_char_specific(vc, c, attr, x, y);
-    spin_unlock(&vc->buf_lock);
+    BUF_UNLOCK(vc);
   }
   return rc;
 }
@@ -396,9 +413,10 @@ int nk_vc_display_char(uint8_t c, uint8_t attr, uint8_t x, uint8_t y)
     vc = default_vc;
   }
   if (vc) { 
-    spin_lock(&vc->buf_lock);
+    BUF_LOCK_CONF;
+    BUF_LOCK(vc);
     rc = _vc_display_char(c,attr,x,y);
-    spin_unlock(&vc->buf_lock);
+    BUF_UNLOCK(vc);
   }
 
   return rc;
@@ -435,9 +453,10 @@ int nk_vc_setpos(uint8_t x, uint8_t y)
     vc = default_vc;
   }
   if (vc) { 
-    spin_lock(&vc->buf_lock);
+    BUF_LOCK_CONF;
+    BUF_LOCK(vc);
     rc = _vc_setpos(x,y);
-    spin_unlock(&vc->buf_lock);
+    BUF_UNLOCK(vc)
   }
 
   return rc;
@@ -466,9 +485,10 @@ int nk_vc_setpos_specific(struct nk_virtual_console *vc, uint8_t x, uint8_t y)
   int rc=0;
 
   if (vc) { 
-    spin_lock(&vc->buf_lock);
+    BUF_LOCK_CONF;
+    BUF_LOCK(vc);
     rc = _vc_setpos_specific(vc,x,y);
-    spin_unlock(&vc->buf_lock);
+    BUF_UNLOCK(vc);
   }
 
   return rc;
@@ -554,9 +574,10 @@ int nk_vc_putchar(uint8_t c)
       vc = default_vc;
     }
     if (vc) {
-      spin_lock(&vc->buf_lock);
+      BUF_LOCK_CONF;
+      BUF_LOCK(vc);
       _vc_putchar_specific(vc,c);
-      spin_unlock(&vc->buf_lock);
+      BUF_UNLOCK(vc);
     }
   } else {
 #ifdef NAUT_CONFIG_X86_64_HOST
@@ -599,9 +620,10 @@ int nk_vc_print(char *s)
       vc = default_vc;
     }
     if (vc) {
-      spin_lock(&vc->buf_lock);
+      BUF_LOCK_CONF;
+      BUF_LOCK(vc);
       _vc_print_specific(vc,s);
-      spin_unlock(&vc->buf_lock);
+      BUF_UNLOCK(vc);
     }
   } else {
 #ifdef NAUT_CONFIG_X86_64_HOST
@@ -659,9 +681,10 @@ int nk_vc_log(char *fmt, ...)
   if (!log_vc) { 
     // no output to screen possible yet
   } else {
-    spin_lock(&log_vc->buf_lock);
+    BUF_LOCK_CONF;
+    BUF_LOCK(log_vc);
     _vc_print_specific(log_vc, buf);
-    spin_unlock(&log_vc->buf_lock);
+    BUF_UNLOCK(log_vc);
   }
 #ifdef NAUT_CONFIG_VIRTUAL_CONSOLE_SERIAL_MIRROR
   serial_write(buf);
@@ -680,9 +703,10 @@ static int _vc_setattr_specific(struct nk_virtual_console *vc, uint8_t attr)
 int nk_vc_setattr_specific(struct nk_virtual_console *vc, uint8_t attr)
 {
   if (vc) { 
-    spin_lock(&vc->buf_lock);
+    BUF_LOCK_CONF;
+    BUF_LOCK(vc);
     _vc_setattr_specific(vc,attr);
-    spin_unlock(&vc->buf_lock);
+    BUF_UNLOCK(vc);
   }
   return 0;
 
@@ -697,9 +721,10 @@ int nk_vc_setattr(uint8_t attr)
     vc = default_vc;
   }
   if (vc) { 
-    spin_lock(&vc->buf_lock);
+    BUF_LOCK_CONF;
+    BUF_LOCK(vc);
     _vc_setattr_specific(vc,attr);
-    spin_unlock(&vc->buf_lock);
+    BUF_UNLOCK(vc);
   }
   return 0;
 }
@@ -731,15 +756,17 @@ static int _vc_clear_specific(struct nk_virtual_console *vc, uint8_t attr)
 int nk_vc_clear_specific(struct nk_virtual_console *vc, uint8_t attr)
 {
   if (vc) { 
-    spin_lock(&vc->buf_lock);
+    BUF_LOCK_CONF;
+    BUF_LOCK(vc);
     _vc_clear_specific(vc,attr);
-    spin_unlock(&vc->buf_lock);
+    BUF_UNLOCK(vc);
   }
   return 0;
 }
 
 int nk_vc_clear(uint8_t attr)
 {
+  BUF_LOCK_CONF;
   struct nk_thread *t = get_cur_thread();
   struct nk_virtual_console *vc;
 
@@ -751,9 +778,9 @@ int nk_vc_clear(uint8_t attr)
     return 0;
   }
      
-  spin_lock(&vc->buf_lock);
+  BUF_LOCK(vc);
   _vc_clear_specific(vc,attr);
-  spin_unlock(&vc->buf_lock);
+  BUF_UNLOCK(vc);
   return 0;
 }
 
@@ -787,19 +814,18 @@ static inline int is_queue_full(struct nk_virtual_console *vc)
 // called without lock
 int nk_enqueue_scancode(struct nk_virtual_console *vc, nk_scancode_t scan) 
 {
-  uint8_t flags;
+  QUEUE_LOCK_CONF;
 
-
-  flags = spin_lock_irq_save(&vc->queue_lock);
+  QUEUE_LOCK(vc);
 
   if(vc->type != RAW || is_queue_full(vc)) {
     DEBUG("Cannot enqueue scancode 0x%x (queue is %s)\n",scan, is_queue_full(vc) ? "full" : "not full");
-    spin_unlock_irq_restore(&vc->queue_lock,flags);
+    QUEUE_UNLOCK(vc);
     return -1;
   } else {
     vc->keyboard_queue.s_queue[vc->tail] = scan;
     vc->tail = next_index_on_queue(vc->type, vc->tail);
-    spin_unlock_irq_restore(&vc->queue_lock,flags);
+    QUEUE_UNLOCK(vc);
     nk_thread_queue_wake_all(vc->waiting_threads);
     return 0;
   }
@@ -807,18 +833,18 @@ int nk_enqueue_scancode(struct nk_virtual_console *vc, nk_scancode_t scan)
 
 int nk_enqueue_keycode(struct nk_virtual_console *vc, nk_keycode_t key) 
 {
-  uint8_t flags;
+  QUEUE_LOCK_CONF;
 
-  flags = spin_lock_irq_save(&vc->queue_lock);
+  QUEUE_LOCK(vc);
 
   if(vc->type != COOKED || is_queue_full(vc)) {
     DEBUG("Cannot enqueue keycode 0x%x (queue is %s)\n",key,is_queue_full(vc) ? "full" : "not full");
-    spin_unlock_irq_restore(&vc->queue_lock,flags);
+    QUEUE_UNLOCK(vc);
     return -1;
   } else {
     vc->keyboard_queue.k_queue[vc->tail] = key;
     vc->tail = next_index_on_queue(vc->type, vc->tail);
-    spin_unlock_irq_restore(&vc->queue_lock,flags);
+    QUEUE_UNLOCK(vc);
     nk_thread_queue_wake_all(vc->waiting_threads);
     return 0;
   }
@@ -826,38 +852,38 @@ int nk_enqueue_keycode(struct nk_virtual_console *vc, nk_keycode_t key)
 
 nk_scancode_t nk_dequeue_scancode(struct nk_virtual_console *vc) 
 {
-  uint8_t flags;
+  QUEUE_LOCK_CONF;
 
-  flags = spin_lock_irq_save(&vc->queue_lock);
+  QUEUE_LOCK(vc);
 
   if(vc->type != RAW || is_queue_empty(vc)) {
     DEBUG("Cannot dequeue scancode (queue is %s)\n",is_queue_empty(vc) ? "empty" : "not empty");
-    spin_unlock_irq_restore(&vc->queue_lock,flags);
+    QUEUE_UNLOCK(vc);
     return NO_SCANCODE;
   } else {
     nk_scancode_t result;
     result = vc->keyboard_queue.s_queue[vc->head];
     vc->head = next_index_on_queue(vc->type, vc->head);
-    spin_unlock_irq_restore(&vc->queue_lock,flags);
+    QUEUE_UNLOCK(vc);
     return result;
   }
 }
 
 nk_keycode_t nk_dequeue_keycode(struct nk_virtual_console *vc) 
 {
-  uint8_t flags;
+  QUEUE_LOCK_CONF;
 
-  flags = spin_lock_irq_save(&vc->queue_lock);
+  QUEUE_LOCK(vc);
 
   if (vc->type != COOKED || is_queue_empty(vc)) {
     DEBUG("Cannot dequeue keycode (queue is %s)\n",is_queue_empty(vc) ? "empty" : "not empty");
-    spin_unlock_irq_restore(&vc->queue_lock,flags);
+    QUEUE_UNLOCK(vc);
     return NO_KEY;
   } else {
     nk_keycode_t result;
     result = vc->keyboard_queue.k_queue[vc->head];
     vc->head = next_index_on_queue(vc->type, vc->head);
-    spin_unlock_irq_restore(&vc->queue_lock,flags);
+    QUEUE_UNLOCK(vc);
     return result;
   }
 }
@@ -1052,6 +1078,11 @@ static void list(void *in, void **out)
     return;
   }
   
+  if (nk_thread_name(get_cur_thread(),"vc-list")) {   
+    ERROR_PRINT("Cannot name vc-list's thread\n");
+    return;
+  }
+
   if (nk_bind_vc(get_cur_thread(), list_vc)) { 
     ERROR("Cannot bind virtual console for list\n");
     return;
@@ -1089,7 +1120,10 @@ int nk_switch_to_vc_list()
 static int start_list()
 {
 
-  nk_thread_start(list, 0, 0, 0, PAGE_SIZE, &list_tid, -1);
+  if (nk_thread_start(list, 0, 0, 1, PAGE_SIZE_4KB, &list_tid, -1)) {
+    ERROR("Failed to launch VC list\n");
+    return -1;
+  }
   
   INFO("List launched\n");
 
@@ -1122,7 +1156,10 @@ int nk_vc_init()
     return -1;
   }
 
-  start_list();
+  if (start_list()) { 
+    ERROR("Cannot create vc list thread\n");
+    return -1;
+  }
 
   cur_vc = default_vc;
   copy_display_to_vc(cur_vc);

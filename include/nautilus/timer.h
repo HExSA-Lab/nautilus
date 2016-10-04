@@ -23,22 +23,38 @@
 #ifndef __TIMER_H__
 #define __TIMER_H__
 
-#define NUM_TIMERS 1
-
-#define TEVENT_WAITING 0
-#define TEVENT_READY   1
-
 struct naut_info;
 
-struct nk_timer_event {
-    uint8_t active;
-    uint32_t ticks;
-    volatile uint8_t event_flag;
-};
+struct nk_timer;
 
-#include <nautilus/idt.h>
-int nk_timer_handler(excp_entry_t *, excp_vec_t);
-int nk_timer_init (struct naut_info * naut);
-void nk_sleep (uint_t msec);
+struct nk_timer *nk_alloc_timer();
+void             nk_free_timer(struct nk_timer *t);
+
+// configures and starts the timer
+int nk_set_timer(struct nk_timer *t, 
+		 uint64_t ns, // from the present time
+		 uint64_t flags,
+#define TIMER_SPIN     0x1
+#define TIMER_CALLBACK 0x2
+		 void (*callback)(void *p), 
+		 void *p,
+		 uint32_t cpu);
+
+int nk_cancel_timer(struct nk_timer *t);
+
+// only makes sense for a spin or blocking timer, not a callback...
+int nk_wait_timer(struct nk_timer *t);
+
+int nk_sleep(uint64_t ns);
+int nk_delay(uint64_t ns);
+
+int nk_timer_init();
+void nk_timer_deinit();
+
+// handler returns ns from return time when it must be 
+// called again at the latest.  The cpu time driver
+// (e.g., apic) will invoke this one every timer interrupt
+// whether this amount of timer has passed or not
+uint64_t nk_timer_handler(void);
 
 #endif

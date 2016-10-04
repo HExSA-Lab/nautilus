@@ -676,7 +676,7 @@ static char *string(char *buf, char *end, char *s, struct printf_spec spec)
 {
 	int len, i;
 
-	if ((unsigned long)s < PAGE_SIZE)
+	if ((unsigned long)s < PAGE_SIZE_4KB)
 		s = "<NULL>";
 
 	len = strnlen(s, spec.precision);

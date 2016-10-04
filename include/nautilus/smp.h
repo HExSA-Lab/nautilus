@@ -88,7 +88,7 @@ struct cpu {
 
     spinlock_t lock;
 
-    struct nk_queue * run_q;
+    struct nk_sched_percpu_state *sched_state;
 
     nk_queue_t * xcall_q;
     struct nk_xcall xcall_nowait_info;

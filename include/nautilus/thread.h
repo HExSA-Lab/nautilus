@@ -32,6 +32,7 @@ extern "C" {
 #include <nautilus/spinlock.h>
 #include <nautilus/queue.h>
 #include <nautilus/intrinsics.h>
+#include <nautilus/scheduler.h>
 
 #define CPU_ANY       -1
 
@@ -51,12 +52,12 @@ typedef uint64_t nk_stack_size_t;
 
 int
 nk_thread_create (nk_thread_fun_t fun, 
-                 void * input,
-                 void ** output,
-                 uint8_t is_detached,
-                 nk_stack_size_t stack_size,
-                 nk_thread_id_t * tid,
-                 int cpu);
+		  void * input,
+		  void ** output,
+		  uint8_t is_detached,
+		  nk_stack_size_t stack_size,
+		  nk_thread_id_t * tid,
+		  int bound_cpu);  // -1 => not bound
 
 int
 nk_thread_run(nk_thread_id_t tid);
@@ -68,15 +69,17 @@ nk_thread_start (nk_thread_fun_t fun,
                  uint8_t is_detached,
                  nk_stack_size_t stack_size,
                  nk_thread_id_t * tid,
-                 int cpu);
+                 int bound_cpu); // -1 => not bound
+
+int nk_thread_name(nk_thread_id_t tid, char *name);
 
 extern nk_thread_id_t nk_thread_fork(void);
 
 void nk_set_thread_fork_output(void * result);
-void nk_yield(void);
 void nk_thread_exit(void * retval);
 void nk_thread_destroy(nk_thread_id_t t); /* like thread_kill */
 void nk_wait(nk_thread_id_t t);
+void nk_yield();
 
 void nk_wake_waiters(void);
 int nk_join(nk_thread_id_t t, void ** retval);
@@ -86,6 +89,8 @@ int nk_join_all_children(int (*)(void*));
 nk_thread_id_t nk_get_tid(void);
 #endif
 nk_thread_id_t nk_get_parent_tid(void);
+
+
 
 /* thread local storage */
 typedef unsigned int nk_tls_key_t; 
@@ -99,6 +104,7 @@ int nk_tls_set(nk_tls_key_t key, const void * val);
 
 #define FXSAVE_SIZE 512
 
+#define MAX_THREAD_NAME 32
 
 /* FOR TLS */
 #define TLS_MAX_KEYS 256
@@ -141,11 +147,13 @@ struct nk_thread {
     nk_queue_entry_t wait_node;
 
     nk_thread_queue_t * cur_run_q;
-
+    
     /* thread state */
     nk_thread_status_t status;
 
     int bound_cpu;
+
+    int current_cpu;
 
     uint8_t is_idle;
 
@@ -153,7 +161,11 @@ struct nk_thread {
     void * input;
     nk_thread_fun_t fun;
 
+    struct nk_sched_thread_state *sched_state;
+
     struct nk_virtual_console *vc;
+
+    char name[MAX_THREAD_NAME];
 
     const void * tls[TLS_MAX_KEYS];
 
@@ -163,19 +175,14 @@ struct nk_thread {
 // internal thread representations
 typedef struct nk_thread nk_thread_t;
 
-struct nk_sched_state {
-    nk_thread_queue_t * thread_list;
-    uint_t num_threads;
-};
-
-
-
 nk_thread_id_t __thread_fork(void);
-nk_thread_t* nk_need_resched(void);
-int nk_sched_init(void);
-int nk_sched_init_ap(void);
 
-void nk_schedule(void);
+int
+_nk_thread_init (nk_thread_t * t, 
+		 void * stack, 
+		 uint8_t is_detached, 
+		 int bound_cpu, // -1 => not bound
+		 nk_thread_t * parent);
 
 
 /* thread queues */

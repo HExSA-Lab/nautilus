@@ -298,12 +298,23 @@ kmem_add_memory (struct mem_region * mem,
      * kmem buddy allocator is initially empty.
      * Memory is added to it via buddy_free().
      * buddy_free() will panic if there are any problems with the args.
+     * However, buddy_free() does expect chunks of memory aligned
+     * to their size, which we manufacture out of the memory given.
+     * buddy_free() will coalesce these chunks as appropriate
      */
 
-    buddy_free(mem->mm_state, (void*)pa_to_va(base_addr), ilog2(size));
+    uint64_t chunk_size = base_addr ? 1ULL << __builtin_ctz(base_addr) : size;
+    uint64_t chunk_order = ilog2(chunk_size);
+    uint64_t num_chunks = size/chunk_size;
+    void *addr=(void*)pa_to_va(base_addr);
+    uint64_t i;
+    
+    for (i=0;i<num_chunks;i++) { 
+	buddy_free(mem->mm_state, addr+i*chunk_size, chunk_order);
+    }
 
     /* Update statistics */
-    kmem_bytes_managed += size;
+    kmem_bytes_managed += chunk_size*num_chunks;
 }
 
 

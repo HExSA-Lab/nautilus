@@ -367,15 +367,9 @@ buddy_free(
 {
     ASSERT(mp);
     ASSERT(order <= mp->pool_order);
-
-    
+    ASSERT(!((uint64_t)addr % (1ULL<<order)));  // aligned to own size only
 
     BUDDY_DEBUG("BUDDY FREE on memory pool: %p addr=%p order=%lu\n",mp,addr,order);
-
-    if (addr>=(void*)0xdf6a0000UL && addr<(void*)0x100000000UL) { 
-	BUDDY_DEBUG("SKIPPED\n");
-	return;
-    }
 
     /* Fixup requested order to be at least the minimum supported */
     if (order < mp->min_order) {

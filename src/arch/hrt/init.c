@@ -34,6 +34,7 @@
 #include <nautilus/smp.h>
 #include <nautilus/irq.h>
 #include <nautilus/thread.h>
+#include <nautilus/timer.h>
 #include <nautilus/idle.h>
 #include <nautilus/percpu.h>
 #include <nautilus/errno.h>
@@ -50,7 +51,6 @@
 #include <dev/pci.h>
 #include <dev/hpet.h>
 #include <dev/ioapic.h>
-#include <dev/timer.h>
 #include <dev/i8254.h>
 #include <dev/kbd.h>
 #include <dev/serial.h>
@@ -64,6 +64,18 @@ extern struct cpu * smp_ap_stack_switch(uint64_t, uint64_t, struct cpu*);
 extern spinlock_t printk_lock;
 
 static int hrt_core_sync = 0;
+
+
+#define QUANTUM_IN_NS (1000000000ULL/NAUT_CONFIG_HZ)
+
+struct nk_sched_config sched_cfg = {
+    .util_limit = NAUT_CONFIG_UTILIZATION_LIMIT*10000ULL, // convert percent to 10^-6 units
+    .sporadic_reservation =  NAUT_CONFIG_SPORADIC_RESERVATION*10000ULL, // ..
+    .aperiodic_reservation = NAUT_CONFIG_APERIODIC_RESERVATION*10000ULL, // ..
+    .aperiodic_quantum = QUANTUM_IN_NS,
+    .aperiodic_default_priority = QUANTUM_IN_NS,
+};
+
 
 #ifdef NAUT_CONFIG_NDPC_RT
 void ndpc_rt_test()
@@ -212,7 +224,7 @@ hrt_bsp_init (unsigned long mbd,
 
     ioapic_init(&(naut->sys));
 
-    nk_timer_init(naut);
+    nk_timer_init();
 
     apic_init(naut->sys.cpus[0]);
 
@@ -220,7 +232,6 @@ hrt_bsp_init (unsigned long mbd,
 
     nk_rand_init(naut->sys.cpus[0]);
 
-    nk_sched_init();
 
     /* we now switch away from the boot-time stack in low memory */
     struct cpu * me = naut->sys.cpus[my_cpu_id()];
@@ -341,7 +352,7 @@ default_init (unsigned long mbd,
 
     pci_init(naut);
 
-    nk_sched_init();
+    nk_sched_init(&sched_cfg);
 
     smp_setup_xcall_bsp(naut->sys.cpus[0]);
 

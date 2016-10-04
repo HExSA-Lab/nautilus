@@ -89,6 +89,20 @@ mm_boot_num_regions (void)
     return mm_info.num_regions;
 }
 
+static int is_usable_ram(uint64_t start, uint64_t len)
+{
+    uint64_t i;
+    
+    for (i=0;i<mm_info.num_regions;i++) { 
+	if ((start >= memory_map[i].addr) &&
+	    (start+len <= (memory_map[i].addr+memory_map[i].len))) {
+	    return memory_map[i].type==MULTIBOOT_MEMORY_AVAILABLE;
+	}
+    }
+
+    return 0;
+}
+
 
 /* returns the very last page frame number 
  * that should be mapped by the paging subsystem
@@ -166,7 +180,7 @@ mm_boot_init (ulong_t mbd)
     BMM_PRINT("Detected %llu.%llu MB of usable System RAM\n", mm_info.usable_ram/1000000, mm_info.usable_ram%1000000);
 
     npages = mm_info.last_pfn + 1;
-    pm_len = (((npages / BITS_PER_LONG) + 7) / 8) * sizeof(long);
+    pm_len = (npages/BITS_PER_LONG + !!(npages%BITS_PER_LONG)) * sizeof(long);
 
     mem->page_map = (ulong_t*)pm_start;
     mem->npages   = npages;
@@ -225,7 +239,7 @@ void
 mm_boot_free_mem (addr_t start, ulong_t size)
 {
     uint32_t start_page = PADDR_TO_PAGE(start);
-    uint32_t npages     = (size+PAGE_SIZE-1) / PAGE_SIZE;
+    uint32_t npages     = (size+PAGE_SIZE-1) / PAGE_SIZE; // what if this is smaller than a page?
     boot_mem_info_t * bm = &bootmem;
 
     if (unlikely(boot_mm_inactive)) {
@@ -430,15 +444,20 @@ add_free_pages (struct mem_region * region)
     for (i = start_pfn; i < end_pfn; ) {
 
         ulong_t v = ~pm[i/BITS_PER_LONG];
-        
+       
+
         /* we have free pages in this index */
         if (v) {
             addr = start_pfn << PAGE_SHIFT;
             for (m = 1; m && i < end_pfn; m <<= 1, addr += PAGE_SIZE, i++) {
                 if (v & m) {
-                    ++count;
-                    kmem_add_memory(region, addr, PAGE_SIZE);
-                }
+		    if (is_usable_ram(addr,PAGE_SIZE)) { 
+			kmem_add_memory(region, addr, PAGE_SIZE);
+			++count;
+		    } else {
+			ERROR_PRINT("Skipping addition of memory at %p (%p bytes) - Likely memory map / SRAT mismatch\n",addr,PAGE_SIZE);
+		    }
+                } 
             }
         } else {
             i += BITS_PER_LONG;
@@ -497,18 +516,28 @@ mm_boot_kmem_cleanup (void)
     BMM_PRINT("Reclaiming boot sections and data:\n");
 
     BMM_PRINT("    [Boot alloc. page map] (%0lu.%02lu MB)\n", bootmem.pm_len/1000000, bootmem.pm_len%1000000);
-    kmem_add_memory(kmem_get_region_by_addr(va_to_pa((ulong_t)bootmem.page_map)),
-            va_to_pa((ulong_t)bootmem.page_map), 
-            bootmem.pm_len);
+    if (is_usable_ram(va_to_pa((ulong_t)bootmem.page_map),bootmem.pm_len)) {
+	kmem_add_memory(kmem_get_region_by_addr(va_to_pa((ulong_t)bootmem.page_map)),
+			va_to_pa((ulong_t)bootmem.page_map), 
+			bootmem.pm_len);
+	count += bootmem.pm_len;
+    } else {
+	ERROR_PRINT("Skipping reclaim of boot page map as memory is not usable: %p (%p bytes) - Likely memory map / SRAT mismatch\n",va_to_pa((ulong_t)bootmem.page_map),bootmem.pm_len);
+    }
 
-    count += bootmem.pm_len;
 
     BMM_PRINT("    [Boot page tables and stack]     (%0lu.%02u MB)\n", PAGE_SIZE_4KB*3/1000000, PAGE_SIZE_4KB%1000000);
-    kmem_add_memory(kmem_get_region_by_addr(va_to_pa((ulong_t)&pml4)), 
-            va_to_pa((ulong_t)(&pml4)), 
-            PAGE_SIZE_4KB*3 + PAGE_SIZE_2MB);
-
-    count += PAGE_SIZE_4KB*3 + PAGE_SIZE_2MB;
+    
+    if (is_usable_ram(va_to_pa((ulong_t)(&pml4)), 
+		      PAGE_SIZE_4KB*3 + PAGE_SIZE_2MB)) { 
+	kmem_add_memory(kmem_get_region_by_addr(va_to_pa((ulong_t)&pml4)), 
+			va_to_pa((ulong_t)(&pml4)), 
+			PAGE_SIZE_4KB*3 + PAGE_SIZE_2MB);
+	
+	count += PAGE_SIZE_4KB*3 + PAGE_SIZE_2MB;
+    } else {
+	ERROR_PRINT("Skipping reclaim of boot page tables and stack as memory is not usable: %p (%p bytes) - Likely memory map / SRAT mismatch\n",va_to_pa((ulong_t)(&pml4)), PAGE_SIZE_4KB*3 + PAGE_SIZE_2MB);
+    }
 
     BMM_PRINT("    =======\n");
     BMM_PRINT("    [TOTAL] (%lu.%lu MB)\n", count/1000000, count%1000000);

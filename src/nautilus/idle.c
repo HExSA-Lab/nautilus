@@ -24,9 +24,12 @@
 #include <nautilus/idle.h>
 #include <nautilus/cpu.h>
 #include <nautilus/thread.h>
+#include <nautilus/scheduler.h>
 
-#define TIMEOUT 1000000
-#define INNER_LOOP_DELAY 50000
+#ifndef NAUT_CONFIG_DEBUG_SCHED
+#undef DEBUG_PRINT
+#define DEBUG_PRINT(...) 
+#endif
 
 
 static inline void 
@@ -46,9 +49,29 @@ idle_delay (unsigned long long n)
 void 
 idle (void * in, void ** out)
 {
+    extern int irqs_enabled();
+
     get_cur_thread()->is_idle = 1;
 
+    uint64_t last_steal = nk_sched_get_runtime(get_cur_thread());
+    uint64_t runtime;
+    uint64_t numstolen;
+
     while (1) {
+	if (!irqs_enabled()) { 
+	    panic("Idle running with interrupts off!");
+	}
+
+#if NAUT_CONFIG_WORK_STEALING
+	runtime = nk_sched_get_runtime(get_cur_thread());
+	if ((runtime - last_steal) > (NAUT_CONFIG_WORK_STEALING_INTERVAL_MS*1000000ULL)) { 
+	    DEBUG_PRINT("CPU %d trying to steal\n",my_cpu_id());
+	    nk_sched_cpu_mug(-1,NAUT_CONFIG_WORK_STEALING_AMOUNT,&numstolen);
+	    DEBUG_PRINT("CPU %d stole %lu threads\n",my_cpu_id(),numstolen);
+	    last_steal = runtime;
+	}
+#endif
+	    
 
         nk_yield();
 

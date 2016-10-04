@@ -313,6 +313,7 @@ COMMON_FLAGS := -O2 \
 			   -ffreestanding \
 			   -fno-stack-protector \
 			   -fno-strict-aliasing \
+                           -fno-strict-overflow \
 			   -mno-red-zone \
 			   -mcmodel=large
 			  
@@ -333,7 +334,8 @@ CFLAGS:=   $(COMMON_FLAGS) \
 		   -Wno-unused-variable \
 		   -fno-common \
 		   -std=gnu99 \
-		    $(call cc-option, -Wno-unused-but-set-variable,)
+		    $(call cc-option, -Wno-unused-but-set-variable,) \
+	           -Wstrict-overflow=5
 		   #-mno-3dnow \
 		   #-Werror \
 		   #-Wmissing-prototypes \
