@@ -303,11 +303,15 @@ kmem_add_memory (struct mem_region * mem,
      * buddy_free() will coalesce these chunks as appropriate
      */
 
-    uint64_t chunk_size = base_addr ? 1ULL << __builtin_ctz(base_addr) : size;
-    uint64_t chunk_order = ilog2(chunk_size);
-    uint64_t num_chunks = size/chunk_size;
+    uint64_t max_chunk_size = base_addr ? 1ULL << __builtin_ctzl(base_addr) : size;
+    uint64_t chunk_size = max_chunk_size < size ? max_chunk_size : size;
+    uint64_t chunk_order = ilog2(chunk_size); // floor
+    uint64_t num_chunks = size/chunk_size; // floor
     void *addr=(void*)pa_to_va(base_addr);
     uint64_t i;
+
+    KMEM_DEBUG("Add Memory to region %p base_addr=0x%llx size=0x%llx chunk_size=0x%llx, chunk_order=0x%llx, num_chunks=0x%llx, addr=%p\n",
+	       mem,base_addr,size,chunk_size,chunk_order,num_chunks,addr);
     
     for (i=0;i<num_chunks;i++) { 
 	buddy_free(mem->mm_state, addr+i*chunk_size, chunk_order);
