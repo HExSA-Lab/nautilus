@@ -142,7 +142,11 @@ free_usable_ram (boot_mem_info_t * mem)
 
     for (i = 0; i < mm_info.num_regions; i++) {
         
-        if (memory_map[i].type == MULTIBOOT_MEMORY_AVAILABLE) {
+        // if we encounter a region smaller than 2MB, we'll just avoid
+        // the trouble of adding it here. Otherwise we'll need to support
+        // either a smarter page map or a per-size bitmap. Perhaps in the future.
+        if (memory_map[i].type == MULTIBOOT_MEMORY_AVAILABLE && 
+            memory_map[i].len >= PAGE_SIZE) {
             BMM_DEBUG("Freeing memory region @[%p - %p]\n", memory_map[i].addr, memory_map[i].addr + memory_map[i].len);
             mm_boot_free_mem(memory_map[i].addr, memory_map[i].len);
         }
