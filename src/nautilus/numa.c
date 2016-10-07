@@ -41,8 +41,11 @@
 #undef DEBUG_PRINT
 #define DEBUG_PRINT(fmt, args...)
 #endif
+
 #define NUMA_PRINT(fmt, args...) printk("NUMA: " fmt, ##args)
 #define NUMA_DEBUG(fmt, args...) DEBUG_PRINT("NUMA: " fmt, ##args)
+#define NUMA_ERROR(fmt, args...) ERROR_PRINT("NUMA: " fmt, ##args)
+#define NUMA_WARN(fmt, args...)  WARN_PRINT("NUMA: " fmt, ##args)
 
 
 static inline uint32_t 
@@ -90,10 +93,56 @@ has_htt (void)
     return !!(ret.d & (1<<28));
 }
 
-static void 
+
+static void
 intel_probe_with_leafb (struct nk_topo_params *tp)
 {
-    panic("Intel CPUID leaf 0xB not currently supported\n");
+	cpuid_ret_t ret;
+	unsigned subleaf = 0;
+	unsigned smt_width = 0;
+	unsigned smtcore_width = 0;
+	unsigned level_width = 0;
+	uint8_t level_type = 0;
+	uint8_t found_core = 0;
+	uint8_t found_smt = 0;
+
+	// iterate through the 0xb subleafs until EBX == 0
+	do {
+		cpuid_sub(0xb, subleaf, &ret);
+		
+		// this is an invalid subleaf
+		if (ret.b == 0) {
+			break;
+		}
+
+		level_type  = (ret.c >> 8) & 0xff;
+		level_width = ret.a & 0xf;
+
+		switch (level_type) {
+			case 0x1: // level type is SMT, which means level_width holds the SMT mask width
+				smt_width = level_width;
+				found_smt = 1;
+				break;
+			case 0x2: // level type is SMT + core, which means level_width holds the width of both
+				smtcore_width = level_width;
+				found_core = 1;
+				break;
+			default:
+				break;
+		}
+		subleaf++;
+	} while (1);
+	
+	// we saw both core and smt levels, we have hyperthreads
+	if (found_core && found_smt) {
+		tp->core_bits = smtcore_width;
+		tp->smt_bits  = smt_width;
+	} else if (!found_core && found_smt) { // only saw threads, 
+		tp->core_bits = 0;
+		tp->smt_bits  = smt_width;
+	} else {
+		NUMA_WARN("Intel chip has strange topology...\n");
+	}
 }
 
 static void
@@ -160,11 +209,11 @@ amd_get_topo_secondary (struct nk_topo_params * tp)
 static void 
 intel_get_topo_secondary (struct nk_topo_params * tp)
 {
-    if (cpuid_leaf_max() >= 0xb && has_leafb()) {
-        intel_probe_with_leafb(tp);
-    }  else {
-        intel_probe_with_leaves14(tp);
-    }
+	if (cpuid_leaf_max() >= 0xb && has_leafb()) {
+		intel_probe_with_leafb(tp);
+	}  else {
+		intel_probe_with_leaves14(tp);
+	}
 }
 
 static inline void
@@ -201,8 +250,25 @@ get_topo_params (struct nk_topo_params * tp)
 static void 
 assign_core_coords (struct cpu * me, struct nk_cpu_coords * coord, struct nk_topo_params *tp)
 {
-    uint32_t my_apic_id = apic_get_id(per_cpu_get(apic));
+    uint32_t my_apic_id;
 
+	/* 
+	 * use the x2APIC ID if it's supported 
+	 * and this is the right environment
+	 */
+	if (!nk_is_amd() && 
+		cpuid_leaf_max() >= 0xb &&
+		has_leafb()) {
+
+		cpuid_ret_t ret;
+		cpuid_sub(0x1, 0, &ret);
+		NUMA_DEBUG("Using x2APIC for ID\n");
+		my_apic_id = ret.d;
+
+	} else {
+		my_apic_id = apic_get_id(per_cpu_get(apic));
+	}
+		
     coord->smt_id  = my_apic_id & ((1 << tp->smt_bits) - 1);
     coord->core_id = (my_apic_id >> tp->smt_bits) & ((1 << tp->core_bits) - 1);
     coord->pkg_id  = my_apic_id & ~((1 << (tp->smt_bits + tp->core_bits)) - 1);
@@ -227,14 +293,14 @@ nk_cpu_topo_discover (struct cpu * me)
 
     coord = (struct nk_cpu_coords*)malloc(sizeof(struct nk_cpu_coords));
     if (!coord) {
-        ERROR_PRINT("Could not allocate coord struct for CPU %u\n", my_cpu_id());
+        NUMA_ERROR("Could not allocate coord struct for CPU %u\n", my_cpu_id());
         return -1;
     }
     memset(coord, 0, sizeof(struct nk_cpu_coords));
 
     tp = (struct nk_topo_params*)malloc(sizeof(struct nk_topo_params));
     if (!tp) {
-        ERROR_PRINT("Could not allocate param struct for CPU %u\n", my_cpu_id());
+        NUMA_ERROR("Could not allocate param struct for CPU %u\n", my_cpu_id());
         goto out_err;
     }
     memset(tp, 0, sizeof(struct nk_topo_params));
@@ -542,7 +608,7 @@ nk_numa_init (void)
     struct sys_info * sys = &(nk_get_nautilus_info()->sys);
 
     if (arch_numa_init(sys) != 0) {
-        ERROR_PRINT("Error initializing arch-specific NUMA\n");
+        NUMA_ERROR("Error initializing arch-specific NUMA\n");
         return -1;
     }
 
@@ -554,7 +620,7 @@ nk_numa_init (void)
         struct numa_domain * domain = mm_boot_alloc(sizeof(struct numa_domain));
 
         if (!domain) {
-            ERROR_PRINT("Could not create main NUMA domain\n");
+            NUMA_ERROR("Could not create main NUMA domain\n");
             return -1;
         }
 
@@ -571,7 +637,7 @@ nk_numa_init (void)
             struct mem_map_entry * m = mm_boot_get_region(i);
             struct mem_region * region = NULL;
             if (!m) {
-                ERROR_PRINT("Couldn't get memory map region %u\n", i);
+                NUMA_ERROR("Couldn't get memory map region %u\n", i);
                 return -1;
             }
 
@@ -581,7 +647,7 @@ nk_numa_init (void)
 
             region = mm_boot_alloc(sizeof(struct mem_region));
             if (!region) {
-                ERROR_PRINT("Couldn't allocate memory region\n");
+                NUMA_ERROR("Couldn't allocate memory region\n");
                 return -1;
             }
             memset(region, 0, sizeof(struct mem_region));
