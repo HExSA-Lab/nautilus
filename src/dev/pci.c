@@ -245,6 +245,8 @@ pci_bus_create (uint32_t num, struct pci_info * pci)
     memset(bus, 0, sizeof(struct pci_bus));
 
     bus->num = num;
+	bus->pci = pci;
+
     INIT_LIST_HEAD(&(bus->dev_list));
 
     pci_add_bus(bus, pci);
@@ -265,8 +267,8 @@ static void pci_fun_probe(struct pci_info * pci, uint8_t bus, uint8_t dev, uint8
 static void
 pci_dev_probe (struct pci_bus * bus, uint8_t dev)
 {
-    uint8_t fun;
-    uint16_t vendor_id;
+    uint8_t fun = 0;
+    uint16_t vendor_id = 0;
     uint8_t hdr_type;
 
     fun = 0;
@@ -299,10 +301,10 @@ pci_dev_probe (struct pci_bus * bus, uint8_t dev)
         PCI_PRINT("[%04d:%02d.%d] Multifunction Device detected\n", 
                 bus->num, dev, vendor_id);
 
-        /* probe the other device functions */
+        // probe the other device functions 
         for (fun = 1; fun < PCI_MAX_FUN; fun++) {
             if (pci_get_vendor_id(bus->num, dev, fun) != 0xffff) {
-                PCI_DEBUG("[%04d:%02d.%d] Probing function %02d\n", fun);
+                PCI_DEBUG("[%04d:%02d.%d] Probing function %02d\n", bus->num, dev, fun, fun);
                 pci_fun_probe(bus->pci, bus->num, dev, fun);
             }
         }
@@ -323,7 +325,6 @@ pci_bus_probe (struct pci_info * pci, uint8_t bus)
     uint8_t dev;
     uint8_t dev_found = 0;
     struct pci_bus * bus_ptr = NULL;
-
 
     /* make sure we actually have at least one device on this bus */
     for (dev = 0; dev < PCI_MAX_DEV; dev++) {
