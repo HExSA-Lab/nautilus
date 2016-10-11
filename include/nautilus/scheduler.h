@@ -74,6 +74,8 @@ struct nk_sched_constraints {
     // Note that in Nautilus, timer, kick, and all APIC emergency
     // interrupts are 0xf?
     // This does not affect NMIs, PMIs, or SMIs
+    // Also note that this is ignored if interrupt threads
+    // are enabled (NAUT_CONFIG_INTERRUPT_THREAD)
     uint8_t                    interrupt_priority_class; 
     union  {
 	struct nk_sched_periodic_constraints     periodic;

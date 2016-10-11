@@ -51,7 +51,7 @@
 #include <dev/apic.h>
 
 
-#define SANITY_CHECKS 1
+#define SANITY_CHECKS 0
 
 #define INFO(fmt, args...) INFO_PRINT("Scheduler: " fmt, ##args)
 #define ERROR(fmt, args...) ERROR_PRINT("Scheduler: " fmt, ##args)
@@ -294,6 +294,8 @@ typedef struct nk_sched_thread_state {
     rt_status status;
     // which queue the thread is currently on
     queue_type q_type;
+    
+    int      is_intr;      // this is an interrupt thread
 
     uint64_t start_time;   // when last started
     uint64_t cur_run_time; // how long it has run without being preempted
@@ -432,6 +434,18 @@ void nk_sched_dump_cores(int cpu_arg)
 
     int cpu;
 
+    char *intr_model="UNK";
+
+#ifdef NAUT_CONFIG_INTERRUPT_THREAD
+#ifdef NAUT_CONFIG_INTERRUPT_THREAD_ALLOW_IDLE
+    intr_model = "it+ii";
+#else
+    intr_model = "it";
+#endif
+#else
+    intr_model = "ip";
+#endif
+
     struct sys_info * sys = per_cpu_get(system);
     rt_scheduler *s;
 
@@ -442,8 +456,9 @@ void nk_sched_dump_cores(int cpu_arg)
 
 	    s = sys->cpus[cpu]->sched_state;
 	    LOCAL_LOCK(s);
-	    nk_vc_printf("%dc %lut %s %utp %lup %lur %lua %lum (%s) (%luul %lusp %luap %luaq %luadp) (%luapic)\n",
+	    nk_vc_printf("%dc %s %lut %s %utp %lup %lur %lua %lum (%s) (%luul %lusp %luap %luaq %luadp) (%luapic)\n",
 			 cpu, 
+			 intr_model,
 			 s->current->thread->tid, 
 			 s->current->thread->is_idle ? "(idle)" : s->current->thread->name[0] ? s->current->thread->name : "(noname)",
 			 s->current->thread->sched_state->constraints.interrupt_priority_class,
@@ -1317,7 +1332,25 @@ static void set_timer(rt_scheduler *scheduler, rt_thread *thread, uint64_t now)
 
 }
 
-    
+static inline void set_interrupt_priority(rt_thread *t)
+{    
+#ifdef NAUT_CONFIG_INTERRUPT_THREAD
+    // if we are using the interrupt thread model
+    // then if we are the interrupt thread (or an interrupt-enabled idle thread)
+    if (t->is_intr) {
+	// then allow any interrupt
+	write_cr8(0x0);
+    } else {
+	// block all but scheduling-related interrupts
+	write_cr8(0xe);
+    }
+#else
+    // if we are not using the interrupt thread model, then use the 
+    // interrupt priority class selected by the thread itself
+    write_cr8((uint64_t)t->constraints.interrupt_priority_class);
+#endif
+}
+
      
 //
 // Invoked in interrupt context by the timer interrupt or
@@ -1839,8 +1872,8 @@ struct nk_thread *_sched_need_resched(int have_lock)
 	// we are switching threads, start accounting for the new one
 	rt_n->cur_run_time=0;
 
-	// instate our interrupt priority class
-	write_cr8((uint64_t)rt_n->constraints.interrupt_priority_class);
+	// instantiate our interrupt priority class
+	set_interrupt_priority(rt_n);
 
 	if (!have_lock) {
 	    LOCAL_UNLOCK(scheduler);
@@ -2143,8 +2176,8 @@ int nk_sched_cpu_mug(int old_cpu, uint64_t maxcount, uint64_t *actualcount)
 
     for (cur=0;cur<SIZE_APERIODIC(os);cur++) {
 	rt_thread *t = PEEK_APERIODIC(os,cur);
-	// do not steal the idle thread or any bound thread
-	if (t && !t->thread->is_idle && t->thread->bound_cpu<0 ) { 
+	// do not steal the idle thread, interrupt thread, or any bound thread
+	if (t && !t->thread->is_idle && !t->is_intr && t->thread->bound_cpu<0 ) { 
 	    DEBUG("Found thread %llu %s\n",t->thread->tid,t->thread->name);
 	    prosp[count++] = t;
 	    if (count>=maxcount) { 
@@ -2747,6 +2780,59 @@ static struct nk_sched_percpu_state *init_local_state(struct nk_sched_config *cf
     return 0;
 }
 
+#if NAUT_CONFIG_INTERRUPT_THREAD
+static void interrupt(void *in, void **out)
+{
+    if (nk_thread_name(get_cur_thread(),"(intr)")) { 
+	ERROR("Failed to name interrupt thread\n");
+	return;
+    }
+
+    struct nk_sched_constraints c = { .type=PERIODIC,
+				      .interrupt_priority_class=0xe,
+				      .periodic.phase=0,
+				      .periodic.period=NAUT_CONFIG_INTERRUPT_THREAD_PERIOD_US*1000ULL,
+				      .periodic.slice=NAUT_CONFIG_INTERRUPT_THREAD_SLICE_US*1000ULL};
+
+    if (nk_sched_thread_change_constraints(&c)) { 
+	ERROR("Unable to set constraints for interrupt thread\n");
+	panic("Unable to set constraints for interrupt thread\n");
+	return;
+    }
+
+    // promote to interrupt thread
+    get_cur_thread()->sched_state->is_intr=1;
+
+    while (1) {
+	if (!irqs_enabled()) { 
+	    panic("Interrupt thread running with interrupts off!");
+	}
+	DEBUG("Interrupt thread halting\n");
+	// we will be woken from this halt at least by the 
+	// timer interrupt at the end of our current slice
+	__asm__ __volatile__ ("hlt");
+	DEBUG("Interrupt thread awoke from halt (interrupt occurred)\n");
+    }
+}
+
+static int start_interrupt_thread_for_this_cpu()
+{
+  nk_thread_id_t tid;
+  
+  // 2 MB stack since we'll be running interrupt handlers on it
+  if (nk_thread_start(interrupt, 0, 0, 1, PAGE_SIZE, &tid, my_cpu_id())) {
+      ERROR("Failed to start interrupt thread\n");
+      return -1;
+  }
+
+  INFO("Interrupt thread launched on cpu %d as %p\n", my_cpu_id(), tid);
+
+  return 0;
+
+}
+
+#endif
+
 static int shared_init(struct cpu *my_cpu, struct nk_sched_config *cfg)
 {
     nk_thread_t * main = NULL;
@@ -2808,6 +2894,11 @@ static int shared_init(struct cpu *my_cpu, struct nk_sched_config *cfg)
 
     nk_sched_thread_post_create(main);
 
+#ifdef NAUT_CONFIG_INTERRUPT_THREAD_ALLOW_IDLE
+    // make the idle thread an interrupt thread as well
+    main->sched_state->is_intr=1;
+#endif
+
     uint64_t now = cur_time();
 
     // it just started
@@ -2824,6 +2915,14 @@ static int shared_init(struct cpu *my_cpu, struct nk_sched_config *cfg)
     DEBUG("Starting idle thread for CPU %d\n",my_cpu->id);
     nk_thread_start(idle, NULL, NULL, 0, TSTACK_DEFAULT, NULL, my_cpu->id);
 #endif
+
+#ifdef NAUT_CONFIG_INTERRUPT_THREAD
+    if (start_interrupt_thread_for_this_cpu()) {
+	ERROR("Cannot start interrupt thread for CPU!\n");
+	panic("Cannot start interrupt thread for CPU!\n");
+	return -1;
+    }
+#endif	
 
     irq_enable_restore(flags);
 
@@ -2894,7 +2993,10 @@ static void reaper(void *in, void **out)
     struct nk_sched_constraints c = { .type=APERIODIC,
 				      .aperiodic.priority=-1 }; // lowest priority
 
-    nk_sched_thread_change_constraints(&c);
+    if (nk_sched_thread_change_constraints(&c)) { 
+	ERROR("Unable to set constraints for reaper thread\n");
+	return;
+    }
     
     while (1) {
 	DEBUG("Reaper sleeping\n");
@@ -2919,6 +3021,8 @@ static int start_reaper()
 }
 
 #endif
+
+
 
 
 /* 

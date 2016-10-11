@@ -272,6 +272,47 @@ config VIRTUAL_CONSOLE_SERIAL_MIRROR_ALL
         attempt to steal every time work stealing is
 	run.
 
+    config INTERRUPT_THREAD
+       bool "Restrict interrupts to special real-time interrupt thread"
+       default false
+       help 
+          When enabled, all interrupts, except scheduling-related
+          interrupts, are ignored except when a special, per-core
+          interrupt thread is running.  The interrupt thread is a
+          periodic real-time thread.  This forces interrupt handlers
+          to start only at well-constrained points in time.   
+          If interrupt handlers are of bounded, known duration, they 
+          also then finish before well-contrained points in time 
+          (max: end of slice + interrupt duration).   The downside
+          of this mechanism is that interrupts are delayed until 
+          the interrupt thread is run, increasing interrupt latency.
+          Note that threads can insulate themselves from interrupts
+          outside of this mechanism, using the interrupt_priority_class
+          mechanism. 
+
+    config INTERRUPT_THREAD_PERIOD_US
+       depends on INTERRUPT_THREAD
+       int "Period for the interrupt thread (us)"
+       range 500 10000
+       default 1000
+       help 
+          The interrupt thread will run this often
+
+    config INTERRUPT_THREAD_SLICE_US
+       depends on INTERRUPT_THREAD
+       int "Slice for the interrupt thread (us)"
+       range 100 5000
+       default 100
+       help 
+          The interrupt thread will execute for this long when it runs
+
+    config INTERRUPT_THREAD_ALLOW_IDLE
+       depends on INTERRUPT_THREAD
+       bool "Also allow interrupts when running idle thread"
+       default false
+       help 
+          Enable interrupts while running the idle thread
+
     choice
         prompt "Scheduling Model For Aperiodic Threads"
         default APERIODIC_ROUND_ROBIN
