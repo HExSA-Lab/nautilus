@@ -388,14 +388,28 @@ static void
 pci_bus_scan (struct pci_info * pci)
 {
     uint8_t hdr_type;
+    uint8_t fun;
 
     hdr_type = pci_get_hdr_type(0, 0, 0);
+
+    // a multi-function host controller means there are more than one...
     if ((hdr_type & 0x80) == 0) {
-        /* only one PCI host controller */
+        // only one PCI host controller 
         pci_bus_probe(pci, 0);
 
     } else {
-        panic("Hosts with multiple PCI host controllers not supported\n");
+        /* 
+         * Multiple PCI host controllers present. this is likely due to
+         * a multi-processor system, where each processor has it's own 
+         * PCIe root complex, each rooting a hierarchy of PCIe switches
+         * and devices.
+         */
+        for (fun = 0; fun < 8; fun++) {
+            if (pci_get_vendor_id(0, 0, fun) != 0xffff) {
+                PCI_DEBUG("Found new PCI host bridge, scanning bus %d\n", fun);
+                pci_bus_probe(pci, fun);
+            } 
+        }
     }
 }
 
