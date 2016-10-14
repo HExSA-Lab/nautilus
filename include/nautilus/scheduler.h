@@ -169,4 +169,6 @@ struct nk_thread *nk_sched_need_resched(void);
 // how much time has this thread spent executing?
 // ns
 uint64_t nk_sched_get_runtime(struct nk_thread *t);
+
+struct nk_thread *nk_find_thread_by_tid(uint64_t tid);
 #endif /* _SCHEDULER_H */

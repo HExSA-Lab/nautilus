@@ -223,6 +223,36 @@ ENTRY(_fork_return)
     sti                         // turn interrupts back on (this is actually unnecessary in the child but oh well)
 	retq                        // and back we go
 
+/*
+	Make it possible to call a function
+	that expects an interrupt frame to be sitting
+	on the stack from a non-interrupt code path
 
+	foo(struct nk_regs *r)
+
+	nk_interrupt_like_trampoline(foo)
+	
+*/
+ENTRY(nk_interrupt_like_trampoline)
+	// we need to create a whole interrupt stack frame
+	mov  %ss, %rax
+	movq %rax, -8(%rsp)
+	movq %rsp, -16(%rsp)	
+	leaq -16(%rsp),%rsp
+	pushfq
+	mov   %cs, %rax
+	pushq %rax
+	pushq 32(%rsp)  //rip
+	pushq $0        // vector
+	pushq $0        // error code
+	REG_SAVE()      // gprs, etc - also pushes flags
+	movq %rdi, %rax
+	leaq 8(%rsp), %rdi // we don't need the flags again
+	callq *%rax
+	REG_LOAD_SKIP_RAX() // pops flags
+	// now we have 7 more words of crud to toss
+	leaq 56(%rsp), %rsp
+	retq			
+	
 panic_str:
 .ascii "Stack corruption detected\12\0"

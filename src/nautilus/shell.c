@@ -24,6 +24,10 @@
 #include <nautilus/nautilus.h>
 #include <nautilus/shell.h>
 #include <nautilus/vc.h>
+#include <nautilus/cpuid.h>
+#include <nautilus/msr.h>
+#include <nautilus/backtrace.h>
+
 #ifdef NAUT_CONFIG_PALACIOS
 #include <nautilus/vmm.h>
 #endif
@@ -163,7 +167,12 @@ static int handle_cmd(char *buf, int n)
   uint64_t priority, phase;
   uint64_t period, slice;
   uint64_t size, deadline;
+  uint64_t addr, data, len;
+  uint64_t tid;
+  uint32_t id, idsub, sub;
+  uint32_t msr;
   int cpu;
+  char bwdq;
 
   if (*buf==0) { 
     return 0;
@@ -176,6 +185,7 @@ static int handle_cmd(char *buf, int n)
   if (!strncasecmp(buf,"help",4)) { 
     nk_vc_printf("help\nexit\nvcs\ncores [n]\ntime [n]\nthreads [n]\n");
     nk_vc_printf("shell name\n");
+    nk_vc_printf("regs [t]\npeek [bwdq] x | mem x n [s] | poke [bwdq] x y\nrdmsr x [n] | wrmsr x y\ncpuid f [n] | cpuidsub f s\n");
     nk_vc_printf("reap\n");
     nk_vc_printf("burn a name size_ms tpr priority\n");
     nk_vc_printf("burn s name size_ms tpr phase size deadline priority\n");
@@ -197,6 +207,165 @@ static int handle_cmd(char *buf, int n)
   if (!strncasecmp(buf,"reap",4)) { 
     nk_sched_reap();
     return 0;
+  }
+
+  if (sscanf(buf,"regs %lu",&tid)==1) { 
+      nk_thread_t *t = nk_find_thread_by_tid(tid);
+      if (!t) {
+	  nk_vc_printf("No such thread\n");
+      } else {
+	  nk_print_regs((struct nk_regs *) t->rsp);
+      }
+      return 0;
+  }
+
+  if (!strncasecmp(buf,"regs",4)) {
+      extern int nk_interrupt_like_trampoline(void (*)(struct nk_regs *));
+      nk_interrupt_like_trampoline(nk_print_regs);
+      return 0;
+  }
+
+  if (((bwdq='b', sscanf(buf,"peek b %lx", &addr))==1) ||
+      ((bwdq='w', sscanf(buf,"peek w %lx", &addr))==1) ||
+      ((bwdq='d', sscanf(buf,"peek d %lx", &addr))==1) ||
+      ((bwdq='q', sscanf(buf,"peek q %lx", &addr))==1) ||
+      ((bwdq='q', sscanf(buf,"peek %lx", &addr))==1)) {
+      switch (bwdq) { 
+      case 'b': 
+	  data = *(uint8_t*)addr;       
+	  nk_vc_printf("Mem[0x%016lx] = 0x%02lx\n",addr,data);
+	  break;
+      case 'w': 
+	  data = *(uint16_t*)addr;       
+	  nk_vc_printf("Mem[0x%016lx] = 0x%04lx\n",addr,data);
+	  break;
+      case 'd': 
+	  data = *(uint32_t*)addr;       
+	  nk_vc_printf("Mem[0x%016lx] = 0x%08lx\n",addr,data);
+	  break;
+      case 'q': 
+	  data = *(uint64_t*)addr;       
+	  nk_vc_printf("Mem[0x%016lx] = 0x%016lx\n",addr,data);
+	  break;
+      default:
+	  nk_vc_printf("Unknown size requested\n",bwdq);
+	  break;
+      }
+      return 0;
+  }
+
+#define BYTES_PER_LINE 16
+
+  if ((sscanf(buf, "mem %lx %lu %lu",&addr,&len,&size)==3) ||
+      (size=8, sscanf(buf, "mem %lx %lu", &addr, &len)==2)) { 
+      uint64_t i,j,k;
+      for (i=0;i<len;i+=BYTES_PER_LINE/size) {
+	  nk_vc_printf("%016lx :",addr+i);
+	  for (j=0;j<BYTES_PER_LINE/size && (i+j)<len; j++) {
+	      nk_vc_printf(" ");
+	      for (k=0;k<size;k++) { 
+		  nk_vc_printf("%02x", *(uint8_t*)(addr+(i+j)*8+k));
+	      }
+	  }
+	  nk_vc_printf(" ");
+	  for (j=0;j<BYTES_PER_LINE/size && (i+j)<len; j++) {
+	      for (k=0;k<size;k++) { 
+		  nk_vc_printf("%c", isalnum(*(uint8_t*)(addr+(i+j)*8+k)) ? 
+			       *(uint8_t*)(addr+(i+j)*8+k) : '.');
+	      }
+	  }
+	  nk_vc_printf("\n");
+      }	      
+      return 0;
+  }
+
+  if (((bwdq='b', sscanf(buf,"poke b %lx %lx", &addr,&data))==2) ||
+      ((bwdq='w', sscanf(buf,"poke w %lx %lx", &addr,&data))==2) ||
+      ((bwdq='d', sscanf(buf,"poke d %lx %lx", &addr,&data))==2) ||
+      ((bwdq='q', sscanf(buf,"poke q %lx %lx", &addr,&data))==2) ||
+      ((bwdq='q', sscanf(buf,"poke %lx", &addr, &data))==2)) {
+      switch (bwdq) { 
+      case 'b': 
+	  *(uint8_t*)addr = data;
+	  nk_vc_printf("Mem[0x%016lx] = 0x%02lx\n",addr,data);
+	  break;
+      case 'w': 
+	  *(uint16_t*)addr = data;
+	  nk_vc_printf("Mem[0x%016lx] = 0x%04lx\n",addr,data);
+	  break;
+      case 'd': 
+	  *(uint32_t*)addr = data;
+	  nk_vc_printf("Mem[0x%016lx] = 0x%08lx\n",addr,data);
+	  break;
+      case 'q': 
+	  *(uint64_t*)addr = data;
+	  nk_vc_printf("Mem[0x%016lx] = 0x%016lx\n",addr,data);
+	  break;
+      default:
+	  nk_vc_printf("Unknown size requested\n");
+	  break;
+      }
+      return 0;
+  }
+
+
+  if ((sscanf(buf,"rdmsr %x %lu", &msr, &size)==2) ||
+      (size=1, sscanf(buf,"rdmsr %x", &msr)==1)) {
+      uint64_t i,k;
+      for (i=0;i<size;i++) { 
+	  data = msr_read(msr+i);
+	  nk_vc_printf("MSR[0x%08x] = 0x%016lx ",msr+i,data);
+	  for (k=0;k<8;k++) { 
+	      nk_vc_printf("%02x",*(k + (uint8_t*)&data));
+	  }
+	  nk_vc_printf(" ");
+	  for (k=0;k<8;k++) { 
+	      nk_vc_printf("%c",isalnum(*(k + (uint8_t*)&data)) ?
+			   (*(k + (uint8_t*)&data)) : '.');
+	  }
+	  nk_vc_printf("\n");
+      }
+      return 0;
+  }
+
+  if (sscanf(buf, "wrmsr %x %lx",&msr,&data)==2) { 
+      msr_write(msr,data);
+      nk_vc_printf("MSR[0x%08x] = 0x%016lx\n",msr,data);
+      return 0;
+  }
+
+  if ((sub=0, sscanf(buf,"cpuid %x %lu", &id, &size)==2) ||
+      (size=1, sub=0, sscanf(buf,"cpuid %x",&id)==1) ||
+      (size=1, sub=1, sscanf(buf,"cpuidsub %x %x",&id,&idsub)==2)) {
+      uint64_t i,j,k;
+      cpuid_ret_t r;
+      uint32_t val[4];
+      
+      for (i=0;i<size;i++) {
+	  if (sub) { 
+	      cpuid_sub(id,idsub,&r);
+	      nk_vc_printf("CPUID[0x%08x, 0x%08x] =",id+i,idsub);
+	  } else {
+	      cpuid(id+i,&r);
+	      nk_vc_printf("CPUID[0x%08x] =",id+i);
+	  }
+	  val[0]=r.a; val[1]=r.b; val[2]=r.c; val[3]=r.d;
+	  for (j=0;j<4;j++) {
+	      nk_vc_printf(" ");
+	      for (k=0;k<4;k++) { 
+		  nk_vc_printf("%02x",*(k + (uint8_t*)&(val[j])));
+	      }
+	  }
+	  for (j=0;j<4;j++) {
+	      nk_vc_printf(" ");
+	      for (k=0;k<4;k++) { 
+		  nk_vc_printf("%c",isalnum(*(k + (uint8_t*)&(val[j]))) ?
+			       (*(k + (uint8_t*)&(val[j]))) : '.');
+	      }
+	  }
+	  nk_vc_printf("\n");
+      }
+      return 0;
   }
 
   if (sscanf(buf,"burn a %s %llu %u %llu", name, &size_ns, &tpr, &priority)==4) { 

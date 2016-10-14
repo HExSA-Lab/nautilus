@@ -522,6 +522,41 @@ void nk_sched_dump_threads(int cpu)
     GLOBAL_UNLOCK();
 }
 
+struct thread_query {
+    uint64_t     tid;
+    nk_thread_t *thread;
+};
+
+static void find_thread(rt_thread *r, void *priv)
+{
+    nk_thread_t  * t = r->thread;
+    struct thread_query *q = (struct thread_query *)priv;
+
+    if (t->tid == q->tid) { 
+	q->thread = t;
+    }
+}
+
+
+struct nk_thread *nk_find_thread_by_tid(uint64_t tid)
+{
+    GLOBAL_LOCK_CONF;
+    struct sys_info *sys = per_cpu_get(system);
+    struct apic_dev *apic = sys->cpus[my_cpu_id()]->apic;
+    struct thread_query q;
+    
+    q.tid=tid;
+    q.thread=0;
+
+    GLOBAL_LOCK();
+
+    rt_list_map(global_sched_state.thread_list,find_thread,(void*)&q);
+
+    GLOBAL_UNLOCK();
+
+    return q.thread;
+}
+
 void nk_sched_reap()
 {
     GLOBAL_LOCK_CONF;
