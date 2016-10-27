@@ -418,6 +418,8 @@ static void
 __associate_domains_slit (struct nk_locality_info * loc)
 {
     unsigned i, j;
+
+    NUMA_DEBUG("Associate Domains Using SLIT\n");
     
     for (i = 0; i < loc->num_domains; i++) {
         for (j = 0; j < loc->num_domains; j++) {
@@ -451,6 +453,8 @@ __associate_domains_adhoc (struct nk_locality_info * loc)
 {
     unsigned i, j;
     
+    NUMA_DEBUG("WARNING Associate Domains using ADHOC METHOD\n");
+
     for (i = 0; i < loc->num_domains; i++) {
         for (j = 0; j < loc->num_domains; j++) {
             if (j == i) continue;
@@ -470,18 +474,26 @@ __coalesce_regions (struct numa_domain * d)
     struct mem_region * mem = NULL;
     unsigned i;
 
+    NUMA_DEBUG("Coalesce Regions domain id=%lu\n",d->id);
+
 restart_scan:
+    NUMA_DEBUG("Restart Scan\n");
     i = 0;
     list_for_each_entry(mem, &d->regions, entry) {
 
         if (mem->entry.next != &d->regions) {
 
+	    NUMA_DEBUG("Examining region :  base=%p, len=0x%lx, domain=0x%lx enabled=%d hot_plug=%d nv=%d\n",mem->base_addr, mem->len, mem->domain_id, mem->enabled, mem->hot_pluggable, mem->nonvolatile);
             struct mem_region * next_mem = list_entry(mem->entry.next, struct mem_region, entry);
             ASSERT(next_mem);
 
+	    NUMA_DEBUG("Next region is: base=%p, len=0x%lx, domain=0x%lx, enabled=%d, hot_plug=%d nv=%d\n",next_mem->base_addr, next_mem->len, next_mem->domain_id, next_mem->enabled, next_mem->hot_pluggable, next_mem->nonvolatile);
+
             if (next_mem->base_addr == mem->base_addr + mem->len) {
 
-                printk("Coalescing adjacent regions %u and %u in domain %u\n", i, i+1, d->id);
+                NUMA_DEBUG("Coalescing adjacent regions %u and %u in domain %u\n", i, i+1, d->id);
+		NUMA_DEBUG("First  region is base=%p, len=0x%lx, domain=0x%lx enabled=%d\n",mem->base_addr, mem->len, mem->domain_id, mem->enabled);
+		NUMA_DEBUG("Second region is base=%p, len=0x%lx, domain=0x%lx enabled=%d\n", next_mem->base_addr, next_mem->len, next_mem->domain_id, next_mem->enabled);
                 struct mem_region * new_reg = mm_boot_alloc(sizeof(struct mem_region));
                 if (!new_reg) {
                     panic("Could not create new coalesced memory region\n");
@@ -494,6 +506,10 @@ restart_scan:
                 new_reg->len       = mem->len + next_mem->len;
                 new_reg->domain_id = mem->domain_id;
                 new_reg->enabled   = mem->enabled;
+
+	       NUMA_DEBUG("Combined Region is base=%p, len=0x%lx, domain=0x%lx enabled=%d\n", new_reg->base_addr, new_reg->len, new_reg->domain_id, new_reg->enabled);
+
+		
                 
                 /* stitch the coalesced region into the domain's region list */
                 list_add_tail(&new_reg->entry, &mem->entry);
@@ -524,6 +540,7 @@ coalesce_regions (struct nk_locality_info * loc)
 {
     unsigned i;
 
+    NUMA_DEBUG("Coalesce Regions\n");
     for (i = 0; i < loc->num_domains; i++) {
         __coalesce_regions(loc->domains[i]);
     }
@@ -533,6 +550,7 @@ coalesce_regions (struct nk_locality_info * loc)
 static void
 associate_domains (struct nk_locality_info * loc)
 {
+    NUMA_DEBUG("Associate Domains\n");
     if (loc->numa_matrix) {
         __associate_domains_slit(loc);
     } else {
@@ -607,6 +625,8 @@ nk_numa_init (void)
 {
     struct sys_info * sys = &(nk_get_nautilus_info()->sys);
 
+    NUMA_DEBUG("NUMA ARCH INIT\n");
+
     if (arch_numa_init(sys) != 0) {
         NUMA_ERROR("Error initializing arch-specific NUMA\n");
         return -1;
@@ -616,6 +636,9 @@ nk_numa_init (void)
      * to coalesce the regions given to us at boot-time into a single
      * NUMA domain */
     if (sys->locality_info.num_domains == 0) {
+
+	NUMA_DEBUG("No domains in locality info - making it up\n");
+
         int i;
         struct numa_domain * domain = mm_boot_alloc(sizeof(struct numa_domain));
 

@@ -265,6 +265,9 @@ create_zone (struct mem_region * region)
 
     KMEM_DEBUG("Creating buddy zone for region at %p\n", region->base_addr);
     
+    KMEM_DEBUG("computed pool order=%lu, len=%lu, roundup_len=%lu\n",
+	       pool_order, region->len, roundup_pow_of_two(region->len));
+
     if (region->mm_state) {
         panic("Memory zone already exists for memory region ([%p - %p] domain %u)\n",
             (void*)region->base_addr,
@@ -341,6 +344,10 @@ nk_kmem_init (void)
     for (; i < numa_info->num_domains; i++) {
         j = 0;
         list_for_each_entry(ent, &(numa_info->domains[i]->regions), entry) {
+	    if (ent->len < (1UL << MIN_ORDER)) { 
+		KMEM_DEBUG("Skipping kmem initialization of oddball region of size %lu\n", ent->len);
+		continue;
+	    }
             ent->mm_state = create_zone(ent);
             if (!ent->mm_state) {
                 panic("Could not create kmem zone for region %u in domain %u\n", j, i);

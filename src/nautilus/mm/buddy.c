@@ -222,7 +222,7 @@ buddy_init (ulong_t base_addr,
     struct buddy_mempool *mp;
     ulong_t i;
 
-    BUDDY_DEBUG("BUDDY INIT: base_addr=%p order=%lu (sul=%d)\n",(void*)base_addr,pool_order,sizeof(ulong_t));
+    BUDDY_DEBUG("BUDDY INIT: base_addr=%p pool_order=%lu min_order=%lu (sul=%d)\n",(void*)base_addr,pool_order,min_order,sizeof(ulong_t));
 
     /* Smallest block size must be big enough to hold a block structure */
     if ((1UL << min_order) < sizeof(struct block)) {
@@ -232,7 +232,7 @@ buddy_init (ulong_t base_addr,
 
     /* The minimum block order must be smaller than the pool order */
     if (min_order > pool_order) {
-	BUDDY_DEBUG("pool order too small\n");
+	BUDDY_DEBUG("Skipping buddy init as required pool order is too small min_order=%lu pool_order=%lu\n", min_order, pool_order);
         return NULL;
     }
 
