@@ -243,6 +243,8 @@ init (unsigned long mbd,
         ERROR_PRINT("Problem parsing multiboot header\n");
     }
 
+	nk_acpi_init();
+
     /* enumerate CPUs and initialize them */
     smp_early_init(naut);
 

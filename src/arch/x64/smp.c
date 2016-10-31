@@ -36,6 +36,7 @@
 #endif
 #define SMP_PRINT(fmt, args...) printk("SMP: " fmt, ##args)
 #define SMP_DEBUG(fmt, args...) DEBUG_PRINT("SMP: " fmt, ##args)
+#define SMP_ERROR(fmt, args...) ERROR_PRINT("SMP: " fmt, ##args)
 
 
 static uint8_t mp_entry_lengths[5] = {
@@ -195,7 +196,7 @@ parse_mp_table (struct sys_info * sys, struct mp_table * mp)
 
     /* make sure everything is as expected */
     if (strncmp((char*)&mp->sig, "PCMP", 4) != 0) {
-        ERROR_PRINT("MP Table unexpected format\n");
+        SMP_ERROR("MP Table unexpected format\n");
     }
 
     mp_entry = (uint8_t*)&mp->entries;
@@ -205,7 +206,7 @@ parse_mp_table (struct sys_info * sys, struct mp_table * mp)
     SMP_PRINT("Verifying MP Table integrity...");
     if (!blk_cksum_ok((uint8_t*)mp, mp->len)) {
         printk("FAIL\n");
-        ERROR_PRINT("Corrupt MP Table detected\n");
+        SMP_ERROR("Corrupt MP Table detected\n");
     } else {
         printk("OK\n");
     }
@@ -231,7 +232,7 @@ parse_mp_table (struct sys_info * sys, struct mp_table * mp)
                 parse_mptable_lint(sys, (struct mp_table_entry_lint*)mp_entry);
                 break;
             default:
-                ERROR_PRINT("Unexpected MP Table Entry (type=%d)\n", type);
+                SMP_ERROR("Unexpected MP Table Entry (type=%d)\n", type);
                 return -1;
         }
 
@@ -282,7 +283,7 @@ __early_init_mp (struct naut_info * naut)
     mp_ptr = find_mp_pointer();
 
     if (!mp_ptr) {
-        ERROR_PRINT("Could not find MP floating pointer struct\n");
+        SMP_ERROR("Could not find MP floating pointer struct\n");
         return -1;
     }
 
@@ -291,21 +292,181 @@ __early_init_mp (struct naut_info * naut)
     SMP_PRINT("Verifying MP Floating Ptr Struct integrity...");
     if (!blk_cksum_ok((uint8_t*)mp_ptr, 16)) {
         printk("FAIL\n");
-        ERROR_PRINT("Corrupt MP Floating Ptr Struct detected\n");
+        SMP_ERROR("Corrupt MP Floating Ptr Struct detected\n");
+		return -1;
     } else {
         printk("OK\n");
     }
 
     parse_mp_table(&(naut->sys), (struct mp_table*)(uint64_t)mp_ptr->mp_cfg_ptr);
 
-    SMP_PRINT("Detected %u CPUs\n", naut->sys.num_cpus);
-
     return 0;
+}
+
+
+static int
+acpi_parse_lapic (struct acpi_subtable_header * hdr,
+				  const unsigned long end)
+{
+	struct acpi_madt_local_apic *p =
+		(struct acpi_madt_local_apic *)hdr;
+	struct sys_info * sys = &(nk_get_nautilus_info()->sys);
+	struct cpu * new_cpu  = NULL;
+
+	/* is it enabled? */
+	if (!(p->lapic_flags & ACPI_MADT_ENABLED)) {
+		SMP_DEBUG("[ ACPI Disabled CPU ] (skipping)\n");
+		return 0;
+	}
+
+#ifdef NAUT_CONFIG_DEBUG_SMP
+	acpi_table_print_madt_entry(hdr);
+#endif
+
+	if (sys->num_cpus == NAUT_CONFIG_MAX_CPUS) {
+		panic("CPU count exceeded max (check your .config)\n");
+	}
+
+	if (!(new_cpu = mm_boot_alloc(sizeof(struct cpu)))) {
+		panic("Couldn't allocate CPU struct\n");
+	}
+	memset(new_cpu, 0, sizeof(struct cpu));
+
+	new_cpu->id         = sys->num_cpus;
+	new_cpu->lapic_id   = p->id;
+	new_cpu->enabled    = 1;
+	new_cpu->cpu_sig    = 0;
+	new_cpu->feat_flags = 0;
+	new_cpu->system     = sys;
+	new_cpu->cpu_khz    = nk_detect_cpu_freq(new_cpu->id);
+	new_cpu->is_bsp     = (p->id == 0 ? 1 : 0);
+
+	spinlock_init(&new_cpu->lock);
+	
+	sys->cpus[sys->num_cpus] = new_cpu;
+	
+	sys->num_cpus++;
+
+	return 0;
+}
+
+
+#if 0
+static int
+acpi_parse_lint (struct acpi_subtable_header * hdr,
+				   const unsigned long end)
+{
+	return 0;
+}
+#endif
+
+static int
+acpi_parse_ioapic (struct acpi_subtable_header * hdr,
+				   const unsigned long end)
+{
+	struct acpi_madt_io_apic *p =
+		(struct acpi_madt_io_apic *)hdr;
+	struct sys_info * sys = &(nk_get_nautilus_info()->sys);
+	struct ioapic * ioa = NULL;
+
+#ifdef NAUT_CONFIG_DEBUG_SMP
+	acpi_table_print_madt_entry(hdr);
+#endif
+
+	if (sys->num_ioapics == NAUT_CONFIG_MAX_IOAPICS) {
+		panic("IOAPIC count exceeded max (change it in .config\n");
+	}
+
+	if (!(ioa = mm_boot_alloc(sizeof(struct ioapic)))) {
+		panic("Couldn't allocate IOAPIC struct\n");
+	}
+	memset(ioa, 0, sizeof(struct ioapic));
+
+	
+	ioa->id      = p->id;
+	ioa->version = 0;
+	ioa->usable  = 1;
+	ioa->base    = p->address;
+
+	sys->ioapics[sys->num_ioapics] = ioa;
+	sys->num_ioapics++;
+
+	return 0;
+}
+
+
+static int
+acpi_table_parse_madt (enum acpi_madt_type id, 
+					   acpi_table_entry_handler handler, 
+					   unsigned max_entries) 
+{
+	return (acpi_table_parse_entries(ACPI_SIG_MADT,
+									sizeof(struct acpi_table_madt), 
+									id, 
+									handler, 
+									max_entries) < 0);
+}
+
+
+static int 
+acpi_parse_madt (struct acpi_table_header * hdr, void * arg)
+{
+	SMP_DEBUG("Parsing MADT...\n");
+	return 0;
+}
+
+
+static int 
+__early_init_madt (struct naut_info * naut)
+{
+
+	if (acpi_table_parse(ACPI_SIG_MADT, acpi_parse_madt, NULL) != 0) {
+		SMP_ERROR("Could not parse MADT\n");
+		return -1;
+	} 
+
+	/* Find all the LAPICS (and their associated CPUs, of course */
+	if (acpi_table_parse_madt(ACPI_MADT_TYPE_LOCAL_APIC,
+							  acpi_parse_lapic,
+							  NAUT_CONFIG_MAX_CPUS) != 0) {
+		SMP_ERROR("Unable to parse MADT LAPIC entries\n");
+		return -1;
+	}
+
+	/* find all the IOAPICS */
+	if (acpi_table_parse_madt(ACPI_MADT_TYPE_IO_APIC,
+							  acpi_parse_ioapic,
+							  NAUT_CONFIG_MAX_IOAPICS) != 0) {
+		SMP_ERROR("Unable to parse MADT IOAPIC entries\n");
+		return -1;
+	}
+		
+	return 0;
 }
 
 
 int 
 arch_early_init (struct naut_info * naut)
 {
-    return __early_init_mp(naut);
+	int ret;
+
+	SMP_DEBUG("Checking for MADT\n");
+
+	/* try to use ACPI if possible. Newer machines may have strange
+     * MP Table corruption 
+     */
+	if (__early_init_madt(naut) == 0) {
+		goto out_ok;
+	} else {
+		SMP_DEBUG("MADT not present or working. Falling back on MP Table\n");
+		if (__early_init_mp(naut) == 0) {
+			goto out_ok;
+		} else {
+			panic("Neither ACPI MADT nor MP Table present/working! Cannot detect CPUs. Giving up.\n");
+		}
+	}
+			
+out_ok:
+    SMP_PRINT("Detected %u CPUs\n", naut->sys.num_cpus);
+	return 0;
 }

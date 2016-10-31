@@ -150,11 +150,13 @@ acpi_parse_processor_affinity(struct acpi_subtable_header * header,
     if (!processor_affinity)
         return -EINVAL;
 
+    if (!(processor_affinity->flags & ACPI_SRAT_CPU_ENABLED)) { 
+		NUMA_DEBUG("Processor affinity for disabled processor...\n");
+		return 0;
+    }
+
     acpi_table_print_srat_entry(header);
 
-    if (!(processor_affinity->flags & ACPI_SRAT_CPU_ENABLED)) { 
-	NUMA_DEBUG("Processor affinity for disabled processor...\n");
-    }
 
     for (i = 0; i < sys->num_cpus; i++) {
         if (sys->cpus[i]->lapic_id == processor_affinity->apic_id) {
@@ -167,7 +169,7 @@ acpi_parse_processor_affinity(struct acpi_subtable_header * header,
     }
 
     if (i==sys->num_cpus) {
-	NUMA_ERROR("Affinity for processor %d not found\n",processor_affinity->apic_id);
+		NUMA_ERROR("Affinity for processor %d not found\n",processor_affinity->apic_id);
     }
 
     return 0;
@@ -193,12 +195,13 @@ acpi_parse_memory_affinity(struct acpi_subtable_header * header,
     if (!memory_affinity)
         return -EINVAL;
 
-    if (!(memory_affinity->flags & 0x1)) {
-	NUMA_DEBUG("Disabled memory region affinity...\n");
+    if (!(memory_affinity->flags & ACPI_SRAT_MEM_ENABLED)) {
+		NUMA_DEBUG("Disabled memory region affinity...\n");
+		return 0;
     }
 
     if (memory_affinity->length == 0 ) { 
-	NUMA_DEBUG("Whacky length zero memory region...\n");
+		NUMA_DEBUG("Whacky length zero memory region...\n");
     }
 
 
@@ -214,9 +217,9 @@ acpi_parse_memory_affinity(struct acpi_subtable_header * header,
     mem->domain_id     = memory_affinity->proximity_domain & ((srat_rev < 2) ? 0xff : 0xffffffff);
     mem->base_addr     = memory_affinity->base_address;
     mem->len           = memory_affinity->length;
-    mem->enabled       = memory_affinity->flags & 0x1;
-    mem->hot_pluggable = memory_affinity->flags & 0x2;
-    mem->nonvolatile   = memory_affinity->flags & 0x4;
+    mem->enabled       = memory_affinity->flags & ACPI_SRAT_MEM_ENABLED;
+    mem->hot_pluggable = memory_affinity->flags & ACPI_SRAT_MEM_HOT_PLUGGABLE;
+    mem->nonvolatile   = memory_affinity->flags & ACPI_SRAT_MEM_NON_VOLATILE;
 
     ASSERT(mem->domain_id < MAX_NUMA_DOMAINS);
 
@@ -327,13 +330,14 @@ acpi_parse_slit(struct acpi_table_header *table, void * arg)
 }
 
 
+/* 
+ * Assumes that nk_acpi_init() has 
+ * already been called 
+ *
+ */
 int 
 arch_numa_init (struct sys_info * sys)
 {
-    /* initialize the ACPI tables */
-    NUMA_DEBUG("ACPI INIT\n");
-    nk_acpi_init();
-
     NUMA_PRINT("Parsing ACPI NUMA information...\n");
 
     /* SLIT: System Locality Information Table */
