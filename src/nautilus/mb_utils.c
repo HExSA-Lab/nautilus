@@ -229,6 +229,22 @@ multiboot_parse (ulong_t mbd, ulong_t magic)
                 DEBUG_PRINT("Cmd line: %s\n", mb_info->boot_cmd_line);
                 break;
                                              }
+
+			case MULTIBOOT_TAG_TYPE_BOOTDEV: {
+				struct multiboot_tag_bootdev * bd = (struct multiboot_tag_bootdev*)tag;
+				DEBUG_PRINT("Boot device: (biosdev=0x%x,slice=%u,part=%u)\n", bd->biosdev, bd->slice, bd->part);
+				break;
+											 }
+			case MULTIBOOT_TAG_TYPE_ACPI_OLD: {
+				struct multiboot_tag_old_acpi * oacpi = (struct multiboot_tag_old_acpi*)tag;
+				DEBUG_PRINT("Old ACPI: rsdp=%p\n", oacpi->rsdp);
+				break;
+											  }
+			case MULTIBOOT_TAG_TYPE_ACPI_NEW: {
+				struct multiboot_tag_new_acpi * nacpi = (struct multiboot_tag_new_acpi*)tag;
+				DEBUG_PRINT("New ACPI: rsdp=%p\n", nacpi->rsdp);
+				break;
+											  }
 #ifdef NAUT_CONFIG_HVM_HRT
             case MULTIBOOT_TAG_TYPE_HRT: {
                 struct multiboot_tag_hrt * hrt = (struct multiboot_tag_hrt*)tag;
