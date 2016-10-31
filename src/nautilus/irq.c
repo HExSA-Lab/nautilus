@@ -83,7 +83,9 @@ inline void
 nk_mask_irq (uint8_t irq)
 {
     struct naut_info * naut = nk_get_nautilus_info();
-    ioapic_mask_irq(naut->sys.int_info.irq_map[irq].ioapic, irq);
+	if (nk_irq_is_assigned(irq)) {
+		ioapic_mask_irq(naut->sys.int_info.irq_map[irq].ioapic, irq);
+	}
 }
 
 
@@ -91,7 +93,9 @@ inline void
 nk_unmask_irq (uint8_t irq)
 {
     struct naut_info * naut = nk_get_nautilus_info();
-    ioapic_unmask_irq(naut->sys.int_info.irq_map[irq].ioapic, irq);
+	if (nk_irq_is_assigned(irq)) {
+		ioapic_unmask_irq(naut->sys.int_info.irq_map[irq].ioapic, irq);
+	}
 }
 
 
