@@ -550,6 +550,30 @@ menu Debugging
       help
         Turn on debug output for VC
 
+    config DEBUG_DEV
+      bool "Debug Base Device Interface"
+      default n
+      help
+        Turn on debug output for base device interface
+    config DEBUG_CHARDEV
+      bool "Debug Character Device Interface"
+      depends on DEBUG_DEV
+      default n
+      help
+        Turn on debug output for character device interface
+    config DEBUG_BLKDEV
+      bool "Debug Block Device Interface"
+      depends on DEBUG_DEV
+      default n
+      help
+        Turn on debug output for block device interface
+    config DEBUG_NETDEV
+      bool "Debug Network Device Interface"
+      depends on DEBUG_DEV
+      default n
+      help
+        Turn on debug output for network device interface
+
 endmenu
 
 
