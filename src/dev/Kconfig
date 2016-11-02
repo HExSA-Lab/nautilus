@@ -94,6 +94,28 @@ config DEBUG_VIRTIO_PCI
     default n
     help
       Turn on debug prints for the Virtio 
+
+config RAMDISK
+    bool "RAM Disk Support"
+    default n
+    help 
+       Adds the ramdisk device
+
+config RAMDISK_EMBED
+    bool "Embed nautilus/ramdisk.img and instantiate at boot"
+    depends on RAMDISK
+    default n
+    help
+      Embed the ramdisk image in the main directory
+      into the Nautilus kernel image
+
+config DEBUG_RAMDISK
+    bool "Debug RAM Disk"
+    depends on DEBUG_PRINTS && RAMDISK
+    default n
+    help
+      Turn on debug prints for the ramdisk device
+
 endmenu
 
     

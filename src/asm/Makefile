@@ -7,3 +7,7 @@ obj-y += smpboot.o \
 ifdef NAUT_CONFIG_PALACIOS_EMBED_VM_IMG
 	obj-y += guest.o
 endif
+
+ifdef NAUT_CONFIG_RAMDISK_EMBED
+	obj-y += ramdisk.o
+endif
