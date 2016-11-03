@@ -1,0 +1,19 @@
+menu "Filesystems"
+
+config EXT2_FILESYSTEM_DRIVER
+	bool "Enable EXT2"
+	default n
+	help
+		Adds EXT2 support
+
+config DEBUG_EXT2_FILESYSTEM_DRIVER
+	bool "Debug EXT filesystem"
+	default n
+	depends on DEBUG_PRINTS && EXT2_FILESYSTEM_DRIVER
+        help
+                Turn on debug prints for the EXT2 filesystem
+
+
+endmenu
+
+    
