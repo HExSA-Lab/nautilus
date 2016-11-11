@@ -24,6 +24,8 @@
 #include <nautilus/nautilus.h>
 #include <nautilus/shell.h>
 #include <nautilus/vc.h>
+#include <nautilus/dev.h>
+#include <nautilus/fs.h>
 #include <nautilus/cpuid.h>
 #include <nautilus/msr.h>
 #include <nautilus/backtrace.h>
@@ -159,6 +161,45 @@ static int launch_periodic_burner(char *name, uint64_t size_ns, uint32_t tpr, ui
     }
 }
 
+static int handle_cat(char *buf)
+{
+    char data[MAX_CMD];
+    ssize_t ct, i;
+
+    buf+=3;
+    
+    while (*buf && *buf==' ') { buf++;}
+    
+    if (!*buf) { 
+	nk_vc_printf("No file requested\n");
+	return 0;
+    }
+
+    nk_fs_fd_t fd = nk_fs_open(buf,O_RDONLY,0);
+
+    if (FS_FD_ERR(fd)) { 
+	nk_vc_printf("Cannot open \"%s\"\n",buf);
+	return 0;
+    }
+
+    do {
+	ct = nk_fs_read(fd, data, MAX_CMD);
+	if (ct<0) {
+	    nk_vc_printf("Error reading file\n");
+	    nk_fs_close(fd);
+	    return 0;
+	}
+	for (i=0;i<ct;i++) {
+	    nk_vc_printf("%c",data[i]);
+	}
+    } while (ct>0);
+
+    //    nk_fs_close(fd);
+    
+    return 0;
+}
+
+
 static int handle_cmd(char *buf, int n)
 {
   char name[MAX_CMD];
@@ -184,6 +225,7 @@ static int handle_cmd(char *buf, int n)
   
   if (!strncasecmp(buf,"help",4)) { 
     nk_vc_printf("help\nexit\nvcs\ncores [n]\ntime [n]\nthreads [n]\n");
+    nk_vc_printf("devs | fses | tofs | cat [path]\n");
     nk_vc_printf("shell name\n");
     nk_vc_printf("regs [t]\npeek [bwdq] x | mem x n [s] | poke [bwdq] x y\nrdmsr x [n] | wrmsr x y\ncpuid f [n] | cpuidsub f s\n");
     nk_vc_printf("reap\n");
@@ -196,6 +238,26 @@ static int handle_cmd(char *buf, int n)
 
   if (!strncasecmp(buf,"vcs",3)) {
     nk_switch_to_vc_list();
+    return 0;
+  }
+
+  if (!strncasecmp(buf,"devs",4)) {
+    nk_dev_dump_devices();
+    return 0;
+  }
+
+  if (!strncasecmp(buf,"fses",4)) {
+    nk_fs_dump_filesystems();
+    return 0;
+  }
+
+  if (!strncasecmp(buf,"ofs",3)) {
+    nk_fs_dump_files();
+    return 0;
+  }
+
+  if (!strncasecmp(buf,"cat",3)) {
+    handle_cat(buf);
     return 0;
   }
 

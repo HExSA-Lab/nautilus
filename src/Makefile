@@ -3,6 +3,7 @@ obj-y += \
 	arch/ \
 	asm/ \
 	dev/ \
+        fs/  \
 	acpi/ \
 	test/  
 
