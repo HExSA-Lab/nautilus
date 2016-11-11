@@ -574,6 +574,13 @@ menu Debugging
       help
         Turn on debug output for network device interface
 
+config DEBUG_FILESYSTEM
+        bool "Debug Base Filesystem Interface"
+        depends on DEBUG_PRINTS
+        default n
+        help
+                Turn on debug prints for the filesystem interface
+
 endmenu
 
 
@@ -644,4 +651,7 @@ endmenu
 
 
 source "src/dev/Kconfig"
+
+source "src/fs/Kconfig"
+
 

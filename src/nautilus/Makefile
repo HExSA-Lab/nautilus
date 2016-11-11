@@ -38,6 +38,7 @@ obj-y += \
 	chardev.o \
 	blkdev.o \
 	netdev.o \
+        fs.o \
         shell.o
 
 obj-$(NAUT_CONFIG_PROFILE) += instrument.o
@@ -45,9 +46,4 @@ obj-$(NAUT_CONFIG_XEON_PHI) += sfi.o
 
 obj-$(NAUT_CONFIG_PALACIOS) += vmm.o
 
-
-#obj-$(NAT_CONFIG_DEV) += dev.o 
-#obj-$(NAT_CONFIG_CHARDEV) += chardev.o 
-#obj-$(NAT_CONFIG_BLKDEV) += blkdev.o 
-#obj-$(NAT_CONFIG_NETDEV) += netdev.o 
 
