@@ -35,7 +35,7 @@ extern "C" {
 #endif
 
 #define DEBUG_PRINT(fmt, args...)   nk_vc_log_wrap("CPU %d: DEBUG: " fmt, my_cpu_id(),##args)
-#define ERROR_PRINT(fmt, args...)   nk_vc_log_wrap("CPU %d: ERROR at %s: " fmt, my_cpu_id(),  __FILE__, __LINE__, ##args)
+#define ERROR_PRINT(fmt, args...)   nk_vc_log_wrap("CPU %d: ERROR at %s(%lu): " fmt, my_cpu_id(),  __FILE__, __LINE__, ##args)
 #define WARN_PRINT(fmt, args...)    nk_vc_log_wrap("CPU %d: WARNING: " fmt, my_cpu_id(), ##args)
 #define INFO_PRINT(fmt, args...)    nk_vc_log_wrap("CPU %d: " fmt, my_cpu_id(), ##args)
 
