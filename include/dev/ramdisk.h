@@ -23,7 +23,7 @@
 #ifndef __RAMDISK
 #define __RAMDISK
 
-#define RAMDISK_DEFAULT_BLOCK_SIZE 4096
+#define RAMDISK_DEFAULT_BLOCK_SIZE 512
 
 int nk_ramdisk_init(struct naut_info *naut);
 int nk_ramdisk_deinit();

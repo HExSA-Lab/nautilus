@@ -94,12 +94,12 @@ int nk_block_dev_get_characteristics(struct nk_block_dev *dev, struct nk_block_d
 int nk_block_dev_read(struct nk_block_dev *dev, 
 		      uint64_t blocknum, 
 		      uint64_t count, 
-		      uint8_t *dest, 
+		      void *dest, 
 		      nk_dev_request_type_t type)
 {
     struct nk_dev *d = (struct nk_dev *)(&(dev->dev));
     struct nk_block_dev_int *di = (struct nk_block_dev_int *)(d->interface);
-    DEBUG("read %s (start=%lu, count=%lu, type=%lx\n", d->name,blocknum,count,type);
+    DEBUG("read %s (start=%lu, count=%lu, type=%lx)\n", d->name,blocknum,count,type);
     switch (type) {
     case NK_DEV_REQ_BLOCKING:
 	if (di->read_blocks_sync) { 
@@ -126,7 +126,7 @@ int nk_block_dev_read(struct nk_block_dev *dev,
 int nk_block_dev_write(struct nk_block_dev *dev, 
 		       uint64_t blocknum, 
 		       uint64_t count, 
-		       uint8_t *src,  
+		       void     *src,  
 		       nk_dev_request_type_t type)
 {
     struct nk_dev *d = (struct nk_dev *)(&(dev->dev));

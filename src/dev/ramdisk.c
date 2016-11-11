@@ -77,6 +77,7 @@ static int read_blocks(void *state, uint64_t blocknum, uint64_t count, uint8_t *
     } else {
 	memcpy(dest,s->data+blocknum*s->block_size,s->block_size*count);
 	STATE_UNLOCK(s);
+	//nk_dump_mem(dest,s->block_size*count);
 	return 0;
     }
 }

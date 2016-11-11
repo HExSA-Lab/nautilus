@@ -40,7 +40,6 @@ static spinlock_t state_lock;
 #define STATE_LOCK() _state_lock_flags = spin_lock_irq_save(&state_lock)
 #define STATE_UNLOCK() spin_unlock_irq_restore(&state_lock, _state_lock_flags);
 
-
 static struct list_head dev_list;
 
 
@@ -118,4 +117,22 @@ struct nk_dev *nk_dev_find(char *name)
     return target;
 }
 
+
+void nk_dev_dump_devices()
+{
+    struct list_head *cur;
+    STATE_LOCK_CONF;
+    STATE_LOCK();
+    list_for_each(cur,&dev_list) {
+	struct nk_dev *d = list_entry(cur,struct nk_dev, dev_list_node);
+	nk_vc_printf("%s: %s flags=0x%lx\n",
+		     d->name, 
+		     d->type==NK_DEV_CHAR ? "char" : 
+		     d->type==NK_DEV_BLK ? "block" :
+		     d->type==NK_DEV_NET ? "net" : "unknown", 
+		     d->flags);
+		     
+    }
+    STATE_UNLOCK();
+}
 

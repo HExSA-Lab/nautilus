@@ -60,6 +60,8 @@ int            nk_dev_unregister(struct nk_dev *);
 
 struct nk_dev *nk_dev_find(char *name);
 
+void nk_dev_dump_devices();
+
 
 #endif
 

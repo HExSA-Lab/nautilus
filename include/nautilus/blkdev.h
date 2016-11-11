@@ -65,13 +65,13 @@ int nk_block_dev_get_characteristics(struct nk_block_dev *d, struct nk_block_dev
 int nk_block_dev_read(struct nk_block_dev *dev, 
 		      uint64_t blocknum, 
 		      uint64_t count, 
-		      uint8_t *dest, 
+		      void   *dest, 
 		      nk_dev_request_type_t type);
 
 int nk_block_dev_write(struct nk_block_dev *dev, 
 		       uint64_t blocknum, 
 		       uint64_t count, 
-		       uint8_t *src,  
+		       void   *src,  
 		       nk_dev_request_type_t type);
 
 
