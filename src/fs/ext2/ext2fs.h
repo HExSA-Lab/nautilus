@@ -217,7 +217,7 @@ struct ext2_inode {
 	__u32	i_mtime;	/* Modification time */
 	__u32	i_dtime;	/* Deletion Time */
 	__u16	i_gid;		/* Low 16 bits of Group Id */
-	__u16	i_links_count;	/* Links count */
+	__u16	i_links_count;	/* Links' count */
 	__u32	i_blocks;	/* Blocks count */
 	__u32	i_flags;	/* File flags */
 	union {

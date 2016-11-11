@@ -1,2 +1,1 @@
-obj-y += ext2.o \
-	ext2_access.o
+obj-y += ext2.o 

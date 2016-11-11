@@ -11,18 +11,20 @@
  * http://xtack.sandia.gov/hobbes
  *
  * Copyright (c) 2016, Brady Lee and David Williams
+ * Copyright (c) 2016, Peter Dinda
  * Copyright (c) 2016, The V3VEE Project  <http://www.v3vee.org> 
  *                     The Hobbes Project <http://xstack.sandia.gov/hobbes>
  * All rights reserved.
  *
  * Authors:  Brady Lee <BradyLee2016@u.northwestern.edu>
  *           David Williams <davidwilliams2016@u.northwestern.edu>
+ *           Peter Dinda <pdinda@northwestern.edu>
  *
  * This is free software.  You are permitted to use,
  * redistribute, and modify it as specified in the file "LICENSE.txt".
  */
 
-/* ext_access.c
+/* ext2_access.c
  *
  * Authors: Brady Lee and David Williams
  * Based on the ext2 specification found at http://www.nongnu.org/ext2-doc/ext2.html
@@ -33,91 +35,207 @@
  * Built for adding ext2 functionality to the Nautilus OS, Northwestern University
  */
 
+#define FLOOR_DIV(x,y) ((x)/(y))
+#define CEIL_DIV(x,y)  (((x)/(y)) + !!((x)%(y)))
+#define DIVIDES(x,y) (((x)%(y))==0)
+#define MAX(x,y) ((x)>(y) ? (x) : (y))
+#define MIN(x,y) ((x)<(y) ? (x) : (y))
 
 
-#include "fs/ext2/ext2_access.h"
-#include "fs/ext2/ext2fs.h"
+static char *rw[2] = { "read", "write" };
 
-#define INFO(fmt, args...) printk("EXT2_ACCESS: " fmt "\n", ##args)
-#define DEBUG(fmt, args...) printk("EXT2_ACCESS (DEBUG): " fmt "\n", ##args)
-#define ERROR(fmt, args...) printk("EXT2_ACCESS (ERROR): " fmt "\n", ##args)
 
-#ifndef NAUT_CONFIG_DEBUG_FILESYSTEM
-#undef DEBUG
-#define DEBUG(fmt, args...)
-#endif
+static int read_write_superblock(struct ext2_state *fs, int write)
+{
+    write &= 0x1;
 
-/* get_super_block
- *
- * returns a pointer to the super block at start of fs
- */
-struct ext2_super_block *get_super_block(void * fs) {
+    if (sizeof(fs->super)!=SUPERBLOCK_SIZE) { 
+	ERROR("Cannot %s superblock as the code is not internally consistent\n",rw[write]);
+	return -1;
+    }
+    
+    if (!DIVIDES(SUPERBLOCK_SIZE,fs->chars.block_size) || 
+	SUPERBLOCK_SIZE<fs->chars.block_size) { 
+	ERROR("Cannot %s superblock as it is too small or not a multiple of device blocks\n",rw[write]);
+	return -1;
+    }
 
-	//Super block is always a constant offset away from fs
-	return (struct ext2_super_block*)(fs+SUPERBLOCK_OFFSET);
+    if (!DIVIDES(SUPERBLOCK_OFFSET,fs->chars.block_size)) {
+	ERROR("Cannot %s superblock as its offset is not a multiple of device block size\n",rw[write]);
+	return -1;
+    }
+    
+    // superblock is a positive integer multiple of device block size
+
+    uint64_t dev_offset = FLOOR_DIV(SUPERBLOCK_OFFSET,fs->chars.block_size);
+    uint64_t dev_num    = FLOOR_DIV(SUPERBLOCK_SIZE,fs->chars.block_size);
+    int rc;
+
+    DEBUG("%sing superblock (offset=%u, size=%u) on fs %s, bs=%u, dev_off=%lu, dev_num=%lu\n",
+	  rw[write], SUPERBLOCK_OFFSET, SUPERBLOCK_SIZE, fs->fs->name, fs->chars.block_size, dev_offset, dev_num);
+
+    if (write) { 
+	rc = nk_block_dev_write(fs->dev,dev_offset,dev_num,&fs->super,NK_DEV_REQ_BLOCKING); 
+	// TODO: write shadow copies
+    } else {
+	rc = nk_block_dev_read(fs->dev,dev_offset,dev_num,&fs->super,NK_DEV_REQ_BLOCKING);
+    }
+    
+    if (rc) { 
+	ERROR("Failed to %s superblock due to device error\n",rw[write]);
+	return -1;
+    }
+
+    return 0;
 }
 
-/* get_block_size
- *
- * returns the block size for a filesystem.
- */
-uint32_t get_block_size(void *fs) {
-	uint32_t shift;
-	struct ext2_super_block* sb;
-	sb = get_super_block(fs);
+#define read_superblock(fs)  read_write_superblock(fs,0)
+#define write_superblock(fs) read_write_superblock(fs,1)
 
-	//s_log_block_size tells how much to shift 1K by to determine block size
-	shift = sb->s_log_block_size;
-	return (1024 << shift);
+
+
+static uint32_t get_block_size(struct ext2_state *fs) 
+{
+    uint32_t shift;
+
+    //s_log_block_size tells how much to shift 1K by to determine block size
+    shift = fs->super.s_log_block_size;
+    return (1024 << shift);
 }
 
-/* get_block
- *
- * returns a pointer to a block given its block number.
- */
+static int read_write_block(struct ext2_state * fs, uint32_t block_num, void *srcdest, int write) 
+{
+    uint32_t block_size = get_block_size(fs);
+    uint64_t dev_offset = FLOOR_DIV(block_num*block_size,fs->chars.block_size);
+    uint64_t dev_num    = FLOOR_DIV(block_size,fs->chars.block_size);
+    int rc;
 
-void * get_block(void * fs, uint32_t block_num) {
-	uint32_t block_size;
-	block_size = get_block_size(fs);
+    write &= 0x1;
 
-	//gets block size, adds block offset to beginning of fs
-	return (void*)(block_size*block_num + fs);
+    DEBUG("%sing block %u on fs %s / dev %s, bs=%u, dev_off=%lu, dev_num=%lu\n",
+	  rw[write], block_num, fs->fs->name, fs->dev->dev.name, block_size, dev_offset, dev_num);
+
+    if (write) { 
+	rc = nk_block_dev_write(fs->dev,dev_offset,dev_num,srcdest,NK_DEV_REQ_BLOCKING); 
+    } else {
+	rc = nk_block_dev_read(fs->dev,dev_offset,dev_num,srcdest,NK_DEV_REQ_BLOCKING);
+    }
+    
+    if (rc) { 
+	ERROR("Failed to %s block %lu due to device error\n",rw[write],block_num);
+	return -1;
+    }
+
+    return 0;
+
 }
 
-/* get_block_group
- *
- * returns a pointer to the first block group descriptor.
- * Ext2 allows by definition for multiple groups. Currently, only supports one group
- */
-struct ext2_group_desc *get_block_group(void * fs, uint32_t block_group_num) {
-	struct ext2_super_block* sb;
-	sb = get_super_block(fs);
+#define read_block(fs,block_num,dest)  read_write_block(fs,block_num,dest,0)
+#define write_block(fs,block_num,src)  read_write_block(fs,block_num,src,1)
 
-	//returns location directly after superblock, which is where first block group descriptor resides 
-	return (struct ext2_group_desc *)((void*)sb+SUPERBLOCK_SIZE);
+
+#define blocks_per_group(sb) ((sb)->s_blocks_per_group)
+#define inodes_per_group(sb) ((sb)->s_inodes_per_group)
+#define num_block_groups(sb) ((sb)->s_blocks_count/(sb)->s_blocks_per_group)
+/*
+ * reads/writes the requested block_group descriptor
+ * only the first block group descriptor table is read/written
+ */
+static int read_write_block_group(struct ext2_state* fs, uint32_t block_group_num, struct ext2_group_desc *srcdest, int write) 
+{
+    uint64_t block_num;
+    uint64_t offset;
+    uint32_t block_size;
+    uint64_t desc_per_block;
+
+    write &= 0x1;
+
+    DEBUG("%s block group fs %s bgn=%u\n", rw[write], fs->fs->name, block_group_num);
+
+    block_size = get_block_size(fs);
+    block_num = FLOOR_DIV(SUPERBLOCK_OFFSET+SUPERBLOCK_SIZE,block_size);
+    desc_per_block = block_size/sizeof(struct ext2_group_desc);
+    block_num += block_group_num/desc_per_block;
+    offset = block_group_num%desc_per_block;
+
+    DEBUG("%sing block group descriptor %u (block_num=%u) on fs %s\n",
+	  rw[write], block_group_num, block_num, fs->fs->name);
+    
+    uint8_t buf[block_size];
+    struct ext2_group_desc *d = (struct ext2_group_desc *)buf;
+
+    if (read_block(fs,block_num,buf)) { 
+	ERROR("Cannot read block group\n");
+	return -1;
+    } 
+
+    if (write) { 
+	d[offset] = *srcdest;
+	if (write_block(fs,block_num,buf)) { 
+	    ERROR("Cannot write block group\n");
+	    return -1;
+	} else {
+	    return 0;
+	}
+	// TODO: update shadow copies
+    } else {
+	*srcdest = d[offset];
+	return 0;
+    }
 }
 
-/* get_inode
- *
- * returns a pointer to an inode, given its inode number
- */
-struct ext2_inode* get_inode(void *fs, uint32_t inode_num) {
-	struct ext2_group_desc* bg;
-	uint32_t inode_table_num;
-	void* inode_table;
+#define read_block_group(fs,block_group_num,dest)  read_write_block_group(fs,block_group_num,dest,0)
+#define write_block_group(fs,block_group_num,src)  read_write_block_group(fs,block_group_num,src,1)
 
-	//get first (only) block group pointer
-	bg = get_block_group(fs,1);
+static int read_write_inode(struct ext2_state *fs, uint32_t inode_num, struct ext2_inode *srcdest, int write) 
+{
+    struct ext2_group_desc bg;
+    uint32_t inode_block;
+    uint64_t inode_offset;
+    uint32_t block_size = get_block_size(fs);
+    uint64_t inodes_per_block = FLOOR_DIV(block_size,sizeof(struct ext2_inode));
+    uint8_t buf[block_size];
+    struct ext2_inode* inode_table = (struct ext2_inode *)buf;
 
-	//get index into inode table
-	inode_table_num = bg->bg_inode_table;
+    write &= 0x1;
 
-	//gets pointer to block where inodes are located 
-	inode_table = get_block(fs, inode_table_num);
+    if (read_block_group(fs,inode_num/inodes_per_group(&fs->super),&bg)) { 
+	ERROR("Cannot read block group\n");
+	return -1;
+    }
 
-	//Adds offset of inode within table to the beginning of the inode table pointer 
-	return (struct ext2_inode*)((void*)inode_table + (inode_num -1)*sizeof(struct ext2_inode));
+    DEBUG("block group:  bbitmap=%u ibitmap=%u, itable=%u\n", 
+	  bg.bg_block_bitmap, bg.bg_inode_bitmap, bg.bg_inode_table);
+
+    //get index into inode table
+    inode_block  = bg.bg_inode_table + FLOOR_DIV(inode_num - 1, inodes_per_block);
+    inode_offset = (inode_num - 1) % inodes_per_block;
+
+    DEBUG("%sing inode %u (block %u, offset %u) inode_size=%u  on fs %s\n", 
+	  rw[write], inode_num, inode_block, inode_offset, sizeof(struct ext2_inode), fs->fs->name);
+
+    //gets pointer to block where inodes are located 
+    if (read_block(fs,inode_block,buf)) { 
+	ERROR("Cannot read inode block\n");
+	return -1;
+    }
+
+    if (write) { 
+	inode_table[inode_offset] = *srcdest;
+	if (write_block(fs,inode_block,buf)) { 
+	    ERROR("Cannot write inode block\n");
+	    return -1;
+	} else {
+	    return 0;
+	}
+    } else {
+	*srcdest = inode_table[inode_offset];
+	return 0;
+    }
 }
+
+#define read_inode(fs,inode_num,dest)  read_write_inode(fs,inode_num,dest,0)
+#define write_inode(fs,inode_num,src)  read_write_inode(fs,inode_num,src,1)
 
 /* split_path
  *
@@ -125,79 +243,135 @@ struct ext2_inode* get_inode(void *fs, uint32_t inode_num) {
  * i.e. split_path("/a/b/c") = {"a", "b", "c"}
  * also puts the number of parts into the specified location for convenience
  */
-char** split_path(char *path, int *num_parts) {
-	int num_slashes = 0;
-	for (char * slash = path; slash != NULL; slash = strchr(slash + 1, '/')) {
-		num_slashes++;
-	}
-	*num_parts = num_slashes;
-	// Copy out each piece by advancing two pointers (piece_start and slash).
-	char **parts = (char **)malloc(num_slashes*sizeof(char *));
-	char *piece_start = path + 1;
-	int i = 0;
-	for (char *slash = strchr(path + 1, '/'); slash != NULL; slash = strchr(slash + 1, '/')) {
-		int part_len = slash - piece_start;
-		parts[i] = (char *) malloc((part_len + 1)*sizeof(char));
-		strncpy(parts[i], piece_start, part_len);
-		piece_start = slash + 1;
-		i++;
-	}
-	// Get the last piece.
-	parts[i] = (char *)malloc((strlen(piece_start) + 1)*sizeof(char));
-	strcpy(parts[i], " ");
-	strcpy(parts[i], piece_start);
-	return parts;
+static char** split_path(char *path, int *num_parts) 
+{
+    int num_slashes = 0;
+    for (char * slash = path; slash != NULL; slash = strchr(slash + 1, '/')) {
+	num_slashes++;
+    }
+	
+    *num_parts = num_slashes;
+    // Copy out each piece by advancing two pointers (piece_start and slash).
+    char **parts = (char **)malloc(num_slashes*sizeof(char *));
+    char *piece_start = path + 1;
+    int i = 0;
+    for (char *slash = strchr(path + 1, '/'); slash != NULL; slash = strchr(slash + 1, '/')) {
+	int part_len = slash - piece_start;
+	parts[i] = (char *) malloc((part_len + 1)*sizeof(char));
+	strncpy(parts[i], piece_start, part_len);
+	piece_start = slash + 1;
+	i++;
+    }
+    // Get the last piece.
+    parts[i] = (char *)malloc((strlen(piece_start) + 1)*sizeof(char));
+    strcpy(parts[i], " ");
+    strcpy(parts[i], piece_start);
+    return parts;
 }
 
-/* get_root_dir
+static void free_split_path(char **list, int n)
+{
+    int i;
+    for (i=0;i<n;i++) { 
+	free(list[i]);
+    }
+    free(list);
+}
+
+/* get_root_dir_inode
  *
  * Convenience function to get pointer to inode of the root directory.
  */
-struct ext2_inode* get_root_dir(void * fs) {
-	return get_inode(fs, EXT2_ROOT_INO);
+static int get_root_dir_inode(void * fs, struct ext2_inode *inode) 
+{
+    return read_inode(fs, EXT2_ROOT_INO, inode);
 }
 
-/* get_inode_from_dir
+
+
+enum dentry_op {GET,PUT,DEL_BY_NAME,DEL_BY_INODE};
+
+static int dentry_get_put_del(struct ext2_state      *fs,
+			      uint32_t                inode_num,
+			      struct ext2_inode       *their_inode,
+			      struct ext2_dir_entry_2 *dentry,
+			      enum dentry_op           op);
+
+/* get_inode_num_from_dir
  *
  * searches a directory for a file by name
  * returns the inode number of the file if found, or 0
  */
-uint32_t get_inode_from_dir(void *fs, struct ext2_inode *dir, char *name) {
-	char *tempname;
+static uint32_t get_inode_num_from_dir(struct ext2_state *fs, 
+				       uint32_t           inode_num,
+				       struct ext2_inode *dir, 
+				       char *name) 
+{
+    struct ext2_dir_entry_2 dentry;
+    uint32_t inum;
 
-	//get pointer to block where directory entries reside using inode of directory
-	struct ext2_dir_entry_2* dentry = (struct ext2_dir_entry_2*)get_block(fs,dir->i_block[0]);
-
-	//scan only valid files in dentry
-	//while(dentry->inode){
-	ssize_t blocksize = get_block_size(fs) - dentry->rec_len;
-	int count = 0;
-	while(blocksize > 0) {
-	//while(++count < 20) {
-		int i;
-		//DEBUG("malloc %d", dentry->name_len);
-		tempname = (char*)malloc(dentry->name_len*sizeof(char));
-
-		//copy file name to temp name, then null terminate it
-		for(i = 0; i<dentry->name_len;i++){
-			tempname[i] = dentry->name[i];
-		}
-		tempname[i] = '\0';
-
-		//if there is a match, return the inode number
-		//DEBUG("INODE DIR: name %s, tempname %s", name, tempname);
-		//DEBUG("INODE DIR: blocksize %d, reclen %d", blocksize, dentry->rec_len);
-		if(strcmp(name,tempname) ==0){
-			free((void*)tempname);
-			return dentry->inode;
-		}
-		//else, go to next dentry entry 
-		dentry = (struct ext2_dir_entry_2*)((void*)dentry+dentry->rec_len);
-		blocksize -= dentry->rec_len;
-
-		free((void*)tempname);
-	}
+    strcpy(dentry.name,name);
+    dentry.name_len=strlen(name);
+    dentry.rec_len=EXT2_DIR_REC_LEN(dentry.name_len);
+    
+    if (dentry_get_put_del(fs,inode_num,dir,&dentry,GET)) { 
+	ERROR("Failed to get directory entry for %s\n",name);
 	return 0;
+    } else {
+	return dentry.inode;
+    }
+
+    /*
+    uint32_t block_size = get_block_size(fs);
+    uint8_t buf[block_size];
+
+    DEBUG("get_inode_num_from_dir(%s, %p, %s)\n", fs->fs->name, dir, name);
+
+    DEBUG("directory inode has i_block[0]=%lu\n",dir->i_block[0]);
+
+    if (!dir->i_block[0]) {
+	return 0;
+    }
+
+    //get pointer to block where directory entries reside using inode of directory
+    if (read_block(fs,dir->i_block[0],buf)) { 
+	ERROR("Cannot read block for directory inode\n");
+	return 0;
+    }
+
+    DEBUG("Block read\n");
+
+    struct ext2_dir_entry_2* dentry = (struct ext2_dir_entry_2*)buf;
+
+    //scan only valid files in dentry
+    //while(dentry->inode){
+    //ssize_t left = block_size - dentry->rec_len;  // huh?  PAD
+    ssize_t left = block_size;  // huh?  PAD
+    int count = 0;
+    while (left > 0 && dentry->rec_len!=0 ) {
+	//while(++count < 20) {
+	//DEBUG("malloc %d", dentry->name_len);
+	char tempname[dentry->name_len+1];
+
+	DEBUG("Entry has length %lu\n",dentry->name_len);
+
+	//copy file name to temp name, then null terminate it
+	memcpy(tempname,dentry->name,dentry->name_len);
+	tempname[dentry->name_len] = 0;
+
+	//if there is a match, return the inode number
+	//DEBUG("INODE DIR: name %s, tempname %s", name, tempname);
+	//DEBUG("INODE DIR: blocksize %d, reclen %d", blocksize, dentry->rec_len);
+	
+	if (!strcmp(name,tempname)) {
+	    return dentry->inode;
+	}
+
+	dentry = (struct ext2_dir_entry_2*)((void*)dentry+dentry->rec_len);
+	left -= dentry->rec_len;
+    }
+    return 0;
+    */
 }
 
 /* get_inode_by_path
@@ -205,82 +379,204 @@ uint32_t get_inode_from_dir(void *fs, struct ext2_inode *dir, char *name) {
  * given a path to a file, tries to find the inode number of the file
  * returns inode number of file if found, or 0
  */
-uint32_t get_inode_by_path(void *fs, char *path) {
-	int num_parts = 0;
-	if (!strcmp(path, "/")) {
-		return EXT2_ROOT_INO;
+static uint32_t get_inode_num_by_path(struct ext2_state *fs, char *path) 
+{
+    int num_parts = 0;
+
+    DEBUG("get_inode_num_by_path(%s,%s)\n",fs->fs->name, path);
+
+    if (!strcmp(path, "/")) {
+	DEBUG("root dir\n");
+	return EXT2_ROOT_INO;
+    }
+
+    char **parts = split_path(path, &num_parts);
+    char *cur_part = *parts;
+
+    int i;
+    struct ext2_inode cur_inode;
+    uint32_t new_inode_num = 0;
+    uint32_t cur_inode_num;
+
+    if (get_root_dir_inode(fs,&cur_inode)) { 
+	ERROR("Cannot get root directory inode\n");
+	free_split_path(parts,num_parts);
+	return 0;
+    }
+    cur_inode_num=EXT2_ROOT_INO;
+
+    DEBUG("Root inode fetched has mode %u, uid %u, size %u, blocks %u\n",
+	  cur_inode.i_mode, cur_inode.i_uid, cur_inode.i_size, cur_inode.i_blocks);
+
+    DEBUG("%s has %d parts\n", path, num_parts);
+    
+    for(i = 1; i <= num_parts; i++) {   // HUH?  PAD (<=)
+	//treat current inode as directory, and search for inode of next part
+	DEBUG("Considering part %s\n",cur_part);
+	new_inode_num = get_inode_num_from_dir(fs, cur_inode_num, &cur_inode, cur_part);
+	if (!new_inode_num) {
+	    ERROR("Finished search and did not find element %s\n",cur_part);
+	    free_split_path(parts,num_parts);
+	    return 0;
 	}
-	char **parts = split_path(path, &num_parts);
-	char *cur_part = *parts;
-	int i;
-	struct ext2_inode* cur_inode = get_root_dir(fs);
-	uint32_t new_inode_num = 0;
-
-	DEBUG("GET INODE: %s has %d parts", path, num_parts);
-
-	for(i = 1; i <= num_parts; i++){
-		//treat current inode as directory, and search for inode of next part
-		new_inode_num = get_inode_from_dir(fs, cur_inode, cur_part);
-		if (!new_inode_num) {
-			ERROR("GET INODE: inode == 0");
-			return 0;
-		}
-		DEBUG("GET INODE found: %d, %s", new_inode_num, cur_part);
-		cur_inode = get_inode(fs, new_inode_num);
-		cur_part = *(parts+i);
+	DEBUG("GET INODE found: %d, %s\n", new_inode_num, cur_part);
+	if (read_inode(fs, new_inode_num, &cur_inode)) { 
+	    ERROR("Failed to read inode...\n");
+	    free_split_path(parts,num_parts);
+	    return 0;
 	}
+	cur_inode_num = new_inode_num;
+	cur_part = *(parts+i);
+    }
 
-	//final inode is the requested file. return its number
-	DEBUG("GET INODE returning: %d", new_inode_num);
-	return new_inode_num;
+    //final inode is the requested file. return its number
+    DEBUG("Found inode: %u\n", new_inode_num);
+    free_split_path(parts,num_parts);
+
+    return new_inode_num;
 }
 
-/* alloc_inode
- *
- * Searches the inode bitmap in the front of the block group for a free inode
- * also sets the inode to taken in the bitmap when found.
- * returns the inode number of the first free inode, or 0
- */
-uint32_t alloc_inode(void *fs) {
-	struct ext2_group_desc *bg = get_block_group(fs, 1);	//get block group descriptor
-	uint8_t *bitmap_byte = get_block(fs, bg->bg_inode_bitmap);	//get inode bitmap first byte
-	int bytes_checked = 0;
+static int alloc_free_inode(struct ext2_state *fs, uint32_t *num, int free)
+{
+    char *af[2] = { "alloc", "free" };
+
+    uint32_t bg_start, bg_end, bgi;
+    uint32_t block_size=get_block_size(fs);
+    uint8_t buf[block_size];
+    struct ext2_group_desc bg;
+    
+    free &= 0x1;
+
+    if (free) { 
+	bg_start = bg_end = (*num-1)/inodes_per_group(&fs->super);
+    } else {
+	bg_start = 0;
+	bg_end = num_block_groups(&fs->super);
+    }
+
+    for (bgi=bg_start;bgi<bg_end;bgi++) {
+	//get block group descriptor
+	if (read_block_group(fs, bgi, &bg)) { 
+	    ERROR("Failed to read block group %u in inode %s\n", bgi, af[free]);
+	    return -1;
+	}
+	
+	if (read_block(fs,bg.bg_inode_bitmap,buf)) { 
+	    ERROR("Failed to read inode bitmap in inode %s\n", af[free]);
+	    return -1;
+	}
+	
+	int byte;
 	int bit;
 	uint8_t cur_byte;
-
-	while(bytes_checked < 1024) {		//cycle through bitmap
-		cur_byte = *bitmap_byte;
-		for(bit=0; bit < 8; bit++) {
-			if(!(cur_byte & 0x01)) {
-				*bitmap_byte = *bitmap_byte | (0x01 << bit); //set the inode to taken
-				return (uint32_t)(bytes_checked*8 + bit + 1); //first inode number is 1, not 0
-			}
-			cur_byte = cur_byte >> 1;
+    
+	if (free) { 
+	    uint32_t actual;
+	    actual = *num-1;  // inode numbers start with 1.... 
+	    actual %= inodes_per_group(&fs->super); // we want index in this group
+	    byte = actual/8;
+	    bit = actual%8;
+	    buf[byte] &= ~(0x1<<bit);
+	} else {
+	    for (byte=0; byte<block_size; byte++) {
+		cur_byte = buf[byte];
+		for (bit=0; bit < 8; bit++, cur_byte>>=1) {
+		    if (!(cur_byte & 0x01)) {
+			buf[byte] |= (0x1 << bit);
+			*num = byte*8 + bit + 1; //first inode number is 1, not 0
+			*num += bgi*inodes_per_group(&fs->super); // we want inode index on whole volume
+			goto out_good;
+		    }
 		}
-		bitmap_byte++;
-		bytes_checked++;
+	    }
+	    // if we got here, we could not find anything...
+	    *num=0;
+	    return -1;
 	}
-	return 0;
+    }
+    
+ out_good:
+
+    if (write_block(fs,bg.bg_inode_bitmap,buf)) { 
+	ERROR("Failed to write inode bitmap in inode %s\n", af[free]);
+	return -1;
+    }
+    
+    return 0;
 }
 
-/* free_inode
- *
- * sets an inode to free in the inode bitmap at front of block group
- * returns 1
- */
-int free_inode(void *fs, uint32_t inum) {
-	struct ext2_group_desc *bg = get_block_group(fs, 1);	//get block group descriptor
-	uint8_t *bitmap_byte = get_block(fs, bg->bg_inode_bitmap);	//get inode bitmap first byte
-	int test = inum-1;
-	DEBUG("%d",test/8);
-	bitmap_byte += (test/ 8);
-	int bit = (test % 8);
-	DEBUG("* %d %x",bit, *bitmap_byte);
-	uint8_t mask = ~(1 << (bit));
-	*bitmap_byte &= mask;
-	DEBUG("* %x %x",mask, *bitmap_byte);
-	return 1;
+#define alloc_inode(fs,num) alloc_free_inode(fs,num,0)
+#define free_inode(fs,num) alloc_free_inode(fs,&(num),1)
+
+
+static int alloc_free_block(struct ext2_state *fs, uint32_t *num, int free)
+{
+    char *af[2] = { "alloc", "free" };
+
+    uint32_t bg_start, bg_end, bgi;
+    uint32_t block_size=get_block_size(fs);
+    uint8_t buf[block_size];
+    struct ext2_group_desc bg;
+    
+    free &= 0x1;
+
+    if (free) { 
+	bg_start = bg_end = *num/blocks_per_group(&fs->super);
+    } else {
+	bg_start = 0;
+	bg_end = num_block_groups(&fs->super);
+    }
+
+    for (bgi=bg_start;bgi<bg_end;bgi++) {
+	//get block group descriptor
+	if (read_block_group(fs, bgi, &bg)) { 
+	    ERROR("Failed to read block group %u in block %s\n", bgi, af[free]);
+	    return -1;
+	}
+	
+	if (read_block(fs,bg.bg_block_bitmap,buf)) { 
+	    ERROR("Failed to read block bitmap in block %s\n", af[free]);
+	    return -1;
+	}
+	
+	int byte;
+	int bit;
+	uint8_t cur_byte;
+    
+	if (free) { 
+	    uint32_t actual;
+	    actual = *num;  // inode numbers start with 0 
+	    actual %= blocks_per_group(&fs->super); // we want index in this group
+	    byte = actual/8;
+	    bit = actual%8;
+	    buf[byte] &= ~(0x1<<bit);
+	} else {
+	    for (byte=0; byte<block_size; byte++) {
+		cur_byte = buf[byte];
+		for (bit=0; bit < 8; bit++, cur_byte>>=1) {
+		    if (!(cur_byte & 0x01)) {
+			buf[byte] |= (0x1 << bit);
+			*num = byte*8 + bit ; //first block number is 0
+			*num += bgi*blocks_per_group(&fs->super); // we want block index on whole volume
+			goto out_good;
+		    }
+		}
+	    }
+	    // if we got here, we could not find anything...
+	    *num=0;
+	    return -1;
+	}
+    }
+    
+ out_good:
+
+    if (write_block(fs,bg.bg_block_bitmap,buf)) { 
+	ERROR("Failed to write block bitmap in block %s\n", af[free]);
+	return -1;
+    }
+    
+    return 0;
 }
 
-
-
+#define alloc_block(fs,num) alloc_free_block(fs,num,0)
+#define free_block(fs,num) alloc_free_block(fs,&(num),1)
