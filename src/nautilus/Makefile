@@ -32,8 +32,9 @@ obj-y += \
 	libccompat.o \
 	nemo.o \
 	pmc.o \
+	setjmp.o \
 	mm/ \
-        shell.o
+	shell.o
 
 obj-$(NAUT_CONFIG_PROFILE) += instrument.o
 obj-$(NAUT_CONFIG_XEON_PHI) += sfi.o
