@@ -779,7 +779,6 @@ apic_init (struct cpu * core)
     }
     
 
-
     /* turn it on */
     apic_sw_enable(apic);
 
@@ -858,6 +857,7 @@ uint64_t apic_cycles_to_realtime(struct apic_dev *apic, uint64_t cycles)
 
 // this is 10 ms (1/100)
 #define TEST_TIME_SEC_RECIP 100
+#define MAX_TRIES 100
 
 static void calibrate_apic_timer(struct apic_dev *apic) 
 {
@@ -883,6 +883,7 @@ static void calibrate_apic_timer(struct apic_dev *apic)
     uint64_t start, end;
     uint16_t pit_count;
     uint8_t tmp2;
+	uint32_t tries = 0;
 
  try_once:
     // First determine the APIC's bus frequency by calibrating it
@@ -958,8 +959,9 @@ static void calibrate_apic_timer(struct apic_dev *apic)
     // results here, probably due to an SMI.   Additionally,
     // QEMU provides loony results and it is worth repeating
     // until we at least get something that's internally consistent
-    if (end-start < 1000000 || apic_timer_ticks<100) { 
+    if (tries < MAX_TRIES && (end-start < 1000000 || apic_timer_ticks<100)) { 
 	APIC_DEBUG("Test Period is impossible - trying again\n");
+	tries++;
 	goto try_once;
     }
 
