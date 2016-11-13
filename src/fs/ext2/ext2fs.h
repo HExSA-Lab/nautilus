@@ -58,7 +58,7 @@
 extern int posix_memalign(void **__memptr, size_t __alignment, size_t __size);
 #endif
 
-#include "fs/ext2/ext2_types.h"
+#include "ext2_types.h"
 
 typedef __u32		ext2_ino_t;
 typedef __u32		blk_t;

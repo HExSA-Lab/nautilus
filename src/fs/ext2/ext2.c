@@ -29,7 +29,7 @@
 #include <nautilus/fs.h>
 
 #include <fs/ext2/ext2.h>
-#include <fs/ext2/ext2fs.h>
+#include "ext2fs.h"
 
 #define EXT2_S_IFREG 0x8000
 #define EXT2_S_IFDIR 0x4000
