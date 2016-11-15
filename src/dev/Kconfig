@@ -14,6 +14,12 @@ config SERIAL_PORT
     help
       Specifies which serial port to use. E.g. 1 is COM1.
 
+config APIC_FORCE_XAPIC_MODE
+    bool "Force APIC to use XAPIC mode"
+    default n
+    help
+       Force the use of XAPIC mode even if X2APIC mode is available
+
 config APIC_TIMER_CALIBRATE_INDEPENDENTLY
     bool "Calibrate APIC timer independently on each core"
     default n

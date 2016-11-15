@@ -98,8 +98,9 @@ int
 ping (excp_entry_t * excp, excp_vec_t vec)
 {
     struct apic_dev * apic = per_cpu_get(apic);
-    apic_write(apic, APIC_REG_ICR2,  0<< APIC_ICR2_DST_SHIFT);
-    apic_write(apic, APIC_REG_ICR, APIC_DEL_MODE_FIXED | PONG_VEC);
+    apic_write_icr(apic,
+		   0,
+		   APIC_DEL_MODE_FIXED | PONG_VEC);
     IRQ_HANDLER_END();
     return 0;
 }
@@ -161,8 +162,9 @@ ipi_begin_test (cpu_id_t cpu)
 	/* warm it up */
     for (i = 0; i < TRIALS; i++) {
         apic_write(apic, APIC_REG_ESR, 0);
-        apic_write(apic, APIC_REG_ICR2, 0 | (remote_apic<< APIC_ICR2_DST_SHIFT));
-        apic_write(apic, APIC_REG_ICR, 0 | APIC_DEL_MODE_FIXED | PING_VEC);
+	apic_write_icr(apic,
+		       0 | (remote_apic),
+		       0 | APIC_DEL_MODE_FIXED | PING_VEC);
 		while (!(*(volatile int*)&done));
 		done = 0;
 	}
@@ -173,9 +175,10 @@ ipi_begin_test (cpu_id_t cpu)
         uint64_t start = 0;
 
         apic_write(apic, APIC_REG_ESR, 0);
-
-        apic_write(apic, APIC_REG_ICR2, 0 | (remote_apic << APIC_ICR2_DST_SHIFT));
-        apic_write(apic, APIC_REG_ICR, 0 | APIC_DEL_MODE_FIXED | PING_VEC);
+	
+	apic_write_icr(apic, 
+		       0 | (remote_apic),
+		       0 | APIC_DEL_MODE_FIXED | PING_VEC);
 
         rdtscll(start);
 
@@ -206,8 +209,9 @@ ipi_oneway_test (cpu_id_t cpu)
 
 	/* warm it up */
     for (i = 0; i < TRIALS; i++) {
-        apic_write(apic, APIC_REG_ICR2, 0 | (remote_apic << APIC_ICR2_DST_SHIFT));
-        apic_write(apic, APIC_REG_ICR, 0 | APIC_DEL_MODE_FIXED | PONG_VEC);
+	apic_write_icr(apic,
+		       0 | (remote_apic),
+		       0 | APIC_DEL_MODE_FIXED | PONG_VEC);
 		while (!done);
 		done = 0;
 	}
@@ -216,8 +220,9 @@ ipi_oneway_test (cpu_id_t cpu)
     
         uint64_t start = 0;
 
-        apic_write(apic, APIC_REG_ICR2, 0 | (remote_apic << APIC_ICR2_DST_SHIFT));
-        apic_write(apic, APIC_REG_ICR, 0 | APIC_DEL_MODE_FIXED | PONG_VEC);
+	apic_write_icr(apic,
+		       0 | (remote_apic),
+		       0 | APIC_DEL_MODE_FIXED | PONG_VEC);
 
         rdtscll(start);
 

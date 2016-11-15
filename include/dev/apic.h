@@ -67,6 +67,7 @@ extern "C" {
 #define APIC_SPIV_SW_ENABLE    (1u << 8)
 #define APIC_SPIV_VEC_MASK     0xffu
 #define APIC_SPIV_CORE_FOCUS  (1u << 9)
+#define APIC_SPIC_EOI_BROADCAST_DISABLE (1u << 12)
     
 #define ICR_DEL_MODE_LOWEST  (1 << 8)
 #define ICR_DEL_MODE_SMI     (2 << 8)
@@ -95,7 +96,8 @@ extern "C" {
 #define APIC_REG_LVR      0x30
 #define     APIC_LVR_VER(x) ((x) & 0xffu)
 #define     APIC_LVR_MAX(x) (((x) >> 16) & 0xffu)
-#define     APIC_HAS_EXT_LVT(x) (x & (1U<<31))
+#define     APIC_LVR_HAS_DIRECTED_EOI(x) ((x)>>24 & 0x1) // "broadcast suppression"
+#define     APIC_LVR_HAS_EXT_LVT(x) (x & (1U<<31))
 #define APIC_REG_TPR      0x80
 #define APIC_REG_APR      0x90
 #define APIC_REG_PPR      0xa0
@@ -135,10 +137,34 @@ extern "C" {
 #define   APIC_EXFC_SN_EN        0x2
 #define   APIC_EXFC_IERN         0x1
 #define   APIC_GET_EXT_ID(x)     (((x) >> 24) & 0xffu)
-    
+
 /* Extended LVT entries */
 #define APIC_REG_EXTLVT(n) (0x500 + 0x10*(n))
-    
+
+/* X2APIC support 
+     - This is an Intel thing
+     - CPUID 0x1, ECX.21 tells you if X2APIC is supported
+     - APIC_BASE_MSR.11 is APIC/XAPIC enable, .12 is X2APIC enable
+       disable both first, then enable, then X2APIC
+     - X2APIC regs are accessed via MSR
+     - the MSR base is 0x800
+     - Generally, an MMIO register at 0xA0 appears
+       at 0x800 + 0xA 
+     - All 32 bits of ID are now the ID (not just 8 bits)
+     - ICR is now a single 64 bit register at 0x30
+     - DFR is not available/supported
+     - LDR is not writeable and has different semantics
+         The logical id of an apic is now:
+            (ID[31:4] << 16) | (1 << ID[3:0])
+     - SELF IPI is now available
+     - MSRREAD/WRITE is of EDX:EAX, where
+       EDX is only meaninful for 64 bit registers
+
+
+*/
+#define X2APIC_MSR_ACCESS_BASE        0x800
+#define X2APIC_MMIO_REG_OFFSET_TO_MSR(reg) (X2APIC_MSR_ACCESS_BASE+(reg>>4))
+
     /* for LVT entries */
 #define APIC_DEL_MODE_FIXED  0x00000
 #define APIC_DEL_MODE_LOWEST 0x00100
@@ -161,6 +187,12 @@ extern "C" {
 #else
 #define APIC_LDR_MASK       (0xffu<<24)
 #endif
+
+// LDR is not writeable in X2APIC mode
+// It's a 32-bit hardware-set quantity that
+// breaks down into a cluster and an id in the cluster
+#define APIC_LDR_X2APIC_CLUSTER(x) (((x)>>16)&0xffff)
+#define APIC_LDR_X2APIC_LOGID(x) ((x)&0xffff)
 
 #ifdef NAUT_CONFIG_XEON_PHI
 #define GET_APIC_LOGICAL_ID(x)  (((x)>>16)&0xffffu)
@@ -190,7 +222,10 @@ extern "C" {
 
 #define IPI_VEC_XCALL 0xf3
 
+typedef enum { APIC_INVALID=0, APIC_DISABLED, APIC_XAPIC, APIC_X2APIC } apic_mode_t;
+
 struct apic_dev {
+    apic_mode_t mode;
     ulong_t  base_addr;
     uint8_t  version;
     uint_t   id;
@@ -207,21 +242,75 @@ struct apic_dev {
     int      in_kick_interrupt;
 };
 
-
-
-static inline void
-apic_write (struct apic_dev * apic, 
-            uint_t reg, 
-            uint32_t val)
+// included here for performance (all inlined)
+static inline void _apic_msr_write(uint32_t msr, 
+				   uint64_t data)
 {
-    *((volatile uint32_t *)(apic->base_addr + reg)) = val;
+    uint32_t lo = data;
+    uint32_t hi = data >> 32;
+    __asm__ __volatile__ ("wrmsr" : : "c"(msr), "a"(lo), "d"(hi));
 }
 
+static inline uint64_t _apic_msr_read(uint32_t msr)
+{
+    uint32_t lo, hi;
+    asm volatile("rdmsr" : "=a"(lo), "=d"(hi) : "c"(msr));
+    return ((uint64_t)hi << 32) | lo;
+}
+
+static inline void
+apic_write (struct apic_dev * apic, uint_t reg, uint32_t val)
+{
+    if (apic->mode==APIC_X2APIC) { 
+	_apic_msr_write(X2APIC_MMIO_REG_OFFSET_TO_MSR(reg), (uint64_t)val);
+    } else {
+	*((volatile uint32_t *)(apic->base_addr + reg)) = val;
+    }
+}
 
 static inline uint32_t
 apic_read (struct apic_dev * apic, uint_t reg)
 {
-    return *((volatile uint32_t *)(apic->base_addr + reg));
+    if (apic->mode==APIC_X2APIC) { 
+	return (uint32_t) _apic_msr_read(X2APIC_MMIO_REG_OFFSET_TO_MSR(reg));
+    } else {
+	return *((volatile uint32_t *)(apic->base_addr + reg));
+    }
+}
+
+static inline void
+apic_write64 (struct apic_dev * apic, uint_t reg, uint64_t val)
+{
+    if (apic->mode==APIC_X2APIC) { 
+	_apic_msr_write(X2APIC_MMIO_REG_OFFSET_TO_MSR(reg), val);
+    } else {
+	void panic(const char *fmt, ...);
+	panic("apic_write_64 attemped while not using X2APIC\n");
+    }
+}
+
+static inline uint32_t
+apic_read64 (struct apic_dev * apic, uint_t reg)
+{
+    if (apic->mode==APIC_X2APIC) { 
+	return _apic_msr_read(X2APIC_MMIO_REG_OFFSET_TO_MSR(reg));
+    } else {
+	void panic(const char *fmt, ...);
+	panic("apic_read_64 attemped while not using X2APIC\n");
+    }
+}
+
+
+static inline void apic_write_icr(struct apic_dev *apic, uint32_t dest, uint32_t lo)
+{
+    if (apic->mode==APIC_X2APIC) {
+	uint64_t val = (((uint64_t)dest))<<32 | lo;
+	apic_write64(apic,APIC_REG_ICR,val);
+    } else {
+	apic_write(apic, APIC_REG_ICR2, dest << APIC_ICR2_DST_SHIFT );
+	apic_write(apic, APIC_REG_ICR, lo);
+    }
+
 }
 
 
@@ -236,14 +325,17 @@ apic_ipi (struct apic_dev * apic,
           uint_t remote_id,
           uint_t vector) 
 {
-    apic_write(apic, APIC_REG_ICR2, remote_id << APIC_ICR2_DST_SHIFT);
-    apic_write(apic, APIC_REG_ICR, APIC_DEL_MODE_FIXED | vector);
+    apic_write_icr(apic,
+		   remote_id,
+		   APIC_DEL_MODE_FIXED | vector);
 }
 
 static inline void 
 apic_bcast_ipi (struct apic_dev * apic, uint_t vector)
 {
-    apic_write(apic, APIC_REG_ICR, APIC_IPI_OTHERS | APIC_DEL_MODE_FIXED | vector);
+    apic_write_icr(apic,
+		   0,
+		   APIC_IPI_OTHERS | APIC_DEL_MODE_FIXED | vector);
 }
 
 

@@ -55,6 +55,83 @@ static const char * apic_err_codes[8] = {
     "[Illegal Register Address]"
 };
 
+static const char * apic_modes[4] = {
+    "Invalid",
+    "Disabled",
+    "XAPIC",
+    "X2APIC",
+};
+
+static apic_mode_t get_max_mode()
+{
+    cpuid_ret_t c;
+    cpuid(0x1, &c);
+    if ((c.c >> 21)&0x1) { 	
+	APIC_DEBUG("APIC with X2APIC support\n");
+	return APIC_X2APIC;
+    }
+    return APIC_XAPIC;  // it must at least do this...
+}
+
+static apic_mode_t get_mode()
+{
+    uint64_t val;
+    uint64_t EN, EXTD;
+
+    val= msr_read(APIC_BASE_MSR);
+    EN = (val>>11)&0x1;
+    EXTD = (val>>10)&0x1;
+
+    if (!EN && !EXTD) { 
+	return APIC_DISABLED;
+    }
+    
+    if (EN && !EXTD) {
+	return APIC_XAPIC;
+    }
+    
+    if (EN && EXTD) { 
+	return APIC_X2APIC;
+    }
+
+    return APIC_INVALID;
+}
+
+
+static int set_mode(struct apic_dev *apic, apic_mode_t mode)
+{
+    uint64_t val;
+    apic_mode_t cur = get_mode(apic);
+
+    if (mode==cur) { 
+	apic->mode = mode;
+	return 0;
+    }
+
+    if (mode==APIC_INVALID) { 
+	return -1;
+    }
+
+    // first go back to disabled
+    val = msr_read(APIC_BASE_MSR);
+    val &= ~(0x3 << 10);
+    msr_write(APIC_BASE_MSR,val);
+    // now go to the relevant mode progressing "upwards"
+    if (mode!=APIC_DISABLED) { 
+	// switch to XAPIC first
+	val |= 0x2<<10;
+	msr_write(APIC_BASE_MSR,val);
+	if (mode==APIC_X2APIC) { 
+	    // now to X2APIC if requested
+	    val |= 0x3 <<10;
+	    msr_write(APIC_BASE_MSR,val);
+	}
+    }
+    apic->mode=mode;
+    return 0;
+}
+
+
 
 static int
 spur_int_handler (excp_entry_t * excp, excp_vec_t v)
@@ -210,6 +287,7 @@ apic_global_enable (void)
     msr_write(APIC_BASE_MSR, msr_read(APIC_BASE_MSR) | APIC_GLOBAL_ENABLE);
 }
 
+// This request only makes sense if we are in xapic mode
 static ulong_t 
 apic_get_base_addr (void) 
 {
@@ -221,6 +299,7 @@ apic_get_base_addr (void)
 }
 
 
+// This request only makes sense if we are in xapic mode
 static void
 apic_set_base_addr (struct apic_dev * apic, addr_t addr)
 {
@@ -242,7 +321,11 @@ apic_do_eoi (void)
 uint32_t
 apic_get_id (struct apic_dev * apic)
 {
-    return (apic_read(apic, APIC_REG_ID) >> APIC_ID_SHIFT) & 0xff;
+    if (apic->mode==APIC_X2APIC) {
+	return apic_read(apic, APIC_REG_ID);
+    } else {
+	return (apic_read(apic, APIC_REG_ID) >> APIC_ID_SHIFT) & 0xff;
+    }
 }
 
 
@@ -260,8 +343,8 @@ apic_wait_for_send(struct apic_dev * apic)
     int n = 0;
 
     do {
-        if (!(res = apic_read(apic, APIC_REG_ICR) & ICR_SEND_PENDING)) {
-            break;
+	if (!(res = apic_read(apic, APIC_REG_ICR) & ICR_SEND_PENDING)) {
+	    break;
         }
         udelay(100);
     } while (n++ < 1000);
@@ -290,18 +373,22 @@ apic_read_timer (struct apic_dev * apic)
 void
 apic_self_ipi (struct apic_dev * apic, uint_t vector)
 {
-    uint8_t flags = irq_disable_save();
-    apic_write(apic, APIC_IPI_SELF, vector);
-    irq_enable_restore(flags);
+    if (apic->mode==APIC_X2APIC) {
+	uint8_t flags = irq_disable_save();
+	apic_write(apic, APIC_REG_SELF_IPI, vector);
+	irq_enable_restore(flags);
+    } else {
+	panic("Self-IPI path for non X2APIC not implemented\n");
+    }
 }
-
 
 void 
 apic_send_iipi (struct apic_dev * apic, uint32_t remote_id) 
 {
     uint8_t flags = irq_disable_save();
-    apic_write(apic, APIC_REG_ICR2, remote_id << APIC_ICR2_DST_SHIFT);
-    apic_write(apic, APIC_REG_ICR, ICR_TRIG_MODE_LEVEL| ICR_LEVEL_ASSERT | ICR_DEL_MODE_INIT);
+    apic_write_icr(apic, 
+		   remote_id,
+		   ICR_TRIG_MODE_LEVEL| ICR_LEVEL_ASSERT | ICR_DEL_MODE_INIT);
     irq_enable_restore(flags);
 }
 
@@ -310,8 +397,9 @@ void
 apic_deinit_iipi (struct apic_dev * apic, uint32_t remote_id)
 {
     uint8_t flags = irq_disable_save();
-    apic_write(apic, APIC_REG_ICR2, remote_id << APIC_ICR2_DST_SHIFT);
-    apic_write(apic, APIC_REG_ICR, ICR_TRIG_MODE_LEVEL| ICR_DEL_MODE_INIT);
+    apic_write_icr(apic,
+		   remote_id,
+		   ICR_TRIG_MODE_LEVEL| ICR_DEL_MODE_INIT);
     irq_enable_restore(flags);
 }
 
@@ -320,8 +408,9 @@ void
 apic_send_sipi (struct apic_dev * apic, uint32_t remote_id, uint8_t target)
 {
     uint8_t flags = irq_disable_save();
-    apic_write(apic, APIC_REG_ICR2, remote_id << APIC_ICR2_DST_SHIFT);
-    apic_write(apic, APIC_REG_ICR, ICR_DEL_MODE_STARTUP | target);
+    apic_write_icr(apic,
+		   remote_id,
+		   ICR_DEL_MODE_STARTUP | target);
     irq_enable_restore(flags);
 }
 
@@ -330,7 +419,9 @@ void
 apic_bcast_iipi (struct apic_dev * apic) 
 {
     uint8_t flags = irq_disable_save();
-    apic_write(apic, APIC_REG_ICR, APIC_IPI_OTHERS | ICR_LEVEL_ASSERT | ICR_TRIG_MODE_LEVEL | ICR_DEL_MODE_INIT);
+    apic_write_icr(apic,
+		   0,
+		   APIC_IPI_OTHERS | ICR_LEVEL_ASSERT | ICR_TRIG_MODE_LEVEL | ICR_DEL_MODE_INIT);
     irq_enable_restore(flags);
 }
 
@@ -339,7 +430,9 @@ void
 apic_bcast_deinit_iipi (struct apic_dev * apic)
 {
     uint8_t flags = irq_disable_save();
-    apic_write(apic, APIC_REG_ICR, APIC_IPI_OTHERS | ICR_TRIG_MODE_LEVEL | ICR_DEL_MODE_INIT);
+    apic_write_icr(apic,
+		   0,
+		   APIC_IPI_OTHERS | ICR_TRIG_MODE_LEVEL | ICR_DEL_MODE_INIT);
     irq_enable_restore(flags);
 }
 
@@ -348,7 +441,9 @@ void
 apic_bcast_sipi (struct apic_dev * apic, uint8_t target)
 {
     uint8_t flags = irq_disable_save();
-    apic_write(apic, APIC_REG_ICR, APIC_IPI_OTHERS | ICR_DEL_MODE_STARTUP | target);
+    apic_write_icr(apic,
+		   0,
+		   APIC_IPI_OTHERS | ICR_DEL_MODE_STARTUP | target);
     irq_enable_restore(flags);
 }
 
@@ -424,7 +519,7 @@ amd_has_ext_lvt (struct apic_dev * apic)
 {
     uint32_t ver = apic_read(apic, APIC_REG_LVR);
 
-    if (APIC_HAS_EXT_LVT(ver)) {
+    if (APIC_LVR_HAS_EXT_LVT(ver)) {
         return 1;
     }
 
@@ -454,29 +549,34 @@ static void
 apic_dump (struct apic_dev * apic)
 {
 	char buf[128];
+	apic_mode_t mode = get_mode();
+
 
 	APIC_DEBUG("DUMP (LOGICAL CPU #%u):\n", my_cpu_id());
 
 	APIC_DEBUG(
-		"  ID:  0x%08x (id=%d)\n",
+		"  ID:  0x%08x (id=%d) (mode=%s)\n",
 		apic_read(apic, APIC_REG_ID),
-		APIC_GET_ID(apic_read(apic, APIC_REG_ID))
+		mode!=APIC_X2APIC ? APIC_GET_ID(apic_read(apic, APIC_REG_ID)) : apic_read(apic,APIC_REG_ID),
+		apic_modes[mode]
 	);
 
-    APIC_DEBUG(
-		"  VER: 0x%08x (version=0x%x, max_lvt=%d)\n",
-		apic_read(apic, APIC_REG_LVR),
-		APIC_LVR_VER(apic_read(apic, APIC_REG_LVR)),
-		APIC_LVR_MAX(apic_read(apic, APIC_REG_LVR))
-	);
+	APIC_DEBUG(
+		   "  VER: 0x%08x (version=0x%x, max_lvt=%d)\n",
+		   apic_read(apic, APIC_REG_LVR),
+		   APIC_LVR_VER(apic_read(apic, APIC_REG_LVR)),
+		   APIC_LVR_MAX(apic_read(apic, APIC_REG_LVR))
+		   );
+	
+	if (mode!=APIC_X2APIC) { 
+	    APIC_DEBUG(
+		       "  BASE ADDR: %p\n",
+		       apic->base_addr
+		       );
+	}
 
-    APIC_DEBUG(
-        "  BASE ADDR: %p\n",
-        apic->base_addr
-    );
-
-    if (nk_is_amd() && amd_has_ext_lvt(apic)) {
-        APIC_DEBUG(
+	if (nk_is_amd() && amd_has_ext_lvt(apic)) {
+	    APIC_DEBUG(
                 "  EXT (AMD-only): 0x%08x (Ext LVT Count=%u, Ext APIC ID=%u, Specific EOI=%u, Int Enable Reg=%u)\n",
                 apic_read(apic, APIC_REG_EXFR),
                 APIC_EXFR_GET_LVT(apic_read(apic, APIC_REG_EXFR)),
@@ -570,14 +670,24 @@ apic_dump (struct apic_dev * apic)
  	 * Logical APIC addressing mode registers
  	 */
 	APIC_DEBUG("  Logical Addressing Mode Information:\n");
-	APIC_DEBUG("      LDR (Logical Dest Reg):  0x%08x (id=%d)\n",
-		apic_read(apic, APIC_REG_LDR),
-		GET_APIC_LOGICAL_ID(apic_read(apic, APIC_REG_LDR))
-	);
-	APIC_DEBUG("      DFR (Dest Format Reg):   0x%08x (%s)\n",
-		apic_read(apic, APIC_REG_DFR),
-		(apic_read(apic, APIC_REG_DFR) == APIC_DFR_FLAT) ? "FLAT" : "CLUSTER"
-	);
+	if (mode!=APIC_X2APIC) {
+	    APIC_DEBUG("      LDR (Logical Dest Reg):  0x%08x (id=%d)\n",
+		       apic_read(apic, APIC_REG_LDR),
+		       GET_APIC_LOGICAL_ID(apic_read(apic, APIC_REG_LDR))
+		       );
+	} else {
+	    APIC_DEBUG("      LDR (Logical Dest Reg):  0x%08x (cluster=%d, id=%d)\n",
+		       apic_read(apic, APIC_REG_LDR),
+		       APIC_LDR_X2APIC_CLUSTER(apic_read(apic, APIC_REG_LDR)),
+		       APIC_LDR_X2APIC_LOGID(apic_read(apic, APIC_REG_LDR))
+		       );
+	}
+	if (mode!=APIC_X2APIC) {
+	    APIC_DEBUG("      DFR (Dest Format Reg):   0x%08x (%s)\n",
+		       apic_read(apic, APIC_REG_DFR),
+		       (apic_read(apic, APIC_REG_DFR) == APIC_DFR_FLAT) ? "FLAT" : "CLUSTER"
+		       );
+	}
 
 	/*
  	 * Task/processor/arbitration priority registers
@@ -589,9 +699,12 @@ apic_dump (struct apic_dev * apic)
 	APIC_DEBUG("      PPR (Processor Priority Reg):   0x%08x\n",
 		apic_read(apic, APIC_REG_PPR)
 	);
-	APIC_DEBUG("      APR (Arbitration Priority Reg): 0x%08x\n",
-		apic_read(apic, APIC_REG_APR)
-	);
+	if (mode!=APIC_X2APIC) { 
+	    // reserved in X2APIC
+	    APIC_DEBUG("      APR (Arbitration Priority Reg): 0x%08x\n",
+		       apic_read(apic, APIC_REG_APR)
+		       );
+	}
 
 
     /* 
@@ -634,6 +747,7 @@ apic_dump (struct apic_dev * apic)
 
 }
 
+ 
 
 
 void
@@ -642,6 +756,7 @@ apic_init (struct cpu * core)
     struct apic_dev * apic = NULL;
     ulong_t base_addr;
     uint32_t val;
+    apic_mode_t curmode,maxmode;
 
     apic = (struct apic_dev*)malloc(sizeof(struct apic_dev));
     if (!apic) {
@@ -654,6 +769,20 @@ apic_init (struct cpu * core)
         panic("No APIC found on core %u, dying\n", core->id);
     } 
 
+    curmode = get_mode();
+    maxmode = get_max_mode();
+    APIC_DEBUG("APIC's initial mode is %s\n", apic_modes[curmode]);
+
+#ifdef NAUT_CONFIG_APIC_FORCE_XAPIC_MODE
+    APIC_PRINT("Setting APIC mode to XAPIC (Forced - Maximum mode is %s)\n",
+	apic_modes[maxmode]);
+    set_mode(apic,APIC_XAPIC);
+#else 
+    APIC_PRINT("Setting APIC mode to maximum available mode (%s)\n",
+	apic_modes[maxmode]);
+    set_mode(apic,maxmode);
+#endif
+   
     /* In response to AMD erratum #663 
      * the damn thing may give us lint interrupts
      * even when we have them masked
@@ -666,19 +795,21 @@ apic_init (struct cpu * core)
                 (1ULL<<54));
     }
 
-    base_addr       = apic_get_base_addr();
-
-    /* idempotent when not compiled as HRT */
-    apic->base_addr = pa_to_va(base_addr);
-
+    if (apic->mode!=APIC_X2APIC) {
+	base_addr       = apic_get_base_addr();
+	
+	/* idempotent when not compiled as HRT */
+	apic->base_addr = pa_to_va(base_addr);
+	
 #ifndef NAUT_CONFIG_HVM_HRT
-    if (core->is_bsp) {
-        /* map in the lapic as uncacheable */
-        if (nk_map_page_nocache(apic->base_addr, PTE_PRESENT_BIT|PTE_WRITABLE_BIT, PS_4K) == -1) {
-            panic("Could not map APIC\n");
-        }
-    }
+	if (core->is_bsp) {
+	    /* map in the lapic as uncacheable */
+	    if (nk_map_page_nocache(apic->base_addr, PTE_PRESENT_BIT|PTE_WRITABLE_BIT, PS_4K) == -1) {
+		panic("Could not map APIC\n");
+	    }
+	}
 #endif
+    }
 
     apic->version   = apic_get_version(apic);
     apic->id        = apic_get_id(apic);
@@ -689,9 +820,19 @@ apic_init (struct cpu * core)
     }
 #endif
 
-    val = apic_read(apic, APIC_REG_LDR) & ~APIC_LDR_MASK;
-    val |= SET_APIC_LOGICAL_ID(0);
-    apic_write(apic, APIC_REG_LDR, val);
+    if (apic->mode==APIC_X2APIC) {
+	// LDR is not writeable in X2APIC mode
+	// we just have to go with what it is
+	// see note in apic.h about how to derive
+	// the logical id from the physical id
+        val = apic_read(apic,APIC_REG_LDR);
+        APIC_DEBUG("X2APIC LDR=0x%x (cluster 0x%x, logical id 0x%x)\n", 
+	val, APIC_LDR_X2APIC_CLUSTER(val), APIC_LDR_X2APIC_LOGID(val));
+    } else {
+        val = apic_read(apic, APIC_REG_LDR) & ~APIC_LDR_MASK;
+	val |= SET_APIC_LOGICAL_ID(0);
+	apic_write(apic, APIC_REG_LDR, val);
+    }
 
     apic_write(apic, APIC_REG_TPR, apic_read(apic, APIC_REG_TPR) & 0xffffff00);                       // accept all interrupts
     apic_write(apic, APIC_REG_LVTT,    APIC_DEL_MODE_FIXED | APIC_LVT_DISABLED);                      // disable timer interrupts intially
@@ -773,7 +914,7 @@ apic_init (struct cpu * core)
 		APIC_PRINT("AMD APIC does NOT have extended space area\n");
 	    }
 	} else {
-	    APIC_PRINT("Not an AMD APIC\n");
+	    APIC_DEBUG("Not an AMD APIC\n");
 	} 
 	
     }
