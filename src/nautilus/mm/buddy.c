@@ -57,7 +57,6 @@ struct block {
 
 
 
-#if 1
 /**
  * __set_bit - Set a bit in memory
  * @nr: the bit to set
@@ -67,25 +66,6 @@ struct block {
  * If it's called on the same region of memory simultaneously, the effect
  * may be that only one operation succeeds.
  */
-static inline void 
-__set_bit (int nr, volatile void * addr)
-{
-    __asm__ __volatile__ (
-        "btsl %1,%0"
-        :"+m" (*(volatile long*)addr)
-        :"r" (nr) : "memory");
-}
-
-
-static inline void 
-__clear_bit (int nr, volatile void * addr)
-{
-    __asm__ __volatile__ (
-        "btrl %1,%0"
-        :"+m" (*(volatile long*)addr)
-        :"r" (nr));
-}
-#else
 static inline void 
 __set_bit (ulong_t nr, volatile void * addr)
 {
@@ -105,7 +85,6 @@ __clear_bit (ulong_t nr, volatile void * addr)
         :"+m" (*(volatile long*)addr)
         :"r" (nr));
 }
-#endif
 
 static inline void setb(ulong_t nr, volatile char *addr)
 {
