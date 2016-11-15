@@ -337,6 +337,7 @@ nk_kmem_init (void)
     struct mem_region * ent = NULL;
     unsigned i = 0, j = 0;
     uint64_t total_mem=0;
+    uint64_t total_phys_mem=0;
     
     /* initialize the global zone list */
     INIT_LIST_HEAD(&glob_zone_list);
@@ -353,6 +354,7 @@ nk_kmem_init (void)
                 panic("Could not create kmem zone for region %u in domain %u\n", j, i);
                 return -1;
             }
+	    total_phys_mem += ent->len;
             ++j;
         }
     }
@@ -413,10 +415,10 @@ nk_kmem_init (void)
 	    total_mem += reg->mem->len;
         }
     }
-    
-    KMEM_PRINT("Malloc configured to support a maximum of: 0x%lx bytes\n", total_mem);
 
-    if (block_hash_init(total_mem)) { 
+    KMEM_PRINT("Malloc configured to support a maximum of: 0x%lx bytes of physical memory\n", total_phys_mem);
+
+    if (block_hash_init(total_phys_mem)) { 
       KMEM_ERROR("Failed to initialize block hash\n");
       return -1;
     }
