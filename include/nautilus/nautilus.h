@@ -82,6 +82,9 @@ struct sys_info {
     uint32_t num_cpus;
     uint32_t num_ioapics;
 
+    uint64_t flags;
+#define NK_SYS_LEGACY 1  // system has dual PIC and ISA devices
+
     nk_barrier_t * core_barrier;
 
     struct nk_mem_info mem;

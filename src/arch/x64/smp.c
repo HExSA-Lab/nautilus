@@ -350,6 +350,105 @@ acpi_parse_lapic (struct acpi_subtable_header * hdr,
 	return 0;
 }
 
+static int acpi_parse_local_x2apic (struct acpi_subtable_header * hdr,
+				    const unsigned long end)
+{
+    struct acpi_madt_local_x2apic *p =
+	(struct acpi_madt_local_x2apic *)hdr;
+    struct sys_info * sys = &(nk_get_nautilus_info()->sys);
+    struct cpu * new_cpu  = NULL;
+    
+    // for now just print it since we don't understand it
+    
+#ifdef NAUT_CONFIG_DEBUG_SMP
+    acpi_table_print_madt_entry(hdr);
+#endif
+    
+    return 0;
+}
+
+static int acpi_parse_interrupt_override (struct acpi_subtable_header * hdr,
+				const unsigned long end)
+{
+#ifdef NAUT_CONFIG_DEBUG_SMP
+    acpi_table_print_madt_entry(hdr);
+#endif
+    return 0;
+}
+
+static int acpi_parse_nmi_source (struct acpi_subtable_header * hdr,
+				  const unsigned long end)
+{
+#ifdef NAUT_CONFIG_DEBUG_SMP
+    acpi_table_print_madt_entry(hdr);
+#endif
+    return 0;
+}
+
+static int acpi_parse_local_apic_nmi (struct acpi_subtable_header * hdr,
+				      const unsigned long end)
+{
+#ifdef NAUT_CONFIG_DEBUG_SMP
+    acpi_table_print_madt_entry(hdr);
+#endif
+    return 0;
+}
+
+static int acpi_parse_local_apic_override (struct acpi_subtable_header * hdr,
+					   const unsigned long end)
+{
+#ifdef NAUT_CONFIG_DEBUG_SMP
+    acpi_table_print_madt_entry(hdr);
+#endif
+    return 0;
+}
+
+static int acpi_parse_io_sapic (struct acpi_subtable_header * hdr,
+				const unsigned long end)
+{
+#ifdef NAUT_CONFIG_DEBUG_SMP
+    acpi_table_print_madt_entry(hdr);
+#endif
+    return 0;
+}
+
+static int acpi_parse_local_sapic (struct acpi_subtable_header * hdr,
+				   const unsigned long end)
+{
+#ifdef NAUT_CONFIG_DEBUG_SMP
+    acpi_table_print_madt_entry(hdr);
+#endif
+    return 0;
+}
+
+static int acpi_parse_interrupt_source (struct acpi_subtable_header * hdr,
+					const unsigned long end)
+{
+#ifdef NAUT_CONFIG_DEBUG_SMP
+    acpi_table_print_madt_entry(hdr);
+#endif
+    return 0;
+}
+
+static int acpi_parse_local_x2apic_nmi (struct acpi_subtable_header * hdr,
+					const unsigned long end)
+{
+#ifdef NAUT_CONFIG_DEBUG_SMP
+    acpi_table_print_madt_entry(hdr);
+#endif
+    return 0;
+}
+
+static int acpi_parse_madt_reserved (struct acpi_subtable_header * hdr,
+				     const unsigned long end)
+{
+#ifdef NAUT_CONFIG_DEBUG_SMP
+    acpi_table_print_madt_entry(hdr);
+#endif
+    return 0;
+}
+
+
 
 #if 0
 static int
@@ -395,53 +494,234 @@ acpi_parse_ioapic (struct acpi_subtable_header * hdr,
 }
 
 
+
 static int
 acpi_table_parse_madt (enum acpi_madt_type id, 
 					   acpi_table_entry_handler handler, 
 					   unsigned max_entries) 
 {
 	return (acpi_table_parse_entries(ACPI_SIG_MADT,
-									sizeof(struct acpi_table_madt), 
-									id, 
-									handler, 
-									max_entries) < 0);
+					 sizeof(struct acpi_table_madt), 
+					 id, 
+					 handler, 
+					 max_entries) < 0);
 }
 
 
 static int 
 acpi_parse_madt (struct acpi_table_header * hdr, void * arg)
 {
-	SMP_DEBUG("Parsing MADT...\n");
-	return 0;
+    struct acpi_table_madt *p = (struct acpi_table_madt *)hdr;
+    struct sys_info * sys = &(nk_get_nautilus_info()->sys);
+    int pcat = p->flags & ACPI_MADT_PCAT_COMPAT;
+
+    SMP_DEBUG("Parsing MADT...\n");
+    SMP_DEBUG("flags=%x (PCAT_COMPAT=%d (%s))\n",
+	      p->flags, pcat, pcat ? "Dual PIC" : "Multiple APIC");
+
+    if (pcat) { 
+	sys->flags |= NK_SYS_LEGACY;
+    }
+
+    return 0;
 }
 
 
 static int 
 __early_init_madt (struct naut_info * naut)
 {
+    if (acpi_table_parse(ACPI_SIG_MADT, acpi_parse_madt, NULL) != 0) {
+	SMP_ERROR("Could not parse MADT\n");
+	return -1;
+    } 
+    
+    /* Find all the LAPICS (and their associated CPUs, of course */
+    if (acpi_table_parse_madt(ACPI_MADT_TYPE_LOCAL_APIC,
+			      acpi_parse_lapic,
+			      NAUT_CONFIG_MAX_CPUS) != 0) {
+	SMP_ERROR("Unable to parse MADT LAPIC entries\n");
+	return -1;
+    }
+    
+    /* find all the IOAPICS */
+    if (acpi_table_parse_madt(ACPI_MADT_TYPE_IO_APIC,
+			      acpi_parse_ioapic,
+			      NAUT_CONFIG_MAX_IOAPICS) != 0) {
+	SMP_ERROR("Unable to parse MADT IOAPIC entries\n");
+	return -1;
+    }
 
-	if (acpi_table_parse(ACPI_SIG_MADT, acpi_parse_madt, NULL) != 0) {
-		SMP_ERROR("Could not parse MADT\n");
-		return -1;
-	} 
+#ifdef NAUT_CONFIG_DEBUG_SMP
+    // These are included for now just to let us easily
+    // see the structure of the machine
+    if (acpi_table_parse_madt(ACPI_MADT_TYPE_LOCAL_X2APIC,
+				  acpi_parse_local_x2apic,
+			      NAUT_CONFIG_MAX_CPUS)) {
+	SMP_ERROR("Unable to parse MADT X2APIC entries\n");
+	return -1;
+    }
+    
+    if (acpi_table_parse_madt(ACPI_MADT_TYPE_INTERRUPT_SOURCE,
+			      acpi_parse_interrupt_source,
+			      NAUT_CONFIG_MAX_CPUS)) { 
+	SMP_ERROR("Unable to parse interrupt sources\n");
+	return -1;
+    }
+    
+    if (acpi_table_parse_madt(ACPI_MADT_TYPE_INTERRUPT_OVERRIDE,
+			      acpi_parse_interrupt_override,
+			      NAUT_CONFIG_MAX_CPUS)) { 
+	SMP_ERROR("Unable to parse interrupt overrides\n");
+	return -1;
+    }
+    
+    if (acpi_table_parse_madt(ACPI_MADT_TYPE_NMI_SOURCE,
+			      acpi_parse_interrupt_source,
+			      NAUT_CONFIG_MAX_CPUS)) { 
+	SMP_ERROR("Unable to parse NMI sources\n");
+	return -1;
+    }
+    
+    if (acpi_table_parse_madt(ACPI_MADT_TYPE_LOCAL_APIC_NMI,
+			      acpi_parse_local_apic_nmi,
+			      NAUT_CONFIG_MAX_CPUS)) { 
+	SMP_ERROR("Unable to parse local apic nmi information\n");
+	return -1;
+    }
+    
+    if (acpi_table_parse_madt(ACPI_MADT_TYPE_LOCAL_APIC_OVERRIDE,
+			      acpi_parse_local_apic_override,
+			      NAUT_CONFIG_MAX_CPUS)) { 
+	SMP_ERROR("Unable to parse local apic overrides\n");
+	return -1;
+    }
+    
+    if (acpi_table_parse_madt(ACPI_MADT_TYPE_IO_SAPIC,
+			      acpi_parse_io_sapic,
+			      NAUT_CONFIG_MAX_CPUS)) { 
+	SMP_ERROR("Unable to parse IO SAPICS\n");
+	return -1;
+    }
+    
+    if (acpi_table_parse_madt(ACPI_MADT_TYPE_LOCAL_SAPIC,
+			      acpi_parse_local_sapic,
+			      NAUT_CONFIG_MAX_CPUS)) { 
+	SMP_ERROR("Unable to parse local SAPICS\n");
+	return -1;
+    }
+    
+    
+    if (acpi_table_parse_madt(ACPI_MADT_TYPE_LOCAL_X2APIC_NMI,
+			      acpi_parse_local_x2apic_nmi,
+			      NAUT_CONFIG_MAX_CPUS)) { 
+	SMP_ERROR("Unable to parse local X2APIC NMIs\n");
+	return -1;
+    }
 
-	/* Find all the LAPICS (and their associated CPUs, of course */
-	if (acpi_table_parse_madt(ACPI_MADT_TYPE_LOCAL_APIC,
-							  acpi_parse_lapic,
-							  NAUT_CONFIG_MAX_CPUS) != 0) {
-		SMP_ERROR("Unable to parse MADT LAPIC entries\n");
-		return -1;
-	}
+#endif
+    
+    return 0;
+}
 
-	/* find all the IOAPICS */
-	if (acpi_table_parse_madt(ACPI_MADT_TYPE_IO_APIC,
-							  acpi_parse_ioapic,
-							  NAUT_CONFIG_MAX_IOAPICS) != 0) {
-		SMP_ERROR("Unable to parse MADT IOAPIC entries\n");
-		return -1;
-	}
-		
-	return 0;
+
+
+static int acpi_table_parse_fadt (enum acpi_madt_type id, 
+				  acpi_table_entry_handler handler, 
+				  unsigned max_entries) 
+{
+    
+    return (acpi_table_parse_entries(ACPI_SIG_FADT,
+				     sizeof(struct acpi_table_fadt), 
+				     id, 
+				     handler, 
+				     max_entries) < 0);
+}
+
+
+static int acpi_parse_fadt(struct acpi_table_header * hdr, void * arg)
+{
+    struct acpi_table_fadt *p = (struct acpi_table_fadt *)hdr;
+    struct sys_info * sys = &(nk_get_nautilus_info()->sys);
+    int legacy=0;
+    int i8042=0;
+    int novga=0;
+    int nomsi=0;
+    
+    SMP_DEBUG("Parsing FADT...\n");
+    SMP_DEBUG("system interrupt model: %x\n",p->model);
+    SMP_DEBUG("boot_flags: %x\n",p->boot_flags);
+    
+    legacy = p->boot_flags & ACPI_FADT_LEGACY_DEVICES;
+    i8042 = p->boot_flags & ACPI_FADT_8042;
+    novga = p->boot_flags & ACPI_FADT_NO_VGA;
+    nomsi = p->boot_flags & ACPI_FADT_NO_MSI;
+
+    SMP_DEBUG("flags are: legacy=%d i8042=%d novga=%d nomsi=%d\n",
+	legacy,i8042,novga,nomsi);
+
+    if (legacy) {
+       sys->flags |= NK_SYS_LEGACY;
+    }
+
+    return 0;
+}
+
+static int __early_init_fadt_legacy(struct naut_info * naut)
+{
+    if (acpi_table_parse(ACPI_SIG_FADT, acpi_parse_fadt, NULL) != 0) {
+	SMP_ERROR("Could not parse FADT\n");
+	return -1;
+    } else {
+        return 0; 
+    }
+}
+
+
+
+static int __acpi_configure_legacy(struct naut_info * naut)
+{
+    // Add an ISA bus, assume it is bus zero.  
+    // Add IRQ0..15, attaching to first I/O apic in the typical way
+    uint32_t ioapic_id;
+    if (naut->sys.num_ioapics<1) { 
+	SMP_ERROR("No IOAPICs!\n");
+	return -1;
+    }
+    
+
+    ioapic_id = naut->sys.ioapics[0]->id;
+
+    SMP_DEBUG("Configuring legacy ISA bus 0 with legacy ISA device IRQs 0..15 channeled to first ioapic (id 0x%x) in the MPSpec manner\n",ioapic_id);
+
+    nk_add_bus_entry(0,"ISA");
+    nk_add_int_entry(0, // [BUS] trigger mode
+		     0, // [BUS] polarity
+		     0, // [INT] interrupt type
+		     0, // Bus 0 (ISA)
+		     0, // Bus IRQ
+		     2, // pin on destination ioapic
+		     ioapic_id // destination ioapic
+		     ); // Timer 8254 PIT
+    // Note that the PIT is wired strangely
+    nk_add_int_entry(0,0,0,0,1,1,ioapic_id); // Keyboard 8042 KBD / PS2 KBD
+    // there is no legacy irq 2 due to the 8259 master/slave setup 
+    nk_add_int_entry(0,0,0,0,3,3,ioapic_id); // Serial 16550 COM2
+    nk_add_int_entry(0,0,0,0,4,4,ioapic_id); // Serial 16550 COM1
+    nk_add_int_entry(0,0,0,0,5,5,ioapic_id); // Parallel LPT2+3 or soundblaster
+    nk_add_int_entry(0,0,0,0,6,6,ioapic_id); // Floppy controller
+    nk_add_int_entry(0,0,0,0,7,7,ioapic_id); // Parallel LPT1
+    nk_add_int_entry(0,0,0,0,8,8,ioapic_id); // Clock RTC
+    //nk_add_int_entry(0,0,0,0,9,9,ioapic_id); // ACPI - not wired
+    nk_add_int_entry(0,0,0,0,10,10,ioapic_id); // expansion
+    nk_add_int_entry(0,0,0,0,11,11,ioapic_id); // expansion
+    nk_add_int_entry(0,0,0,0,12,12,ioapic_id); // Mouse / PS2 AUX
+    nk_add_int_entry(0,0,0,0,13,13,ioapic_id); // Coprocessor / etc
+    nk_add_int_entry(0,0,0,0,14,14,ioapic_id); // Primary ATA controller
+    nk_add_int_entry(0,0,0,0,15,15,ioapic_id); // Secondary ATA controller
+
+    SMP_DEBUG("Legacy configuration finished\n");
+
+    return 0;
 }
 
 
@@ -452,11 +732,20 @@ arch_early_init (struct naut_info * naut)
 
 	SMP_DEBUG("Checking for MADT\n");
 
-	/* try to use ACPI if possible. Newer machines may have strange
+    /* try to use ACPI if possible. Newer machines may have strange
      * MP Table corruption 
      */
 	if (__early_init_madt(naut) == 0) {
-		goto out_ok;
+	    SMP_DEBUG("MADT init succeeded - now also checking for legacy system via FADT\n");
+	    __early_init_fadt_legacy(naut);
+	    // At this point we have determined if this is a legacy system
+	    if (naut->sys.flags & NK_SYS_LEGACY) { 
+		SMP_DEBUG("ACPI system with legacy - configuring\n");
+		if (__acpi_configure_legacy(naut)) {
+		    panic("Cannot configure ACPI system with legacy\n");
+		}
+	    }
+	    goto out_ok;
 	} else {
 		SMP_DEBUG("MADT not present or working. Falling back on MP Table\n");
 		if (__early_init_mp(naut) == 0) {
