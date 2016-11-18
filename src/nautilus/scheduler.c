@@ -3006,7 +3006,7 @@ nk_sched_init_ap (struct nk_sched_config *cfg)
     cpu_id_t id = my_cpu_id();
     struct cpu * my_cpu = get_cpu();
 
-    INFO("Initializing scheduler on AP %u (%p)\n",id,my_cpu);
+    DEBUG("Initializing scheduler on AP %u (%p)\n",id,my_cpu);
 
     if (shared_init(my_cpu,cfg)) { 
 	ERROR("Could not intialize scheduler\n");

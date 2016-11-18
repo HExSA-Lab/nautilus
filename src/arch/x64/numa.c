@@ -117,10 +117,33 @@ acpi_parse_x2apic_affinity(struct acpi_subtable_header *header,
     struct acpi_srat_x2apic_cpu_affinity *processor_affinity;
 
     processor_affinity = (struct acpi_srat_x2apic_cpu_affinity *)header;
-    if (!processor_affinity)
+
+    if (!processor_affinity) {
         return -EINVAL;
+    }
+
+    struct sys_info * sys = &(nk_get_nautilus_info()->sys);
+    unsigned i;
+    uint32_t domain_id;
+
+    if (!(processor_affinity->flags & ACPI_SRAT_CPU_ENABLED)) { 
+	NUMA_DEBUG("Processor affinity for disabled x2apic processor...\n");
+	return 0;
+    }
 
     acpi_table_print_srat_entry(header);
+
+    for (i = 0; i < sys->num_cpus; i++) {
+        if (sys->cpus[i]->lapic_id == processor_affinity->apic_id) {
+            domain_id = processor_affinity->proximity_domain;
+            sys->cpus[i]->domain = sys->locality_info.domains[domain_id];
+            break;
+        }
+    }
+
+    if (i==sys->num_cpus) {
+	NUMA_ERROR("Affinity for x2apic processor %x not found\n",processor_affinity->apic_id);
+    }
 
     return 0;
 }

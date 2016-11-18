@@ -774,11 +774,11 @@ apic_init (struct cpu * core)
     APIC_DEBUG("APIC's initial mode is %s\n", apic_modes[curmode]);
 
 #ifdef NAUT_CONFIG_APIC_FORCE_XAPIC_MODE
-    APIC_PRINT("Setting APIC mode to XAPIC (Forced - Maximum mode is %s)\n",
+    APIC_DEBUG("Setting APIC mode to XAPIC (Forced - Maximum mode is %s)\n",
 	apic_modes[maxmode]);
     set_mode(apic,APIC_XAPIC);
 #else 
-    APIC_PRINT("Setting APIC mode to maximum available mode (%s)\n",
+    APIC_DEBUG("Setting APIC mode to maximum available mode (%s)\n",
 	apic_modes[maxmode]);
     set_mode(apic,maxmode);
 #endif
@@ -903,15 +903,15 @@ apic_init (struct cpu * core)
     {
 	if (nk_is_amd()) {
 	    if (amd_has_ext_lvt(apic)) {
-		APIC_PRINT("AMD APIC has extended space area\n");
+		APIC_DEBUG("AMD APIC has extended space area\n");
 		uint32_t e = apic_read(apic, APIC_REG_EXFR);
 		if (e & 0x1) { 
-		    APIC_PRINT("AMD APIC has IER\n");
+		    APIC_DEBUG("AMD APIC has IER\n");
 		} else {
-		    APIC_PRINT("AMD APIC does NOT have IER\n");
+		    APIC_DEBUG("AMD APIC does NOT have IER\n");
 		}
 	    } else {
-		APIC_PRINT("AMD APIC does NOT have extended space area\n");
+		APIC_DEBUG("AMD APIC does NOT have extended space area\n");
 	    }
 	} else {
 	    APIC_DEBUG("Not an AMD APIC\n");

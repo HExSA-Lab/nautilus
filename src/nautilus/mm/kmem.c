@@ -217,7 +217,7 @@ static inline int block_hash_free(void *ptr)
 struct mem_region *
 kmem_get_base_zone (void)
 {
-    printk("getting base zone\n");
+    KMEM_DEBUG("getting base zone\n");
     return list_first_entry(&glob_zone_list, struct mem_region, glob_link);
 }
 
@@ -409,9 +409,9 @@ nk_kmem_init (void)
         struct list_head * local_regions = &(sys->cpus[i]->kmem.ordered_regions);
         struct mem_reg_entry * reg = NULL;
 
-        KMEM_PRINT("CPU %u region affinity list:\n", i);
+        KMEM_DEBUG("CPU %u region affinity list:\n", i);
         list_for_each_entry(reg, local_regions, mem_ent) {
-            KMEM_PRINT("    [Domain=%u, %p-%p]\n", reg->mem->domain_id, reg->mem->base_addr, reg->mem->base_addr + reg->mem->len);
+            KMEM_DEBUG("    [Domain=%u, %p-%p]\n", reg->mem->domain_id, reg->mem->base_addr, reg->mem->base_addr + reg->mem->len);
 	    total_mem += reg->mem->len;
         }
     }

@@ -225,7 +225,7 @@ static int handle_cmd(char *buf, int n)
   
   if (!strncasecmp(buf,"help",4)) { 
     nk_vc_printf("help\nexit\nvcs\ncores [n]\ntime [n]\nthreads [n]\n");
-    nk_vc_printf("devs | fses | tofs | cat [path]\n");
+    nk_vc_printf("devs | fses | ofs | cat [path]\n");
     nk_vc_printf("shell name\n");
     nk_vc_printf("regs [t]\npeek [bwdq] x | mem x n [s] | poke [bwdq] x y\nrdmsr x [n] | wrmsr x y\ncpuid f [n] | cpuidsub f s\n");
     nk_vc_printf("reap\n");

@@ -74,7 +74,7 @@ struct cpu {
     struct nk_thread * cur_thread; /* KCH: this must be first! */
 
     cpu_id_t id;
-    uint8_t lapic_id;
+    uint32_t lapic_id;   
     uint8_t enabled;
     uint8_t is_bsp;
     uint32_t cpu_sig;

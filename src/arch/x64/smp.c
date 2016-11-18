@@ -358,12 +358,41 @@ static int acpi_parse_local_x2apic (struct acpi_subtable_header * hdr,
     struct sys_info * sys = &(nk_get_nautilus_info()->sys);
     struct cpu * new_cpu  = NULL;
     
-    // for now just print it since we don't understand it
-    
+    /* is it enabled? */
+    if (!(p->lapic_flags & ACPI_MADT_ENABLED)) {
+	SMP_DEBUG("[ ACPI Disabled CPU (X2APIC) ] (skipping)\n");
+	return 0;
+    }
+
 #ifdef NAUT_CONFIG_DEBUG_SMP
     acpi_table_print_madt_entry(hdr);
 #endif
     
+    if (sys->num_cpus == NAUT_CONFIG_MAX_CPUS) {
+	panic("CPU count exceeded max (check your .config)\n");
+    }
+
+    if (!(new_cpu = mm_boot_alloc(sizeof(struct cpu)))) {
+	panic("Couldn't allocate CPU struct\n");
+    }
+
+    memset(new_cpu, 0, sizeof(struct cpu));
+
+    new_cpu->id         = sys->num_cpus;
+    new_cpu->lapic_id   = p->local_apic_id;
+    new_cpu->enabled    = 1;
+    new_cpu->cpu_sig    = 0;
+    new_cpu->feat_flags = 0;
+    new_cpu->system     = sys;
+    new_cpu->cpu_khz    = nk_detect_cpu_freq(new_cpu->id);
+    new_cpu->is_bsp     = 0; // id > 255 by design
+
+    spinlock_init(&new_cpu->lock);
+    
+    sys->cpus[sys->num_cpus] = new_cpu;
+
+    sys->num_cpus++;
+
     return 0;
 }
 
@@ -542,6 +571,17 @@ __early_init_madt (struct naut_info * naut)
 	SMP_ERROR("Unable to parse MADT LAPIC entries\n");
 	return -1;
     }
+
+    // The ACPI model is that all APICs, *whether XAPIC or X2APIC*
+    // whose id is <256 ar reported ONLY as lapics.  Those whose ids
+    // are 256+ are X2APICS, so we need to now add whatever
+    // X2APICs and their processors we can find
+    if (acpi_table_parse_madt(ACPI_MADT_TYPE_LOCAL_X2APIC,
+			      acpi_parse_local_x2apic,
+			      NAUT_CONFIG_MAX_CPUS)) {
+	SMP_ERROR("Unable to parse MADT X2APIC entries\n");
+	return -1;
+    }
     
     /* find all the IOAPICS */
     if (acpi_table_parse_madt(ACPI_MADT_TYPE_IO_APIC,
@@ -554,13 +594,6 @@ __early_init_madt (struct naut_info * naut)
 #ifdef NAUT_CONFIG_DEBUG_SMP
     // These are included for now just to let us easily
     // see the structure of the machine
-    if (acpi_table_parse_madt(ACPI_MADT_TYPE_LOCAL_X2APIC,
-				  acpi_parse_local_x2apic,
-			      NAUT_CONFIG_MAX_CPUS)) {
-	SMP_ERROR("Unable to parse MADT X2APIC entries\n");
-	return -1;
-    }
-    
     if (acpi_table_parse_madt(ACPI_MADT_TYPE_INTERRUPT_SOURCE,
 			      acpi_parse_interrupt_source,
 			      NAUT_CONFIG_MAX_CPUS)) { 
@@ -692,6 +725,11 @@ static int __acpi_configure_legacy(struct naut_info * naut)
     ioapic_id = naut->sys.ioapics[0]->id;
 
     SMP_DEBUG("Configuring legacy ISA bus 0 with legacy ISA device IRQs 0..15 channeled to first ioapic (id 0x%x) in the MPSpec manner\n",ioapic_id);
+
+    // the legacy setup should be 1-1 except for 
+    // any interrupt source overrides.   In the following
+    // we simple set up the typical overrides.   This should 
+    // be FIXED eventually, but this will work for typical machines now 
 
     nk_add_bus_entry(0,"ISA");
     nk_add_int_entry(0, // [BUS] trigger mode
