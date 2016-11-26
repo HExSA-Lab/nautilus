@@ -149,8 +149,8 @@ static int discover_ramdisks()
     INFO("Added embedded image as ramdisk0, blocksize=%lu, numblocks=%lu, len=%lu\n",
 	 s->block_size,s->num_blocks, s->len);
 
-    return 0;
 #endif
+    return 0;
 }
 
 int nk_ramdisk_init(struct naut_info *naut)
