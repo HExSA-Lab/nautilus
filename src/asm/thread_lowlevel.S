@@ -71,7 +71,7 @@ ENTRY(nk_thread_switch_intr_entry)
 #ifdef NAUT_CONFIG_FPU_SAVE
     /* Save the FPRs */
     movzwq 16(%rax), %rbx
-    movq (%rax, %rbx, 1), %rbx
+    leaq (%rax, %rbx, 1), %rbx
     fxsave (%rbx)
 #endif
 
@@ -82,7 +82,7 @@ ENTRY(nk_thread_switch_intr_entry)
 #ifdef NAUT_CONFIG_FPU_SAVE
     /* Restore the FPRs */
     movzwq 16(%rax), %rbx
-    movq (%rax, %rbx, 1), %rbx
+    leaq (%rax, %rbx, 1), %rbx
     fxrstor (%rbx)
 #endif
 
