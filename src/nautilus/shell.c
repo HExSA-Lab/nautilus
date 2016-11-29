@@ -321,23 +321,24 @@ static int handle_cmd(char *buf, int n)
   if ((sscanf(buf, "mem %lx %lu %lu",&addr,&len,&size)==3) ||
       (size=8, sscanf(buf, "mem %lx %lu", &addr, &len)==2)) { 
       uint64_t i,j,k;
-      for (i=0;i<len;i+=BYTES_PER_LINE/size) {
+      for (i=0;i<len;i+=BYTES_PER_LINE) {
 	  nk_vc_printf("%016lx :",addr+i);
-	  for (j=0;j<BYTES_PER_LINE/size && (i+j)<len; j++) {
+	  for (j=0;j<BYTES_PER_LINE && (i+j)<len; j+=size) {
 	      nk_vc_printf(" ");
 	      for (k=0;k<size;k++) { 
-		  nk_vc_printf("%02x", *(uint8_t*)(addr+(i+j)*8+k));
+		  nk_vc_printf("%02x", *(uint8_t*)(addr+i+j+k));
 	      }
 	  }
 	  nk_vc_printf(" ");
-	  for (j=0;j<BYTES_PER_LINE/size && (i+j)<len; j++) {
+	  for (j=0;j<BYTES_PER_LINE && (i+j)<len; j+=size) {
 	      for (k=0;k<size;k++) { 
-		  nk_vc_printf("%c", isalnum(*(uint8_t*)(addr+(i+j)*8+k)) ? 
-			       *(uint8_t*)(addr+(i+j)*8+k) : '.');
+		  nk_vc_printf("%c", isalnum(*(uint8_t*)(addr+i+j+k)) ? 
+			       *(uint8_t*)(addr+i+j+k) : '.');
 	      }
 	  }
 	  nk_vc_printf("\n");
       }	      
+
       return 0;
   }
 
