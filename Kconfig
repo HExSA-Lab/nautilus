@@ -345,6 +345,29 @@ config VIRTUAL_CONSOLE_SERIAL_MIRROR_ALL
 
     endchoice
   endmenu
+config REAL_MODE_INTERFACE
+   bool "Enable the Long->Real interface"
+   default n
+   help
+      Allows long mode code in Nautilus to execute real-mode
+      software interrupts (e.g., BIOS, VESA, etc)
+
+config DEBUG_REAL_MODE_INTERFACE
+   bool "Debug Long->Real interface"
+   default n
+   depends on REAL_MODE_INTERFACE
+   help
+      Adds debugging output for the long->real interface
+
+config REAL_MODE_INTERFACE_SEGMENT
+   hex "Segment (64K total) used for Long->Real interface"
+   default 0x8000
+   depends on REAL_MODE_INTERFACE
+   help
+      Segment used for the real-mode interface
+      The first 32K is reserved for the trampoline
+      code and data. The second 32K can be used by
+      code invoking real mode interrupts
 endmenu
 
 menu "AeroKernel Performance Optimizations"
@@ -391,6 +414,8 @@ menu "AeroKernel Performance Optimizations"
 
 
 endmenu
+
+      
     
 
 menu Debugging

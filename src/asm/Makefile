@@ -11,3 +11,7 @@ endif
 ifdef NAUT_CONFIG_RAMDISK_EMBED
 	obj-y += ramdisk.o
 endif
+
+ifdef NAUT_CONFIG_REAL_MODE_INTERFACE
+	obj-y += realmode.o
+endif
