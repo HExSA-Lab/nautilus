@@ -75,7 +75,7 @@ SECTIONS
 	_v3_devices ALIGN(0x1000) : AT(ADDR(.rodata)+SIZEOF(.rodata))
         {
                 __start__v3_devices = .;
-                ../palacios/libv3vee.a:*(_v3_devices);
+                *(_v3_devices);
                 __stop__v3_devices = .;
 
         }
@@ -84,7 +84,7 @@ SECTIONS
         _v3_shdw_pg_impls ALIGN(0x1000) : AT(ADDR(_v3_devices)+SIZEOF(_v3_devices))
         {
                 __start__v3_shdw_pg_impls = .;
-                ../palacios/libv3vee.a:*(_v3_shdw_pg_impls);
+                *(_v3_shdw_pg_impls);
                 __stop__v3_shdw_pg_impls = .;
 
         }
