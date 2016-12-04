@@ -332,6 +332,7 @@ CFLAGS:=   $(COMMON_FLAGS) \
 		   -Wall \
 		   -Wno-unused-function \
 		   -Wno-unused-variable \
+		   -Wno-frame-address \
 		   -fno-common \
 		   -std=gnu99 \
 		    $(call cc-option, -Wno-unused-but-set-variable,) \
