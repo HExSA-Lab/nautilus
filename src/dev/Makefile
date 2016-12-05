@@ -15,3 +15,5 @@ obj-$(NAUT_CONFIG_VIRTIO_PCI) += virtio_pci.o
 
 obj-$(NAUT_CONFIG_RAMDISK) += ramdisk.o
 
+obj-$(NAUT_CONFIG_VESA) += vesa.o
+

@@ -122,6 +122,20 @@ config DEBUG_RAMDISK
     help
       Turn on debug prints for the ramdisk device
 
+config VESA
+    bool "VESA Support"
+    depends on REAL_MODE_INTERFACE
+    default n
+    help
+       Allow text and graphics control on VESA video cards
+
+config DEBUG_VESA
+    bool "Debug VESA"
+    depends on VESA
+    default n
+    help
+       Add debugging output from VESA driver
+
 endmenu
 
     
