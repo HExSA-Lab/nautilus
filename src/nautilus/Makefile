@@ -39,7 +39,8 @@ obj-y += \
 	blkdev.o \
 	netdev.o \
         fs.o \
-        shell.o
+        shell.o \
+		fprintk.o 
 
 obj-$(NAUT_CONFIG_PROFILE) += instrument.o
 obj-$(NAUT_CONFIG_XEON_PHI) += sfi.o
