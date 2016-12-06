@@ -102,6 +102,10 @@ inline int nk_vc_is_active()
   return cur_vc!=0;
 }
 
+struct nk_virtual_console * nk_get_cur_vc()
+{
+    return cur_vc;
+}
 
 static inline void copy_display_to_vc(struct nk_virtual_console *vc) 
 {
@@ -610,6 +614,22 @@ static int _vc_print_specific(struct nk_virtual_console *vc, char *s)
   return 0;
 }
 
+
+static int vc_print_specific(struct nk_virtual_console *vc, char *s)
+{
+    if (!vc) {
+        return 0;
+    }
+    BUF_LOCK_CONF;
+    BUF_LOCK(vc);
+    _vc_print_specific(vc,s);
+    BUF_UNLOCK(vc);
+#ifdef NAUT_CONFIG_VIRTUAL_CONSOLE_SERIAL_MIRROR_ALL
+    serial_write(s);
+#endif
+    return 0;
+}
+
 int nk_vc_print(char *s)
 {
   if (nk_vc_is_active()) { 
@@ -666,6 +686,19 @@ int nk_vc_printf(char *fmt, ...)
   return i;
 }
 
+int nk_vc_printf_specific(struct nk_virtual_console *vc, char *fmt, ...)
+{
+  char buf[PRINT_MAX];
+
+  va_list args;
+  int i;
+
+  va_start(args, fmt);
+  i=vsnprintf(buf,PRINT_MAX,fmt,args);
+  va_end(args);
+  vc_print_specific(vc, buf);
+  return i;
+}
 
 int nk_vc_log(char *fmt, ...)
 {

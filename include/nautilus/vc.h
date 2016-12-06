@@ -46,6 +46,8 @@ int nk_bind_vc(struct nk_thread *thread, struct nk_virtual_console * cons);
 
 int nk_release_vc(struct nk_thread *thread);
 
+struct nk_virtual_console * nk_get_cur_vc();
+
 int nk_switch_to_vc(struct nk_virtual_console *vc);
 int nk_switch_to_prev_vc(void);
 int nk_switch_to_next_vc(void);
@@ -56,6 +58,8 @@ int nk_vc_print(char *s);
 int nk_vc_puts(char *s);
 int nk_vc_printf(char *fmt, ...);
 int nk_vc_log(char *fmt, ...);
+
+int nk_vc_printf_specific(struct nk_virtual_console *vc, char *fmt, ...);
 
 
 int nk_vc_setattr(uint8_t attr);
