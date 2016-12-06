@@ -29,6 +29,7 @@
 #include <nautilus/cpuid.h>
 #include <nautilus/msr.h>
 #include <nautilus/backtrace.h>
+#include <test/ipi.h>
 
 #ifdef NAUT_CONFIG_PALACIOS
 #include <nautilus/vmm.h>
@@ -200,6 +201,119 @@ static int handle_cat(char *buf)
 }
 
 
+static int handle_ipitest(char * buf)
+{
+	uint32_t trials, sid, did;
+
+	ipi_exp_data_t * data = malloc(sizeof(ipi_exp_data_t));
+	if (!data) {
+		nk_vc_printf("ERROR: could not allocate IPI experiment data\n");
+		return -1;
+	}
+	memset(data, 0, sizeof(ipi_exp_data_t));
+	
+	buf += 7;
+	while (*buf && *buf==' ') { buf++;}
+
+	if (!*buf) {
+		nk_vc_printf("No test type given\n");
+		return 0;
+	}
+
+	// get the experiment type (oneway, roundtrip, or broadcast)
+	if (sscanf(buf, "oneway %u", &trials)==1) {
+		data->type = EXP_ONEWAY;
+		buf += 6;
+	} else if (sscanf(buf, "roundtrip %u", &trials)==1) {
+		data->type = EXP_ROUNDTRIP;
+		buf += 9;
+	} else if (sscanf(buf, "broadcast %u", &trials)==1) {
+		data->type = EXP_BROADCAST;
+		buf += 9;
+	} else {
+		nk_vc_printf("Unknown IPI test type\n");
+		return 0;
+	}
+
+	data->trials = (trials > IPI_MAX_TRIALS) ? IPI_MAX_TRIALS : trials;
+
+    buf++;
+
+    // skip over trial count
+    while (*buf && *buf!=' ') { buf++;}
+
+    // find next arg
+	while (*buf && *buf==' ') { buf++;}
+
+    if (!strncasecmp(buf, "-f", 2)) {
+
+#ifndef NAUT_CONFIG_EXT2_FILESYSTEM_DRIVER 
+        nk_vc_printf("Not compiled with FS support, cannot use -f\n");
+        return 0;
+    }
+#else
+        char fbuf[IPI_MAX_FNAME_LEN];
+        data->use_file = 1;
+        buf += 2;
+
+        // find next arg
+        while (*buf && *buf==' ') { buf++;}
+
+        if (sscanf(buf, "%s", fbuf)==1) {
+            if (!strncasecmp(buf, "-", 1)) {
+                nk_vc_printf("No filename given\n");
+                return 0;
+            }
+            strncpy(data->fname, fbuf, IPI_MAX_FNAME_LEN);
+
+            // skip over the filename
+            while(*buf && *buf!=' ') {buf++;}
+
+            // find next arg
+            while (*buf && *buf==' ') {buf++;}
+
+        } else {
+            nk_vc_printf("No filename given\n");
+            return 0;
+        }
+    }
+#endif
+
+    // which source type is it 
+	if (sscanf(buf, "-s %u", &sid)==1) {
+        data->src_type = SRC_ONE;
+        data->src_core = sid; 
+        buf += 3;
+
+        // skip over src core
+        while (*buf && *buf!=' ') { buf++;}
+
+        // find next arg
+        while (*buf && *buf==' ') { buf++;}
+
+	} else { 
+        data->src_type = SRC_ALL;
+    }
+
+        
+    if (sscanf(buf, "-d %u", &did)==1) {
+        data->dst_type = DST_ONE;
+        data->dst_core = did;
+    } else {
+        data->dst_type = DST_ALL;
+    }
+		
+	if (ipi_run_exps(data) != 0) {
+        nk_vc_printf("Could not run ipi experiment\n");
+        return 0;
+    }
+
+    free(data);
+
+	return 0;
+}
+
+
 static int handle_cmd(char *buf, int n)
 {
   char name[MAX_CMD];
@@ -232,6 +346,7 @@ static int handle_cmd(char *buf, int n)
     nk_vc_printf("burn a name size_ms tpr priority\n");
     nk_vc_printf("burn s name size_ms tpr phase size deadline priority\n");
     nk_vc_printf("burn p name size_ms tpr phase period slice\n");
+	nk_vc_printf("ipitest type (oneway | roundtrip | broadcast) trials [-f <filename>] [-s <src_id> | all] [-d <dst_id> | all]\n");
     nk_vc_printf("vm name [embedded image]\n");
     return 0;
   }
@@ -259,6 +374,11 @@ static int handle_cmd(char *buf, int n)
   if (!strncasecmp(buf,"cat",3)) {
     handle_cat(buf);
     return 0;
+  }
+
+  if (!strncasecmp(buf,"ipitest",7)) {
+	handle_ipitest(buf);
+	return 0;
   }
 
   if (sscanf(buf,"shell %s", name)==1) { 
