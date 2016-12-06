@@ -12,7 +12,7 @@
  *
  * Copyright (c) 2016, Chris Beauchene <ChristopherBeauchene2016@u.northwestern.edu>
  *                     Conor Hetland <ConorHetland2015@u.northwestern.edu>
- *                     Peter Dinda <pdinda@northwestern.edu
+ *                     Peter Dinda <pdinda@northwestern.edu>
  * Copyright (c) 2016, The V3VEE Project  <http://www.v3vee.org> 
  *                     The Hobbes Project <http://xstack.sandia.gov/hobbes>
  * All rights reserved.
@@ -50,6 +50,7 @@
 #include <nautilus/random.h>
 #include <dev/apic.h>
 
+#define INSTRUMENT    0
 
 #define SANITY_CHECKS 0
 
@@ -220,7 +221,65 @@ typedef struct nk_sched_percpu_state {
 
     uint64_t num_thefts;   // how many threads I've successfully stolen
 
+#if INSTRUMENT
+    uint64_t resched_fast_num;
+    uint64_t resched_fast_sum;
+    uint64_t resched_fast_sum2;
+    uint64_t resched_fast_min;
+    uint64_t resched_fast_max;
+    uint64_t resched_slow_num;
+    uint64_t resched_slow_sum;
+    uint64_t resched_slow_sum2;
+    uint64_t resched_slow_min;
+    uint64_t resched_slow_max;
+    uint64_t resched_slow_noswitch_num;
+    uint64_t resched_slow_noswitch_sum;
+    uint64_t resched_slow_noswitch_sum2;
+    uint64_t resched_slow_noswitch_min;
+    uint64_t resched_slow_noswitch_max;
+#endif
+
 } rt_scheduler;
+
+#if INSTRUMENT
+#define INST_SCHED_IN(WHAT)  uint64_t _inst_start = rdtsc()
+#define INST_SCHED_OUT(WHAT)						\
+{									\
+	uint64_t inst_diff = rdtsc() - _inst_start;			\
+	scheduler->WHAT ## _num++;					\
+	scheduler->WHAT##_sum+=inst_diff;				\
+	scheduler->WHAT##_sum2+=inst_diff*inst_diff;			\
+	if (scheduler->WHAT##_max < inst_diff) {			\
+	    scheduler->WHAT##_max = inst_diff;				\
+	}								\
+	if (!scheduler->WHAT##_min || scheduler->WHAT##_min > inst_diff) { \
+	    scheduler->WHAT##_min = inst_diff;				\
+	}								\
+    }
+
+#define INST_DUMP(WHAT)							\
+    nk_vc_printf("+ rf:(n=%lu,a=%lu,v=%lu,m=%lu,M=%lu) rs:(n=%lu,a=%lu,v=%lu,m=%lu,M=%lu) rs-ns:(n=%lu,a=%lu,v=%lu,m=%lu,M=%lu)\n", \
+		 WHAT->resched_fast_num,					\
+		 WHAT->resched_fast_num>0 ? WHAT->resched_fast_sum/WHAT->resched_fast_num : 0, \
+		 WHAT->resched_fast_num>0 ? ((WHAT->resched_fast_sum2)-(WHAT->resched_fast_sum*WHAT->resched_fast_sum)/WHAT->resched_fast_num)/WHAT->resched_fast_num : 0, \
+		 WHAT->resched_fast_min,					\
+		 WHAT->resched_fast_max,					\
+		 WHAT->resched_slow_num,					\
+		 WHAT->resched_slow_num>0 ? WHAT->resched_slow_sum/WHAT->resched_slow_num : 0, \
+		 WHAT->resched_slow_num>0 ? ((WHAT->resched_slow_sum2)-(WHAT->resched_slow_sum*WHAT->resched_slow_sum)/WHAT->resched_slow_num)/WHAT->resched_slow_num : 0, \
+		 WHAT->resched_slow_min,					\
+		 WHAT->resched_slow_max,				\
+		 WHAT->resched_slow_noswitch_num,					\
+		 WHAT->resched_slow_noswitch_num>0 ? WHAT->resched_slow_noswitch_sum/WHAT->resched_slow_noswitch_num : 0, \
+		 WHAT->resched_slow_noswitch_num>0 ? ((WHAT->resched_slow_noswitch_sum2)-(WHAT->resched_slow_noswitch_sum*WHAT->resched_slow_noswitch_sum)/WHAT->resched_slow_noswitch_num)/WHAT->resched_slow_noswitch_num : 0, \
+		 WHAT->resched_slow_noswitch_min,			\
+		 WHAT->resched_slow_noswitch_max);			\
+
+#else
+#define INST_SCHED_IN(s) 
+#define INST_SCHED_OUT(s)						
+#define INST_DUMP(s)
+#endif
 
 
 #if NAUT_CONFIG_APERIODIC_ROUND_ROBIN || NAUT_CONFIG_APERIODIC_LOTTERY
@@ -484,7 +543,7 @@ void nk_sched_dump_cores(int cpu_arg)
 			 s->cfg.sporadic_reservation, s->cfg.aperiodic_reservation, 
 			 s->cfg.aperiodic_quantum, s->cfg.aperiodic_default_priority,
 			 apic->timer_count);
-		     
+	    INST_DUMP(s);
             LOCAL_UNLOCK(s);
 	}
     }
@@ -1386,6 +1445,17 @@ static inline void set_interrupt_priority(rt_thread *t)
 #endif
 }
 
+#define DUMP_ENTRY_CONTEXT()				\
+    ERROR("ENTRY CONTEXT\n");				\
+    ERROR(" have_lock = %d\n",have_lock);               \
+    ERROR(" going_to_sleep = %d\n",going_to_sleep);	\
+    ERROR(" going_to_exit = %d\n",going_to_exit);	\
+    ERROR(" changing = %d\n",changing);			\
+    ERROR(" yielding = %d\n",yielding);			\
+    ERROR(" idle = %d\n",idle);				\
+    ERROR(" timed_out = %d\n",timed_out);		\
+    ERROR(" apic_timer = %d\n",apic_timer);		\
+    ERROR(" apic_kick = %d\n",apic_kick);					
      
 //
 // Invoked in interrupt context by the timer interrupt or
@@ -1400,6 +1470,8 @@ static inline void set_interrupt_priority(rt_thread *t)
 struct nk_thread *_sched_need_resched(int have_lock)
 {
     LOCAL_LOCK_CONF;
+
+    INST_SCHED_IN();
 
     uint64_t now = cur_time();
 
@@ -1427,6 +1499,8 @@ struct nk_thread *_sched_need_resched(int have_lock)
     int yielding = rt_c->status==YIELDING;
     int idle = rt_c->thread->is_idle;
     int timed_out = scheduler->tsc.set_time < now;  
+    int apic_timer = apic->in_timer_interrupt;
+    int apic_kick = apic->in_kick_interrupt;
 
     // "SPECIAL" means the current task is not to be enqueued
 #define CUR_IS_SPECIAL (going_to_sleep || going_to_exit || changing)
@@ -1435,11 +1509,14 @@ struct nk_thread *_sched_need_resched(int have_lock)
 #define CUR_NOT_SPECIAL_STR (yielding ? "Yielding" : "Preempting")
 
 
+    // We might be switching away from a thread that is 
+    // attempting a special case, for example going to sleep
+
     DEBUG("need_resched (cur=%d, sleep=%d, exit=%d, changing=%d)\n", c->tid, going_to_sleep,going_to_exit, changing);
 
     rt_c->resched_count++;
 
-    if (!timed_out && (!apic->in_timer_interrupt && (!apic->in_kick_interrupt)) 
+    if (!timed_out && !apic_timer && !apic_kick
 	&& CUR_IS_NOT_SPECIAL 
 	&& !yielding 
 	&& !idle) { 
@@ -1848,11 +1925,15 @@ struct nk_thread *_sched_need_resched(int have_lock)
     panic("UNEXPECTED QUEUE OVERFLOW IN nk_sched_need_resched()\n");
     return 0;
 
+
  out_good_early:
     //   DEBUG("Have not timed out yet (set_time=%llu now=%llu caller=%p) - early exit\n",scheduler->tsc.set_time,now,__builtin_return_address(0));
     if (!have_lock) {
 	LOCAL_UNLOCK(scheduler);
     }
+
+    INST_SCHED_OUT(resched_fast);
+
     return 0;
 
  out_good:
@@ -1886,6 +1967,7 @@ struct nk_thread *_sched_need_resched(int have_lock)
     if (rt_n!=rt_c) {
 	if (rt_n->thread->status==NK_THR_RUNNING) { 
 	    ERROR("Switching to new thread that is already running (old tid=%llu\n",rt_c->thread->tid);
+	    DUMP_ENTRY_CONTEXT();
 	}
 	// We may have switched away from a thread attempting to sleep
 	// before we were able to do so, in which case, don't reset its status
@@ -1893,8 +1975,15 @@ struct nk_thread *_sched_need_resched(int have_lock)
 	if (rt_n->thread->status != NK_THR_WAITING) { 
 	    rt_n->thread->status=NK_THR_RUNNING;
 	}
-	if (rt_c->thread->status==NK_THR_RUNNING) { 
-	    ERROR("Switching to new thread, but old thread is still marked running (rt status is %u, oldtid=%llu, newtid=%llu)\n",rt_c->status,rt_c->thread->tid,rt_n->thread->tid);
+	// The currently running thread has either been marked suspended
+	// at this point, or it is trying to exit or sleep
+	// The purpose of this test is to catch any potential
+	// races we might have between the scheduler running
+	// in thread context and in interrupt context
+	if (rt_c->thread->status==NK_THR_RUNNING &&
+	    !going_to_sleep && !going_to_exit) {
+	    ERROR("Switching to new thread, but old thread (which is not sleeping or exiting) is still marked running (rt status is %u, oldtid=%llu (%s), newtid=%llu (%s))\n",rt_c->status,rt_c->thread->tid,rt_c->thread->name,rt_n->thread->tid,rt_n->thread->name);
+	    DUMP_ENTRY_CONTEXT();
 	}
 
 	DEBUG("Switching from %llu (%s) to %llu (%s) on cpu %llu\n", 
@@ -1913,13 +2002,15 @@ struct nk_thread *_sched_need_resched(int have_lock)
 	if (!have_lock) {
 	    LOCAL_UNLOCK(scheduler);
 	}
+	INST_SCHED_OUT(resched_slow);
 	return rt_n->thread;
     } else {
 	// we are not switching threads
 	// the thread may be marked waiting as we may have been preempted in the 
 	// middle of going to sleep
-	if (rt_c->thread->status!=NK_THR_SUSPENDED && rt_c->thread->status!=NK_THR_WAITING) { 
-	    ERROR("Staying with current thread, but it is not marked suspended or waiting (thread status is %u rt thread status is %u tid=%llu)\n",rt_c->thread->status,rt_c->status,rt_c->thread->tid);
+	if (rt_c->thread->status!=NK_THR_SUSPENDED && rt_c->thread->status!=NK_THR_WAITING && !yielding) { 
+	    ERROR("Staying with current thread, but it is not marked suspended or waiting or yielding (thread status is %u rt thread status is %u tid=%llu)\n",rt_c->thread->status,rt_c->status,rt_c->thread->tid);
+	    DUMP_ENTRY_CONTEXT();
 	}
 	if (rt_c->thread->status!=NK_THR_WAITING) { 
 	    rt_c->thread->status=NK_THR_RUNNING;
@@ -1930,6 +2021,7 @@ struct nk_thread *_sched_need_resched(int have_lock)
 	if (!have_lock) {
 	    LOCAL_UNLOCK(scheduler);
 	}
+	INST_SCHED_OUT(resched_slow_noswitch);
 	return 0;
     }
 }
@@ -3057,8 +3149,7 @@ static int start_reaper()
 
 #endif
 
-
-
+static void timing_test(uint64_t N, uint64_t M, int print);
 
 /* 
  * nk_sched_init
@@ -3072,6 +3163,10 @@ nk_sched_init(struct nk_sched_config *cfg)
     struct cpu * my_cpu = nk_get_nautilus_info()->sys.cpus[nk_get_nautilus_info()->sys.bsp_id];
 
     INFO("Initializing scheduler on BSP\n");
+
+    //timing_test(1000000,1000000,1);
+    //INFO("Hanging\n");
+    //while (1) { asm("hlt"); }
 
     if (init_global_state()) { 
 	ERROR("Could not initialize global scheduler state\n");
@@ -3139,5 +3234,6 @@ static void timing_test(uint64_t N, uint64_t M, int print)
     INFO("sum  = %lu cycles\n",sum);
     INFO("sum2 = %lu cycles\n",sum2);
   }
+
 }
 
