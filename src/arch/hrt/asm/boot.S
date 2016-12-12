@@ -95,8 +95,8 @@ hdr_end:
 .align 8
 gdt64:
     .quad 0x0000000000000000 /* null */
-    .quad 0x00a09a0000000000 /* code (note lme bit) */
-    .quad 0x00a0920000000000 /* data (most entries don't matter) */
+    .quad 0x00af9a000000ffff /* code (note lme bit) */
+    .quad 0x00af92000000ffff /* data (most entries don't matter) */
 
 .align 8
 GLOBAL(gdtr64)
