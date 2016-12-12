@@ -41,7 +41,12 @@ extern char * mem_region_types[6];
 void 
 arch_reserve_boot_regions (unsigned long mbd)
 {
-    /* nothing to do here */
+#ifdef NAUT_CONFIG_REAL_MODE_INTERFACE
+    INFO_PRINT("Reserving Long->Real Interface Segment (%p, size %lu)\n",
+		NAUT_CONFIG_REAL_MODE_INTERFACE_SEGMENT*16UL, 65536UL);
+    mm_boot_reserve_mem((addr_t)(NAUT_CONFIG_REAL_MODE_INTERFACE_SEGMENT*16UL),
+			(ulong_t)65536);
+#endif
 }
 
 
