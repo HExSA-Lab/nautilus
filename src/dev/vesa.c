@@ -53,30 +53,46 @@ int vesa_init()
 	ERROR("Failed to get adapter info at init - probably not a VESA card\n");
 	return -1;
     }
-    INFO("version %04hx capabilities %08x memory %lu KB\n",
+    INFO("version %04x capabilities %08x memory %lu KB\n",
 	 adapter_info.version,
 	 adapter_info.capabilities,
 	 adapter_info.video_memory*64);
-    INFO("  modes at %04hx:%04hx (%p)\n",
+    INFO("oem %s vendor %s product_name %s software_rev %04x product_rev %s\n",
+	 VESA_PTR_TO_LINEAR(adapter_info.oem),
+	 VESA_PTR_TO_LINEAR(adapter_info.vendor),
+	 VESA_PTR_TO_LINEAR(adapter_info.product_name),
+	 adapter_info.software_rev,
+	 VESA_PTR_TO_LINEAR(adapter_info.product_rev));
+    INFO("modes at %04x:%04x (%p)\n",
 	 VESA_PTR_TO_SEG(adapter_info.video_modes),
 	 VESA_PTR_TO_OFF(adapter_info.video_modes),
 	 VESA_PTR_TO_LINEAR(adapter_info.video_modes));
-    if (VESA_PTR_TO_SEG(adapter_info.video_modes)!=NAUT_CONFIG_REAL_MODE_INTERFACE_SEGMENT) { 
-	ERROR("Mode list is not on the interface segment....\n");
-	return -1;
-    }
-    if (VESA_PTR_TO_OFF(adapter_info.video_modes)<0x8000) {
-	ERROR("Mode list is in non-user portion of interface segment...\n");
-	return -1;
-    }
-    if (VESA_PTR_TO_OFF(adapter_info.video_modes)>=0x8000+sizeof(struct vesa_adapter_info)) {
-	ERROR("Mode list is beyond the adapter info structure...\n");
-	return -1;
-    }
 
-    modes_start = (vesa_mode_t *)(uint64_t)&adapter_info + VESA_PTR_TO_OFF(adapter_info.video_modes) - 0x8000;
-    
-    //enumerate_modes();
+    if (VESA_PTR_TO_SEG(adapter_info.video_modes)==NAUT_CONFIG_REAL_MODE_INTERFACE_SEGMENT) {
+	// the data was copied where we asked, so we need to keep in mind that we copied
+	// it to a final destination when computing where the mode table is
+	if (VESA_PTR_TO_OFF(adapter_info.video_modes)<0x8000) {
+	    ERROR("Mode list is in non-user portion of interface segment...\n");
+	    return -1;
+	}
+	if (VESA_PTR_TO_OFF(adapter_info.video_modes)>=0x8000+sizeof(struct vesa_adapter_info)) {
+	    ERROR("Mode list is beyond the adapter info structure...\n");
+	    return -1;
+	}
+	modes_start = (vesa_mode_t *)(uint64_t)&adapter_info + VESA_PTR_TO_OFF(adapter_info.video_modes) - 0x8000;
+    } else {
+	// We better hope it is pointing into the ROM...
+	if (VESA_PTR_TO_SEG(adapter_info.video_modes)==0xc000) {
+	    // if it's in the rom, then we just need to take note, since 
+	    // it will not change
+	    modes_start = (vesa_mode_t *)(uint64_t)VESA_PTR_TO_LINEAR(adapter_info.video_modes);
+	} else {
+	    ERROR("Mode list is stored outside of ROM and outside of our transfer segment (%04x:%04x)...\n",VESA_PTR_TO_SEG(adapter_info.video_modes),VESA_PTR_TO_OFF(adapter_info.video_modes));
+	    return -1;
+	}
+    }
+	    
+    enumerate_modes();
 
     if (vesa_get_cur_mode(&orig_mode)) { 
 	ERROR("Failed to get current mode at init - weird\n");
@@ -109,28 +125,39 @@ static int _scan_modes(struct vesa_mode_request *r, vesa_mode_t *mode, scan_acti
 
     for (cur = modes_start; *cur!=0xffff; cur++) { 
 	if (vesa_get_mode_info(*cur,&m)) {
-	    ERROR("Failed to get info for mode %hx\n",*cur);
+	    ERROR("Failed to get info for mode %x\n",*cur);
 	    return -1;
 	}
 	switch (s) {
 	case ENUM:
-	    INFO(" mode %hx: w=%u h=%hu bpp=%u pitch=%u text=%d color=%d lfb=%d fb=%p\n", *cur,
-		 (uint32_t)m.width,(uint32_t)m.height,
-		 (uint32_t)m.bpp, (uint32_t)m.pitch,
+	    INFO("mode %04x:\n",*cur);
+	    INFO("     attr=%08x w=%u h=%u\n",
+		 m.attributes,
+		 (uint32_t)m.width,
+		 (uint32_t)m.height);
+	    INFO("     bpp=%u pitch=%u\n",
+		 (uint32_t)m.bpp,
+		 (uint32_t)m.pitch);
+	    INFO("     text=%d color=%d lfb=%d fb=%p\n", 
 		 !(m.attributes & VESA_ATTR_GRAPHICS),
 		 !!(m.attributes & VESA_ATTR_COLOR),
 		 !!(m.attributes & VESA_ATTR_LINEARFB),
 		 (void*)(uint64_t)m.framebuffer);
 	    break;
 	case FIND:
-	    DEBUG(" examine mode %hx: attr=%08x w=%u h=%hu bpp=%u pitch=%u text=%d color=%d lfb=%d fb=%p\n", *cur,
-		 m.attributes,
-		 (uint32_t)m.width,(uint32_t)m.height,
-		 (uint32_t)m.bpp, (uint32_t)m.pitch,
-		 !(m.attributes & VESA_ATTR_GRAPHICS),
-		 !!(m.attributes & VESA_ATTR_COLOR),
-		 !!(m.attributes & VESA_ATTR_LINEARFB),
-		 (void*)(uint64_t)m.framebuffer);
+	    DEBUG(" examine mode %04x:\n",*cur);
+	    DEBUG("     attr=%08x w=%u h=%u\n",
+		  m.attributes,
+		  (uint32_t)m.width,
+		  (uint32_t)m.height);
+	    DEBUG("     bpp=%u pitch=%u\n",
+		  (uint32_t)m.bpp,
+		  (uint32_t)m.pitch);
+	    DEBUG("     text=%d color=%d lfb=%d fb=%p\n", 
+		  !(m.attributes & VESA_ATTR_GRAPHICS),
+		  !!(m.attributes & VESA_ATTR_COLOR),
+		  !!(m.attributes & VESA_ATTR_LINEARFB),
+		  (void*)(uint64_t)m.framebuffer);
 	    if ((m.attributes & VESA_ATTR_HWSUPPORT) &&
 		(m.attributes & VESA_ATTR_COLOR) &&
 		(m.width == r->width) &&
@@ -139,9 +166,15 @@ static int _scan_modes(struct vesa_mode_request *r, vesa_mode_t *mode, scan_acti
 		(((m.attributes & VESA_ATTR_GRAPHICS) && !r->text && (m.attributes && VESA_ATTR_LINEARFB)) ||
 		 (!(m.attributes & VESA_ATTR_GRAPHICS) && r->text))) {
 
-		DEBUG(" FOUND mode %hx: w=%u h=%hu bpp=%u pitch=%u text=%d color=%d lfb=%d fb=%p\n", *cur,
-		      (uint32_t)m.width,(uint32_t)m.height,
-		      (uint32_t)m.bpp, (uint32_t)m.pitch,
+		DEBUG(" FOUND mode %04x:\n",*cur);
+		DEBUG("     attr=%08x w=%u h=%u\n",
+		      m.attributes,
+		      (uint32_t)m.width,
+		      (uint32_t)m.height);
+		DEBUG("     bpp=%u pitch=%u\n",
+		      (uint32_t)m.bpp,
+		      (uint32_t)m.pitch);
+		DEBUG("     text=%d color=%d lfb=%d fb=%p\n", 
 		      !(m.attributes & VESA_ATTR_GRAPHICS),
 		      !!(m.attributes & VESA_ATTR_COLOR),
 		      !!(m.attributes & VESA_ATTR_LINEARFB),
@@ -218,7 +251,7 @@ int vesa_get_cur_mode(vesa_mode_t *mode)
     }
 
     if (r.ax != 0x004f) { 
-	ERROR("vesa call reports failure (%0hx)\n",r.ax);
+	ERROR("vesa call reports failure (%04x)\n",r.ax);
 	_vesa_done();
 	return -1;
     }
@@ -247,7 +280,7 @@ int vesa_get_adapter_info(struct vesa_adapter_info *info)
     }
 
     if (r.ax != 0x004f) { 
-	ERROR("vesa call reports failure (%0hx)\n",r.ax);
+	ERROR("vesa call reports failure (%04x)\n",r.ax);
 	_vesa_done();
 	return -1;
     }
@@ -283,7 +316,7 @@ int vesa_get_mode_info(vesa_mode_t mode, struct vesa_mode_info *info)
     }
 
     if (r.ax != 0x004f) { 
-	ERROR("vesa call reports failure (%0hx)\n",r.ax);
+	ERROR("vesa call reports failure (%04x)\n",r.ax);
 	_vesa_done();
 	return -1;
     }
@@ -319,7 +352,7 @@ int vesa_set_cur_mode(vesa_mode_t mode)
     }
 
     if (r.ax != 0x004f) { 
-	ERROR("vesa call reports failure (%0hx)\n",r.ax);
+	ERROR("vesa call reports failure (%04x)\n",r.ax);
 	_vesa_done();
 	return -1;
     }
@@ -368,7 +401,7 @@ void vesa_test()
 	return;
     }
 
-    INFO("Original mode is %0hx\n",orig_mode);
+    INFO("Original mode is %04x\n",orig_mode);
     
     INFO("Looking for a 80x60 text mode\n");
 

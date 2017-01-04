@@ -241,8 +241,8 @@ static int handle_real(char *cmd)
 	 sscanf(cmd,"real %hx",
 		&test.vector)==1)) {
 
-	nk_vc_printf("Req: int %hx ax=%04hx bx=%04hx es:di=%04hx:%04hx\n",
-		     test.vector, test.ax, test.bx, test.es, test.di);
+	nk_vc_printf("Req: int %hx ax=%04hx bx=%04hx cx=%04hx dx=%04hx es:di=%04hx:%04hx\n",
+		     test.vector, test.ax, test.bx, test.cx, test.dx, test.es, test.di);
     
 	if (nk_real_mode_start()) { 
 	    nk_vc_printf("start failed\n");
