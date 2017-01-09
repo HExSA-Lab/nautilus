@@ -45,6 +45,11 @@
 #include <nautilus/libccompat.h>
 #include <nautilus/barrier.h>
 #include <nautilus/vc.h>
+#include <nautilus/dev.h>
+#include <nautilus/chardev.h>
+#include <nautilus/blkdev.h>
+#include <nautilus/netdev.h>
+#include <nautilus/fs.h>
 #include <nautilus/shell.h>
 
 #include <dev/apic.h>
@@ -55,6 +60,15 @@
 #include <dev/kbd.h>
 #include <dev/serial.h>
 #include <dev/vga.h>
+#ifdef NAUT_CONFIG_VIRTIO_PCI
+#include <dev/virtio_pci.h>
+#endif
+#ifdef NAUT_CONFIG_RAMDISK
+#include <dev/ramdisk.h>
+#endif
+#ifdef NAUT_CONFIG_EXT2_FILESYSTEM_DRIVER
+#include <fs/ext2/ext2.h>
+#endif
 
 #ifdef NAUT_CONFIG_NDPC_RT
 #include "ndpc_preempt_threads.h"
@@ -62,6 +76,14 @@
 
 #ifdef NAUT_CONFIG_PALACIOS
 #include <nautilus/vmm.h>
+#endif
+
+#ifdef NAUT_CONFIG_REAL_MODE_INTERFACE 
+#include <nautilus/realmode.h>
+#endif
+
+#ifdef NAUT_CONFIG_VESA
+#include <dev/vesa.h>
 #endif
 
 extern spinlock_t printk_lock;
@@ -95,7 +117,7 @@ void ndpc_rt_test()
     ndpc_init_preempt_threads();
     
     tid = ndpc_fork_preempt_thread();
-    
+
     if (!tid) { 
         printk("Error in initial fork\n");
         return;
@@ -229,9 +251,16 @@ init (unsigned long mbd,
 
     nk_int_init(&(naut->sys));
 
+    // Bring serial device up early so we can have output
     serial_init();
 
+    nk_dev_init();
+    nk_char_dev_init();
+    nk_block_dev_init();
+    nk_net_dev_init();
+
     nk_vc_print(NAUT_WELCOME);
+
     
     detect_cpu();
 
@@ -243,7 +272,7 @@ init (unsigned long mbd,
         ERROR_PRINT("Problem parsing multiboot header\n");
     }
 
-	nk_acpi_init();
+    nk_acpi_init();
 
     /* enumerate CPUs and initialize them */
     smp_early_init(naut);
@@ -305,6 +334,15 @@ init (unsigned long mbd,
     nk_instrument_init();
 #endif
 
+#ifdef NAUT_CONFIG_REAL_MODE_INTERFACE 
+    nk_real_mode_init();
+#endif
+
+#ifdef NAUT_CONFIG_VESA
+    vesa_init();
+    // vesa_test();
+#endif
+
     smp_bringup_aps(naut);
 
     extern void nk_mwait_init(void);
@@ -321,9 +359,25 @@ init (unsigned long mbd,
 
     nk_vc_init();
 
+#ifdef NAUT_CONFIG_RAMDISK
+    nk_ramdisk_init(naut);
+#endif
+
+#ifdef NAUT_CONFIG_VIRTIO_PCI
+    virtio_pci_init(naut);
+#endif
+
+    nk_fs_init();
+
+#ifdef NAUT_CONFIG_EXT2_FILESYSTEM_DRIVER
+#ifdef NAUT_CONFIG_RAMDISK_EMBED
+    nk_fs_ext2_attach("ramdisk0","rootfs", 1);
+#endif
+#endif
+
     launch_vmm_environment();
 
-    nk_launch_shell("root-shell",-1);
+    nk_launch_shell("root-shell",0);
 
     runtime_init();
 

@@ -654,7 +654,7 @@ static int handle_cmd(char *buf, int n)
     return 0;
   }
 
-#ifdef NAUT_CONFIG_PALACIOS_EMBEDDED_VM_IMG
+#ifdef NAUT_CONFIG_PALACIOS_EMBED
   if (sscanf(buf,"vm %s", name)==1) { 
     extern int guest_start;
     nk_vmm_start_vm(name,&guest_start,0xffffffff);
