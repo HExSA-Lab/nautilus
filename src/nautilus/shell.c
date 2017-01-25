@@ -382,6 +382,15 @@ static int handle_ipitest(char * buf)
 }
 
 
+static int handle_benchmarks(char * buf)
+{
+    extern void run_benchmarks();
+    
+    run_benchmarks();
+
+    return 0;
+}
+
 static int handle_cmd(char *buf, int n)
 {
   char name[MAX_CMD];
@@ -423,6 +432,7 @@ static int handle_cmd(char *buf, int n)
     nk_vc_printf("burn p name size_ms tpr phase period slice\n");
     nk_vc_printf("real int [ax [bx [cx [dx]]]] [es:di]\n");
     nk_vc_printf("ipitest type (oneway | roundtrip | broadcast) trials [-f <filename>] [-s <src_id> | all] [-d <dst_id> | all]\n");
+    nk_vc_printf("bench\n");
     nk_vc_printf("vm name [embedded image]\n");
     return 0;
   }
@@ -454,6 +464,11 @@ static int handle_cmd(char *buf, int n)
 
   if (!strncasecmp(buf,"ipitest",7)) {
 	handle_ipitest(buf);
+	return 0;
+  }
+
+  if (!strncasecmp(buf,"bench",5)) {
+	handle_benchmarks(buf);
 	return 0;
   }
 
