@@ -122,6 +122,21 @@ config DEBUG_RAMDISK
     help
       Turn on debug prints for the ramdisk device
 
+config ATA
+    bool "ATA Support"
+    default n
+    help 
+       Adds very primitive ATA suppor 
+       Currently legacy controller only, HDs only, 
+       and PIO only with LBA48
+
+config DEBUG_ATA
+    bool "Debug ATA Support"
+    depends on DEBUG_PRINTS && ATA
+    default n
+    help
+      Turn on debug prints for ATA devices
+
 config VESA
     bool "VESA Support"
     depends on REAL_MODE_INTERFACE

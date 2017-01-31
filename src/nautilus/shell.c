@@ -25,6 +25,9 @@
 #include <nautilus/shell.h>
 #include <nautilus/vc.h>
 #include <nautilus/dev.h>
+#include <nautilus/blkdev.h>
+#include <nautilus/netdev.h>
+#include <nautilus/chardev.h>
 #include <nautilus/fs.h>
 #include <nautilus/cpuid.h>
 #include <nautilus/msr.h>
@@ -382,6 +385,86 @@ static int handle_ipitest(char * buf)
 }
 
 
+static int handle_blktest(char * buf)
+{
+    char name[32], rw[16];
+    uint64_t start, count;
+    struct nk_block_dev *d;
+    struct nk_block_dev_characteristics c;
+
+    if ((sscanf(buf,"blktest %s %s %lu %lu",name,rw,&start,&count)!=4)
+	|| (*rw!='r' && *rw!='w') ) { 
+	nk_vc_printf("Don't understand %s\n",buf);
+	return -1;
+    }
+
+    if (!(d=nk_block_dev_find(name))) { 
+	nk_vc_printf("Can't find %s\n",name);
+	return -1;
+    }
+
+    if (nk_block_dev_get_characteristics(d,&c)) { 
+	nk_vc_printf("Can't get characteristics of %s\n",name);
+	return -1;
+    }
+
+    char data[c.block_size+1];
+    uint64_t i,j;
+
+
+    for (i=start;i<start+count;i++) { 
+	if (*rw == 'w') { 
+	    for (j=0;j<c.block_size;j++) { 
+		data[j] = "abcdefghijklmnopqrstuvwxyz0123456789"[j%36];
+	    }
+	    if (nk_block_dev_write(d,i,1,data,NK_DEV_REQ_BLOCKING)) {
+		nk_vc_printf("Failed to write block %lu\n",i);
+		return -1;
+	    }
+	} else if (*rw == 'r') {
+	    if (nk_block_dev_read(d,i,1,data,NK_DEV_REQ_BLOCKING)) {
+		nk_vc_printf("Failed to read block %lu\n",i);
+		return -1;
+	    }
+	    data[c.block_size] = 0;
+	    nk_vc_printf("%s\n",data);
+	}
+    }
+    return 0;
+}
+
+static int handle_attach(char * buf)
+{
+    char type[32], devname[32], fsname[32]; 
+    uint64_t start, count;
+    struct nk_block_dev *d;
+    struct nk_block_dev_characteristics c;
+    int rc;
+
+    if (sscanf(buf,"attach %s %s %s",devname, type, fsname)!=3) {
+	nk_vc_printf("Don't understand %s\n",buf);
+	return -1;
+    }
+
+    if (!strcmp(type,"ext2")) { 
+#ifndef NAUT_CONFIG_EXT2_FILESYSTEM_DRIVER 
+        nk_vc_printf("Not compiled with EXT2 support, cannot attach\n");
+        return -1;
+#else
+	if (nk_fs_ext2_attach(devname,fsname,0)) {
+	    nk_vc_printf("Failed to attach %s as ext2 volume with name %s\n", devname,fsname);
+	    return -1;
+	} else {
+	    nk_vc_printf("Device %s attached as ext2 volume with name %s\n", devname,fsname);
+	    return 0;
+	}
+#endif
+    } else {
+	nk_vc_printf("FS type %s is not supported\n", type);
+	return -1;
+    }
+}
+
 static int handle_benchmarks(char * buf)
 {
     extern void run_benchmarks();
@@ -433,6 +516,8 @@ static int handle_cmd(char *buf, int n)
     nk_vc_printf("real int [ax [bx [cx [dx]]]] [es:di]\n");
     nk_vc_printf("ipitest type (oneway | roundtrip | broadcast) trials [-f <filename>] [-s <src_id> | all] [-d <dst_id> | all]\n");
     nk_vc_printf("bench\n");
+    nk_vc_printf("blktest dev r|w start count\n");
+    nk_vc_printf("attach blkdev fstype fsname\n");
     nk_vc_printf("vm name [embedded image]\n");
     return 0;
   }
@@ -469,6 +554,16 @@ static int handle_cmd(char *buf, int n)
 
   if (!strncasecmp(buf,"bench",5)) {
 	handle_benchmarks(buf);
+	return 0;
+  }
+
+  if (!strncasecmp(buf,"blktest",7)) {
+	handle_blktest(buf);
+	return 0;
+  }
+
+  if (!strncasecmp(buf,"attach",6)) {
+	handle_attach(buf);
 	return 0;
   }
 
