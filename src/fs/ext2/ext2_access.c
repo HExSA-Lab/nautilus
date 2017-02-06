@@ -310,6 +310,9 @@ static uint32_t get_inode_num_from_dir(struct ext2_state *fs,
     struct ext2_dir_entry_2 dentry;
     uint32_t inum;
 
+    DEBUG("get_inode_num_from_dir on %s, inode_num=%u, dir=%p, search=%s\n",
+	  fs->fs->name,inode_num,dir,name);
+
     strcpy(dentry.name,name);
     dentry.name_len=strlen(name);
     dentry.rec_len=EXT2_DIR_REC_LEN(dentry.name_len);

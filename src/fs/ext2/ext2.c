@@ -637,12 +637,17 @@ static int dentry_get_put_del(struct ext2_state      *fs,
     struct ext2_inode our_inode;
     struct ext2_inode *inode;
     uint64_t block_size = get_block_size(fs);
+    uint32_t num_sects;
     uint32_t num_blocks;
     uint32_t logical_block;
     uint32_t physical_block;
     uint8_t buf[block_size];
     struct ext2_dir_entry_2 *de, *pde;
     uint32_t dl;
+
+    DEBUG("dentry_get_put_del(%s, fs=%s, inode=%u, name=%s)\n",
+	  op==GET ? "GET" : op==PUT ? "PUT" : "DEL",
+	  fs->fs->name, inode_num, dentry->name);
 
     if (!their_inode) {
 	if (read_inode(fs,inode_num,&our_inode)) { 
@@ -654,13 +659,19 @@ static int dentry_get_put_del(struct ext2_state      *fs,
 	inode = their_inode;
     }
     
-    num_blocks = inode->i_blocks;
+    // i_blocks counts in sectors, not fs blocks....
+    num_sects = inode->i_blocks;
+    num_blocks = CEIL_DIV(num_sects,block_size);
+
+    DEBUG("Directory has %u sectors / %u blocks\n",num_sects, num_blocks);
 
     for (logical_block=0;logical_block<num_blocks;logical_block++) {
+	DEBUG("Scanning directory logical block %lu\n",logical_block);
 	if (map_logical_to_physical_get(fs,inode_num,inode,logical_block,&physical_block)) { 
 	    ERROR("Unable to map directory block %u\n",logical_block);
 	    return -1;
 	}
+	DEBUG("Scanning directory physical block %lu\n",physical_block);
 	if (read_block(fs,physical_block,buf)) {
 	    ERROR("Unable to read directory block %u (%u)\n",logical_block,physical_block);
 	    return -1;
