@@ -172,7 +172,7 @@ static int map_logical_to_physical_get_put(struct ext2_state *fs, uint32_t inode
 		    }
 		} else {
 		    ERROR("required indirect block does not exist\n");
-		    return 0;
+		    return -1;
 		}
 	    }
 	    if (read_block(fs,next,buf)) { 
