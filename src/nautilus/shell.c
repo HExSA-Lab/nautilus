@@ -485,7 +485,11 @@ static void isotest(void *arg)
     // note trying to do anything in here with NK
     // features, even a print, is unlikely to work due to
     // relocation, interrupts off, etc.   
-    // serial_putchar('H'); serial_putchar('I');
+    //serial_print("Hello from isocore, my arg is %p\n", arg);
+    serial_putchar('H');
+    serial_putchar('I');
+    serial_putchar('!');
+    serial_putchar('\n');
     while (1) { }  // does actually get here in testing
 }
 

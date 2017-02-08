@@ -52,6 +52,7 @@ read_loop:
 	// Now the capsule should be in the cache
 
 	// turn off cache (put into no-fill mode)
+	movq %cr0, %rax
 	orq $(0x3<<29), %rax  // set CD and NWT to one
 	movq %rax, %cr0
 	

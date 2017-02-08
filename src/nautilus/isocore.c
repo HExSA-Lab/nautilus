@@ -24,8 +24,8 @@ int nk_isolate(void (*code)(void *arg),
 	       void     *arg)
 {
 
-    //DEBUG("nk_isolate(code=%p, codesize=%lu\n",code, codesize);
-    //DEBUG("           stacksize=%lu, arg=%p\n", stacksize, arg);
+    DEBUG("nk_isolate(code=%p, codesize=%lu\n",code, codesize);
+    DEBUG("           stacksize=%lu, arg=%p\n", stacksize, arg);
 
     // build a code+stack segment that looks like this:
     //
