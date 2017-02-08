@@ -42,6 +42,10 @@
 #include <nautilus/realmode.h>
 #endif
 
+#ifdef NAUT_CONFIG_ISOCORE
+#include <nautilus/isocore.h>
+#endif
+
 #define MAX_CMD 80
 
 struct burner_args {
@@ -474,6 +478,33 @@ static int handle_benchmarks(char * buf)
     return 0;
 }
 
+#ifdef NAUT_CONFIG_ISOCORE
+
+static void isotest(void *arg)
+{
+    // note trying to do anything in here with NK
+    // features, even a print, is unlikely to work due to
+    // relocation, interrupts off, etc.   
+    // serial_putchar('H'); serial_putchar('I');
+    while (1) { }  // does actually get here in testing
+}
+
+static int handle_isotest(char *buf)
+{
+    void (*code)(void*) = isotest;
+    uint64_t codesize = PAGE_SIZE_4KB; // we are making pretend here
+    uint64_t stacksize = PAGE_SIZE_4KB;
+    void *arg = (void*)0xdeadbeef;
+
+    return nk_isolate(code, 
+		      codesize,
+		      stacksize,
+		      arg);
+}
+
+
+#endif
+
 static int handle_cmd(char *buf, int n)
 {
   char name[MAX_CMD];
@@ -503,6 +534,13 @@ static int handle_cmd(char *buf, int n)
     return 0;
   }
 #endif
+
+#ifdef NAUT_CONFIG_ISOCORE
+  if (!strncasecmp(buf,"isotest",4)) { 
+    handle_isotest(buf);
+    return 0;
+  }
+#endif
   
   if (!strncasecmp(buf,"help",4)) { 
     nk_vc_printf("help\nexit\nvcs\ncores [n]\ntime [n]\nthreads [n]\n");
@@ -517,7 +555,8 @@ static int handle_cmd(char *buf, int n)
     nk_vc_printf("ipitest type (oneway | roundtrip | broadcast) trials [-f <filename>] [-s <src_id> | all] [-d <dst_id> | all]\n");
     nk_vc_printf("bench\n");
     nk_vc_printf("blktest dev r|w start count\n");
-    nk_vc_printf("attach blkdev fstype fsname\n");
+    nk_vc_printf("blktest dev r|w start count\n");
+    nk_vc_printf("isotest\n");
     nk_vc_printf("vm name [embedded image]\n");
     return 0;
   }

@@ -345,6 +345,7 @@ config VIRTUAL_CONSOLE_SERIAL_MIRROR_ALL
 
     endchoice
   endmenu
+
 config REAL_MODE_INTERFACE
    bool "Enable the Long->Real interface"
    default n
@@ -368,6 +369,24 @@ config REAL_MODE_INTERFACE_SEGMENT
       The first 32K is reserved for the trampoline
       code and data. The second 32K can be used by
       code invoking real mode interrupts
+
+
+config ISOCORE
+   bool "Enable Isolated Core Execution"
+   default n
+   help
+      Allows us to dedicate a core to the
+      execution of a function without any
+      interference from other cores
+
+config DEBUG_ISOCORE
+   bool "Debug Isolated Core Execution"
+   default n
+   depends on ISOCORE
+   help
+      Adds debugging output for isolated core execution
+      The low-level code does not have debugging output
+   
 endmenu
 
 menu "AeroKernel Performance Optimizations"

@@ -15,3 +15,7 @@ endif
 ifdef NAUT_CONFIG_REAL_MODE_INTERFACE
 	obj-y += realmode.o
 endif
+
+ifdef NAUT_CONFIG_ISOCORE
+	obj-y += isocore_lowlevel.o
+endif

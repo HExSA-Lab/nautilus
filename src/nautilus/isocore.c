@@ -1,0 +1,91 @@
+/* 
+ */
+
+#include <nautilus/nautilus.h>
+
+#ifndef NAUT_CONFIG_DEBUG_ISOCORE
+#undef DEBUG_PRINT
+#define DEBUG_PRINT(fmt, args...) 
+#endif
+
+#define ERROR(fmt, args...) ERROR_PRINT("isocore: " fmt, ##args)
+#define DEBUG(fmt, args...) DEBUG_PRINT("isocore: " fmt, ##args)
+#define INFO(fmt, args...) INFO_PRINT("isocore: " fmt, ##args)
+
+#define FLOOR_DIV(x,y) ((x)/(y))
+#define CEIL_DIV(x,y)  (((x)/(y)) + !!((x)%(y)))
+#define DIVIDES(x,y) (((x)%(y))==0)
+#define MAX(x,y) ((x)>(y) ? (x) : (y))
+#define MIN(x,y) ((x)<(y) ? (x) : (y))
+
+int nk_isolate(void (*code)(void *arg),
+	       uint64_t codesize,
+	       uint64_t stacksize,
+	       void     *arg)
+{
+
+    //DEBUG("nk_isolate(code=%p, codesize=%lu\n",code, codesize);
+    //DEBUG("           stacksize=%lu, arg=%p\n", stacksize, arg);
+
+    // build a code+stack segment that looks like this:
+    //
+    // CODE
+    // ----- <- page boundary
+    // STACK
+    //
+    // both CODE and STACK are an integral number of 
+    // pages long
+    //
+    // Note that we don't really need page alignment for
+    // this - I'm just doing it for now to make sure
+    // we have cache line alignment for everything, regardless of machine
+
+    uint64_t code_pages = CEIL_DIV(codesize,PAGE_SIZE_4KB);
+    uint64_t stack_pages = CEIL_DIV(stacksize,PAGE_SIZE_4KB);
+    uint64_t total_pages = code_pages+stack_pages;
+
+    DEBUG("Allocating %lu code pages and %lu stack pages\n",
+	  code_pages,stack_pages);
+
+    // malloc will align to next power of 2 pages...
+    void *capsule = malloc(total_pages*PAGE_SIZE_4KB);
+    
+    if (!capsule) { 
+	ERROR("Unable to allocate capsule\n");
+	return -1;
+    }
+
+    DEBUG("Capsule allocated at %p\n",capsule);
+
+    // clear code and stack of the capsule
+    memset(capsule,0,total_pages*PAGE_SIZE_4KB);
+
+    // copy the code into the capsule
+    memcpy(capsule+stack_pages*PAGE_SIZE_4KB,
+	   code,
+	   codesize);
+
+    //nk_dump_mem(capsule+stack_pages*PAGE_SIZE_4KB, codesize);
+
+    // now transfer to the low-level code to
+    // effect isolation
+
+    extern int _nk_isolate_entry(void *,   // where capsule begins
+				 uint64_t, // size of capsule
+				 void *,   // entry point/stack start
+				 void *);  // what goes into rdi
+
+    DEBUG("Launching low-level capsule code, capsule=%p, size=%lu, entry=%p, rdi=%p\n", capsule, total_pages*PAGE_SIZE_4KB, capsule+stack_pages*PAGE_SIZE_4KB, arg);
+
+    _nk_isolate_entry(capsule,
+		      total_pages*PAGE_SIZE_4KB, 
+		      capsule+stack_pages*PAGE_SIZE_4KB, 
+		      arg);
+
+    // this should never return
+    
+    ERROR("The impossible has happened - _nk_isolate_entry returned!\n");
+    return -1;
+}
+    
+    

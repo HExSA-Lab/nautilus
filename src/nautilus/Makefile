@@ -40,7 +40,7 @@ obj-y += \
 	netdev.o \
         fs.o \
         shell.o \
-		fprintk.o 
+	fprintk.o \
 
 obj-$(NAUT_CONFIG_PROFILE) += instrument.o
 obj-$(NAUT_CONFIG_XEON_PHI) += sfi.o
@@ -48,5 +48,7 @@ obj-$(NAUT_CONFIG_XEON_PHI) += sfi.o
 obj-$(NAUT_CONFIG_PALACIOS) += vmm.o
 
 obj-$(NAUT_CONFIG_REAL_MODE_INTERFACE) += realmode.o
+
+obj-$(NAUT_CONFIG_ISOCORE) += isocore.o
 
 
