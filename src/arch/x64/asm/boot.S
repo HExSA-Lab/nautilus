@@ -95,6 +95,8 @@ hdr_end:
     movw %ax, %ds
     movw %ax, %es
     movw %ax, %ss
+    movw %ax, %fs
+    movw %ax, %gs
 
     movq $boot_stack_end, %rsp
 
