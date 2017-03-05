@@ -1100,6 +1100,8 @@ int nk_vc_handle_input(nk_scancode_t scan)
   return 0;
 }
 
+static int vc_list_inited=0;
+
 static void list(void *in, void **out)
 {
   struct list_head *cur;
@@ -1121,6 +1123,9 @@ static void list(void *in, void **out)
     return;
   }
   
+  // declare we are up
+  __sync_fetch_and_add(&vc_list_inited,1);
+
   while (1) {
     nk_vc_clear(0xf9);
    
@@ -1158,6 +1163,10 @@ static int start_list()
     return -1;
   }
   
+  while (!__sync_fetch_and_add(&vc_list_inited,0)) {
+      // wait for vc list to be up
+  }
+
   INFO("List launched\n");
 
   return 0;
