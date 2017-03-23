@@ -838,7 +838,9 @@ uint64_t syscall_end = 0;
 static uint64_t syscall_start = 0;
 
 
-extern void syscall_handler(void);
+void syscall_handler(void)
+{
+}
 
 static void
 syscall_setup (void)
