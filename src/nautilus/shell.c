@@ -55,6 +55,21 @@ struct burner_args {
     struct nk_sched_constraints constraints;
 } ;
 
+// enable this to flip a GPIO periodically within
+// the main loop of test thread
+#define GPIO_OUTPUT 0
+
+#if GPIO_OUPUT
+#define GET_OUT() inb(0xe010)
+#define SET_OUT(x) outb(x,0xe010)
+#else
+#define GET_OUT() 
+#define SET_OUT(x) 
+#endif
+
+#define SWITCH() SET_OUT(~GET_OUT())
+#define LOOP() {SWITCH(); udelay(1000); }
+
 static void burner(void *in, void **out)
 {
     uint64_t start, end, dur;
@@ -79,7 +94,7 @@ static void burner(void *in, void **out)
 
     while(1) {
 	start = nk_sched_get_realtime();
-	udelay(1000);
+	LOOP();
 	end = nk_sched_get_realtime();
 	dur = end - start;
 	//	nk_vc_printf("%s (tid %llu) start=%llu, end=%llu left=%llu\n",a->name,get_cur_thread()->tid, start, end,a->size_ns);
@@ -172,6 +187,7 @@ static int launch_periodic_burner(char *name, uint64_t size_ns, uint32_t tpr, ui
 	return 0;
     }
 }
+
 
 static int handle_cat(char *buf)
 {
@@ -550,7 +566,7 @@ static int handle_cmd(char *buf, int n)
     nk_vc_printf("help\nexit\nvcs\ncores [n]\ntime [n]\nthreads [n]\n");
     nk_vc_printf("devs | fses | ofs | cat [path]\n");
     nk_vc_printf("shell name\n");
-    nk_vc_printf("regs [t]\npeek [bwdq] x | mem x n [s] | poke [bwdq] x y\nrdmsr x [n] | wrmsr x y\ncpuid f [n] | cpuidsub f s\n");
+    nk_vc_printf("regs [t]\npeek [bwdq] x | mem x n [s] | poke [bwdq] x y\nin [bwd] addr | out [bwd] addr data\nrdmsr x [n] | wrmsr x y\ncpuid f [n] | cpuidsub f s\n");
     nk_vc_printf("reap\n");
     nk_vc_printf("burn a name size_ms tpr priority\n");
     nk_vc_printf("burn s name size_ms tpr phase size deadline priority\n");
@@ -665,6 +681,31 @@ static int handle_cmd(char *buf, int n)
       return 0;
   }
 
+  if (((bwdq='b', sscanf(buf,"in b %lx", &addr))==1) ||
+      ((bwdq='w', sscanf(buf,"in w %lx", &addr))==1) ||
+      ((bwdq='d', sscanf(buf,"in d %lx", &addr))==1) ||
+      ((bwdq='b', sscanf(buf,"in %lx", &addr))==1)) {
+      addr &= 0xffff; // 16 bit address space
+      switch (bwdq) { 
+      case 'b': 
+	  data = (uint64_t) inb(addr);
+	  nk_vc_printf("IO[0x%04lx] = 0x%02lx\n",addr,data);
+	  break;
+      case 'w': 
+	  data = (uint64_t) inw(addr);
+	  nk_vc_printf("IO[0x%04lx] = 0x%04lx\n",addr,data);
+	  break;
+      case 'd': 
+	  data = (uint64_t) inl(addr);
+	  nk_vc_printf("IO[0x%04lx] = 0x%08lx\n",addr,data);
+	  break;
+      default:
+	  nk_vc_printf("Unknown size requested\n",bwdq);
+	  break;
+      }
+      return 0;
+  }
+
 #define BYTES_PER_LINE 16
 
   if ((sscanf(buf, "mem %lx %lu %lu",&addr,&len,&size)==3) ||
@@ -695,7 +736,7 @@ static int handle_cmd(char *buf, int n)
       ((bwdq='w', sscanf(buf,"poke w %lx %lx", &addr,&data))==2) ||
       ((bwdq='d', sscanf(buf,"poke d %lx %lx", &addr,&data))==2) ||
       ((bwdq='q', sscanf(buf,"poke q %lx %lx", &addr,&data))==2) ||
-      ((bwdq='q', sscanf(buf,"poke %lx", &addr, &data))==2)) {
+      ((bwdq='q', sscanf(buf,"poke %lx %lx", &addr, &data))==2)) {
       switch (bwdq) { 
       case 'b': 
 	  *(uint8_t*)addr = data;
@@ -713,6 +754,33 @@ static int handle_cmd(char *buf, int n)
 	  *(uint64_t*)addr = data;
 	  nk_vc_printf("Mem[0x%016lx] = 0x%016lx\n",addr,data);
 	  break;
+      default:
+	  nk_vc_printf("Unknown size requested\n");
+	  break;
+      }
+      return 0;
+  }
+
+  if (((bwdq='b', sscanf(buf,"out b %lx %lx", &addr,&data))==2) ||
+      ((bwdq='w', sscanf(buf,"out w %lx %lx", &addr,&data))==2) ||
+      ((bwdq='d', sscanf(buf,"out d %lx %lx", &addr,&data))==2) ||
+      ((bwdq='q', sscanf(buf,"out %lx %lx", &addr, &data))==2)) {
+      addr &= 0xffff;
+      switch (bwdq) { 
+      case 'b': 
+	  data &= 0xff;
+	  outb((uint8_t) data, (uint16_t)addr);
+	  nk_vc_printf("IO[0x%04lx] = 0x%02lx\n",addr,data);
+	  break;
+      case 'w': 
+	  data &= 0xffff;
+	  outw((uint16_t) data, (uint16_t)addr);
+	  nk_vc_printf("IO[0x%04lx] = 0x%04lx\n",addr,data);
+	  break;
+      case 'd': 
+	  data &= 0xffffffff;
+	  outl((uint32_t) data, (uint16_t)addr);
+	  nk_vc_printf("IO[0x%04lx] = 0x%08lx\n",addr,data);
       default:
 	  nk_vc_printf("Unknown size requested\n");
 	  break;
