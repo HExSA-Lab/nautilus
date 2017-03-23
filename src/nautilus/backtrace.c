@@ -96,9 +96,10 @@ nk_print_regs (struct nk_regs * r)
     uint_t  ds;
     uint_t  es;
 
-    printk("Current Thread=0x%x (%p)\n", 
+    printk("Current Thread=0x%x (%p) \"%s\"\n", 
             get_cur_thread() ? get_cur_thread()->tid : -1,
-            get_cur_thread() ? (void*)get_cur_thread() :  NULL);
+            get_cur_thread() ? (void*)get_cur_thread() :  NULL,
+            !get_cur_thread() ? "NONE" : get_cur_thread()->is_idle ? "*idle*" : get_cur_thread()->name);
 
     
     printk("[-------------- Register Contents --------------]\n");
