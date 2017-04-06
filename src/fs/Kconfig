@@ -13,6 +13,18 @@ config DEBUG_EXT2_FILESYSTEM_DRIVER
         help
                 Turn on debug prints for the EXT2 filesystem
 
+config FAT32_FILESYSTEM_DRIVER
+	bool "Enable FAT32"
+	default n
+	help
+		Adds FAT32 support
+
+config DEBUG_FAT32_FILESYSTEM_DRIVER
+	bool "Debug FAT filesystem"
+	default n
+	depends on DEBUG_PRINTS && FAT32_FILESYSTEM_DRIVER
+        help
+                Turn on debug prints for the FAT32 filesystem
 
 endmenu
 
