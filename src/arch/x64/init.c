@@ -57,7 +57,7 @@
 #include <dev/hpet.h>
 #include <dev/ioapic.h>
 #include <dev/i8254.h>
-#include <dev/kbd.h>
+#include <dev/ps2.h>
 #include <dev/serial.h>
 #include <dev/vga.h>
 #ifdef NAUT_CONFIG_VIRTIO_PCI
@@ -318,7 +318,7 @@ init (unsigned long mbd,
 
     nk_rand_init(naut->sys.cpus[0]);
 
-    kbd_init(naut);
+    ps2_init(naut);
 
     pci_init(naut);
 

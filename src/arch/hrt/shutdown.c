@@ -26,7 +26,7 @@
 #include <nautilus/acpi.h>
 #include <nautilus/shutdown.h>
 #include <acpi/acpi.h>
-#include <dev/kbd.h>
+#include <dev/ps2.h>
 
 void 
 reboot (void) 

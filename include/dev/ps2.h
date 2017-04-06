@@ -16,15 +16,17 @@
  * All rights reserved.
  *
  * Author: Kyle C. Hale <kh@u.northwestern.edu>
- *          Yang Wu, Fei Luo and Yuanhui Yang
- *          {YangWu2015, FeiLuo2015, YuanhuiYang2015}@u.northwestern.edu
+ *         Yang Wu, Fei Luo and Yuanhui Yang
+ *         {YangWu2015, FeiLuo2015, YuanhuiYang2015}@u.northwestern.edu
  *         Peter Dinda <pdinda@northwestern.edu>
+ *         William Wallace, Scott Renshaw 
+ *         {WilliamWallace2018,ScottRenshaw2018}@u.northwestern.edu>
  *
  * This is free software.  You are permitted to use,
  * redistribute, and modify it as specified in the file "LICENSE.txt".
  */
-#ifndef __KBD_H__
-#define __KBD_H__
+#ifndef __PS2_H__
+#define __PS2_H__
 
 
 struct naut_info;
@@ -101,9 +103,21 @@ typedef uint16_t nk_scancode_t;
 
 nk_keycode_t kbd_translate(nk_scancode_t);
 
-int kbd_init(struct naut_info * naut);
-int kbd_reset();
-int kbd_deinit();
+typedef struct nk_mouse_event {
+    uint8_t  left;
+    uint8_t  middle;
+    uint8_t  right;
+    uint8_t  res; // counts/mm
+    sint32_t dx;
+    sint32_t dy;
+} nk_mouse_event_t;
+	
+
+int ps2_init(struct naut_info * naut);
+int ps2_reset();
+int ps2_kbd_reset();
+int ps2_mouse_reset();
+int ps2_deinit();
 
 
 #endif

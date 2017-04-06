@@ -28,7 +28,7 @@
 #include <nautilus/thread.h>
 #include <nautilus/queue.h>
 #include <nautilus/list.h>
-#include <dev/kbd.h>
+#include <dev/ps2.h>
 #include <nautilus/vc.h>
 #include <nautilus/printk.h>
 #include <dev/serial.h>
@@ -1078,7 +1078,7 @@ static int enqueue_scancode_as_keycode(struct nk_virtual_console *cur_vc, uint8_
   return 0;
 }
 
-int nk_vc_handle_input(nk_scancode_t scan) 
+int nk_vc_handle_keyboard(nk_scancode_t scan) 
 {
   DEBUG("Input: %x\n",scan);
   switch (cur_vc->type) { 
@@ -1097,6 +1097,18 @@ int nk_vc_handle_input(nk_scancode_t scan)
     ERROR("vc %s does not have a valid type\n",cur_vc->name);
     break;
   }
+  return 0;
+}
+
+int nk_vc_handle_mouse(nk_mouse_event_t *m) 
+{
+  // mouse events are not currently routed
+  DEBUG("Discarding mouse event\n");
+  DEBUG("Mouse Packet: buttons: %s %s %s\n",
+	m->left ? "down" : "up",
+	m->middle ? "down" : "up",
+	m->right ? "down" : "up");
+  DEBUG("Mouse Packet: dx: %d dy: %d res: %u\n", m->dx, m->dy, m->res );
   return 0;
 }
 

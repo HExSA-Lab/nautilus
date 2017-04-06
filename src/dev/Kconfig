@@ -50,12 +50,12 @@ config DEBUG_PCI
     help 
         Turn on debug prints for PCI devices
 
-config DEBUG_KBD
-    bool "Debug Keyboard"
+config DEBUG_PS2
+    bool "Debug PS2 interface (Keyboard/Mouse)"
     depends on DEBUG_PRINTS
     default n
     help
-        Turn on debug prints for the keyboard
+        Turn on debug prints for the keyboard/mouse on the PS/2 interface
 
 config DEBUG_PIT
     bool "Debug PIT"

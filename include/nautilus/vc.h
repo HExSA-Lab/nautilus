@@ -28,7 +28,7 @@
 #define __NK_VC
 
 
-#include <dev/kbd.h>
+#include <dev/ps2.h>
 
 struct nk_thread;
 
@@ -86,7 +86,8 @@ int nk_vc_getchar_extended(int wait);
 int nk_vc_getchar();
 int nk_vc_gets(char *buf, int n, int display);
 
-int nk_vc_handle_input(nk_scancode_t scan);
+int nk_vc_handle_keyboard(nk_scancode_t scan);
+int nk_vc_handle_mouse(nk_mouse_event_t *mouse);
 
 int nk_vc_init(void);
 int nk_vc_is_active(void);

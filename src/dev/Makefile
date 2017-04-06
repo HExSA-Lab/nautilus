@@ -1,7 +1,7 @@
 obj-y += apic.o \
 	 ioapic.o \
 	 i8254.o \
-	 kbd.o \
+	 ps2.o \
 	 pci.o \
          vga.o \
 

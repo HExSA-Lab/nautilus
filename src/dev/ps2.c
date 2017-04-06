@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
@@ -19,6 +19,8 @@
  *          Yang Wu, Fei Luo and Yuanhui Yang
  *          {YangWu2015, FeiLuo2015, YuanhuiYang2015}@u.northwestern.edu
  *          Peter Dinda <pdinda@northwestern.edu>
+ *          William Wallace, Scott Renshaw 
+ *          {WilliamWallace2018,ScottRenshaw2018}@u.northwestern.edu>
  * This is free software.  You are permitted to use,
  * redistribute, and modify it as specified in the file "LICENSE.txt".
  */
@@ -26,17 +28,78 @@
 #include <nautilus/nautilus.h>
 #include <nautilus/irq.h>
 #include <nautilus/thread.h>
-#include <dev/kbd.h>
+#include <dev/ps2.h>
 #include <nautilus/vc.h>
 
-#ifndef NAUT_CONFIG_DEBUG_KBD
+#ifndef NAUT_CONFIG_DEBUG_PS2
 #undef DEBUG_PRINT
 #define DEBUG_PRINT(fmt, args...) 
 #endif
 
-#define ERROR(fmt, args...) ERROR_PRINT("kbd: " fmt, ##args)
-#define DEBUG(fmt, args...) DEBUG_PRINT("kbd: " fmt, ##args)
-#define INFO(fmt, args...)  INFO_PRINT("kbd: " fmt, ##args)
+#define ERROR(fmt, args...) ERROR_PRINT("ps2: " fmt, ##args)
+#define DEBUG(fmt, args...) DEBUG_PRINT("ps2: " fmt, ##args)
+#define INFO(fmt, args...)  INFO_PRINT("ps2: " fmt, ##args)
+
+
+/***************************************************************
+    GENERAL PS2
+****************************************************************/
+
+#define KBD_DATA_REG 0x60
+#define KBD_ACK_REG  0x61
+#define KBD_CMD_REG  0x64
+#define KBD_STATUS_REG  0x64
+
+typedef union ps2_status {
+    uint8_t  val;
+    struct {
+	uint8_t obf:1;  // output buffer full (0=> can read from 0x60)
+	uint8_t ibf:1;  // input buffer full (0=> can write to either port)
+	uint8_t sys:1;  // set on successful reset
+	uint8_t a2:1;   // last address (0=>0x60, 1=>0x64)
+	uint8_t inh:1;  // keyboard inhibit, active low
+	uint8_t mobf:1; // mouse buffer full
+	uint8_t to:1;   // timeout
+	uint8_t perr:1; // parity error
+    } ;
+} __packed ps2_status_t;
+
+typedef union ps2_cmd {
+    uint8_t  val;
+    struct {
+	uint8_t kint:1; // enable keyboard interrupts
+	uint8_t mint:1; // enable mouse interrupts
+	uint8_t sys:1;  // set/clear sysflag / do BAT
+	uint8_t rsv1:1; 
+	uint8_t ken:1;  // keyboard enable, active low
+	uint8_t men:1;  // mouse enable, active low
+	uint8_t xlat:1; // do scancode translation
+	uint8_t rsv2:1;
+    } ;
+} __packed ps2_cmd_t;
+
+
+// INPUT => want to write to 0x60 or 0x64
+// OUTPUT => want to read from 0x60
+typedef enum {INPUT, OUTPUT} wait_t;
+
+
+static int ps2_wait(wait_t w)
+{
+    volatile ps2_status_t status;
+
+    do {
+	status.val = inb(KBD_STATUS_REG);
+	//	INFO("obf=%d ibf=%d req=%s\n",status.obf, status.ibf, w==INPUT ? "input" : "output");
+    } while (!((status.obf && (w==OUTPUT)) ||
+	       ((!status.ibf) && (w==INPUT))));
+
+    return 0;
+} 
+
+/***************************************************************
+    KEYBOARD
+****************************************************************/
 
 
 #define SCAN_MAX_QUEUE 16
@@ -149,15 +212,13 @@ static const nk_keycode_t ShiftCaps[] = {
 
 
 
-#define KBD_DATA_REG 0x60
-#define KBD_ACK_REG  0x61
-#define KBD_CMD_REG  0x64
 
 #define KBD_RELEASE  0x80
 
 #define STATUS_OUTPUT_FULL 0x1
 
 static nk_keycode_t flags = 0;
+
 
 
 static void queue_scancode(nk_scancode_t scan)
@@ -174,7 +235,7 @@ static void dequeue_scancodes()
   int i;
 
   for (i=0;i<switcher_num_queued;i++) { 
-    nk_vc_handle_input(switcher_scancode_queue[i]);
+    nk_vc_handle_keyboard(switcher_scancode_queue[i]);
   }
 
   switcher_num_queued=0;
@@ -395,7 +456,7 @@ kbd_handler (excp_entry_t * excp, excp_vec_t vec)
   uint8_t flag;
   
   status = inb(KBD_CMD_REG);
-  
+
   io_delay();
 
   if ((status & STATUS_OUTPUT_FULL) != 0) {
@@ -409,7 +470,7 @@ kbd_handler (excp_entry_t * excp, excp_vec_t vec)
     if (scan == 0xc4) {
       void * ret = NULL;
       IRQ_HANDLER_END();
-      kbd_reset();
+      ps2_kbd_reset();
       nk_thread_exit(ret);
     }
 #endif
@@ -417,33 +478,220 @@ kbd_handler (excp_entry_t * excp, excp_vec_t vec)
     switcher(scan);
     
   }
-  
+
   IRQ_HANDLER_END();
   return 0;
 }
 
+/***************************************************************
+    MOUSE
+****************************************************************/
+
+union mouse_packet {
+    uint8_t data[3];
+    struct {
+	uint8_t  bl:1;
+	uint8_t  br:1;
+	uint8_t  bm:1;
+	uint8_t  a0:1;
+	uint8_t  xs:1;
+	uint8_t  ys:1;
+	uint8_t  xo:1;
+	uint8_t  yo:1;
+	uint8_t  xm;
+	uint8_t  ym;
+    } __packed;
+} __packed; 
 
 
-int
-kbd_init (struct naut_info * naut)
+
+static union mouse_packet cur_mouse_packet;
+static int cur_mouse_packet_byte=0;
+
+
+static void mouse_write(uint8_t d)
 {
-  INFO("init\n");
-  register_irq_handler(1, kbd_handler, NULL);
-  kbd_reset();
-  return 0;
+    ps2_wait(INPUT);
+    outb(0xd4, KBD_CMD_REG);  // address mouse
+    ps2_wait(INPUT);
+    outb(d, KBD_DATA_REG);
+}
+
+static uint8_t mouse_read()
+{
+    ps2_wait(OUTPUT);
+    return inb(KBD_DATA_REG);
+}
+
+int ps2_mouse_reset()
+{
+    ps2_cmd_t cmd;
+    uint32_t rc;
+
+    DEBUG("Reseting mouse\n");
+
+    // enable mouse in PS2 controller
+    ps2_wait(INPUT);
+    outb(0xa8,KBD_CMD_REG); 
+
+    DEBUG("Mouse enabled on PS2 controller\n");
+
+    // enable mouse interrupts on PS2 controller
+    ps2_wait(INPUT);
+    outb(0x20,KBD_CMD_REG); // prepare to read command word
+    ps2_wait(OUTPUT);
+    cmd.val = inb(KBD_DATA_REG);
+    DEBUG("Initial command word is 0x%x\n",cmd.val);
+    cmd.mint = 1;
+    cmd.men = 0;  // enable is active low
+    ps2_wait(INPUT);
+    outb(0x60, KBD_CMD_REG); // prepare to write command word
+    ps2_wait(INPUT);
+    outb(cmd.val, KBD_DATA_REG);
+    DEBUG("PS2 command word is now 0x%x\n",cmd.val);
+
+    // reset mouse
+    DEBUG("Reset\n");
+    mouse_write(0xff);  
+    rc = mouse_read(); 
+    rc = (rc << 8) | mouse_read();
+    rc = (rc << 8) | mouse_read();
+    if (rc==0xfaaa00) {  // ACK SELF-TEST-PASSED DONE
+	DEBUG("Mouse reset good\n");
+    } else {
+	ERROR("Mouse reset failed (%x)\n",rc);
+    }
+
+    // determine mouse type
+    mouse_write(0xf2);  
+    rc = mouse_read(); 
+    if (rc!=0xfa) { 
+	ERROR("On reset, mouse did not return ack, but rather 0x%x\n",rc);
+    } else {
+	rc = mouse_read();
+	DEBUG("Mouse is of type 0x%x (%s)\n",rc, rc==0 ? "generic ps/2" : "something weird");
+    }
+
+    // configure mouse for defaults
+    mouse_write(0xf6);  
+    rc = mouse_read(); 
+    if (rc!=0xfa) { 
+	ERROR("On config, mouse did not return ack, but rather 0x%x\n",rc);
+    }
+
+    // set stream mode (shouldn't have to do this)
+    mouse_write(0xea);
+    rc = mouse_read();
+    if (rc!=0xfa) { 
+	ERROR("Cannot set stream mode (%x)\n",rc);
+    }
+
+    // enable mouse data reporting
+    mouse_write(0xf4);
+    rc = mouse_read(); 
+    if (rc!=0xfa) { 
+	ERROR("On enable, mouse did not return ack, but rather 0x%x\n",rc);
+    }
+    
+    DEBUG("Mouse reset done\n");
+
+    return 0;
 }
 
 
-int kbd_reset()
+
+static int mouse_handler(excp_entry_t * excp, excp_vec_t vec)
 {
-  INFO("reset\n");
+    ps2_status_t status;
+    int count=0;
+
+    // read just one byte and continue
+    // do not read status since this probably has side effects
+
+    uint8_t data;
+    data = inb(KBD_DATA_REG);
+    
+    //INFO("Have mouse data (%x)\n",(uint32_t)data);
+    cur_mouse_packet.data[cur_mouse_packet_byte] = data;
+
+    if (cur_mouse_packet_byte==0 && !(data&0x8)) { 
+	ERROR("Invalid first byte (%02x) - lost sync, retry\n",data);
+	goto out;
+    }
+
+    cur_mouse_packet_byte++;
+
+    if (cur_mouse_packet_byte==3) {
+	// done with packet
+	int dx = cur_mouse_packet.xm - ((cur_mouse_packet.data[0] << 4) & 0x100);
+	int dy = cur_mouse_packet.ym - ((cur_mouse_packet.data[0] << 3) & 0x100);
+
+	if (cur_mouse_packet.xo || cur_mouse_packet.yo) { 
+	    ERROR("Mouse Packet Ignored: overflows: xo: %d yo: %d\n",
+		  cur_mouse_packet.xo, cur_mouse_packet.yo);
+	    ERROR("Mouse: %02x %02x %02x\n", cur_mouse_packet.data[0], cur_mouse_packet.data[1], cur_mouse_packet.data[2]);
+	} else {
+	    nk_mouse_event_t m;
+	    DEBUG("Mouse Packet: buttons: %s %s %s\n",
+		  cur_mouse_packet.bl ? "down" : "up",
+		  cur_mouse_packet.bm ? "down" : "up",
+		  cur_mouse_packet.br ? "down" : "up");
+	    DEBUG("Mouse Packet: overflows: xo: %d yo: %d\n",
+		  cur_mouse_packet.xo, cur_mouse_packet.yo);
+	    DEBUG("Mouse Packet: dx: %d dy: %d\n", dx, dy);
+	    m.left = cur_mouse_packet.bl;
+	    m.middle = cur_mouse_packet.bm;
+	    m.right = cur_mouse_packet.br;
+	    m.res = 4; // default mouse res
+	    m.dx = dx;
+	    m.dy = dy;
+
+	    nk_vc_handle_mouse(&m);
+
+	}
+	cur_mouse_packet_byte=0;
+    }
+    
+ out:
+    IRQ_HANDLER_END();
+    return 0;
+
+}
+
+int ps2_kbd_reset()
+{
+  DEBUG("kbd reset\n");
   flags=0;
   return 0;
 }
 
-int kbd_deinit()
+int ps2_reset()
+{
+  ps2_kbd_reset();
+  ps2_mouse_reset();
+  return 0;
+}
+
+   
+int ps2_init(struct naut_info * naut)
+{
+  INFO("init\n");
+  register_irq_handler(1, kbd_handler, NULL);
+  register_irq_handler(12, mouse_handler, NULL);
+  ps2_reset();
+  nk_unmask_irq(1);
+  nk_unmask_irq(12);
+  return 0;
+}
+
+
+
+int ps2_deinit()
 {
   INFO("deinit\n");
+  ps2_reset();
+  nk_mask_irq(1);
+  nk_mask_irq(12);
   return 0;
 }
 
