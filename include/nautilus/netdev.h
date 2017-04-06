@@ -63,14 +63,18 @@ struct nk_net_dev * nk_net_dev_find(char *name);
 int nk_net_dev_get_characteristics(struct nk_net_dev *d, struct nk_net_dev_characteristics *c);
 
 int nk_net_dev_receive_packet(struct nk_net_dev *dev, 
-		       uint8_t *dest,
-		       uint64_t len,
-		       nk_dev_request_type_t type);
+			      uint8_t *dest,
+			      uint64_t len,
+			      nk_dev_request_type_t type, 
+			      void (*callback)(void *state), // for callback reqs
+			      void *state);                 // for callback reqs
 
 int nk_net_dev_send_packet(struct nk_net_dev *dev, 
 			   uint8_t *src,
 			   uint64_t len,
-			   nk_dev_request_type_t type);
+			   nk_dev_request_type_t type,
+			   void (*callback)(void *state),  // for callback reqs
+			   void *state);                  // for callback reqs
 
 
 #endif

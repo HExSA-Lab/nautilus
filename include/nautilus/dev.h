@@ -50,7 +50,10 @@ struct nk_dev {
     struct nk_dev_int *interface;
 };
 
-typedef enum {NK_DEV_REQ_BLOCKING, NK_DEV_REQ_NONBLOCKING} nk_dev_request_type_t;
+// Not all request types apply to all device types
+// Not all devices support the request types valid
+// for a specific device type
+typedef enum {NK_DEV_REQ_BLOCKING, NK_DEV_REQ_NONBLOCKING, NK_DEV_REQ_CALLBACK} nk_dev_request_type_t;
 
 int nk_dev_init();
 int nk_dev_deinit();

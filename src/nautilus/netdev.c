@@ -106,12 +106,22 @@ static void generic_receive_callback(void *context)
 int nk_net_dev_send_packet(struct nk_net_dev *dev, 
 			   uint8_t *src, 
 			   uint64_t len, 
-			   nk_dev_request_type_t type)
+			   nk_dev_request_type_t type,
+			   void (*callback)(void *state),
+			   void *state)
 {
     struct nk_dev *d = (struct nk_dev *)(&(dev->dev));
     struct nk_net_dev_int *di = (struct nk_net_dev_int *)(d->interface);
     DEBUG("send packet on %s (len=%lu, type=%lx)\n", d->name,len,type);
     switch (type) {
+    case NK_DEV_REQ_CALLBACK:
+	if (!di->post_send) { 
+	    DEBUG("packet send not possible\n");
+	    return -1;
+	} else {
+	    return di->post_send(d->state,src,len,callback,state);
+	}
+	break;
     case NK_DEV_REQ_BLOCKING:
     case NK_DEV_REQ_NONBLOCKING:
 	if (!di->post_send) { 
@@ -149,13 +159,23 @@ int nk_net_dev_send_packet(struct nk_net_dev *dev,
 int nk_net_dev_receive_packet(struct nk_net_dev *dev, 
 			      uint8_t *dest, 
 			      uint64_t len, 
-			      nk_dev_request_type_t type)
+			      nk_dev_request_type_t type,
+			      void (*callback)(void *state),
+			      void *state)
 {
     struct nk_dev *d = (struct nk_dev *)(&(dev->dev));
     struct nk_net_dev_int *di = (struct nk_net_dev_int *)(d->interface);
     DEBUG("receive packet on %s (len=%lu, type=%lx)\n", d->name,len,type);
     
     switch (type) {
+    case NK_DEV_REQ_CALLBACK:
+	if (!di->post_receive) { 
+	    DEBUG("packet receive not possible\n");
+	    return -1;
+	} else {
+	    return di->post_receive(d->state,dest,len,callback,state);
+	}
+	break;
     case NK_DEV_REQ_BLOCKING:
     case NK_DEV_REQ_NONBLOCKING:
 	if (!di->post_receive) { 
