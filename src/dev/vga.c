@@ -24,6 +24,7 @@
  */
 
 #include <nautilus/cpu.h>
+#include <nautilus/dev.h>
 #include <dev/vga.h>
 
 #define VGA_BASE_ADDR 0xb8000
@@ -117,12 +118,22 @@ void vga_init_screen()
 }
 
 
-void vga_init()
+void vga_early_init()
 {
   vga_x=vga_y=0;
   vga_attr = 0x08;
   vga_clear_screen(vga_make_entry(' ', vga_attr));
   vga_set_cursor(vga_x,vga_y);
+}
+
+static struct nk_dev_int ops = {
+    .open=0,
+    .close=0,
+};
+
+void vga_init()
+{
+    nk_dev_register("vga",NK_DEV_GENERIC,0,&ops,0);
 }
 
 void vga_scrollup (void) 

@@ -22,6 +22,7 @@
  */
 
 #include <nautilus/nautilus.h>
+#include <nautilus/dev.h>
 #include <dev/vesa.h>
 #include <nautilus/realmode.h>
 
@@ -45,6 +46,11 @@ static struct vesa_mode_info    cur_mode_info;
 
 
 static void enumerate_modes();
+
+static struct nk_dev_int ops = {
+    .open=0,
+    .close=0,
+};
 
 int vesa_init()
 {
@@ -104,6 +110,8 @@ int vesa_init()
 	ERROR("Failed to get current mode info at init - weird\n");
 	return -1;
     }
+
+    nk_dev_register("vesa", NK_DEV_GENERIC,0,&ops,0);
 
     return 0;
 }

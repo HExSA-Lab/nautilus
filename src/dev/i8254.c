@@ -24,6 +24,7 @@
 #include <nautilus/cpu.h>
 #include <nautilus/math.h>
 #include <nautilus/irq.h>
+#include <nautilus/dev.h>
 #include <dev/i8254.h>
 
 
@@ -114,6 +115,10 @@ pit_irq_handler (excp_entry_t * excp, excp_vec_t vec)
     return 0;
 }
 
+static struct nk_dev_int ops = {
+    .open=0,
+    .close=0,
+};
 
 int 
 i8254_init (struct naut_info * naut)
@@ -127,6 +132,8 @@ i8254_init (struct naut_info * naut)
         ERROR_PRINT("Could not register timer interrupt handler\n");
         return -1;
     }
+    
+    nk_dev_register("PIT",NK_DEV_TIMER,0,&ops,0);
 
     return 0;
 }

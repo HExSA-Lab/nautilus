@@ -57,6 +57,7 @@ uint8_t  vga_make_color (enum vga_color fg, enum vga_color bg);
 void     vga_set_cursor(uint8_t x, uint8_t y);
 void     vga_get_cursor(uint8_t *x, uint8_t *y);
 
+void     vga_early_init();
 void     vga_init();
 
 void     vga_init_screen();

@@ -30,6 +30,7 @@
 #include <nautilus/intrinsics.h>
 #include <nautilus/mm.h>
 #include <nautilus/timer.h>
+#include <nautilus/dev.h>
 #include <dev/apic.h>
 #include <dev/i8254.h>
 #include <lib/bitops.h>
@@ -747,8 +748,10 @@ apic_dump (struct apic_dev * apic)
 
 }
 
- 
-
+static struct nk_dev_int ops = {
+    .open = 0,
+    .close = 0,
+};
 
 void
 apic_init (struct cpu * core)
@@ -929,6 +932,10 @@ apic_init (struct cpu * core)
 #endif
 
     apic_dump(apic);
+
+    char n[32];
+    snprintf(n,32,"apic%u",core->id);
+    nk_dev_register(n,NK_DEV_INTR,0,&ops,apic);
 }
 
 

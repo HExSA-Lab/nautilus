@@ -25,6 +25,7 @@
 #include <nautilus/cpu.h>
 #include <nautilus/intrinsics.h>
 #include <nautilus/mm.h>
+#include <nautilus/dev.h>
 
 #ifndef NAUT_CONFIG_DEBUG_PCI
 #undef DEBUG_PRINT
@@ -413,6 +414,12 @@ pci_bus_scan (struct pci_info * pci)
     }
 }
 
+static struct nk_dev_int ops = {
+    .open=0,
+    .close=0,
+};
+
+
 
 /*
  *
@@ -438,6 +445,11 @@ pci_init (struct naut_info * naut)
     pci_bus_scan(pci);
 
     naut->sys.pci = pci;
+
+    nk_dev_register("pci0", NK_DEV_BUS, 0, &ops, 0);
+
+    // register ISA here for now
+    nk_dev_register("isa", NK_DEV_BUS, 0, &ops, 0);
 
     return 0;
 }

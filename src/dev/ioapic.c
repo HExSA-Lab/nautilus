@@ -22,6 +22,7 @@
  */
 #include <nautilus/nautilus.h>
 #include <nautilus/paging.h>
+#include <nautilus/dev.h>
 #include <dev/ioapic.h>
 #include <nautilus/irq.h>
 #include <nautilus/mm.h>
@@ -324,6 +325,10 @@ __ioapic_init (struct ioapic * ioapic, uint8_t ioapic_id)
     return 0;
 }
 
+static struct nk_dev_int ops = {
+    .open=0,
+    .close=0,
+};
 
 int 
 ioapic_init (struct sys_info * sys)
@@ -333,7 +338,11 @@ ioapic_init (struct sys_info * sys)
         if (__ioapic_init(sys->ioapics[i], i) < 0) {
             ERROR_PRINT("Couldn't initialize IOAPIC\n");
             return -1;
-        }
+        } else {
+	    char n[32];
+	    snprintf(n,32,"ioapic%u",i);
+	    nk_dev_register(n,NK_DEV_INTR,0,&ops,&sys->ioapics[i]);
+	}
     }
 
     /* Enter Symmetric I/O mode */

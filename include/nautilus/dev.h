@@ -27,7 +27,15 @@
 #include <nautilus/list.h>
 
 #define DEV_NAME_LEN 32
-typedef enum {NK_DEV_CHAR, NK_DEV_BLK, NK_DEV_NET} nk_dev_type_t ; 
+typedef enum {
+    NK_DEV_GENERIC, 
+    NK_DEV_INTR, 
+    NK_DEV_TIMER,
+    NK_DEV_BUS,
+    NK_DEV_CHAR, 
+    NK_DEV_BLK, 
+    NK_DEV_NET
+} nk_dev_type_t ; 
 
 
 // this is the abstract base class for device interfaces

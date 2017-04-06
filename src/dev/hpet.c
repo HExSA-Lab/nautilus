@@ -26,7 +26,7 @@
 #include <nautilus/paging.h>
 #include <nautilus/intrinsics.h>
 #include <nautilus/naut_assert.h>
-#include <dev/timer.h>
+#include <nautilus/dev.h>
 #include <dev/hpet.h>
 #include <nautilus/math.h>
 
@@ -313,6 +313,10 @@ parse_hpet_tbl (struct acpi_table_header * hdr, void * arg)
     return 0;
 }
 
+static struct nk_dev_int ops = {
+    .open=0,
+    .close=0,
+};
 
 int 
 nk_hpet_init (void)
@@ -328,6 +332,8 @@ nk_hpet_init (void)
 
     // go ahead and start the counter
     hpet_cntr_run(hpet);
+
+    nk_dev_register("hpet",NK_DEV_TIMER,0,&ops,0);
 
     return 0;
 }

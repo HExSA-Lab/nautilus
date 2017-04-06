@@ -298,7 +298,7 @@ default_init (unsigned long mbd,
 
     nk_int_init(&(naut->sys));
 
-    serial_init();
+    serial_early_init();
 
     detect_cpu();
 
@@ -377,6 +377,10 @@ default_init (unsigned long mbd,
 #endif 
 
     nk_vc_init();
+
+    // reinit the early-initted devices now that
+    // we have malloc and the device framework functional
+    serial_init();
 
     /* interrupts on */
     sti();

@@ -28,6 +28,7 @@
 #include <nautilus/irq.h>
 #include <nautilus/cpu.h>
 #include <nautilus/shutdown.h>
+#include <nautilus/dev.h>
 #include <dev/serial.h>
 
 
@@ -40,35 +41,127 @@ uint_t serial_print_level;
 static uint8_t com_irq;
 
 
+
+// Commands are of the form ~~~K
+// cmd_state counts how many ~s we have seen so far
+static int cmd_state = 0; 
+
+static void reset_cmd_fsm() 
+{
+    cmd_state = 0;
+}
+
+static int drive_cmd_fsm(char c)
+{
+    if (c=='~') { 
+	cmd_state++;
+	if (cmd_state==4) { 
+	    // dump the ~s we have seen
+	    DEBUG_PRINT("~~~");
+	    reset_cmd_fsm();
+	    return 0;
+	} else {
+	    return 1;
+	}
+    } else {
+	if (cmd_state==3) { 
+	    switch (c) {
+	    case 'k' :
+		DEBUG_PRINT("Rebooting Machine\n");
+		reboot();
+		return 1;
+		break;
+	    case 'p' :
+		DEBUG_PRINT("Manually invoking panic\n");
+		panic();
+		return 1;
+		break;
+	    case 's' :
+		DEBUG_PRINT("Shutting down machine\n");
+		acpi_shutdown();
+		return 1;
+		break;
+	    default:
+		// not a command; the user typed ~~~somethingelse
+		// this would queue up ~~~ 
+		DEBUG_PRINT("User typed \"~~~\"\n");
+		reset_cmd_fsm();
+		return 0;
+		break;
+	    }
+	} else {
+	    return 0;
+	}
+    }
+}
+      
+
 static int 
 serial_irq_handler (excp_entry_t * excp,
                     excp_vec_t vec)
 {
   char rcv_byte;
-  char irq_id;
+  char irr;
+  char id;
 
-  irq_id = inb(serial_io_addr + 2);
+  // Note that the DEBUG_PRINT statements here
+  // are dangerous since they can do serial output
+  // themselves, which introduces a race... 
+  // for production, these need to be removed
 
-  if ((irq_id & com_irq) != 0) {
-    rcv_byte = inb(serial_io_addr + 0);
+  DEBUG_PRINT("serial_irq_handler\n");
 
-    switch (rcv_byte) {
-        case 'k' :
-            serial_print("Rebooting Machine\n");
-            reboot();
-            break;
-        case 'p' :
-            serial_print("Manually invoking panic\n");
-            panic();
-            break;
-        case 's' :
-            acpi_shutdown();
-            break;
-        default:
-            break;
-    }
+  irr = inb(serial_io_addr + 2);
+
+  DEBUG_PRINT("irr=0x%x\n",irr);
+  
+  id = irr & 0xf;
+  
+  DEBUG_PRINT("id=0x%x\n",id);
+  
+  switch (id) {
+  case 0: 
+      DEBUG_PRINT("Modem status change\n");
+      goto out;
+      break;
+  case 1:
+      DEBUG_PRINT("No interrupt reason\n");
+      goto out;
+      break;
+  case 2:
+      DEBUG_PRINT("Transmit holding register empty\n");
+      goto out;
+      break;
+  case 4:
+      DEBUG_PRINT("Received data available\n");
+
+      rcv_byte = inb(serial_io_addr + 0);
+      DEBUG_PRINT("Received data: '%c'\n",rcv_byte);
       
+      if (!drive_cmd_fsm(rcv_byte)) { 
+	  // this would enqueue the byte into a recv queue
+	  DEBUG_PRINT("char '%c' received\n",rcv_byte);
+      }
+      goto out;
+      break;
+  case 6:
+      DEBUG_PRINT("Receiver line status change\n");
+      goto out;
+      break;
+  case 12:
+      DEBUG_PRINT("Character timeout (FIFO)\n");
+      goto out;
+      break;
+  default:
+      DEBUG_PRINT("Unknown interrupt id 0x%x\n",id);
+      goto out;
+      break;
   }
+
+
+  out:
+
+  DEBUG_PRINT("Handler end\n");
 
   IRQ_HANDLER_END();
 
@@ -82,28 +175,40 @@ serial_init_addr (uint16_t io_addr)
   serial_io_addr = io_addr;
 
 
-  //  io_adr = 0x3F8;	/* 3F8=COM1, 2F8=COM2, 3E8=COM3, 2E8=COM4 */
+  //  io_adr = 3F8=COM1, 2F8=COM2, 3E8=COM3, 2E8=COM4 
+
+  // line control register
+  // set DLAB so we can write divisor
   outb(0x80, io_addr + 3);
 
-  // 115200 /* 115200 / 12 = 9600 baud */
+  // write divisor to divisor latch to set speed
+  // LSB then MSB
+  // 115200 / 1 = 115200 baud 
   outb(1, io_addr + 0);
   outb(0, io_addr + 1);
 
-  /* 8N1 */
+  // line control register
+  // turn DLAB off, set
+  // 8 bit word, 1 stop bit, no parity
   outb(0x03, io_addr + 3);
 
-  /* all interrupts disabled */
-  //  outb(0, io_addr + 1);
+  // interrupt enable register
+  // raise interrupts on received data available
+  // do not raise interrupts on transmit holding register empty,
+  // line status update, or modem status update
+  // 
   outb(0x01, io_addr + 1);
 
-  /* turn off FIFO, if any */
+  // FIFO control register
+  // turn off FIFOs;  chip is now going to raise an
+  // interrupt on every incoming word
   outb(0, io_addr + 2);
-
-  /* loopback off, interrupts (Out2) off, Out1/RTS/DTR off */
-  //  outb(0, io_addr + 4);
+  
+  // prepare to handle our ~~~ commands
+  reset_cmd_fsm();
   
   // enable interrupts (bit 3)
-  outb(0x08, io_addr + 4);
+  // outb(0x08, io_addr + 4);
 }
 
 void 
@@ -284,8 +389,13 @@ serial_get_irq (void)
     return com_irq;
 }
 
+static struct nk_dev_int ops = {
+    .open=0,
+    .close=0,
+};
+
 void 
-serial_init (void) 
+serial_early_init (void) 
 {
   serial_print_level = SERIAL_PRINT_DEBUG_LEVEL;
 
@@ -315,4 +425,10 @@ serial_init (void)
 #endif
 
   serial_device_ready = 1;
+}
+
+void serial_init()
+{
+    // this will eventually bring up all serial devices and register them
+    nk_dev_register("serial-boot",NK_DEV_GENERIC,0,&ops,0);
 }

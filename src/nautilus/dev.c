@@ -125,12 +125,18 @@ void nk_dev_dump_devices()
     STATE_LOCK();
     list_for_each(cur,&dev_list) {
 	struct nk_dev *d = list_entry(cur,struct nk_dev, dev_list_node);
-	nk_vc_printf("%s: %s flags=0x%lx\n",
+	nk_vc_printf("%s: %s flags=0x%lx interface=%p state=%p\n",
 		     d->name, 
+		     d->type==NK_DEV_GENERIC ? "generic" : 
+		     d->type==NK_DEV_BUS ? "bus" : 
+		     d->type==NK_DEV_TIMER ? "timer" : 
+		     d->type==NK_DEV_INTR ? "interrupt" : 
 		     d->type==NK_DEV_CHAR ? "char" : 
 		     d->type==NK_DEV_BLK ? "block" :
 		     d->type==NK_DEV_NET ? "net" : "unknown", 
-		     d->flags);
+		     d->flags,
+		     d->interface,
+		     d->state);
 		     
     }
     STATE_UNLOCK();

@@ -249,7 +249,7 @@ init (unsigned long mbd,
 
     memset(naut, 0, sizeof(struct naut_info));
 
-    vga_init();
+    vga_early_init();
 
     spinlock_init(&printk_lock);
 
@@ -258,7 +258,7 @@ init (unsigned long mbd,
     nk_int_init(&(naut->sys));
 
     // Bring serial device up early so we can have output
-    serial_init();
+    serial_early_init();
 
     nk_dev_init();
     nk_char_dev_init();
@@ -266,7 +266,6 @@ init (unsigned long mbd,
     nk_net_dev_init();
 
     nk_vc_print(NAUT_WELCOME);
-
     
     detect_cpu();
 
@@ -359,6 +358,12 @@ init (unsigned long mbd,
     // Assuming we don't encounter C++ before here
     nk_cxx_init();
 #endif 
+
+    // reinit the early-initted devices now that
+    // we have malloc and the device framework functional
+    vga_init();
+    serial_init();
+
 
     /* interrupts on */
     sti();

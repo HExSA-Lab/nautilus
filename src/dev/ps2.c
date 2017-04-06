@@ -30,6 +30,7 @@
 #include <nautilus/thread.h>
 #include <dev/ps2.h>
 #include <nautilus/vc.h>
+#include <nautilus/dev.h>
 
 #ifndef NAUT_CONFIG_DEBUG_PS2
 #undef DEBUG_PRINT
@@ -627,9 +628,9 @@ static int mouse_handler(excp_entry_t * excp, excp_vec_t vec)
 	int dy = cur_mouse_packet.ym - ((cur_mouse_packet.data[0] << 3) & 0x100);
 
 	if (cur_mouse_packet.xo || cur_mouse_packet.yo) { 
-	    ERROR("Mouse Packet Ignored: overflows: xo: %d yo: %d\n",
+	    DEBUG("Mouse Packet Ignored: overflows: xo: %d yo: %d\n",
 		  cur_mouse_packet.xo, cur_mouse_packet.yo);
-	    ERROR("Mouse: %02x %02x %02x\n", cur_mouse_packet.data[0], cur_mouse_packet.data[1], cur_mouse_packet.data[2]);
+	    DEBUG("Mouse: %02x %02x %02x\n", cur_mouse_packet.data[0], cur_mouse_packet.data[1], cur_mouse_packet.data[2]);
 	} else {
 	    nk_mouse_event_t m;
 	    DEBUG("Mouse Packet: buttons: %s %s %s\n",
@@ -672,6 +673,15 @@ int ps2_reset()
   return 0;
 }
 
+static struct nk_dev_int kops = {
+    .open=0,
+    .close=0,
+};
+
+static struct nk_dev_int mops = {
+    .open=0,
+    .close=0,
+};
    
 int ps2_init(struct naut_info * naut)
 {
@@ -679,6 +689,8 @@ int ps2_init(struct naut_info * naut)
   register_irq_handler(1, kbd_handler, NULL);
   register_irq_handler(12, mouse_handler, NULL);
   ps2_reset();
+  nk_dev_register("ps2-keyboard",NK_DEV_GENERIC,0,&kops,0);
+  nk_dev_register("ps2-mouse",NK_DEV_GENERIC,0,&mops,0);
   nk_unmask_irq(1);
   nk_unmask_irq(12);
   return 0;
