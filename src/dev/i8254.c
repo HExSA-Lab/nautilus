@@ -133,7 +133,9 @@ i8254_init (struct naut_info * naut)
         return -1;
     }
     
-    nk_dev_register("PIT",NK_DEV_TIMER,0,&ops,0);
+    nk_dev_register("i8254",NK_DEV_TIMER,0,&ops,0);
+
+    nk_unmask_irq(PIT_TIMER_IRQ);
 
     return 0;
 }
