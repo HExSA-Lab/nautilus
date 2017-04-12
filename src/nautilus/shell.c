@@ -437,12 +437,12 @@ static int handle_blktest(char * buf)
 	    for (j=0;j<c.block_size;j++) { 
 		data[j] = "abcdefghijklmnopqrstuvwxyz0123456789"[j%36];
 	    }
-	    if (nk_block_dev_write(d,i,1,data,NK_DEV_REQ_BLOCKING)) {
+	    if (nk_block_dev_write(d,i,1,data,NK_DEV_REQ_BLOCKING,0,0)) {
 		nk_vc_printf("Failed to write block %lu\n",i);
 		return -1;
 	    }
 	} else if (*rw == 'r') {
-	    if (nk_block_dev_read(d,i,1,data,NK_DEV_REQ_BLOCKING)) {
+	    if (nk_block_dev_read(d,i,1,data,NK_DEV_REQ_BLOCKING,0,0)) {
 		nk_vc_printf("Failed to read block %lu\n",i);
 		return -1;
 	    }

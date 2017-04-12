@@ -355,7 +355,7 @@ static int ata_lba48_read_write(struct ata_blkdev_state *s,
 	
 
 
-static int read_blocks(void *state, uint64_t blocknum, uint64_t count, uint8_t *dest)
+static int read_blocks(void *state, uint64_t blocknum, uint64_t count, uint8_t *dest,void (*callback)(void *), void *context)
 {
     STATE_LOCK_CONF;
     struct ata_blkdev_state *s = (struct ata_blkdev_state *)state;
@@ -371,11 +371,15 @@ static int read_blocks(void *state, uint64_t blocknum, uint64_t count, uint8_t *
     } else {
 	int rc = ata_lba48_read_write(s,blocknum, count, dest, 0);
 	STATE_UNLOCK(s);
+	nk_dev_signal((struct nk_dev*)(s->blkdev));
+	if (callback) {
+	    callback(context);
+	}
 	return rc;
     }
 }
 
-static int write_blocks(void *state, uint64_t blocknum, uint64_t count, uint8_t *src)
+static int write_blocks(void *state, uint64_t blocknum, uint64_t count, uint8_t *src,void (*callback)(void *), void *context)
 {
     STATE_LOCK_CONF;
     struct ata_blkdev_state *s = (struct ata_blkdev_state *)state;
@@ -391,6 +395,10 @@ static int write_blocks(void *state, uint64_t blocknum, uint64_t count, uint8_t 
     } else {
 	int rc = ata_lba48_read_write(s,blocknum, count, src, 1);
 	STATE_UNLOCK(s);
+	nk_dev_signal((struct nk_dev*)(s->blkdev));
+	if (callback) {
+	    callback(context);
+	}
 	return rc;
     }
 }
@@ -411,10 +419,8 @@ static int get_characteristics(void *state, struct nk_block_dev_characteristics 
 static struct nk_block_dev_int inter = 
 {
     .get_characteristics = get_characteristics,
-    .read_blocks_sync = read_blocks,
-    .write_blocks_sync = write_blocks,
-    .read_blocks_async = read_blocks,
-    .write_blocks_async = write_blocks,
+    .read_blocks = read_blocks,
+    .write_blocks = write_blocks,
 };
 
 static void discover_device(int channel, int id)

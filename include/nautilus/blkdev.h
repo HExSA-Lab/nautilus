@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2016, Peter Dinda <pdinda@northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
@@ -37,12 +37,11 @@ struct nk_block_dev_int {
     struct nk_dev_int dev_int;
     
     // blockdev-specific interface - set to zero if not available
-    // an interface either succeeds (returns zero) or fails (returns -1)
+    // an interface either succeeds (returns zero) or fails (returns -1) 
+    // in any case, it returns immediately
     int (*get_characteristics)(void *state, struct nk_block_dev_characteristics *c);
-    int (*read_blocks_sync)(void *state, uint64_t blocknum, uint64_t count, uint8_t *dest);
-    int (*write_blocks_sync)(void *state, uint64_t blocknum, uint64_t count, uint8_t *src);
-    int (*read_blocks_async)(void *state, uint64_t blocknum, uint64_t count, uint8_t *dest);
-    int (*write_blocks_async)(void *state, uint64_t blocknum, uint64_t count, uint8_t *src);
+    int (*read_blocks)(void *state, uint64_t blocknum, uint64_t count, uint8_t *dest, void (*callback)(void *), void *context);
+    int (*write_blocks)(void *state, uint64_t blocknum, uint64_t count, uint8_t *src, void (*callback)(void *), void *context);
 };
 
 
@@ -66,13 +65,17 @@ int nk_block_dev_read(struct nk_block_dev *dev,
 		      uint64_t blocknum, 
 		      uint64_t count, 
 		      void   *dest, 
-		      nk_dev_request_type_t type);
+		      nk_dev_request_type_t type,
+		      void (*callback)(void *), 
+		      void *state);
 
 int nk_block_dev_write(struct nk_block_dev *dev, 
 		       uint64_t blocknum, 
 		       uint64_t count, 
 		       void   *src,  
-		       nk_dev_request_type_t type);
+		       nk_dev_request_type_t type,
+		       void (*callback)(void *), 
+		       void *state);
 
 
 

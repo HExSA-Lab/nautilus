@@ -66,9 +66,9 @@ static int read_write_bootrecord(struct fat32_state *fs, int write)
     
     int rc = 0;
     if (write) { 
-	rc = nk_block_dev_write(fs->dev,0,1,&fs->bootrecord,NK_DEV_REQ_BLOCKING); 
+	rc = nk_block_dev_write(fs->dev,0,1,&fs->bootrecord,NK_DEV_REQ_BLOCKING,0,0); 
     } else {
-	rc = nk_block_dev_read(fs->dev,0,1,&fs->bootrecord,NK_DEV_REQ_BLOCKING);
+	rc = nk_block_dev_read(fs->dev,0,1,&fs->bootrecord,NK_DEV_REQ_BLOCKING,0,0);
     }
     
     if (rc) { 
@@ -102,7 +102,7 @@ static int read_FAT(struct fat32_state *fs)
     fs->table_chars.data_start = fs->bootrecord.FAT_num * FAT32_size + fs->bootrecord.reservedblock_size;
     fs->table_chars.data_end = fs->bootrecord.total_sector_num - 1; 
     
-    rc = nk_block_dev_read(fs->dev, fs->bootrecord.reservedblock_size, FAT32_size, fs->table_chars.FAT32_begin, NK_DEV_REQ_BLOCKING);
+    rc = nk_block_dev_read(fs->dev, fs->bootrecord.reservedblock_size, FAT32_size, fs->table_chars.FAT32_begin, NK_DEV_REQ_BLOCKING,0,0);
 
     if (rc) {
 	ERROR("Failed to read FAT from disk");
@@ -231,7 +231,7 @@ static void filename_parser(char* path, char* name, char* ext, int* name_s, int*
 static void debug_print_file(struct fat32_state* state, uint32_t cluster_num, uint32_t size)
 {
     char file[512];
-    if (nk_block_dev_read(state->dev, get_sector_num(cluster_num, state), 1, file, NK_DEV_REQ_BLOCKING)) {
+    if (nk_block_dev_read(state->dev, get_sector_num(cluster_num, state), 1, file, NK_DEV_REQ_BLOCKING,0,0)) {
 	ERROR("Failed to read block\n");
 	return;
     }
@@ -288,7 +288,7 @@ static int path_lookup( struct fat32_state* state, char* path, uint32_t* dir_clu
 	DEBUG("dir_len is %d\n", dir_len);
 	DEBUG("dir_name is %s\n", dir_name);
 	while(! (*dir_cluster_num >= EOC_MIN && *dir_cluster_num <= EOC_MAX) ){
-	    if (nk_block_dev_read(state->dev, dir_sector, clu_per_sec, dir_data, NK_DEV_REQ_BLOCKING)) { 
+	    if (nk_block_dev_read(state->dev, dir_sector, clu_per_sec, dir_data, NK_DEV_REQ_BLOCKING,0,0)) { 
 		ERROR("Failed to read block\n");
 		free_split_path(parts, num_parts);
 		return -1;
@@ -349,7 +349,7 @@ static int path_lookup( struct fat32_state* state, char* path, uint32_t* dir_clu
     
     DEBUG("read file name is %s, ext is %s, ext_size is %d\n", file_name, file_ext, ext_size);
     while(! (*dir_cluster_num >= EOC_MIN && *dir_cluster_num <= EOC_MAX) ){
-	if (nk_block_dev_read(state->dev, dir_sector, clu_per_sec, dir_data, NK_DEV_REQ_BLOCKING) ) {
+	if (nk_block_dev_read(state->dev, dir_sector, clu_per_sec, dir_data, NK_DEV_REQ_BLOCKING,0,0) ) {
 	    ERROR("Failed to read block\n");
 	    free_split_path(parts, num_parts);
 	    return -1;
@@ -469,13 +469,13 @@ static int grow_shrink_chain(struct fat32_state* state, uint32_t cluster_entry, 
     // flush fat back to disk
 
     // copy 1
-    if (nk_block_dev_write(state->dev, state->bootrecord.reservedblock_size, size, fat, NK_DEV_REQ_BLOCKING)) {
+    if (nk_block_dev_write(state->dev, state->bootrecord.reservedblock_size, size, fat, NK_DEV_REQ_BLOCKING,0,0)) {
 	ERROR("Failed to write blocks\n");
 	return -1;
     }
 
     // copy 2
-    if (nk_block_dev_write(state->dev, state->bootrecord.reservedblock_size+size, size, fat, NK_DEV_REQ_BLOCKING)) {
+    if (nk_block_dev_write(state->dev, state->bootrecord.reservedblock_size+size, size, fat, NK_DEV_REQ_BLOCKING,0,0)) {
 	ERROR("Failed to write blocks\n");
 	return -1;
     }

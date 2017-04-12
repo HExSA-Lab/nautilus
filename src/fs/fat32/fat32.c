@@ -127,14 +127,14 @@ static ssize_t fat32_read_write(void *state, void *file, void *srcdest, off_t of
         if (offset + num_bytes < file_size ) {  //don't need to allocate new block 
             //update file content
             do {
-                if (nk_block_dev_read(fs->dev, get_sector_num(cluster_num, fs), fs->bootrecord.cluster_size, buf, NK_DEV_REQ_BLOCKING)) {
+                if (nk_block_dev_read(fs->dev, get_sector_num(cluster_num, fs), fs->bootrecord.cluster_size, buf, NK_DEV_REQ_BLOCKING,0,0)) {
                     ERROR("Failed to read block.\n");
 		    // should really unwind here
 		    return -1;
                 }
                 memcpy(buf+remainder, srcdest + src_off, MIN(cluster_size - remainder, num_bytes-src_off));
                 DEBUG("Num Bytes to be written: %d\n", MIN(cluster_size - remainder, num_bytes-src_off));
-                if (nk_block_dev_write(fs->dev, get_sector_num(cluster_num, fs), fs->bootrecord.cluster_size, buf, NK_DEV_REQ_BLOCKING)) {
+                if (nk_block_dev_write(fs->dev, get_sector_num(cluster_num, fs), fs->bootrecord.cluster_size, buf, NK_DEV_REQ_BLOCKING,0,0)) {
                     ERROR("Failed to write block.\n");
 		    // should really unwind here
 		    return -1;
@@ -152,14 +152,14 @@ static ssize_t fat32_read_write(void *state, void *file, void *srcdest, off_t of
             uint32_t next = cluster_num;
             while( ! (next >= EOC_MIN && next <= EOC_MAX) ) {
                 cluster_num = next;
-                if (nk_block_dev_read(fs->dev, get_sector_num(cluster_num, fs), fs->bootrecord.cluster_size, buf, NK_DEV_REQ_BLOCKING)) {
+                if (nk_block_dev_read(fs->dev, get_sector_num(cluster_num, fs), fs->bootrecord.cluster_size, buf, NK_DEV_REQ_BLOCKING,0,0)) {
                     ERROR("Failed to read on block.\n");
 		    // should really unwind here
 		    return -1;
                 }
                 memcpy(buf+remainder, srcdest + src_off, MIN(cluster_size - remainder, num_bytes-src_off));
                 DEBUG("Num Bytes to be written: %d\n", MIN(cluster_size - remainder, num_bytes-src_off));
-                if (nk_block_dev_write(fs->dev, get_sector_num(cluster_num, fs), fs->bootrecord.cluster_size, buf, NK_DEV_REQ_BLOCKING)) {
+                if (nk_block_dev_write(fs->dev, get_sector_num(cluster_num, fs), fs->bootrecord.cluster_size, buf, NK_DEV_REQ_BLOCKING,0,0)) {
                     ERROR("Failed to write on block.\n");
 		    // should really unwind here
 		    return -1;
@@ -188,7 +188,7 @@ static ssize_t fat32_read_write(void *state, void *file, void *srcdest, off_t of
                     memset(buf, '\0', cluster_size);
                     memcpy(buf, srcdest + src_off, MIN(cluster_size, num_bytes-src_off));
                     DEBUG("Num Bytes to be written: %d\n", MIN(cluster_size, num_bytes-src_off));
-                    if (nk_block_dev_write(fs->dev, get_sector_num(cluster_num, fs), fs->bootrecord.cluster_size, buf, NK_DEV_REQ_BLOCKING)) {
+                    if (nk_block_dev_write(fs->dev, get_sector_num(cluster_num, fs), fs->bootrecord.cluster_size, buf, NK_DEV_REQ_BLOCKING,0,0)) {
                         //TODO: RESTORE THE FILE
                         ERROR("Failed to write block.\n");
 			// unwind... 
@@ -201,7 +201,7 @@ static ssize_t fat32_read_write(void *state, void *file, void *srcdest, off_t of
 
             //Update directory entry
             dir_entry dir_buf[fs->bootrecord.directory_entry_num];
-            if (nk_block_dev_read(fs->dev, get_sector_num(dir_cluster_num, fs), fs->bootrecord.cluster_size, dir_buf, NK_DEV_REQ_BLOCKING)) {
+            if (nk_block_dev_read(fs->dev, get_sector_num(dir_cluster_num, fs), fs->bootrecord.cluster_size, dir_buf, NK_DEV_REQ_BLOCKING,0,0)) {
                 ERROR("Failed to read block.\n");
 		// unwind... 
 		return -1;
@@ -210,7 +210,7 @@ static ssize_t fat32_read_write(void *state, void *file, void *srcdest, off_t of
             uint32_t new_file_size = offset + num_bytes; 
             dir_buf[dir_num].size = new_file_size; 
 
-            if (nk_block_dev_write(fs->dev, get_sector_num(dir_cluster_num, fs), fs->bootrecord.cluster_size, dir_buf, NK_DEV_REQ_BLOCKING)) {
+            if (nk_block_dev_write(fs->dev, get_sector_num(dir_cluster_num, fs), fs->bootrecord.cluster_size, dir_buf, NK_DEV_REQ_BLOCKING,0,0)) {
                 ERROR("Failed to write block.\n");
 		// unwind... 
 		return -1;
@@ -223,7 +223,7 @@ static ssize_t fat32_read_write(void *state, void *file, void *srcdest, off_t of
         long dest_off = 0;
         
         do {
-            if (nk_block_dev_read(fs->dev, get_sector_num(cluster_num, fs), fs->bootrecord.cluster_size, buf, NK_DEV_REQ_BLOCKING)) {
+            if (nk_block_dev_read(fs->dev, get_sector_num(cluster_num, fs), fs->bootrecord.cluster_size, buf, NK_DEV_REQ_BLOCKING,0,0)) {
 		ERROR("Failed to read block\n");
 		return -1;
 	    }
@@ -329,7 +329,7 @@ static void *fat32_create(void *state, char *path, int isdir)
 	    free_split_path(parts,num_parts);
             return NULL;
         }
-        if (nk_block_dev_read(fs->dev, get_sector_num(dir_cluster_num, fs), 1, full_dirs, NK_DEV_REQ_BLOCKING)) { 
+        if (nk_block_dev_read(fs->dev, get_sector_num(dir_cluster_num, fs), 1, full_dirs, NK_DEV_REQ_BLOCKING,0,0)) { 
 	    ERROR("block read failed\n");
 	    free_split_path(parts,num_parts);
 	    return NULL;
@@ -348,7 +348,7 @@ static void *fat32_create(void *state, char *path, int isdir)
 
     dir_entry full_dirs2[num_dir_entry_per_file]; // last cluster of c
     DEBUG("end of dir_cluster_num (c) is %d\n", cluster_num);
-    if (nk_block_dev_read(fs->dev, get_sector_num(cluster_num, fs), 1, full_dirs2, NK_DEV_REQ_BLOCKING)) {
+    if (nk_block_dev_read(fs->dev, get_sector_num(cluster_num, fs), 1, full_dirs2, NK_DEV_REQ_BLOCKING,0,0)) {
 	ERROR("block read failed\n");
 	free_split_path(parts,num_parts);
 	return NULL;
@@ -367,7 +367,7 @@ static void *fat32_create(void *state, char *path, int isdir)
         }
         cluster_num = fat[cluster_num]; // advance to the allocated cluster
         i = 0; // start of cluster
-        if (nk_block_dev_read(fs->dev, get_sector_num(cluster_num, fs), 1, full_dirs2, NK_DEV_REQ_BLOCKING)) { // read the new cluster of c
+        if (nk_block_dev_read(fs->dev, get_sector_num(cluster_num, fs), 1, full_dirs2, NK_DEV_REQ_BLOCKING,0,0)) { // read the new cluster of c
 	    ERROR("Failed to read block\n");
 	    free_split_path(parts,num_parts);
             return NULL;
@@ -406,14 +406,14 @@ static void *fat32_create(void *state, char *path, int isdir)
     int rc;
     if (path_without_name[0] != 0) { // make sure path not like "/name"
         dir_ent.size += sizeof(dir_entry); // increment size of c in (dir entry of c in b)
-        if (nk_block_dev_write(fs->dev, get_sector_num(dir_cluster_num, fs), fs->bootrecord.cluster_size, full_dirs, NK_DEV_REQ_BLOCKING)) {
+        if (nk_block_dev_write(fs->dev, get_sector_num(dir_cluster_num, fs), fs->bootrecord.cluster_size, full_dirs, NK_DEV_REQ_BLOCKING,0,0)) {
             ERROR("Failed to write block for full_dirs.\n");
 	    free_split_path(parts,num_parts);
 	    return NULL;
         }
     }
     
-    if (nk_block_dev_write(fs->dev, get_sector_num(cluster_num, fs), fs->bootrecord.cluster_size, full_dirs2, NK_DEV_REQ_BLOCKING)) {
+    if (nk_block_dev_write(fs->dev, get_sector_num(cluster_num, fs), fs->bootrecord.cluster_size, full_dirs2, NK_DEV_REQ_BLOCKING,0,0)) {
         ERROR("Failed to write on block for full_dirs2.\n");
 	free_split_path(parts,num_parts);
 	return NULL;
@@ -479,25 +479,25 @@ int fat32_remove(void *state, char *path)
     } while (! (cluster_num >= EOC_MIN && cluster_num <= EOC_MAX) );
 
     fs->table_chars.FAT32_begin[cluster_num] = FREE_CLUSTER; 
-    if (nk_block_dev_write(fs->dev, fs->bootrecord.reservedblock_size, fat_size, fat, NK_DEV_REQ_BLOCKING)) {
+    if (nk_block_dev_write(fs->dev, fs->bootrecord.reservedblock_size, fat_size, fat, NK_DEV_REQ_BLOCKING,0,0)) {
 	ERROR("Failed to write block\n");
 	return -1;
     }
 
-    if (nk_block_dev_write(fs->dev, fs->bootrecord.reservedblock_size + fat_size, fat_size, fat, NK_DEV_REQ_BLOCKING)) {
+    if (nk_block_dev_write(fs->dev, fs->bootrecord.reservedblock_size + fat_size, fat_size, fat, NK_DEV_REQ_BLOCKING,0,0)) {
 	ERROR("Failed to write block\n");
 	return -1;
     }
 
     //remove the directory entry
     dir_entry full_dirs[FLOOR_DIV(fs->bootrecord.sector_size, sizeof(dir_entry))];
-    if (nk_block_dev_read(fs->dev, get_sector_num(dir_cluster_num, fs), 1, full_dirs, NK_DEV_REQ_BLOCKING)) { 
+    if (nk_block_dev_read(fs->dev, get_sector_num(dir_cluster_num, fs), 1, full_dirs, NK_DEV_REQ_BLOCKING,0,0)) { 
 	ERROR("Failed to read block\n");
 	return -1;
     }
     DEBUG("dir_num is %d\n", dir_num);
     memset(full_dirs + dir_num, 0, sizeof(dir_entry));
-    if (nk_block_dev_write(fs->dev, get_sector_num(dir_cluster_num, fs), 1, full_dirs, NK_DEV_REQ_BLOCKING)) {
+    if (nk_block_dev_write(fs->dev, get_sector_num(dir_cluster_num, fs), 1, full_dirs, NK_DEV_REQ_BLOCKING,0,0)) {
 	ERROR("Failed to write block\n");
 	return -1;
     }
@@ -571,13 +571,13 @@ static int fat32_truncate(void *state, void *file, off_t len)
             size -= cluster_size;
         }
         char file_content[cluster_size];
-        if (nk_block_dev_read(fs->dev, get_sector_num(cluster_num, fs), 1, file_content, NK_DEV_REQ_BLOCKING)) {
+        if (nk_block_dev_read(fs->dev, get_sector_num(cluster_num, fs), 1, file_content, NK_DEV_REQ_BLOCKING,0,0)) {
 	    ERROR("Failed to read block\n");
 	    return -1;
 	}
 
         memset(file_content + size - 1, '\0', cluster_size - size + 1);
-        if (nk_block_dev_write(fs->dev, get_sector_num(cluster_num, fs), 1, file_content, NK_DEV_REQ_BLOCKING)) { 
+        if (nk_block_dev_write(fs->dev, get_sector_num(cluster_num, fs), 1, file_content, NK_DEV_REQ_BLOCKING,0,0)) { 
 	    ERROR("Failed to write block\n");
 	    return -1;
 	}
@@ -618,13 +618,13 @@ static int fat32_truncate(void *state, void *file, off_t len)
     //set new file size and write directory entry back 
     dir_entry full_dirs[FLOOR_DIV(fs->bootrecord.sector_size, sizeof(dir_entry))];
     
-    if (nk_block_dev_read(fs->dev, get_sector_num(dir_cluster_num, fs), 1, full_dirs, NK_DEV_REQ_BLOCKING)) { 
+    if (nk_block_dev_read(fs->dev, get_sector_num(dir_cluster_num, fs), 1, full_dirs, NK_DEV_REQ_BLOCKING,0,0)) { 
 	ERROR("FAiled to read block\n");
 	return -1;
     }
     full_dirs[dir_num].size = (uint32_t) new_file_size; 
 
-    if (nk_block_dev_write(fs->dev, get_sector_num(dir_cluster_num, fs), 1, full_dirs, NK_DEV_REQ_BLOCKING)) { 
+    if (nk_block_dev_write(fs->dev, get_sector_num(dir_cluster_num, fs), 1, full_dirs, NK_DEV_REQ_BLOCKING,0,0)) { 
 	ERROR("Failed to write block\n");
 	return -1;
     }
@@ -754,7 +754,7 @@ int nk_fs_fat32_attach(char *devname, char *fsname, int readonly)
     return 0;
 }
 
-int nk_fs_ext2_detach(char *fsname)
+int nk_fs_fat32_detach(char *fsname)
 {
     struct nk_fs *fs = nk_fs_find(fsname);
     if (!fs) {

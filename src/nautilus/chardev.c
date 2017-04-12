@@ -99,6 +99,7 @@ uint64_t nk_char_dev_read(struct nk_char_dev *dev,
     struct nk_dev *d = (struct nk_dev *)(&(dev->dev));
     struct nk_char_dev_int *di = (struct nk_char_dev_int *)(d->interface);
     DEBUG("read %s (count=%lu, type=%lx)\n", d->name,count,type);
+	
     switch (type) {
     case NK_DEV_REQ_BLOCKING:
     case NK_DEV_REQ_NONBLOCKING:
@@ -116,7 +117,7 @@ uint64_t nk_char_dev_read(struct nk_char_dev *dev,
 		    if (type==NK_DEV_REQ_NONBLOCKING) { 
 			return num;
 		    } else {
-			continue;
+			nk_dev_wait((struct nk_dev *)dev);
 		    }
 		} else {
 		    num++;
@@ -157,7 +158,7 @@ uint64_t nk_char_dev_write(struct nk_char_dev *dev,
 		    if (type==NK_DEV_REQ_NONBLOCKING) { 
 			return num;
 		    } else {
-			continue;
+			nk_dev_wait((struct nk_dev *)dev);
 		    }
 		} else {
 		    num++;

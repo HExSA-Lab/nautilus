@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2016, Peter Dinda <pdinda@northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
@@ -25,6 +25,7 @@
 #define __DEV
 
 #include <nautilus/list.h>
+
 
 #define DEV_NAME_LEN 32
 typedef enum {
@@ -45,6 +46,8 @@ struct nk_dev_int {
     int (*close)(void *state);
 };
 
+typedef struct nk_queue nk_thread_queue_t;
+
 // this is the class for devices.  It should be the first
 // member of any specific type of device
 struct nk_dev {
@@ -56,6 +59,8 @@ struct nk_dev {
     void *state; // driver state
     
     struct nk_dev_int *interface;
+    
+    nk_thread_queue_t *waiting_threads;
 };
 
 // Not all request types apply to all device types
@@ -70,6 +75,9 @@ struct nk_dev *nk_dev_register(char *name, nk_dev_type_t type, uint64_t flags, s
 int            nk_dev_unregister(struct nk_dev *);
 
 struct nk_dev *nk_dev_find(char *name);
+
+void nk_dev_wait(struct nk_dev *);
+void nk_dev_signal(struct nk_dev *);
 
 void nk_dev_dump_devices();
 

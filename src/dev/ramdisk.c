@@ -61,7 +61,7 @@ static int get_characteristics(void *state, struct nk_block_dev_characteristics 
     return 0;
 }
 
-static int read_blocks(void *state, uint64_t blocknum, uint64_t count, uint8_t *dest)
+static int read_blocks(void *state, uint64_t blocknum, uint64_t count, uint8_t *dest,void (*callback)(void *), void *context)
 {
     STATE_LOCK_CONF;
     struct ramdisk_state *s = (struct ramdisk_state *)state;
@@ -78,11 +78,15 @@ static int read_blocks(void *state, uint64_t blocknum, uint64_t count, uint8_t *
 	memcpy(dest,s->data+blocknum*s->block_size,s->block_size*count);
 	STATE_UNLOCK(s);
 	//nk_dump_mem(dest,s->block_size*count);
+	nk_dev_signal((struct nk_dev *)s->blkdev);
+	if (callback) {
+	    callback(context);
+	}
 	return 0;
     }
 }
 
-static int write_blocks(void *state, uint64_t blocknum, uint64_t count, uint8_t *src)
+static int write_blocks(void *state, uint64_t blocknum, uint64_t count, uint8_t *src,void (*callback)(void *), void *context)
 {
     STATE_LOCK_CONF;
     struct ramdisk_state *s = (struct ramdisk_state *)state;
@@ -98,6 +102,10 @@ static int write_blocks(void *state, uint64_t blocknum, uint64_t count, uint8_t 
     } else {
 	memcpy(s->data+blocknum*s->block_size,src,s->block_size*count);
 	STATE_UNLOCK(s);
+	nk_dev_signal((struct nk_dev *)(s->blkdev));
+	if (callback) { 
+	    callback(context);
+	}
 	return 0;
     }
 }
@@ -107,10 +115,8 @@ static int write_blocks(void *state, uint64_t blocknum, uint64_t count, uint8_t 
 static struct nk_block_dev_int inter = 
 {
     .get_characteristics = get_characteristics,
-    .read_blocks_sync = read_blocks,
-    .write_blocks_sync = write_blocks,
-    .read_blocks_async = read_blocks,
-    .write_blocks_async = write_blocks,
+    .read_blocks = read_blocks,
+    .write_blocks = write_blocks,
 };
 
 static int discover_ramdisks()

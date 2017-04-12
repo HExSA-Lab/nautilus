@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2016, Peter Dinda <pdinda@northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
@@ -90,32 +90,62 @@ int nk_block_dev_get_characteristics(struct nk_block_dev *dev, struct nk_block_d
     return di->get_characteristics(d->state,c);
 }
 
+void generic_callback(void *context)
+{
+    *(volatile uint64_t *)context = 1;
+}
+
 
 int nk_block_dev_read(struct nk_block_dev *dev, 
 		      uint64_t blocknum, 
 		      uint64_t count, 
 		      void *dest, 
-		      nk_dev_request_type_t type)
+		      nk_dev_request_type_t type,
+		      void (*callback)(void *state),
+		      void *state)
 {
     struct nk_dev *d = (struct nk_dev *)(&(dev->dev));
     struct nk_block_dev_int *di = (struct nk_block_dev_int *)(d->interface);
     DEBUG("read %s (start=%lu, count=%lu, type=%lx)\n", d->name,blocknum,count,type);
     switch (type) {
-    case NK_DEV_REQ_BLOCKING:
-	if (di->read_blocks_sync) { 
-	    return di->read_blocks_sync(d->state,blocknum,count,dest);
-	} else {
-	    DEBUG("synchronous read not possible\n");
+    case NK_DEV_REQ_CALLBACK:
+	if (!di->read_blocks) { 
+	    DEBUG("readblocks not possible\n");
 	    return -1;
+	} else {
+	    return di->read_blocks(d->state,blocknum,count,dest,callback,state);
 	}
 	break;
-    case NK_DEV_REQ_NONBLOCKING:
-	if (di->read_blocks_async) { 
-	    return di->read_blocks_async(d->state,blocknum,count,dest);
-	} else {
-	    DEBUG("asynchronous read not possible\n");
+    case NK_DEV_REQ_BLOCKING:
+    case NK_DEV_REQ_NONBLOCKING: {
+	if (!di->read_blocks) { 
+	    DEBUG("readblocks is not possible\n");
 	    return -1;
+	} else {
+	    volatile uint64_t completion = 0;
+	    
+	    if (type==NK_DEV_REQ_NONBLOCKING) {
+		if (di->read_blocks(d->state,blocknum,count,dest,0,0)) {
+		    ERROR("failed to start up readblocks\n");
+		    return -1;
+		} else {
+		    DEBUG("readblocks started\n");
+		    return 0;
+		}
+	    } else {
+		if (di->read_blocks(d->state,blocknum,count,dest,generic_callback,(void*)&completion)) {
+		    ERROR("failed to start up readblocks\n");
+		    return -1;
+		} else {
+		    DEBUG("readblocks started, waiting for completion\n");
+		    while (!completion) { 
+			nk_dev_wait((struct nk_dev *)d);
+		    }
+		    return 0;
+		}
+	    }
 	}
+    }
 	break;
     default:
 	return -1;
@@ -127,30 +157,55 @@ int nk_block_dev_write(struct nk_block_dev *dev,
 		       uint64_t blocknum, 
 		       uint64_t count, 
 		       void     *src,  
-		       nk_dev_request_type_t type)
+		       nk_dev_request_type_t type,
+		       void (*callback)(void *state),
+		       void *state)
 {
     struct nk_dev *d = (struct nk_dev *)(&(dev->dev));
     struct nk_block_dev_int *di = (struct nk_block_dev_int *)(d->interface);
     DEBUG("write %s (start=%lu, count=%lu, type=%lx\n", d->name,blocknum,count,type);
     switch (type) {
-    case NK_DEV_REQ_BLOCKING:
-	if (di->write_blocks_sync) { 
-	    return di->write_blocks_sync(d->state,blocknum,count,src);
-	} else {
-	    DEBUG("synchronous write not possible\n");
+    case NK_DEV_REQ_CALLBACK:
+	if (!di->write_blocks) { 
+	    DEBUG("writeblocks not possible\n");
 	    return -1;
+	} else {
+	    return di->write_blocks(d->state,blocknum,count,src,callback,state);
 	}
 	break;
-    case NK_DEV_REQ_NONBLOCKING:
-	if (di->write_blocks_async) { 
-	    return di->write_blocks_async(d->state,blocknum,count,src);
-	} else {
-	    DEBUG("asynchronous write not possible\n");
+    case NK_DEV_REQ_BLOCKING:
+    case NK_DEV_REQ_NONBLOCKING: {
+	if (!di->write_blocks) { 
+	    DEBUG("writeblocks is not possible\n");
 	    return -1;
+	} else {
+	    volatile uint64_t completion = 0;
+	    
+	    if (type==NK_DEV_REQ_NONBLOCKING) {
+		if (di->write_blocks(d->state,blocknum,count,src,0,0)) {
+		    ERROR("failed to start up writeblocks\n");
+		    return -1;
+		} else {
+		    DEBUG("readblocks started\n");
+		    return 0;
+		}
+	    } else {
+		if (di->write_blocks(d->state,blocknum,count,src,generic_callback,(void*)&completion)) {
+		    ERROR("failed to start up writeblocks\n");
+		    return -1;
+		} else {
+		    DEBUG("writeblocks started, waiting for completion\n");
+		    while (!completion) { 
+			nk_dev_wait((struct nk_dev *)d);
+		    }
+		    return 0;
+		}
+	    }
 	}
+    }
 	break;
     default:
 	return -1;
     }
-}
 
+}

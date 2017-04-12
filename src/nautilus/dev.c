@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2016, Peter Dinda <pdinda@northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
@@ -24,6 +24,7 @@
 #include <nautilus/nautilus.h>
 #include <nautilus/spinlock.h>
 #include <nautilus/dev.h>
+#include <nautilus/thread.h>
 
 #ifndef NAUT_CONFIG_DEBUG_DEV
 #undef DEBUG_PRINT
@@ -75,6 +76,14 @@ struct nk_dev *nk_dev_register(char *name, nk_dev_type_t type, uint64_t flags, s
     
     memset(d,0,sizeof(*d));
 
+    d->waiting_threads = nk_thread_queue_create();
+    
+    if (!d->waiting_threads) { 
+	ERROR("Failed to allocate wait queue\n");
+	free(d);
+	return 0;
+    }
+
     strncpy(d->name,name,DEV_NAME_LEN);
     d->type = type;
     d->flags = flags;
@@ -93,9 +102,13 @@ struct nk_dev *nk_dev_register(char *name, nk_dev_type_t type, uint64_t flags, s
 int            nk_dev_unregister(struct nk_dev *d)
 {
     STATE_LOCK_CONF;
+    
     STATE_LOCK();
     list_del(&d->dev_list_node);
     STATE_UNLOCK();
+
+    nk_thread_queue_wake_all(d->waiting_threads);
+    nk_thread_queue_destroy(d->waiting_threads);
     INFO("Unregistered device %s\n",d->name);
     free(d);
     return 0;
@@ -117,6 +130,16 @@ struct nk_dev *nk_dev_find(char *name)
     return target;
 }
 
+
+void nk_dev_wait(struct nk_dev *d)
+{
+    nk_thread_queue_sleep(d->waiting_threads);
+}
+
+void nk_dev_signal(struct nk_dev *d)
+{
+    nk_thread_queue_wake_all(d->waiting_threads);
+}
 
 void nk_dev_dump_devices()
 {

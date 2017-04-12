@@ -198,7 +198,9 @@ int nk_net_dev_receive_packet(struct nk_net_dev *dev,
 		    return -1;
 		} else {
 		    DEBUG("Packet receive posted, waiting for completion\n");
-		    while (!completion) {}
+		    while (!completion) {
+			nk_dev_wait((struct nk_dev *)d);
+		    }
 		    return 0;
 		}
 	    }

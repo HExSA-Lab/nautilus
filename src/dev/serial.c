@@ -345,7 +345,7 @@ static void kick_output(struct serial_state *s)
 	    uint8_t ier = serial_read_reg(s,IER);
 	    ier &= 0x2;
 	    serial_write_reg(s,IER,ier);
-	    return;
+	    goto out;
 	}
     }
     
@@ -354,6 +354,11 @@ static void kick_output(struct serial_state *s)
     uint8_t ier = serial_read_reg(s,IER);
     ier |= ~0x2;
     serial_write_reg(s,IER,ier);
+
+ out:
+    nk_dev_signal((struct nk_dev*)(s->dev));
+    return;
+
 }
 
 // assumes this is being done while lock held
@@ -372,6 +377,7 @@ static void kick_input(struct serial_state *s)
 	    break;
 	}
     }
+    nk_dev_signal((struct nk_dev *)s->dev);
 }
 
 
