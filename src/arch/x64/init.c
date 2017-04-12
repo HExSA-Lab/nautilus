@@ -370,6 +370,11 @@ init (unsigned long mbd,
 
     nk_vc_init();
 
+    
+#ifdef NAUT_CONFIG_VIRTUAL_CONSOLE_CHARDEV_CONSOLE
+    nk_vc_start_chardev_console(NAUT_CONFIG_VIRTUAL_CONSOLE_CHARDEV_CONSOLE_NAME);
+#endif
+
 #ifdef NAUT_CONFIG_RAMDISK
     nk_ramdisk_init(naut);
 #endif

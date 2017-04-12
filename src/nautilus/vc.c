@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2016, Peter Dinda
  * Copyright (c) 2016, Yang Wu, Fei Luo and Yuanhui Yang
@@ -30,6 +30,7 @@
 #include <nautilus/list.h>
 #include <dev/ps2.h>
 #include <nautilus/vc.h>
+#include <nautilus/chardev.h>
 #include <nautilus/printk.h>
 #include <dev/serial.h>
 #include <dev/vga.h>
@@ -63,12 +64,35 @@ static spinlock_t state_lock;
 #define QUEUE_LOCK(cons) _queue_lock_flags = spin_lock_irq_save(&cons->queue_lock)
 #define QUEUE_UNLOCK(cons) spin_unlock_irq_restore(&cons->queue_lock, _queue_lock_flags);
 
-
+// List of all VC in the system
 static struct list_head vc_list;
+
+// Current VC for native console
 static struct nk_virtual_console *cur_vc = NULL;
+
+// Typically used VCs
 static struct nk_virtual_console *default_vc = NULL;
 static struct nk_virtual_console *log_vc = NULL;
 static struct nk_virtual_console *list_vc = NULL; 
+
+// We can have any number of chardev consoles
+// each of which has a current vc
+struct chardev_console {
+    int    inited;       // handler thread is up
+    nk_thread_id_t   tid;  // thread handling this console
+    char   name[DEV_NAME_LEN]; // device name
+    struct nk_char_dev *dev; // device for I/O
+    struct nk_virtual_console *cur_vc; // current virtual console
+    struct list_head chardev_node;  // for list of chardev consoles
+};
+
+// List of all chardev consoles in the system
+static struct list_head chardev_console_list;
+
+
+// Broadcast updates to chardev consoles
+static void chardev_consoles_putchar(struct nk_virtual_console *vc, char data);
+static void chardev_consoles_print(struct nk_virtual_console *vc, char *data);
 
 static nk_thread_id_t list_tid;
 
@@ -582,6 +606,7 @@ int nk_vc_putchar(uint8_t c)
       BUF_LOCK(vc);
       _vc_putchar_specific(vc,c);
       BUF_UNLOCK(vc);
+      chardev_consoles_putchar(vc, c);
     }
   } else {
 #ifdef NAUT_CONFIG_X86_64_HOST
@@ -598,6 +623,7 @@ int nk_vc_putchar(uint8_t c)
 #ifdef NAUT_CONFIG_VIRTUAL_CONSOLE_SERIAL_MIRROR_ALL
   serial_putchar(c);
 #endif
+
   return c;
 }
 
@@ -624,6 +650,7 @@ static int vc_print_specific(struct nk_virtual_console *vc, char *s)
     BUF_LOCK(vc);
     _vc_print_specific(vc,s);
     BUF_UNLOCK(vc);
+    chardev_consoles_print(vc,s);
 #ifdef NAUT_CONFIG_VIRTUAL_CONSOLE_SERIAL_MIRROR_ALL
     serial_write(s);
 #endif
@@ -644,6 +671,7 @@ int nk_vc_print(char *s)
       BUF_LOCK(vc);
       _vc_print_specific(vc,s);
       BUF_UNLOCK(vc);
+      chardev_consoles_print(vc, s);
     }
   } else {
 #ifdef NAUT_CONFIG_X86_64_HOST
@@ -655,11 +683,12 @@ int nk_vc_print(char *s)
 #ifdef NAUT_CONFIG_XEON_PHI
     phi_cons_print(s);
 #endif
-
   }
 #ifdef NAUT_CONFIG_VIRTUAL_CONSOLE_SERIAL_MIRROR_ALL
   serial_write(s);
 #endif
+
+
   return 0;
 }
 
@@ -718,6 +747,7 @@ int nk_vc_log(char *fmt, ...)
     BUF_LOCK(log_vc);
     _vc_print_specific(log_vc, buf);
     BUF_UNLOCK(log_vc);
+    chardev_consoles_print(log_vc, buf);
   }
 #ifdef NAUT_CONFIG_VIRTUAL_CONSOLE_SERIAL_MIRROR
   serial_write(buf);
@@ -1162,6 +1192,7 @@ static void list(void *in, void **out)
   }
 }
 
+
 int nk_switch_to_vc_list()
 {
   return nk_switch_to_vc(list_vc);
@@ -1184,12 +1215,234 @@ static int start_list()
   return 0;
 }
 
+
+
+static void _chardev_consoles_print(struct nk_virtual_console *vc, char *data, uint64_t len)
+{
+    struct list_head *cur;
+
+    STATE_LOCK_CONF;
+
+    STATE_LOCK();
+
+    list_for_each(cur,&chardev_console_list) {
+	struct chardev_console *c = list_entry(cur,struct chardev_console, chardev_node);
+	if (c->cur_vc == vc) { 
+	    nk_char_dev_write(c->dev,len,data,NK_DEV_REQ_BLOCKING);
+	}
+    }
+    
+    STATE_UNLOCK();
+}
+
+static void chardev_consoles_print(struct nk_virtual_console *vc, char *data)
+{
+    _chardev_consoles_print(vc,data,strlen(data));
+}
+ 
+static void chardev_consoles_putchar(struct nk_virtual_console *vc, char data)
+{
+    _chardev_consoles_print(vc,&data,1);
+}
+
+static int chardev_console_handle_input(struct chardev_console *c, uint8_t data)
+{
+    if (c->cur_vc->type == COOKED) { 
+	return nk_enqueue_keycode(c->cur_vc,data);
+    } else {
+	// raw data not currently handled
+	return 0;
+    }
+}
+
+//
+// Commands:
+// 
+//   ``1 = left
+//   ``2 = right
+//   ``3 = vc list
+static void chardev_console(void *in, void **out)
+{
+    uint8_t data[3];
+    char myname[80]; 
+    uint8_t cur=0;
+
+
+    struct chardev_console *c = (struct chardev_console *)in;
+
+    c->dev = nk_char_dev_find(c->name);
+
+    if (!c->dev) {
+	ERROR("Unable to open char device %s - no chardev console started\n",c->name);
+	return;
+    } 
+
+    strcpy(myname,c->name);
+    strcat(myname,"-console");
+
+    if (nk_thread_name(get_cur_thread(),myname)) {   
+        ERROR_PRINT("Cannot name chardev console's thread\n");
+        return;
+    }
+
+
+    // declare we are up
+    __sync_fetch_and_add(&c->inited,1);
+    
+
+    char buf[80];
+		
+    snprintf(buf,80,"\n*** Console %s // prev=``1 next=``2 list=``3 ***\n",myname);
+    nk_char_dev_write(c->dev,strlen(buf),buf,NK_DEV_REQ_BLOCKING);
+
+    snprintf(buf,80,"\n*** %s ***\n",c->cur_vc->name);
+    nk_char_dev_write(c->dev,strlen(buf),buf,NK_DEV_REQ_BLOCKING);
+    
+
+    cur = 0;
+    while (1) {
+	if (nk_char_dev_read(c->dev,1,&data[cur],NK_DEV_REQ_BLOCKING)!=1) { 
+	    ERROR("FAILED TO READ CHARDEV %s\n",c->name);
+	}
+
+
+	if (cur==0) {
+	    if (data[cur]!='`') { 
+		chardev_console_handle_input(c,data[0]);
+	    } else {
+		cur++;
+	    }
+	    continue;
+	} 
+	
+	if (cur==1) { 
+	    if (data[cur]!='`') { 
+		chardev_console_handle_input(c,data[0]);
+		chardev_console_handle_input(c,data[1]);
+		cur=0;
+	    } else {
+		cur++;
+	    }
+	    continue;
+	}
+
+	if (cur==2) { 
+	    struct list_head *cur_node = &c->cur_vc->vc_node;
+	    struct list_head *next_node = &c->cur_vc->vc_node;
+	    int do_data=0;
+
+
+	    switch (data[cur]) {
+	    case '1': 
+                if (cur_node->prev != &vc_list) {
+		    next_node = cur_node->prev;
+                }
+		break;
+	    case '2': 
+                if (cur_node->next != &vc_list) {
+		    next_node = cur_node->next;
+                }
+		break;
+	    case '3': {
+		// display the vcs
+		struct list_head *cur;
+		int i;
+		char which;
+		strcpy(buf,"\nList of VCs \n\n");
+		nk_char_dev_write(c->dev,strlen(buf),buf,NK_DEV_REQ_BLOCKING);
+		i=0;
+		list_for_each(cur,&vc_list) {
+		    snprintf(buf,80,"%c : %s\n", 'a'+i, list_entry(cur,struct nk_virtual_console, vc_node)->name);
+		    nk_char_dev_write(c->dev,strlen(buf),buf,NK_DEV_REQ_BLOCKING);
+		    i++;
+		}
+		// get user input
+		if (nk_char_dev_read(c->dev,1,&which,NK_DEV_REQ_BLOCKING)!=1) { 
+		    nk_char_dev_write(c->dev,7,"\nERROR\n",NK_DEV_REQ_BLOCKING);
+		    next_node = cur_node;
+		    break;
+		} 
+		i=0;
+		list_for_each(cur,&vc_list) {
+		    if (which == (i+'a')) { 
+			next_node = cur;
+			break;
+		    }
+		    i++;
+		}
+	    }
+		break;
+	    default:
+		do_data = 1;
+		next_node = cur_node;
+	    }
+
+	    c->cur_vc = container_of(next_node, struct nk_virtual_console, vc_node);
+
+	    if (do_data) {
+		chardev_console_handle_input(c,data[0]);
+		chardev_console_handle_input(c,data[1]);
+		chardev_console_handle_input(c,data[2]);
+	    } else {
+		char buf[80];
+		
+		snprintf(buf,80,"\n*** %s ***\n",c->cur_vc->name);
+		
+		nk_char_dev_write(c->dev,strlen(buf),buf,NK_DEV_REQ_BLOCKING);
+	    }
+	    
+	    cur = 0;
+
+	    continue;
+	}
+    }		
+}
+
+
+
+
+int nk_vc_start_chardev_console(char *chardev)
+{
+    struct chardev_console *c = malloc(sizeof(*c));
+				       
+    if (!c) { 
+	ERROR("Cannot allocate chardev console for %s\n",chardev);
+	return -1;
+    }
+
+    memset(c,0,sizeof(*c));
+    strncpy(c->name,chardev,DEV_NAME_LEN);
+    c->name[DEV_NAME_LEN-1] = 0;
+    c->cur_vc = default_vc;
+
+    if (nk_thread_start(chardev_console, c, 0, 1, PAGE_SIZE_4KB, &c->tid, 0)) {
+	ERROR("Failed to launch chardev console handler for %s\n",c->name);
+	free(c);
+	return -1;
+    }
+    
+    while (!__sync_fetch_and_add(&c->inited,0)) {
+	// wait for console thread to start
+    }
+    
+    STATE_LOCK_CONF;
+
+    STATE_LOCK();
+    list_add_tail(&c->chardev_node, &chardev_console_list);
+    STATE_UNLOCK();
+
+    INFO("chardev console %s launched\n",c->name);
+    
+    return 0;
+}
+
+
 int nk_vc_init() 
 {
   INFO("init\n");
   spinlock_init(&state_lock);
   INIT_LIST_HEAD(&vc_list);
-
+  INIT_LIST_HEAD(&chardev_console_list);
 
   default_vc = nk_create_vc("default", COOKED, 0x0f, 0, 0);
   if(!default_vc) {
@@ -1247,5 +1500,8 @@ int nk_vc_deinit()
       return -1;
     }
   }
+
+  // should free chardev consoles here...
+
   return 0;
 }

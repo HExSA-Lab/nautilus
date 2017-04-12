@@ -168,6 +168,22 @@ config USE_TICKETLOCKS
       Uses ticketlocks (similar to Linux impl.) instead of
       default spinlocks
 
+config VIRTUAL_CONSOLE_CHARDEV_CONSOLE
+   bool "Place a virtual console interface on a character device"
+   default n
+   help
+        Starts a virtual console interface on a given character device
+        This allows interaction with VCs much like the VGA console
+        does
+
+config VIRTUAL_CONSOLE_CHARDEV_CONSOLE_NAME
+    string "Character device name to use"
+    default "serial0"
+    depends on VIRTUAL_CONSOLE_CHARDEV_CONSOLE
+    help
+        The character device port name to use for this console
+
+
 config VIRTUAL_CONSOLE_SERIAL_MIRROR
     bool "Mirror virtual console log output to serial"
     default n
@@ -186,6 +202,7 @@ config VIRTUAL_CONSOLE_SERIAL_MIRROR_ALL
         target virtual consoles;  direct displays
         (screen clears, display char, etc) are not
         currently mirrored.
+
 
   menu "Scheduler Options"
 
