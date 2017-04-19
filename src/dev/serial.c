@@ -175,10 +175,10 @@ static void kick_output(struct serial_state *s);
 static int serial_do_write(void *state, uint8_t *src)
 {
     struct serial_state *s = (struct serial_state *)state;
-    
+
     int rc = -1;
     int flags;
-    
+ 
     flags = spin_lock_irq_save(&s->output_lock);
 
     if (serial_output_full(s)) {
@@ -343,7 +343,7 @@ static void kick_output(struct serial_state *s)
 	    // but since we have more data, have it
 	    // interrupt us when it has room
 	    uint8_t ier = serial_read_reg(s,IER);
-	    ier &= 0x2;
+	    ier |= 0x2;
 	    serial_write_reg(s,IER,ier);
 	    goto out;
 	}
@@ -352,13 +352,12 @@ static void kick_output(struct serial_state *s)
     // the chip has room, but we have no data for it, so
     // disable the transmit interrupt for now
     uint8_t ier = serial_read_reg(s,IER);
-    ier |= ~0x2;
+    ier &= ~0x2;
     serial_write_reg(s,IER,ier);
 
  out:
     nk_dev_signal((struct nk_dev*)(s->dev));
     return;
-
 }
 
 // assumes this is being done while lock held
@@ -525,12 +524,16 @@ static int serial_irq_handler_late(struct serial_state *s)
     case 0: // modem status reset + ignore
 	(void)serial_read_reg(s,MSR);
 	break;
-    case 2: // THR empty (can send more data
+    case 2: // THR empty (can send more data)
+	spin_lock(&s->output_lock);
 	kick_output(s);
+	spin_unlock(&s->output_lock);
 	break;
     case 4:  // received data available 
     case 12: // received data available (FIFO timeout)
+	spin_lock(&s->input_lock);
 	kick_input(s);
+	spin_unlock(&s->input_lock);
 	break;
     case 6: // line status reset + ignore
 	(void)serial_read_reg(s,LSR);
@@ -780,12 +783,6 @@ serial_printlevel (int level, const char * format, ...)
   }
 }
 
-
-uint8_t 
-serial_get_irq (void)
-{
-    return com_irq;
-}
 
 static struct nk_dev_int devops = {
     .open=0,
