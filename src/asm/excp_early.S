@@ -65,7 +65,12 @@ END(early_irq_handlers)
 .align 16
 GLOBAL(early_irq_common)
 
+    incw %gs:8   // increment interrupt nesting level -
+	         // cpu is now in interrupt context
+    incq %gs:16  // increment interrupt count
+
     SAVE_GPRS()
+
 
 #ifdef NAUT_CONFIG_PROFILE
     callq nk_irq_prof_enter
@@ -104,6 +109,8 @@ GLOBAL(early_irq_common)
 thr_return:
     RESTORE_GPRS()
     addq $16, %rsp  // pop the vector and the error code
+    decw %gs:8      // decrement interrupt nesting level
+	            // we may now be outside of interrupt context
     iretq
 
 irq_err:
@@ -119,6 +126,10 @@ GLOBAL(early_excp_common)
 
     SAVE_GPRS()
 
+    incw %gs:8   // increment interrupt nesting level -
+	         // cpu is now in interrupt context 
+    incq %gs:24  // increment exception count
+	
     movq 120(%rsp), %rsi
     cmpq $32, %rsi
     jge excp_err
@@ -139,6 +150,8 @@ no_pf:
     RESTORE_GPRS()
     /* pop error code and excp number */
     addq $16, %rsp
+    decw %gs:8      // decrement interrupt nesting level
+	            // we may now be outside of interrupt context
     iretq
 
 excp_err:

@@ -516,9 +516,12 @@ void nk_sched_dump_cores(int cpu_arg)
 
 	    s = sys->cpus[cpu]->sched_state;
 	    LOCAL_LOCK(s);
-	    snprintf(buf,256,"%dc %s %lut %s %utp %lup %lur %lua %lum (%s) (%luul %lusp %luap %luaq %luadp) (%luapic)\n",
+	    snprintf(buf,256,"%dc %s %unl %luin %luex %lut %s %utp %lup %lur %lua %lum (%s) (%luul %lusp %luap %luaq %luadp) (%luapic)\n",
 		     cpu, 
 		     intr_model,
+		     sys->cpus[cpu]->interrupt_nesting_level,
+		     sys->cpus[cpu]->interrupt_count,
+		     sys->cpus[cpu]->exception_count,
 		     s->current->thread->tid, 
 		     s->current->thread->is_idle ? "(idle)" : s->current->thread->name[0] ? s->current->thread->name : "(noname)",
 		     s->current->thread->sched_state->constraints.interrupt_priority_class,

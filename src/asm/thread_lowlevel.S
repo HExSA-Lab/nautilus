@@ -57,6 +57,10 @@ ENTRY(nk_thread_switch)
 
     SAVE_GPRS()
 
+    incw %gs:8           // increment interrupt nesting level
+	                 // pretend we are doing an interrupt-driven switch
+	                 // to make the sums work out
+	
 ENTRY(nk_thread_switch_intr_entry)
 
 #ifdef NAUT_CONFIG_PROFILE
@@ -66,6 +70,7 @@ ENTRY(nk_thread_switch_intr_entry)
 #endif
 
     movq %gs:0x0, %rax
+
     movq %rsp, (%rax)   /* save the current stack pointer */
 
 #ifdef NAUT_CONFIG_FPU_SAVE
@@ -93,6 +98,9 @@ ENTRY(nk_thread_switch_intr_entry)
     RESTORE_GPRS()      /* load the new thread's GPRs */
 
     leaq 16(%rsp), %rsp /* pop off the vector and the error code */
+
+    decw %gs:8          // decrement interrupt nesting level -
+	                // we may now be leaving interrupt context
 
     iretq               /* and off we go */
 

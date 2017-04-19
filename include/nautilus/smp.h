@@ -71,7 +71,10 @@ struct nk_xcall {
 #endif
 
 struct cpu {
-    struct nk_thread * cur_thread; /* KCH: this must be first! */
+    struct nk_thread * cur_thread;             /* +0  KCH: this must be first! */
+    uint16_t interrupt_nesting_level;          /* +8  PAD: DO NOT MOVE */
+    uint64_t interrupt_count;                  /* +16 PAD: DO NOT MOVE */
+    uint64_t exception_count;                  /* +24 PAD: DO NOT MOVE */
 
     cpu_id_t id;
     uint32_t lapic_id;   
