@@ -113,6 +113,7 @@ struct nk_sched_global_state {
     uint64_t             num_threads;
     int                  reaping;
 };
+
 static struct nk_sched_global_state global_sched_state;
 
 //
@@ -257,28 +258,28 @@ typedef struct nk_sched_percpu_state {
 	}								\
     }
 
-#define INST_DUMP(WHAT)							\
-    nk_vc_printf("+ rf:(n=%lu,a=%lu,v=%lu,m=%lu,M=%lu) rs:(n=%lu,a=%lu,v=%lu,m=%lu,M=%lu) rs-ns:(n=%lu,a=%lu,v=%lu,m=%lu,M=%lu)\n", \
-		 WHAT->resched_fast_num,					\
-		 WHAT->resched_fast_num>0 ? WHAT->resched_fast_sum/WHAT->resched_fast_num : 0, \
-		 WHAT->resched_fast_num>0 ? ((WHAT->resched_fast_sum2)-(WHAT->resched_fast_sum*WHAT->resched_fast_sum)/WHAT->resched_fast_num)/WHAT->resched_fast_num : 0, \
-		 WHAT->resched_fast_min,					\
-		 WHAT->resched_fast_max,					\
-		 WHAT->resched_slow_num,					\
-		 WHAT->resched_slow_num>0 ? WHAT->resched_slow_sum/WHAT->resched_slow_num : 0, \
-		 WHAT->resched_slow_num>0 ? ((WHAT->resched_slow_sum2)-(WHAT->resched_slow_sum*WHAT->resched_slow_sum)/WHAT->resched_slow_num)/WHAT->resched_slow_num : 0, \
-		 WHAT->resched_slow_min,					\
-		 WHAT->resched_slow_max,				\
-		 WHAT->resched_slow_noswitch_num,					\
-		 WHAT->resched_slow_noswitch_num>0 ? WHAT->resched_slow_noswitch_sum/WHAT->resched_slow_noswitch_num : 0, \
-		 WHAT->resched_slow_noswitch_num>0 ? ((WHAT->resched_slow_noswitch_sum2)-(WHAT->resched_slow_noswitch_sum*WHAT->resched_slow_noswitch_sum)/WHAT->resched_slow_noswitch_num)/WHAT->resched_slow_noswitch_num : 0, \
-		 WHAT->resched_slow_noswitch_min,			\
-		 WHAT->resched_slow_noswitch_max);			\
-
+#define INST_DUMP(WHAT,BUF,LEN)						\
+    snprintf(BUF,LEN,"+ rf:(n=%lu,a=%lu,v=%lu,m=%lu,M=%lu) rs:(n=%lu,a=%lu,v=%lu,m=%lu,M=%lu) rs-ns:(n=%lu,a=%lu,v=%lu,m=%lu,M=%lu)\n", \
+	     WHAT->resched_fast_num,					\
+	     WHAT->resched_fast_num>0 ? WHAT->resched_fast_sum/WHAT->resched_fast_num : 0, \
+	     WHAT->resched_fast_num>0 ? ((WHAT->resched_fast_sum2)-(WHAT->resched_fast_sum*WHAT->resched_fast_sum)/WHAT->resched_fast_num)/WHAT->resched_fast_num : 0, \
+	     WHAT->resched_fast_min,					\
+	     WHAT->resched_fast_max,					\
+	     WHAT->resched_slow_num,					\
+	     WHAT->resched_slow_num>0 ? WHAT->resched_slow_sum/WHAT->resched_slow_num : 0, \
+	     WHAT->resched_slow_num>0 ? ((WHAT->resched_slow_sum2)-(WHAT->resched_slow_sum*WHAT->resched_slow_sum)/WHAT->resched_slow_num)/WHAT->resched_slow_num : 0, \
+	     WHAT->resched_slow_min,					\
+	     WHAT->resched_slow_max,					\
+	     WHAT->resched_slow_noswitch_num,				\
+	     WHAT->resched_slow_noswitch_num>0 ? WHAT->resched_slow_noswitch_sum/WHAT->resched_slow_noswitch_num : 0, \
+	     WHAT->resched_slow_noswitch_num>0 ? ((WHAT->resched_slow_noswitch_sum2)-(WHAT->resched_slow_noswitch_sum*WHAT->resched_slow_noswitch_sum)/WHAT->resched_slow_noswitch_num)/WHAT->resched_slow_noswitch_num : 0, \
+	     WHAT->resched_slow_noswitch_min,				\
+	     WHAT->resched_slow_noswitch_max);				\
+    
 #else
 #define INST_SCHED_IN(s) 
 #define INST_SCHED_OUT(s)						
-#define INST_DUMP(s)
+#define INST_DUMP(s,b,n)
 #endif
 
 
@@ -510,41 +511,49 @@ void nk_sched_dump_cores(int cpu_arg)
 
     for (cpu=0;cpu<sys->num_cpus;cpu++) { 
 	if (cpu_arg<0 || cpu_arg==cpu) {
-
+	    char buf[256];
 	    struct apic_dev *apic = sys->cpus[cpu]->apic;
 
 	    s = sys->cpus[cpu]->sched_state;
 	    LOCAL_LOCK(s);
-	    nk_vc_printf("%dc %s %lut %s %utp %lup %lur %lua %lum (%s) (%luul %lusp %luap %luaq %luadp) (%luapic)\n",
-			 cpu, 
-			 intr_model,
-			 s->current->thread->tid, 
-			 s->current->thread->is_idle ? "(idle)" : s->current->thread->name[0] ? s->current->thread->name : "(noname)",
-			 s->current->thread->sched_state->constraints.interrupt_priority_class,
-			 s->pending.size, s->runnable.size, s->aperiodic.size,
-			 s->num_thefts,
-
+	    snprintf(buf,256,"%dc %s %lut %s %utp %lup %lur %lua %lum (%s) (%luul %lusp %luap %luaq %luadp) (%luapic)\n",
+		     cpu, 
+		     intr_model,
+		     s->current->thread->tid, 
+		     s->current->thread->is_idle ? "(idle)" : s->current->thread->name[0] ? s->current->thread->name : "(noname)",
+		     s->current->thread->sched_state->constraints.interrupt_priority_class,
+		     s->pending.size, s->runnable.size, s->aperiodic.size,
+		     s->num_thefts,
+		     
 #if NAUT_CONFIG_APERIODIC_ROUND_ROBIN
-			 "RR",
+		     "RR",
 #endif
-
+		     
 #if NAUT_CONFIG_APERIODIC_DYNAMIC_QUANTUM 
-			 "DQ",
+		     "DQ",
 #endif
-
+		     
 #if NAUT_CONFIG_APERIODIC_DYNAMIC_LIFETIME
-			 "DL",
+		     "DL",
 #endif
-
+		     
 #if NAUT_CONFIG_APERIODIC_LOTTERY
-			 "LO",
+		     "LO",
 #endif
-			 s->cfg.util_limit,
-			 s->cfg.sporadic_reservation, s->cfg.aperiodic_reservation, 
-			 s->cfg.aperiodic_quantum, s->cfg.aperiodic_default_priority,
-			 apic->timer_count);
-	    INST_DUMP(s);
-            LOCAL_UNLOCK(s);
+		     s->cfg.util_limit,
+		     s->cfg.sporadic_reservation, s->cfg.aperiodic_reservation, 
+		     s->cfg.aperiodic_quantum, s->cfg.aperiodic_default_priority,
+		     apic->timer_count);
+#if INSTRUMENT
+	    char buf2[256];
+            INST_DUMP(s,buf2,256);
+#endif
+	    LOCAL_UNLOCK(s);
+
+	    nk_vc_printf(buf);
+#if INSTRUMENT
+	    nk_vc_printf(buf2);
+#endif
 	}
     }
 }
@@ -901,11 +910,13 @@ static int    _sched_make_runnable(struct nk_thread *thread, int cpu, int admit,
 
     if (unlikely(cpu <= CPU_ANY || 
         cpu >= sys->num_cpus)) {
-
         s = per_cpu_get(sched_state);
-
     } else {
         s = sys->cpus[cpu]->sched_state;
+    }
+
+    if (!s) {
+	return -1;
     }
 
     if (!have_lock) {
@@ -2960,6 +2971,8 @@ static int start_interrupt_thread_for_this_cpu()
 
 #endif
 
+
+
 static int shared_init(struct cpu *my_cpu, struct nk_sched_config *cfg)
 {
     nk_thread_t * main = NULL;
@@ -3082,7 +3095,6 @@ static int init_global_state()
 
 }
 								  
-
 
 
 /*
