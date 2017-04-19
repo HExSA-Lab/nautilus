@@ -54,7 +54,14 @@ spin_lock (volatile spinlock_t * lock)
     NK_PROFILE_EXIT();
 }
 
-static uint8_t
+// returns zero on successful lock acquisition, -1 otherwise
+static inline int
+spin_try_lock(volatile spinlock_t *lock)
+{
+    return  __sync_lock_test_and_set(lock,1) ? -1 : 0 ;
+}
+
+static inline uint8_t
 spin_lock_irq_save (volatile spinlock_t * lock)
 {
     uint64_t rflags = read_rflags();
@@ -65,6 +72,7 @@ spin_lock_irq_save (volatile spinlock_t * lock)
     PAUSE_WHILE(__sync_lock_test_and_set(lock, 1));
     return flags;
 }
+
 
 void
 spin_lock_nopause (volatile spinlock_t * lock);
@@ -80,7 +88,7 @@ spin_unlock (volatile spinlock_t * lock)
     NK_PROFILE_EXIT();
 }
 
-static void
+static inline void
 spin_unlock_irq_restore (volatile spinlock_t * lock, uint8_t flags)
 {
     __sync_lock_release(lock);
@@ -98,6 +106,7 @@ spin_unlock_irq_restore (volatile spinlock_t * lock, uint8_t flags)
 #define NK_LOCK_T         nk_ticket_lock_t
 #define NK_LOCK_INIT(l)   nk_ticket_lock_deinit(l)
 #define NK_LOCK(l)        nk_ticket_lock(l)
+#define NK_TRY_LOCK(l)    nk_ticket_trylock(l)
 #define NK_UNLOCK(l)      nk_ticket_unlock(l)
 #define NK_LOCK_DEINIT(l) nk_ticket_lock_deinit(l)
 #else
@@ -106,6 +115,7 @@ spin_unlock_irq_restore (volatile spinlock_t * lock, uint8_t flags)
 #define NK_LOCK_T         spinlock_t
 #define NK_LOCK_INIT(l)   spinlock_init(l)
 #define NK_LOCK(l)        spin_lock(l)
+#define NK_TRY_LOCK(l)    spin_try_lock(l)
 #define NK_UNLOCK(l)      spin_unlock(l)
 #define NK_LOCK_DEINIT(l) spinlock_deinit(l)
 #endif
