@@ -448,7 +448,7 @@ static int switcher(nk_scancode_t scan)
 
 
 static int 
-kbd_handler (excp_entry_t * excp, excp_vec_t vec)
+kbd_handler (excp_entry_t * excp, excp_vec_t vec, void *state)
 {
   
   uint8_t status;
@@ -601,7 +601,7 @@ int ps2_mouse_reset()
 
 
 
-static int mouse_handler(excp_entry_t * excp, excp_vec_t vec)
+static int mouse_handler(excp_entry_t * excp, excp_vec_t vec, void *state)
 {
     ps2_status_t status;
     int count=0;

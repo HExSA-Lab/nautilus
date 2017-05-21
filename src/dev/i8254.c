@@ -108,7 +108,7 @@ i8254_calib_tsc (void)
 
 
 static int 
-pit_irq_handler (excp_entry_t * excp, excp_vec_t vec)
+pit_irq_handler (excp_entry_t * excp, excp_vec_t vec, void *state)
 {
     DEBUG_PRINT("Received PIT Timer interrupt\n");
     IRQ_HANDLER_END();

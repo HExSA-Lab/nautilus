@@ -134,8 +134,9 @@ static int set_mode(struct apic_dev *apic, apic_mode_t mode)
 
 
 
+
 static int
-spur_int_handler (excp_entry_t * excp, excp_vec_t v)
+spur_int_handler (excp_entry_t * excp, excp_vec_t v, void *state)
 {
     APIC_WARN("APIC (ID=0x%x) Received Spurious Interrupt on core %u\n",
         per_cpu_get(apic)->id,
@@ -149,7 +150,7 @@ spur_int_handler (excp_entry_t * excp, excp_vec_t v)
 }
 
 static int
-null_kick (excp_entry_t * excp, excp_vec_t v)
+null_kick (excp_entry_t * excp, excp_vec_t v, void *state)
 {
     struct apic_dev * apic = (struct apic_dev*)per_cpu_get(apic);
     
@@ -163,7 +164,7 @@ null_kick (excp_entry_t * excp, excp_vec_t v)
 }
 
 static int
-error_int_handler (excp_entry_t * excp, excp_vec_t v)
+error_int_handler (excp_entry_t * excp, excp_vec_t v, void *state)
 {
     struct apic_dev * apic = per_cpu_get(apic);
     char * s = "[Unknown Error]";
@@ -197,7 +198,7 @@ error_int_handler (excp_entry_t * excp, excp_vec_t v)
 
 
 static int
-dummy_int_handler (excp_entry_t * excp, excp_vec_t v)
+dummy_int_handler (excp_entry_t * excp, excp_vec_t v, void *state)
 {
     panic("Received an interrupt from an Extended LVT vector  on LAPIC (0x%x) on core %u (Should be masked)\n",
         per_cpu_get(apic)->id,
@@ -208,7 +209,7 @@ dummy_int_handler (excp_entry_t * excp, excp_vec_t v)
 
 
 static int
-pc_int_handler (excp_entry_t * excp, excp_vec_t v)
+pc_int_handler (excp_entry_t * excp, excp_vec_t v, void *state)
 {
     panic("Received a performance counter interrupt from the LAPIC (0x%x) on core %u (Should be masked)\n",
         per_cpu_get(apic)->id,
@@ -219,7 +220,7 @@ pc_int_handler (excp_entry_t * excp, excp_vec_t v)
 
 
 static int
-thermal_int_handler (excp_entry_t * excp, excp_vec_t v)
+thermal_int_handler (excp_entry_t * excp, excp_vec_t v, void *state)
 {
     panic("Received a thermal interrupt from the LAPIC (0x%x) on core %u (Should be masked)\n",
         per_cpu_get(apic)->id,
@@ -449,7 +450,7 @@ apic_bcast_sipi (struct apic_dev * apic, uint8_t target)
 }
 
 static void calibrate_apic_timer(struct apic_dev *apic);
-static int apic_timer_handler(excp_entry_t * excp, excp_vec_t vec);
+static int apic_timer_handler(excp_entry_t * excp, excp_vec_t vec, void *state);
 
 
 static void
@@ -474,6 +475,7 @@ apic_timer_setup (struct apic_dev * apic, uint32_t quantum)
     APIC_DEBUG("APIC timer has:  x2apic=%d tscdeadline=%d arat=%d\n",
 	       x2apic, tscdeadline, arat);
 
+    // Note that no state is used here since APICs are per-CPU
     if (register_int_handler(APIC_TIMER_INT_VEC,
             apic_timer_handler,
             NULL) != 0) {
@@ -865,31 +867,33 @@ apic_init (struct cpu * core)
     // assign interrupt handlers
     if (core->is_bsp) {
 
-        if (register_int_handler(APIC_NULL_KICK_VEC, null_kick, apic) != 0) {
+	// Note that no state is used here since APICs are per-CPU
+
+        if (register_int_handler(APIC_NULL_KICK_VEC, null_kick, NULL) != 0) {
             panic("Could not register null kick interrupt handler\n");
         }
 
-        if (register_int_handler(APIC_SPUR_INT_VEC, spur_int_handler, apic) != 0) {
+        if (register_int_handler(APIC_SPUR_INT_VEC, spur_int_handler, NULL) != 0) {
             panic("Could not register spurious interrupt handler\n");
         }
 
-        if (register_int_handler(APIC_ERROR_INT_VEC, error_int_handler, apic) != 0) {
+        if (register_int_handler(APIC_ERROR_INT_VEC, error_int_handler, NULL) != 0) {
             panic("Could not register spurious interrupt handler\n");
             return;
         }
 
         /* we shouldn't ever get these, but just in case */
-        if (register_int_handler(APIC_PC_INT_VEC, pc_int_handler, apic) != 0) {
+        if (register_int_handler(APIC_PC_INT_VEC, pc_int_handler, NULL) != 0) {
             panic("Could not register perf counter interrupt handler\n");
             return;
         }
 
-        if (register_int_handler(APIC_THRML_INT_VEC, thermal_int_handler, apic) != 0) {
+        if (register_int_handler(APIC_THRML_INT_VEC, thermal_int_handler, NULL) != 0) {
             panic("Could not register thermal interrupt handler\n");
             return;
         }
 
-        if (register_int_handler(APIC_EXT_LVT_DUMMY_VEC, dummy_int_handler, apic) != 0) {
+        if (register_int_handler(APIC_EXT_LVT_DUMMY_VEC, dummy_int_handler, NULL) != 0) {
             panic("Could not register dummy ext lvt handler\n");
             return;
         }
@@ -1180,7 +1184,7 @@ static void calibrate_apic_timer(struct apic_dev *apic)
 }
 
 
-static int apic_timer_handler(excp_entry_t * excp, excp_vec_t vec)
+static int apic_timer_handler(excp_entry_t * excp, excp_vec_t vec, void *state)
 {
     struct apic_dev * apic = (struct apic_dev*)per_cpu_get(apic);
 
