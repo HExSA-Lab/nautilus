@@ -78,8 +78,11 @@ GLOBAL(early_irq_common)
 
     leaq 128(%rsp), %rdi # pointer to exception struct
     movq 120(%rsp), %rsi # irq num
-    movabs $handler_table, %rdx
-    movq (%rdx, %rsi, 8), %rcx
+    movabs $idt_handler_table, %rdx
+    movq (%rdx, %rsi, 8), %r8   # pointer to handler
+    movabs $idt_state_table, %rdx
+    movq (%rdx, %rsi, 8), %rdx   # pointer to state
+	
     
 #ifdef NAUT_CONFIG_ENABLE_ASSERTS
     cmpq $256, %rsi
@@ -89,7 +92,7 @@ GLOBAL(early_irq_common)
     jl irq_err
 #endif
 
-    callq *%rcx
+    callq *%r8    # rdi = exp struct, rsi = irq num, rdx = state
 
     testq %rax, %rax
     jnz irq_err
@@ -136,14 +139,16 @@ GLOBAL(early_excp_common)
 
     leaq 128(%rsp), %rdi # pointer to exception struct
     movq 120(%rsp), %rsi # excp vector
-    movabs $handler_table, %rdx
-    movq (%rdx, %rsi, 8), %rcx
+    movabs $idt_handler_table, %rdx
+    movq (%rdx, %rsi, 8), %r8   # pointer to handler
+    movabs $idt_state_table, %rdx
+    movq (%rdx, %rsi, 8), %rcx   # pointer to state
     cmpq $14, %rsi
     jnz no_pf
     movq %cr2, %rdx
 
 no_pf:
-    callq *%rcx
+    callq *%r8   # rdi = exp struct, rsi = irq num, rdx = error, rcx = state
     testq %rax, %rax
     jnz excp_err
 
@@ -164,7 +169,7 @@ loop1:
 
 
 .align 8
-GLOBAL(handler_table)
+GLOBAL(idt_handler_table)
 .rept NUM_EXCEPTIONS
     .quad null_excp_handler
 .endr
@@ -172,7 +177,14 @@ GLOBAL(handler_table)
 .rept NUM_IDT_ENTRIES - NUM_EXCEPTIONS
     .quad null_irq_handler
 .endr
-END(handler_table)
+END(idt_handler_table)
+
+.align 8
+GLOBAL(idt_state_table)
+.rept NUM_IDT_ENTRIES
+    .quad 0
+.endr
+END(idt_state_table)
 
 
 irq_err_str:

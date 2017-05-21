@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
@@ -31,7 +31,8 @@
 #include <nautilus/irq.h>
 #include <nautilus/backtrace.h>
 
-extern ulong_t handler_table[NUM_IDT_ENTRIES];
+extern ulong_t idt_handler_table[NUM_IDT_ENTRIES];
+extern ulong_t idt_state_table[NUM_IDT_ENTRIES]; 
 
 struct gate_desc64 idt64[NUM_IDT_ENTRIES] __align(8);
 
@@ -85,7 +86,8 @@ struct idt_desc idt_descriptor =
 int 
 null_excp_handler (excp_entry_t * excp,
                    excp_vec_t vector,
-                   addr_t fault_addr)
+                   addr_t fault_addr,
+		   void *state)
 {
     cpu_id_t cpu_id = cpu_info_ready ? my_cpu_id() : 0xffffffff;
     /* TODO: this should be based on scheduler initialization, not CPU */
@@ -120,7 +122,8 @@ null_excp_handler (excp_entry_t * excp,
 
 int
 null_irq_handler (excp_entry_t * excp,
-                  excp_vec_t vector)
+                  excp_vec_t vector,
+		  void       *state)
 {
     printk("[Unhandled IRQ] (vector=0x%x)\n    RIP=(%p)     (core=%u)\n", 
             vector,
@@ -159,7 +162,7 @@ pic_spur_int_handler (excp_entry_t * excp,
 
 
 int
-idt_assign_entry (ulong_t entry, ulong_t handler_addr)
+idt_assign_entry (ulong_t entry, ulong_t handler_addr, ulong_t state_addr)
 {
 
     if (entry >= NUM_IDT_ENTRIES) {
@@ -172,7 +175,23 @@ idt_assign_entry (ulong_t entry, ulong_t handler_addr)
         return -1;
     }
 
-    handler_table[entry] = handler_addr;
+    idt_handler_table[entry] = handler_addr;
+    idt_state_table[entry]   = state_addr;
+
+    return 0;
+}
+
+int
+idt_get_entry (ulong_t entry, ulong_t *handler_addr, ulong_t *state_addr)
+{
+
+    if (entry >= NUM_IDT_ENTRIES) {
+        ERROR_PRINT("Getting invalid IDT entry\n");
+        return -1;
+    }
+
+    *handler_addr = idt_handler_table[entry];
+    *state_addr = idt_state_table[entry];
 
     return 0;
 }
@@ -194,25 +213,25 @@ setup_idt (void)
 
     for (i = 0; i < NUM_EXCEPTIONS; i++) {
         set_intr_gate(idt64, i, (void*)(excp_start + i*16));
-        idt_assign_entry(i, (ulong_t)null_excp_handler);
+        idt_assign_entry(i, (ulong_t)null_excp_handler, 0);
     }
 
     for (i = 32; i < NUM_IDT_ENTRIES; i++) {
         set_intr_gate(idt64, i, (void*)(irq_start + (i-32)*16));
-        idt_assign_entry(i, (ulong_t)null_irq_handler);
+        idt_assign_entry(i, (ulong_t)null_irq_handler, 0);
     }
 
-    if (idt_assign_entry(PF_EXCP, (ulong_t)nk_pf_handler) < 0) {
+    if (idt_assign_entry(PF_EXCP, (ulong_t)nk_pf_handler, 0) < 0) {
         ERROR_PRINT("Couldn't assign page fault handler\n");
         return -1;
     }
 
-    if (idt_assign_entry(DF_EXCP, (ulong_t)df_handler) < 0) {
+    if (idt_assign_entry(DF_EXCP, (ulong_t)df_handler, 0) < 0) {
         ERROR_PRINT("Couldn't assign double fault handler\n");
         return -1;
     }
 
-    if (idt_assign_entry(0xf, (ulong_t)pic_spur_int_handler) < 0) {
+    if (idt_assign_entry(0xf, (ulong_t)pic_spur_int_handler, 0) < 0) {
         ERROR_PRINT("Couldn't assign PIC spur int handler\n");
         return -1;
     }

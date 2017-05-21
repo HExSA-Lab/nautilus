@@ -121,9 +121,12 @@ struct idt_desc {
 
 
 int setup_idt(void);
-int idt_assign_entry(ulong_t entry, ulong_t handler_addr);
-int null_excp_handler(excp_entry_t * excp, excp_vec_t vec, addr_t fault_addr);
-int null_irq_handler(excp_entry_t * excp, excp_vec_t vector);
+
+int idt_assign_entry(ulong_t entry, ulong_t handler_addr, ulong_t state_addr);
+int idt_get_entry(ulong_t entry, ulong_t *handler_addr, ulong_t *state_addr);
+
+int null_excp_handler(excp_entry_t * excp, excp_vec_t vec, addr_t fault_addr, void * state_addr);
+int null_irq_handler(excp_entry_t * excp, excp_vec_t vector, void * state_addr);
 
 static inline void
 write_gate_desc (struct   gate_desc64 * idt,
