@@ -29,6 +29,7 @@
 extern "C" {
 #endif
 
+#include <nautilus/msr.h>
 
 /******* EXTERNAL INTERFACE *********/
 
@@ -72,9 +73,18 @@ struct nk_xcall {
 
 struct cpu {
     struct nk_thread * cur_thread;             /* +0  KCH: this must be first! */
+    // track whether we are in an interrupt, nested or otherwise
+    // this is intended for use by the scheduler (any scheduler)
     uint16_t interrupt_nesting_level;          /* +8  PAD: DO NOT MOVE */
+    // track whether the scheduler (any scheduler) should be able to preempt
+    // the current thread (whether cooperatively or via any
+    uint16_t preempt_disable_level;            /* +10 PAD: DO NOT MOVE */
+
+    // Track statistics of interrupts and exceptions
+    // these counts are updated by the low-level interrupt handling code
     uint64_t interrupt_count;                  /* +16 PAD: DO NOT MOVE */
     uint64_t exception_count;                  /* +24 PAD: DO NOT MOVE */
+
 
     cpu_id_t id;
     uint32_t lapic_id;   
@@ -143,6 +153,7 @@ int smp_setup_xcall_bsp (struct cpu * core);
 /* ARCH-SPECIFIC */
 
 int arch_early_init (struct naut_info * naut);
+
 
 
 #ifdef __cplusplus
