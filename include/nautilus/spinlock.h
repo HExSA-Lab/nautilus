@@ -28,10 +28,10 @@ extern "C" {
 #endif
 
 #include <nautilus/naut_types.h>
-
 #include <nautilus/intrinsics.h>
 #include <nautilus/atomic.h>
 #include <nautilus/cpu.h>
+#include <nautilus/cpu_state.h>
 #include <nautilus/instrument.h>
 
 #define SPINLOCK_INITIALIZER 0
@@ -64,11 +64,7 @@ spin_try_lock(volatile spinlock_t *lock)
 static inline uint8_t
 spin_lock_irq_save (volatile spinlock_t * lock)
 {
-    uint64_t rflags = read_rflags();
-    uint8_t flags = (rflags & RFLAGS_IF) != 0;
-    if (flags) {
-        asm volatile ("cli");
-    }
+    uint8_t flags = irq_disable_save();
     PAUSE_WHILE(__sync_lock_test_and_set(lock, 1));
     return flags;
 }
@@ -92,9 +88,7 @@ static inline void
 spin_unlock_irq_restore (volatile spinlock_t * lock, uint8_t flags)
 {
     __sync_lock_release(lock);
-    if (flags) {
-        asm volatile ("sti");
-    }
+    irq_enable_restore(flags);
 }
 
 
