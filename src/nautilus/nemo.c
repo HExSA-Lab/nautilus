@@ -53,7 +53,7 @@ event_is_valid (nemo_event_id_t id)
 
 
 static int
-nemo_ipi_event_recv (excp_entry_t * excp, excp_vec_t v)
+nemo_ipi_event_recv (excp_entry_t * excp, excp_vec_t v, void *state)
 {
 	nemo_event_id_t eid = nemo_lookup_table[my_cpu_id()];
 

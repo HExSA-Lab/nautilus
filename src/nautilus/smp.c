@@ -246,7 +246,7 @@ smp_bringup_aps (struct naut_info * naut)
 extern struct idt_desc idt_descriptor;
 extern struct gdt_desc64 gdtr64;
 
-static int xcall_handler(excp_entry_t * e, excp_vec_t v);
+static int xcall_handler(excp_entry_t * e, excp_vec_t v, void *state);
 
 
 static int
@@ -413,7 +413,7 @@ mark_xcall_done (struct nk_xcall * x)
 
 
 static int
-xcall_handler (excp_entry_t * e, excp_vec_t v) 
+xcall_handler (excp_entry_t * e, excp_vec_t v, void *state) 
 {
     nk_queue_t * xcq = per_cpu_get(xcall_q); 
     struct nk_xcall * x = NULL;

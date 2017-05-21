@@ -28,56 +28,17 @@ extern "C" {
 #endif
 
 #include <nautilus/nautilus.h>
-#include <nautilus/idt.h>
 #include <nautilus/cpu.h>
+#include <nautilus/cpu_state.h>
+#include <nautilus/list.h>
 
-#include <dev/apic.h>
+extern void apic_do_eoi();
 
-#define PIC_MASTER_CMD_PORT  0x20
-#define PIC_MASTER_DATA_PORT 0x21
-#define PIC_SLAVE_CMD_PORT   0xa0
-#define PIC_SLAVE_DATA_PORT  0xa1
-
-#define PIC_MODE_ON (1 << 7)
-
-#define MAX_IRQ_NUM 15
-#define NUM_EXT_IRQS   16
-#define FIRST_EXT_IRQ  32
+#define IRQ_HANDLER_END() apic_do_eoi()
 
 typedef enum { INT_TYPE_INT, INT_TYPE_NMI, INT_TYPE_SMI, INT_TYPE_EXT } int_type_t;
 typedef enum { INT_POL_BUS, INT_POL_ACTHI, INT_POL_RSVD, INT_POL_ACTLO } int_pol_t;
 typedef enum { INT_TRIG_BUS, INT_TRIG_EDGE, INT_TRIG_RSVD, INT_TRIG_LEVEL } int_trig_t;
-
-#define IRQ_HANDLER_END() apic_do_eoi()
-
-
-#define enable_irqs() sti()
-#define disable_irqs() cli()
-
-uint8_t irqs_enabled(void);
-
-static inline uint8_t
-irq_disable_save (void)
-{
-    uint8_t enabled = irqs_enabled();
-
-    if (enabled) {
-        disable_irqs();
-    }
-
-    return enabled;
-}
-        
-
-static inline void 
-irq_enable_restore (uint8_t iflag)
-{
-    if (iflag) {
-        /* Interrupts were originally enabled, so turn them back on */
-        enable_irqs();
-    }
-}
-
 
 struct nk_int_entry {
     int_trig_t trig_mode;
@@ -98,19 +59,19 @@ struct nk_bus_entry {
     struct list_head elm;
 };
 
-inline void nk_mask_irq(uint8_t irq);
-inline void nk_unmask_irq(uint8_t irq);
-inline uint8_t nk_irq_is_assigned(uint8_t irq);
+void nk_mask_irq(uint8_t irq);
+void nk_unmask_irq(uint8_t irq);
+uint8_t nk_irq_is_assigned(uint8_t irq);
 
-inline uint8_t irq_to_vec (uint8_t irq);
-inline void irqmap_set_ioapic (uint8_t irq, struct ioapic * ioapic);
+uint8_t irq_to_vec (uint8_t irq);
+void irqmap_set_ioapic (uint8_t irq, struct ioapic * ioapic);
 void disable_8259pic(void);
 void imcr_begin_sym_io(void);
 int register_irq_handler (uint16_t irq, 
-                          int (*handler)(excp_entry_t *, excp_vec_t),
+                          int (*handler)(excp_entry_t *, excp_vec_t, void *priv_data),
                           void * priv_data);
 int register_int_handler (uint16_t int_vec,
-                          int (*handler)(excp_entry_t *, excp_vec_t),
+                          int (*handler)(excp_entry_t *, excp_vec_t, void *priv_data),
                           void * priv_data);
 
 int nk_int_init(struct sys_info * sys);

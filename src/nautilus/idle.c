@@ -23,6 +23,7 @@
 #include <nautilus/nautilus.h>
 #include <nautilus/idle.h>
 #include <nautilus/cpu.h>
+#include <nautilus/irq.h>
 #include <nautilus/thread.h>
 #include <nautilus/scheduler.h>
 
@@ -49,8 +50,6 @@ idle_delay (unsigned long long n)
 void 
 idle (void * in, void ** out)
 {
-    extern int irqs_enabled();
-
     get_cur_thread()->is_idle = 1;
 
     uint64_t last_steal = nk_sched_get_runtime(get_cur_thread());

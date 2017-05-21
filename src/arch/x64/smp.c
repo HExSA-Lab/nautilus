@@ -274,6 +274,7 @@ find_mp_pointer (void)
     return 0;
 }
 
+#define PIC_MODE_ON (1 << 7)
 
 static int
 __early_init_mp (struct naut_info * naut)

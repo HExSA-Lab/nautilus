@@ -69,18 +69,14 @@
 
 
 
-int mf_handler (excp_entry_t * excp, excp_vec_t vec);
-int 
-mf_handler (excp_entry_t * excp, excp_vec_t vec)
+int mf_handler (excp_entry_t * excp, excp_vec_t vec, void *state)
 {
     panic("x86 Floating Point Exception\n");
     return 0;
 }
 
 
-int xm_handler (excp_entry_t * excp, excp_vec_t vec);
-int
-xm_handler (excp_entry_t * excp, excp_vec_t vec)
+int xm_handler (excp_entry_t * excp, excp_vec_t vec, void *state)
 {
     uint32_t m;
     asm volatile ("stmxcsr %[_m]" : [_m] "=m" (m) : : "memory");

@@ -808,7 +808,7 @@ time_ipi_send(void)
 static uint64_t int80_end = 0;
 
 static int
-int80_handler (excp_entry_t * excp, excp_vec_t v)
+int80_handler (excp_entry_t * excp, excp_vec_t v, void *state)
 {
     rdtscll(int80_end);
     return 0;

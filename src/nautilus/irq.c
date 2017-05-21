@@ -26,6 +26,13 @@
 #include <nautilus/cpu.h>
 #include <nautilus/mm.h>
 
+#define PIC_MASTER_CMD_PORT  0x20
+#define PIC_MASTER_DATA_PORT 0x21
+#define PIC_SLAVE_CMD_PORT   0xa0
+#define PIC_SLAVE_DATA_PORT  0xa1
+
+#define MAX_IRQ_NUM    15     // this is really PIC-specific
+
 
 /* NOTE: the APIC organizes interrupt priorities as follows:
  * class 0: interrupt vectors 0-15
@@ -50,21 +57,15 @@
  * priority with increasing vector number
  *
  */
-uint8_t 
-irqs_enabled (void)
-{
-    uint64_t rflags = read_rflags();
-    return (rflags & RFLAGS_IF) != 0;
-}
 
 
-inline uint8_t
+uint8_t
 irq_to_vec (uint8_t irq)
 {
     return nk_get_nautilus_info()->sys.int_info.irq_map[irq].vector;
 }
 
-inline void
+void
 irqmap_set_ioapic (uint8_t irq, struct ioapic * ioapic)
 {
     struct naut_info * naut = nk_get_nautilus_info();
@@ -79,7 +80,7 @@ set_irq_vector (uint8_t irq, uint8_t vector)
 }
 
 
-inline void 
+void 
 nk_mask_irq (uint8_t irq)
 {
     struct naut_info * naut = nk_get_nautilus_info();
@@ -89,7 +90,7 @@ nk_mask_irq (uint8_t irq)
 }
 
 
-inline void
+void
 nk_unmask_irq (uint8_t irq)
 {
     struct naut_info * naut = nk_get_nautilus_info();
@@ -99,7 +100,7 @@ nk_unmask_irq (uint8_t irq)
 }
 
 
-inline uint8_t
+uint8_t
 nk_irq_is_assigned (uint8_t irq)
 {
     struct naut_info * naut = nk_get_nautilus_info();
@@ -115,7 +116,7 @@ nk_irq_is_assigned (uint8_t irq)
  */
 int 
 register_int_handler (uint16_t int_vec, 
-                      int (*handler)(excp_entry_t *, excp_vec_t),
+                      int (*handler)(excp_entry_t *, excp_vec_t, void *),
                       void * priv_data)
 {
 
@@ -129,7 +130,7 @@ register_int_handler (uint16_t int_vec,
         return -1;
     }
 
-    idt_assign_entry(int_vec, (ulong_t)handler);
+    idt_assign_entry(int_vec, (ulong_t)handler, (ulong_t)priv_data);
 
     return 0;
 }
@@ -137,7 +138,7 @@ register_int_handler (uint16_t int_vec,
 
 int 
 register_irq_handler (uint16_t irq, 
-                      int (*handler)(excp_entry_t *, excp_vec_t),
+                      int (*handler)(excp_entry_t *, excp_vec_t, void *),
                       void * priv_data)
 {
     uint8_t int_vector;
@@ -154,7 +155,7 @@ register_irq_handler (uint16_t irq,
 
     int_vector = irq_to_vec(irq);
 
-    idt_assign_entry(int_vector, (ulong_t)handler);
+    idt_assign_entry(int_vector, (ulong_t)handler, (ulong_t)priv_data);
 
     return 0;
 }

@@ -112,7 +112,7 @@ time_end (void)
 
 
 static int
-ping (excp_entry_t * excp, excp_vec_t vec)
+ping (excp_entry_t * excp, excp_vec_t vec, void *state)
 {
     struct apic_dev * apic = per_cpu_get(apic);
     apic_write_icr(apic,
@@ -125,7 +125,7 @@ ping (excp_entry_t * excp, excp_vec_t vec)
 
 
 static int
-pong (excp_entry_t * excp, excp_vec_t vec)
+pong (excp_entry_t * excp, excp_vec_t vec, void *state)
 {
     rdtscll(ipi_oneway_end);
     IRQ_HANDLER_END();
@@ -135,7 +135,7 @@ pong (excp_entry_t * excp, excp_vec_t vec)
 
 
 static int
-pong_bcast (excp_entry_t * excp, excp_vec_t vec)
+pong_bcast (excp_entry_t * excp, excp_vec_t vec, void *state)
 {
     uint64_t tmp;
     ipi_exp_data_t * data = glob_exp_data;
