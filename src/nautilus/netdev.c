@@ -59,7 +59,7 @@ int nk_net_dev_deinit()
 struct nk_net_dev * nk_net_dev_register(char *name, uint64_t flags, struct nk_net_dev_int *inter, void *state)
 {
     INFO("register device %s\n",name);
-    return (struct nk_net_dev *) nk_dev_register(name,NK_DEV_BLK,flags,(struct nk_dev_int *)inter,state);
+    return (struct nk_net_dev *) nk_dev_register(name,NK_DEV_NET,flags,(struct nk_dev_int *)inter,state);
 }
 
 int                   nk_net_dev_unregister(struct nk_net_dev *d)
