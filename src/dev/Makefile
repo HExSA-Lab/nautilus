@@ -19,3 +19,6 @@ obj-$(NAUT_CONFIG_ATA) += ata.o
 
 obj-$(NAUT_CONFIG_VESA) += vesa.o
 
+ifdef NAUT_CONFIG_LOAD_LUA
+obj-y +=lua_script.o
+endif
