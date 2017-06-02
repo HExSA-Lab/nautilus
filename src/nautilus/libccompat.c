@@ -27,6 +27,10 @@
  * 
  *
  */
+
+
+#define LIBCCOMPAT 1
+
 #include <nautilus/nautilus.h>
 #include <nautilus/libccompat.h>
 #include <nautilus/thread.h>
@@ -42,6 +46,64 @@
     } 
 
 
+// Structs needed for LUA 
+
+
+
+static int maxExponent = 511;	/* Largest possible base 10 exponent.  Any
+				 * exponent larger than this will already
+				 * produce underflow or overflow, so there's
+				 * no need to worry about additional digits.
+				 */
+static double powersOf10[] = {	/* Table giving binary powers of 10.  Entry */
+    10.,			/* is 10^2^i.  Used to convert decimal */
+    100.,			/* exponents into floating-point numbers. */
+    1.0e4,
+    1.0e8,
+    1.0e16,
+    1.0e32,
+    1.0e64,
+    1.0e128,
+    1.0e256
+};
+
+
+
+struct lconv {
+    char *decimal_point;      //"."          LC_NUMERIC
+    char *grouping;           //""           LC_NUMERIC
+    char *thousands_sep;      //""           LC_NUMERIC
+
+    char *mon_decimal_point;  //""           LC_MONETARY
+    char *mon_grouping;       //""           LC_MONETARY
+    char *mon_thousands_sep;  //""           LC_MONETARY
+
+    char *negative_sign;      //""           LC_MONETARY
+    char *positive_sign;      //""           LC_MONETARY
+    char *currency_symbol;    //""           LC_MONETARY
+    char frac_digits;         //CHAR_MAX     LC_MONETARY
+    char n_cs_precedes;       //CHAR_MAX     LC_MONETARY
+    char n_sep_by_space;      //CHAR_MAX     LC_MONETARY
+    char n_sign_posn;         //CHAR_MAX     LC_MONETARY
+    char p_cs_precedes;       //CHAR_MAX     LC_MONETARY
+    char p_sep_by_space;      //CHAR_MAX     LC_MONETARY
+    char p_sign_posn;         //CHAR_MAX     LC_MONETARY
+
+    char *int_curr_symbol;
+    char int_frac_digits;
+    char int_n_cs_precedes;
+    char int_n_sep_by_space;
+    char int_n_sign_posn;
+    char int_p_cs_precedes;
+    char int_p_sep_by_space;
+    char int_p_sign_posn;
+};
+
+
+
+
+
+//=========================================================
 static uint64_t dummy_mono_clock = 0;
 
 time_t 
@@ -232,7 +294,25 @@ strerror (int errnum)
     UNDEF_FUN_ERR();
     return NULL;
 }
+FILE *tmpfile(void)
+{
 
+    UNDEF_FUN_ERR();
+    return NULL;
+
+}
+int 
+ferror (FILE * f)
+{
+    UNDEF_FUN_ERR();
+    return -1;
+}
+FILE *freopen(const char *fname, const char *mode,FILE *stream)
+{
+
+    UNDEF_FUN_ERR();
+    return NULL;
+}
 int 
 fclose (FILE * f)
 {
@@ -264,13 +344,60 @@ fdopen (int fd, const char * mode)
     return NULL;
 }
 
+char *getenv(const char *name)
+{
 
-int 
-fflush (FILE * f)
+    UNDEF_FUN_ERR();
+    return NULL;
+}
+//For LUA Support
+clock_t clock()
+{
+
+    UNDEF_FUN_ERR();
+    return -1;
+}
+//For LUA Support
+char *tmpnam(char *s)
+{
+
+    UNDEF_FUN_ERR();
+    return NULL;
+}
+
+//For LUA Support
+int remove(const char *path)
+{
+
+    UNDEF_FUN_ERR();
+    return -1;
+}
+//For LUA Support
+int rename(const char *old, const char *new)
+{
+
+    UNDEF_FUN_ERR();
+    return -1;
+}
+//For LUA Support
+int system(const char *command)
+{
+
+    UNDEF_FUN_ERR();
+    return -1;
+}
+//For LUA Support
+
+int fflush (FILE * f)
 {
     return 0;
 }
 
+void (*signal(int sig, void (*func)(int)))(int ){
+//    printk("\nSIGNAL Function:");
+}
+
+//For LUA Support
 
 int 
 fprintf (FILE * f, const char * s, ...)
@@ -287,8 +414,34 @@ fprintf (FILE * f, const char * s, ...)
 #endif
 }
 
-int 
-printf (const char * s, ...)
+//For LUA
+int setvbuf(FILE *restrict stream, char *restrict buf, int type,
+       size_t size)
+{
+
+    UNDEF_FUN_ERR();
+    return -1;
+}
+
+
+//For LUA
+
+int fscanf(FILE *restrict stream, const char *restrict format, ... )
+{
+
+    UNDEF_FUN_ERR();
+    return -1;
+
+}
+//For LUA
+void clearerr(FILE *stream)
+{
+
+    UNDEF_FUN_ERR();
+   // return NULL;
+}
+
+int printf (const char * s, ...)
 {
 #if 0
     UNDEF_FUN_ERR();
@@ -316,13 +469,12 @@ fputs (const char * s, FILE * f)
     printk("%s\n", s);
     return 0;
 }
-
-
-size_t 
-fwrite (const void * ptr, size_t size, size_t count, FILE * stream)
+size_t fwrite (const void *ptr, size_t size, size_t nmemb, FILE *stream)
 {
-    UNDEF_FUN_ERR();
-    return -1;
+
+   printk("\n %s",ptr); 
+   //UNDEF_FUN_ERR();
+   return (int)size;
 }
 
 size_t 
@@ -340,13 +492,20 @@ getwc (FILE * stream)
 }
 
 
+
 size_t 
 __ctype_get_mb_cur_max (void)
 {
     UNDEF_FUN_ERR();
     return 0;
 }
- 
+//For LUA Support
+int fseek(FILE *stream, long offset, int whence)
+{
+
+    UNDEF_FUN_ERR();
+    return 1;
+}
 
 int 
 fseeko64 (FILE *fp, uint64_t offset, int whence)
@@ -377,12 +536,16 @@ ftello64 (FILE *stream)
     UNDEF_FUN_ERR();
     return 0;
 }
-
-int 
-poll (struct pollfd *fds, nfds_t nfds, int timeout)
+//For LUA Support
+long ftell(FILE *x)
 {
     UNDEF_FUN_ERR();
     return -1;
+}
+int poll (struct pollfd *fds, nfds_t nfds, int timeout)
+{
+    UNDEF_FUN_ERR();
+    return 1;
 }
 
 int 
@@ -450,6 +613,381 @@ gettext (const char * msgid)
     return ret;
 }
 
+int getc(FILE* arg)
+{
+
+    UNDEF_FUN_ERR();
+    return -1;
+
+}
+//LUA SPECIFIC....................
+size_t strftime(char *str, size_t maxsize, const char *format, const struct tm *timeptr)
+{
+    return 0;
+}
+int feof(FILE * x)
+{
+    UNDEF_FUN_ERR();
+    return 0;
+}
+
+char *fgets(char *str, int n, FILE *stream)
+{
+    UNDEF_FUN_ERR();
+    return NULL;
+}
+void *memchr(const void *str, int c, size_t n)
+{
+    return NULL;
+}
+/*void longjmp(int *x, int __y)
+{
+    UNDEF_FUN_ERR();
+}
+
+int setjmp(int *x)
+{
+    return 0;
+} */
+double fabs(double __x){
+    return abs(__x);
+}
+double atan(double __x){
+    return 45.000;
+}
+double atan2(double y, double x){
+    return 135.00;
+}
+double fmod(double y, double x){
+    // this is replacement to actual fmod() (/nautilus/libccompat)
+    // defining own fmod similar to the one defined in (/gcc/libc)
+    printk("\n in fmod y %d,x %d",(int)y,(int)x); 
+//	return y -x*(y/x);
+      return (int)y% (int)x;
+}
+ 
+double fmodnew(int y, int x){
+    // this is replacement to actual fmod() (/nautilus/libccompat)
+    // defining own fmod similar to the one defined in (/gcc/libc)
+  //  printk("\n in fmod y %d,x %d",y,x); 
+	return y -x*(y/x);
+}
+double modf(double y, double *x){
+  *x = 0;
+//	printk("\n in modf");
+  return 0.000;
+}
+double frexp(double x, int *e){
+  *e = 0;
+  return 0.5;
+}
+double ldexp(double x, int exp){
+  return x;
+}
+
+
+int ischar(unsigned char *str)
+{
+
+	return 1;
+}
+
+double strtod(const char *string, char **endPtr)
+{
+   
+  
+  // printk("\n *endptr %p ---- %p",endptr,*endptr); 
+
+  // *endptr = *endptr+1; 
+
+      //	UNDEF_FUN_ERR();
+
+//    const char *string;	
+	/* A decimal ASCII floating-point number,
+				 * optionally preceded by white space.
+				 * Must have form "-I.FE-X", where I is the
+				 * integer part of the mantissa, F is the
+				 * fractional part of the mantissa, and X
+				 * is the exponent.  Either of the signs
+				 * may be "+", "-", or omitted.  Either I
+				 * or F may be omitted, or both.  The decimal
+				 * point isn't necessary unless F is present.
+				 * The "E" may actually be an "e".  E and X
+				 * may both be omitted (but not just one).
+				 */
+//    char **endPtr;	
+	/* If non-NULL, store terminating character's
+				 * address here. */
+    int errno=0;
+    int sign, expSign = FALSE;
+    double fraction, dblExp, *d;
+    register const char *p;
+    register int c;
+    int exp = 0;		/* Exponent read from "EX" field. */
+    int fracExp = 0;		/* Exponent that derives from the fractional
+				 * part.  Under normal circumstatnces, it is
+				 * the negative of the number of digits in F.
+				 * However, if I is very long, the last digits
+				 * of I get dropped (otherwise a long I with a
+				 * large negative exponent could cause an
+				 * unnecessary overflow on I alone).  In this
+				 * case, fracExp is incremented one for each
+				 * dropped digit. */
+    int mantSize;		/* Number of digits in mantissa. */
+    int decPt;			/* Number of mantissa digits BEFORE decimal
+				 * point. */
+    const char *pExp;		/* Temporarily holds location of exponent
+				 * in string. */
+
+    /*
+     * Strip off leading blanks and check for a sign.
+     */
+
+    p = string;
+   
+    while (isspace(( unsigned char)(*p))) {
+	p += 1;
+    }
+    if (*p == '-') {
+	sign = TRUE;
+	p += 1;
+    } else {
+	if (*p == '+') {
+	    p += 1;
+	}
+	sign = FALSE;
+    }
+
+    /*/
+     * Count the number of digits in the mantissa (including the decimal
+     * point), and also locate the decimal point.
+     */
+
+    decPt = -1;
+    for (mantSize = 0; ; mantSize += 1)
+    {
+	c = *p;
+	if (!isdigit(c)) {
+	    if ((c != '.') || (decPt >= 0)) {
+		break;
+	    }
+	    decPt = mantSize;
+	}
+	p += 1;
+    }
+
+    /*
+     * Now suck up the digits in the mantissa.  Use two integers to
+     * collect 9 digits each (this is faster than using floating-point).
+     * If the mantissa has more than 18 digits, ignore the extras, since
+     * they can't affect the value anyway.
+     */
+    
+    pExp  = p;
+    p -= mantSize;
+    if (decPt < 0) {
+	decPt = mantSize;
+    } else {
+	mantSize -= 1;			/* One of the digits was the point. */
+    }
+    if (mantSize > 18) {
+	fracExp = decPt - 18;
+	mantSize = 18;
+    } else {
+	fracExp = decPt - mantSize;
+    }
+    if (mantSize == 0) {
+	fraction = 0.0;
+	p = string;
+	goto done;
+    } else {
+	int frac1, frac2;
+	frac1 = 0;
+	for ( ; mantSize > 9; mantSize -= 1)
+	{
+	    c = *p;
+	    p += 1;
+	    if (c == '.') {
+		c = *p;
+		p += 1;
+	    }
+	    frac1 = 10*frac1 + (c - '0');
+	}
+	frac2 = 0;
+	for (; mantSize > 0; mantSize -= 1)
+	{
+	    c = *p;
+	    p += 1;
+	    if (c == '.') {
+		c = *p;
+		p += 1;
+	    }
+	    frac2 = 10*frac2 + (c - '0');
+	}
+	fraction = (1.0e9 * frac1) + frac2;
+    }
+
+    /*
+     * Skim off the exponent.
+     */
+
+    p = pExp;
+    if ((*p == 'E') || (*p == 'e')) {
+	p += 1;
+	if (*p == '-') {
+	    expSign = TRUE;
+	    p += 1;
+	} else {
+	    if (*p == '+') {
+		p += 1;
+	    }
+	    expSign = FALSE;
+	}
+	if (!isdigit((unsigned char)(*p))) {
+	    p = pExp;
+	    goto done;
+	}
+	while (isdigit((unsigned char)(*p))) {
+	    exp = exp * 10 + (*p - '0');
+	    p += 1;
+	}
+    }
+    if (expSign) {
+	exp = fracExp - exp;
+    } else {
+	exp = fracExp + exp;
+    }
+
+    /*
+     * Generate a floating-point number that represents the exponent.
+     * Do this by processing the exponent one bit at a time to combine
+     * many powers of 2 of 10. Then combine the exponent with the
+     * fraction.
+     */
+    
+    if (exp < 0) {
+	expSign = TRUE;
+	exp = -exp;
+    } else {
+	expSign = FALSE;
+    }
+    if (exp > maxExponent) {
+	exp = maxExponent;
+	errno = ERANGE;
+    }
+    dblExp = 1.0;
+    for (d = powersOf10; exp != 0; exp >>= 1, d += 1) {
+	if (exp & 01) {
+	    dblExp *= *d;
+	}
+    }
+    if (expSign) {
+	fraction /= dblExp;
+    } else {
+	fraction *= dblExp;
+    }
+
+done:
+    if (endPtr != NULL) {
+	*endPtr = (char *) p;
+    }
+
+    if (sign) {
+	return -fraction;
+    }
+    return fraction;
+}
+ //   return 2.0;
+//}
+/*----------*/
+double abs(double x)
+{
+//should return absolute value of x
+if (x<0)
+	return -1*x;
+else
+	return x;
+}
+double sin(double x)
+{
+return x;
+}
+double sinh(double x)
+{
+return x;
+}
+double cos(double x)
+{
+return x;
+}
+double cosh(double x)
+{
+return x;
+}
+time_t mktime(struct tm *timeptr)
+{
+    return 0;
+}
+struct tm *localtime(const time_t *timer)
+{
+    return NULL;
+}
+struct tm *gmtime(const time_t *timer)
+{
+    return NULL;
+}
+int strcoll(const char *str1, const char *str2)
+{
+    return 0;
+}
+double tan(double x)
+{
+return x;
+}
+double tanh(double x)
+{
+return x;
+}
+double asin(double x)
+{
+return x;
+}
+double acos(double x)
+{
+return x;
+}
+double ceil(double x)
+{
+return x;
+}
+double floor(double x)
+{
+return x;
+}
+double difftime(time_t time1, time_t time2)
+{
+    return 0;
+}
+double sqrt(double x)
+{
+return x;
+}
+double pow(double x, double y)
+{
+return x;
+}
+double log(double x)
+{
+return x;
+}
+double log10(double x)
+{
+return x;
+}
+double exp(double x)
+{
+return x;
+}
 
 /* became lazy... */
 GEN_DEF(writev)
@@ -458,13 +996,13 @@ GEN_DEF(__errno_location)
 GEN_DEF(write)
 GEN_DEF(wcrtomb)
 GEN_DEF(mbrtowc)
-GEN_DEF(getc)
+//GEN_DEF(getc)
 GEN_DEF(__iswctype_l)
 GEN_DEF(wcslen)
 GEN_DEF(__strtof_l)
-GEN_DEF(stderr)
+//GEN_DEF(stderr)
 GEN_DEF(wmemset)
-GEN_DEF(stdin)
+//GEN_DEF(stdin)
 GEN_DEF(fileno)
 GEN_DEF(__fxstat64)
 GEN_DEF(putc)
@@ -485,13 +1023,13 @@ GEN_DEF(__wcsxfrm_l)
 GEN_DEF(wcscmp)
 GEN_DEF(wcsnrtombs)
 GEN_DEF(__strcoll_l)
-GEN_DEF(stdout)
+//GEN_DEF(stdout)
 GEN_DEF(btowc)
-GEN_DEF(memchr)
+//GEN_DEF(memchr)
 GEN_DEF(strtold_l)
 GEN_DEF(wmemcmp)
 GEN_DEF(__strtod_l)
-GEN_DEF(setvbuf)
+//GEN_DEF(setvbuf)
 GEN_DEF(__wctype_l)
 GEN_DEF(__towupper_l)
 GEN_DEF(__uselocale)
@@ -501,15 +1039,15 @@ GEN_DEF(pthread_mutex_init)
 GEN_DEF(pthread_mutex_lock)
 GEN_DEF(pthread_mutex_unlock)
 GEN_DEF(wcscoll)
-GEN_DEF(strcoll)
+//GEN_DEF(strcoll)
 GEN_DEF(towupper)
 GEN_DEF(towlower)
 GEN_DEF(iswctype)
-GEN_DEF(strftime)
+//GEN_DEF(strftime)
 GEN_DEF(wcsftime)
 GEN_DEF(wctype)
 GEN_DEF(strtold)
-GEN_DEF(strtod)
+//GEN_DEF(strtod)
 GEN_DEF(strtof)
 GEN_DEF(__ctype_b_loc)
 GEN_DEF(__ctype_toupper_loc)

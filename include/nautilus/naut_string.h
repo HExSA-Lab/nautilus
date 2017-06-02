@@ -91,6 +91,8 @@ int strncmp (const char * s1, const char * s2, size_t limit);
 int strncasecmp (const char * s1, const char * s2, size_t limit);
 char * strdup (const char * s);
 char * strpbrk (const char * cs, const char * ct);
+char * strptok (const char * cs, const char * ct);
+char * strsep (char ** s, const char * ct);
 char * strsep (char ** s, const char * ct);
 char * strcat (char * s1, const char * s2);
 char * strncat (char * s1, const char * s2, size_t limit);
