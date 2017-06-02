@@ -1,0 +1,19 @@
+print('Test Starts')
+
+function max(num1, num2)
+
+   if (num1 > num2) then
+      result = num1;
+   else
+      result = num2;
+   end
+
+   return result; 
+end
+
+print('Call for function- max(5,6)')
+
+print(max(5,6))
+
+print("Calling boot_num_regions() of nautilus ")
+print(naut.mm_boot_num_regions())
