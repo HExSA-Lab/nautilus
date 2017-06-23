@@ -33,6 +33,7 @@
 #include <nautilus/msr.h>
 #include <nautilus/backtrace.h>
 #include <test/ipi.h>
+#include <test/threads.h>
 
 #ifdef NAUT_CONFIG_PALACIOS
 #include <nautilus/vmm.h>
@@ -453,6 +454,23 @@ static int handle_blktest(char * buf)
     return 0;
 }
 
+static int handle_test(char *buf)
+{
+    char what[80];
+    
+    if (sscanf(buf,"test %s",what)!=1) { 
+	goto dunno;
+    }
+    
+    if (!strncasecmp(what,"thread",6)) { 
+	return test_threads();
+    }
+
+ dunno:
+    nk_vc_printf("Unknown test request\n");
+    return -1;
+}
+	
 static int handle_attach(char * buf)
 {
     char type[32], devname[32], fsname[32]; 
@@ -525,6 +543,45 @@ static int handle_isotest(char *buf)
 
 #endif
 
+static int handle_meminfo(char *buf)
+{
+    uint64_t num = kmem_num_pools();
+
+    // nk_vc_printf("Number of pools=%lu\n",num);
+    
+    struct kmem_stats *s = malloc(sizeof(struct kmem_stats)+num*sizeof(struct buddy_pool_stats));
+
+    if (!s) { 
+	nk_vc_printf("Failed to allocate space for mem info\n");
+	return 0;
+    }
+
+    s->max_pools = num;
+    
+    kmem_stats(s);
+
+    
+    uint64_t i;
+
+    for (i=0;i<s->num_pools;i++) { 
+	nk_vc_printf("pool %lu %p-%p %lu blks free %lu bytes free\n  %lu bytes min %lu bytes max\n", 
+		     i,
+		     s->pool_stats[i].start_addr,
+		     s->pool_stats[i].end_addr,
+		     s->pool_stats[i].total_blocks_free,
+		     s->pool_stats[i].total_bytes_free,
+		     s->pool_stats[i].min_alloc_size,
+		     s->pool_stats[i].max_alloc_size);
+    }
+
+    nk_vc_printf("%lu pools %lu blks free %lu bytes free\n", s->total_num_pools, s->total_blocks_free, s->total_bytes_free);
+    nk_vc_printf("  %lu bytes min %lu bytes max\n", s->min_alloc_size, s->max_alloc_size);
+
+    free(s);
+    
+    return 0;
+}
+
 static int handle_cmd(char *buf, int n)
 {
   char name[MAX_CMD];
@@ -567,6 +624,7 @@ static int handle_cmd(char *buf, int n)
     nk_vc_printf("devs | fses | ofs | cat [path]\n");
     nk_vc_printf("shell name\n");
     nk_vc_printf("regs [t]\npeek [bwdq] x | mem x n [s] | poke [bwdq] x y\nin [bwd] addr | out [bwd] addr data\nrdmsr x [n] | wrmsr x y\ncpuid f [n] | cpuidsub f s\n");
+    nk_vc_printf("meminfo [detail]\n");
     nk_vc_printf("reap\n");
     nk_vc_printf("burn a name size_ms tpr priority\n");
     nk_vc_printf("burn s name size_ms tpr phase size deadline priority\n");
@@ -577,6 +635,7 @@ static int handle_cmd(char *buf, int n)
     nk_vc_printf("blktest dev r|w start count\n");
     nk_vc_printf("blktest dev r|w start count\n");
     nk_vc_printf("isotest\n");
+    nk_vc_printf("test threads|...\n");
     nk_vc_printf("vm name [embedded image]\n");
     return 0;
   }
@@ -621,6 +680,12 @@ static int handle_cmd(char *buf, int n)
 	return 0;
   }
 
+  if (!strncasecmp(buf,"test",4)) {
+      handle_test(buf);
+      return 0;
+  }
+
+
   if (!strncasecmp(buf,"attach",6)) {
 	handle_attach(buf);
 	return 0;
@@ -632,7 +697,7 @@ static int handle_cmd(char *buf, int n)
   }
 
   if (!strncasecmp(buf,"reap",4)) { 
-    nk_sched_reap();
+      nk_sched_reap(1); // unconditional reap
     return 0;
   }
 
@@ -907,6 +972,10 @@ static int handle_cmd(char *buf, int n)
     return 0;
   }
 
+  if (!strncasecmp(buf,"memi",4)) {
+      handle_meminfo(buf);
+      return 0;
+  }
 
   nk_vc_printf("Don't understand \"%s\"\n",buf);
   return 0;
@@ -936,11 +1005,19 @@ static void shell(void *in, void **out)
    
   nk_switch_to_vc(vc);
   
-  nk_vc_clear(0x9f);
+#define PROMPT 0xcf 
+#define INPUT  0x3f
+#define OUTPUT 0x9f
+
+  nk_vc_clear(OUTPUT);
+  nk_vc_setattr(OUTPUT);
    
   while (1) {  
+    nk_vc_setattr(PROMPT);
     nk_vc_printf("%s> ", (char*)in);
+    nk_vc_setattr(INPUT);
     nk_vc_gets(buf,MAX_CMD,1);
+    nk_vc_setattr(OUTPUT);
 
     if (buf[0]==0 && !first) { 
 	// continue; // turn off autorepeat for now
