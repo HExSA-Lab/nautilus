@@ -65,6 +65,20 @@ static inline void preempt_enable()
     }
 }
 
+// make cpu preeemptible once again
+// this should only be called by scheduler in handling
+// special context switch requests
+static inline void preempt_reset() 
+{
+    void *base = __cpu_state_get_cpu();
+    if (base) {
+	// per-cpu functional
+	__sync_fetch_and_and((uint16_t *)(base+10),0);
+    } else {
+	// per-cpu is not running, so we are not going to get preempted anyway
+    }
+}
+
 static inline int preempt_is_disabled()
 {
     void *base = __cpu_state_get_cpu();

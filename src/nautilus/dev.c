@@ -140,7 +140,7 @@ void nk_dev_wait(struct nk_dev *d)
     } else {
 	// We are in a thread context and we will
 	// put ourselves to sleep
-	nk_thread_queue_sleep(d->waiting_threads);
+	nk_thread_queue_sleep_extended(d->waiting_threads, 0, 0);
     }
 }
 

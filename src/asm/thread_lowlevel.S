@@ -216,7 +216,6 @@ leaq 8(%rsp), %rsp ;                            // This instruction must not aff
 */	
 
 ENTRY(nk_thread_fork)
-    cli                         // turn interrupts off
 	REG_SAVE()                  // RBP and RSP will be handled in _thread_fork
 
 	// Note that callee will see us as part of the stack frame
@@ -228,7 +227,6 @@ ENTRY(nk_thread_fork)
 // different stacks and different rax return values
 ENTRY(_fork_return)
 	REG_LOAD_SKIP_RAX()         // we want the return produced by _thread_fork
-    sti                         // turn interrupts back on (this is actually unnecessary in the child but oh well)
 	retq                        // and back we go
 
 /*
@@ -261,6 +259,22 @@ ENTRY(nk_interrupt_like_trampoline)
 	// now we have 7 more words of crud to toss
 	leaq 56(%rsp), %rsp
 	retq			
+
+
+/*
+	Allow C-code to do FP saves/restores
+
+	nk_fp_save(destptr)
+	mk_fp_restore(srcptr)
+	
+*/
+ENTRY(nk_fp_save)
+	fxsave (%rdi)
+	ret
+
+ENTRY(nk_fp_restore)
+	fxrstor (%rdi)
+	ret
 	
 panic_str:
 .ascii "Stack corruption detected\12\0"

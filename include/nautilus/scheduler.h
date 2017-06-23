@@ -132,19 +132,26 @@ void   nk_sched_kick_cpu(int cpu);
 // Put the thread to sleep / awaken it
 // these signal the scheduler that the thread is now on a 
 // non-scheduler queue (sleep) or is to be returned to a scheduler 
-// queue (awaken)
-void    nk_sched_sleep();
+// queue (awaken)   
+// the lock_to_release will be released once the scheduling pass is complete
+// this allows the user code to manage races between its own abstractions
+// (e.g., wait queues) and the scheduling process
+// nk_sched_sleep will also renable preemption on the core before switching to
+// the new thread
+void    nk_sched_sleep(spinlock_t *lock_to_release);
 #define nk_sched_awaken(thread,cpu) nk_sched_make_runnable(thread,cpu,0)
 
 // Have the thread yield to another, if appropriate
-void              nk_sched_yield(void);
-#define           nk_sched_schedule() nk_sched_yield()
+void              nk_sched_yield(spinlock_t *lock_to_release);
+#define           nk_sched_schedule(lock_to_release) nk_sched_yield(lock_to_release)
 
 // Thread exit - will not return!
-void    nk_sched_exit();
+// does this have the same issue as sleep?
+void    nk_sched_exit(spinlock_t *lock_to_release);
 
 // clean up after detached threads
-void    nk_sched_reap();
+// normally will only execute if we have too many threads active
+void    nk_sched_reap(int unconditional);
 
 // return ns
 uint64_t nk_sched_get_realtime();

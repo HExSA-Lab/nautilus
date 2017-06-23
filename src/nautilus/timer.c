@@ -141,13 +141,19 @@ int nk_cancel_timer(struct nk_timer *t)
     return 0;
 }
 
+static int check(void *state)
+{
+    struct nk_timer *t = state;
+    return __sync_fetch_and_add(&t->signaled,0);
+}
+
 int nk_wait_timer(struct nk_timer *t)
 {
     DEBUG("Wait timer %p\n",t);
     while (!__sync_fetch_and_add(&t->signaled,0)) {
 	if (!(t->flags & TIMER_SPIN)) { 
 	    DEBUG("Going to sleep on thread queue\n");
-	    nk_thread_queue_sleep(t->waitq);
+	    nk_thread_queue_sleep_extended(t->waitq, check, t);
 	} else {
 	    asm volatile ("pause");
 	}

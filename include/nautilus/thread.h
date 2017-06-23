@@ -50,6 +50,7 @@ typedef void (*nk_thread_fun_t)(void * input, void ** output);
 typedef uint64_t nk_stack_size_t;
 
 
+// Create thread but do not launch it 
 int
 nk_thread_create (nk_thread_fun_t fun, 
 		  void * input,
@@ -59,9 +60,11 @@ nk_thread_create (nk_thread_fun_t fun,
 		  nk_thread_id_t * tid,
 		  int bound_cpu);  // -1 => not bound
 
+// Launch a previously created thread
 int
 nk_thread_run(nk_thread_id_t tid);
 
+// Create and launch a thread
 int
 nk_thread_start (nk_thread_fun_t fun, 
                  void * input,
@@ -71,19 +74,40 @@ nk_thread_start (nk_thread_fun_t fun,
                  nk_thread_id_t * tid,
                  int bound_cpu); // -1 => not bound
 
-int nk_thread_name(nk_thread_id_t tid, char *name);
-
+// fork the current thread 
+//   - parent is returned the tid of child
+//   - child is returned zero
+//   - child runs until it returns from the 
+//     current function, which returns into
+//     the thread cleanup logic instead of to
+//     the caller
 extern nk_thread_id_t nk_thread_fork(void);
 
+// Allow a child thread to set output explicitly
+// since it has no start function to which we can
+// pass an output pointer
 void nk_set_thread_fork_output(void * result);
-void nk_thread_exit(void * retval);
-void nk_thread_destroy(nk_thread_id_t t); /* like thread_kill */
-void nk_wait(nk_thread_id_t t);
+
+// Give a thread a name
+int nk_thread_name(nk_thread_id_t tid, char *name);
+
+// explicit yield (hides details of the scheduler)
 void nk_yield();
 
-void nk_wake_waiters(void);
+// Wait for a child or all children to exit
+// This includes forked threads
+// When joining all children, the optional
+// function consumes their output values
 int nk_join(nk_thread_id_t t, void ** retval);
-int nk_join_all_children(int (*)(void*));
+int nk_join_all_children(int (*output_consumer)(void *output));
+
+// called explictly or implicitly when a thread exits
+void nk_thread_exit(void * retval);
+
+// garbage collect an exited thread - typically called
+// by the reaper logic in the scheduler
+void nk_thread_destroy(nk_thread_id_t t);
+
 
 #ifndef __LEGION__
 nk_thread_id_t nk_get_tid(void);
@@ -102,7 +126,18 @@ int nk_tls_set(nk_tls_key_t key, const void * val);
 
 /********* INTERNALS ***********/
 
-#define FXSAVE_SIZE 512
+// Support both fxsave and xsave for FP state
+// The specific instruction used is determined in thread_lowlevel.S
+#define XSAVE_SIZE 4096           // guess - actually is extensible format
+                                  // current reasoning: 512 bytes for legacy
+                                  // 1KB + for AVX2 (32*512 bit)
+                                  // extra space
+#define XSAVE_ALIGN 64            // per Intel docs
+#define FXSAVE_SIZE 512           // per Intel docs
+#define FXSAVE_ALIGN 16           // per Intel docs
+
+#define FPSTATE_SIZE (XSAVE_SIZE>FXSAVE_SIZE ? XSAVE_SIZE : FXSAVE_SIZE)
+#define FPSTATE_ALIGN (XSAVE_ALIGN>FXSAVE_ALIGN ? XSAVE_ALIGN : FXSAVE_ALIGN)
 
 #define MAX_THREAD_NAME 32
 
@@ -115,19 +150,20 @@ int nk_tls_set(nk_tls_key_t key, const void * val);
 
 /* thread status */
 typedef enum {
-    NK_THR_INIT,
+    NK_THR_INIT=0,
     NK_THR_RUNNING, 
     NK_THR_WAITING,
     NK_THR_SUSPENDED, 
-    NK_THR_EXITED
+    NK_THR_EXITED,
 } nk_thread_status_t;
+
 
 typedef struct nk_queue nk_thread_queue_t;
 
 struct nk_thread {
-    uint64_t rsp; /* SHOULD NOT CHANGE POSITION */
-    void * stack; /* SHOULD NOT CHANGE POSITION */
-    uint16_t fpu_state_offset; /* SHOULD NOT CHANGE POSITION */
+    uint64_t rsp;              /* +0  SHOULD NOT CHANGE POSITION */
+    void * stack;              /* +8  SHOULD NOT CHANGE POSITION */
+    uint16_t fpu_state_offset; /* +16 SHOULD NOT CHANGE POSITION */
 
     nk_stack_size_t stack_size;
     unsigned long tid;
@@ -146,8 +182,6 @@ struct nk_thread {
     nk_thread_queue_t * waitq;
     nk_queue_entry_t wait_node;
 
-    nk_thread_queue_t * cur_run_q;
-    
     /* thread state */
     nk_thread_status_t status;
 
@@ -169,8 +203,8 @@ struct nk_thread {
 
     const void * tls[TLS_MAX_KEYS];
 
-    uint8_t fpu_state[FXSAVE_SIZE] __align(16);
-} __packed;
+    uint8_t fpu_state[FPSTATE_SIZE] __align(FPSTATE_ALIGN);
+} ;
 
 // internal thread representations
 typedef struct nk_thread nk_thread_t;
@@ -189,11 +223,12 @@ _nk_thread_init (nk_thread_t * t,
 
 nk_thread_queue_t * nk_thread_queue_create (void);
 void nk_thread_queue_destroy(nk_thread_queue_t * q);
-inline void nk_enqueue_thread_on_runq(nk_thread_t * t, int cpu);
-inline nk_thread_t* nk_dequeue_thread_from_runq(nk_thread_t * t);
-int nk_thread_queue_sleep(nk_thread_queue_t * q);
-int nk_thread_queue_wake_one(nk_thread_queue_t * q);
-int nk_thread_queue_wake_all(nk_thread_queue_t * q);
+
+void nk_thread_queue_sleep(nk_thread_queue_t * q);
+//  cond_check is condition (if any) to check atomically with enqueueing
+void nk_thread_queue_sleep_extended(nk_thread_queue_t * q, int (*cond_check)(void *state), void *state);
+void nk_thread_queue_wake_one(nk_thread_queue_t * q);
+void nk_thread_queue_wake_all(nk_thread_queue_t * q);
 
 struct nk_tls {
     unsigned seq_num;

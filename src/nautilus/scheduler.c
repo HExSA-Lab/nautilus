@@ -54,8 +54,12 @@
 
 #define SANITY_CHECKS 0
 
+#define DUMP_THREAD_RT_STATE 0
+#define DUMP_SCHED_STATE     0
+
 #define INFO(fmt, args...) INFO_PRINT("Scheduler: " fmt, ##args)
 #define ERROR(fmt, args...) ERROR_PRINT("Scheduler: " fmt, ##args)
+
 
 #define DEBUG(fmt, args...)
 #define DEBUG_DUMP(rt,pre)
@@ -63,7 +67,11 @@
 #undef DEBUG
 #undef DEBUG_DUMP
 #define DEBUG(fmt, args...) DEBUG_PRINT("Scheduler: " fmt, ##args)
+#if DUMP_THREAD_RT_STATE
 #define DEBUG_DUMP(rt,pre) rt_thread_dump(rt,pre)
+#else
+#define DEBUG_DUMP(rt,pre) 
+#endif
 #endif
 
 
@@ -79,7 +87,7 @@
 #define UTIL_ONE 1000000ULL
 
 // Maximum number of threads within a priority queue or queue
-#define MAX_QUEUE NAUT_CONFIG_MAX_THREADS
+#define MAX_QUEUE (NAUT_CONFIG_MAX_THREADS)
 
 
 #define GLOBAL_LOCK_CONF uint8_t _global_flags=0
@@ -300,7 +308,15 @@ typedef struct nk_sched_percpu_state {
 #define REMOVE_APERIODIC(s,t) lottery_remove_aperiodic(s,t)
 #endif
 #define HAVE_APERIODIC(s) (!rt_queue_empty(&(s)->aperiodic))
+#ifdef NAUT_CONFIG_DEBUG_SCHED
+#if DUMP_SCHED_STATE
 #define DUMP_APERIODIC(s,p) rt_queue_dump(&(s)->aperiodic,p)
+#else
+#define DUMP_APERIODIC(s,p) 
+#endif
+#else
+#define DUMP_APERIODIC(s,p) 
+#endif
 #define PEEK_APERIODIC(s,k) rt_queue_peek(&(s)->aperiodic,k)
 #define SIZE_APERIODIC(s) ((s)->aperiodic.size)
 #else
@@ -310,7 +326,15 @@ typedef struct nk_sched_percpu_state {
 #define PEEK_APERIODIC(s,k) rt_priority_queue_peek(&(s)->aperiodic,k)
 #define SIZE_APERIODIC(s) ((s)->aperiodic.size)
 #define HAVE_APERIODIC(s) (!rt_priority_queue_empty(&(s)->aperiodic))
+#ifdef NAUT_CONFIG_DEBUG_SCHED
+#if DUMP_SCHED_STATE
 #define DUMP_APERIODIC(s,p) rt_priority_queue_dump(&(s)->aperiodic,p)
+#else
+#define DUMP_APERIODIC(s,p) 
+#endif
+#else
+#define DUMP_APERIODIC(s,p) 
+#endif
 #endif
 
 #define GET_NEXT_RT_PENDING(s)   rt_priority_queue_dequeue(&(s)->pending)
@@ -318,14 +342,30 @@ typedef struct nk_sched_percpu_state {
 #define REMOVE_RT_PENDING(s,t) rt_priority_queue_remove(&(s)->pending,t)
 #define HAVE_RT_PENDING(s) (!rt_priority_queue_empty(&(s)->pending))
 #define PEEK_RT_PENDING(s) (s->pending.threads[0])
+#ifdef NAUT_CONFIG_DEBUG_SCHED
+#if DUMP_SCHED_STATE
 #define DUMP_RT_PENDING(s,p) rt_priority_queue_dump(&(s)->pending,p)
+#else
+#define DUMP_RT_PENDING(s,p)
+#endif
+#else
+#define DUMP_RT_PENDING(s,p)
+#endif
 
 #define GET_NEXT_RT(s)   rt_priority_queue_dequeue(&(s)->runnable)
 #define PUT_RT(s,t) rt_priority_queue_enqueue(&(s)->runnable,t)
 #define REMOVE_RT(s,t) rt_priority_queue_remove(&(s)->runnable,t)
 #define HAVE_RT(s) (!rt_priority_queue_empty(&(s)->runnable))
 #define PEEK_RT(s) (s->runnable.threads[0])
+#ifdef NAUT_CONFIG_DEBUG_SCHED
+#if DUMP_SCHED_STATE
 #define DUMP_RT(s,p) rt_priority_queue_dump(&(s)->runnable,p)
+#else
+#define DUMP_RT(s,p)
+#endif
+#else
+#define DUMP_RT(s,p)
+#endif
 
 //
 // Per-thread state (abstracted from overall thread context
@@ -397,7 +437,7 @@ static void           set_timer(rt_scheduler *scheduler,
 				rt_thread *thread, 
 				uint64_t now);
 
-static void           handle_special_switch(rt_status what, int have_lock, uint8_t flags);
+static void           handle_special_switch(rt_status what, int have_lock, uint8_t flags, spinlock_t *lock_to_release);
 
 static inline uint64_t get_min_per(rt_priority_queue *runnable, rt_priority_queue *queue, rt_thread *thread);
 static inline uint64_t get_avg_per(rt_priority_queue *runnable, rt_priority_queue *pending, rt_thread *thread);
@@ -628,12 +668,18 @@ struct nk_thread *nk_find_thread_by_tid(uint64_t tid)
     return q.thread;
 }
 
-void nk_sched_reap()
+void nk_sched_reap(int uncond)
 {
     GLOBAL_LOCK_CONF;
     struct sys_info *sys = per_cpu_get(system);
     struct apic_dev *apic = sys->cpus[my_cpu_id()]->apic;
     struct rt_list *rlist;
+
+    if (!uncond && global_sched_state.num_threads < ((NAUT_CONFIG_MAX_THREADS * 95)/100)) {
+	// unless we are unconditionally reaping, do not reap if we still
+	// have a lot of threads left....
+	return;
+    }
 
     if (!__sync_bool_compare_and_swap(&global_sched_state.reaping,0,1)) {
 	// reaping is already in progress elsewhere
@@ -725,6 +771,8 @@ static int initial_placement(nk_thread_t *t)
 int nk_sched_thread_post_create(nk_thread_t * t)
 {
     GLOBAL_LOCK_CONF;
+
+    nk_sched_reap(0); // conditional reap to make room for new thread
     
     t->current_cpu = initial_placement(t);
 
@@ -983,9 +1031,9 @@ int nk_sched_make_runnable(struct nk_thread *thread, int cpu, int admit)
 }
 
 
-void nk_sched_exit()
+void nk_sched_exit(spinlock_t *lock_to_release)
 {
-    handle_special_switch(EXITING,0,0);
+    handle_special_switch(EXITING,0,0,lock_to_release);
     // we should not come back!
     panic("Returned to finished thread!\n");
 }
@@ -1475,15 +1523,26 @@ static inline void set_interrupt_priority(rt_thread *t)
 // Invoked in interrupt context by the timer interrupt or
 // some other interrupt
 //
+// Invoked in non-interrupt context by handle_special_switch
+//
 // Returns NULL if there is no need to change the current thread
 // Returns pointer to the thread to switch to otherwise
 //
 // In both cases updates the timer to reflect the thread
 // that should be running
 //
-struct nk_thread *_sched_need_resched(int have_lock)
+struct nk_thread *_sched_need_resched(int have_lock, int force_resched)
 {
     LOCAL_LOCK_CONF;
+
+    if (preempt_is_disabled())  {
+	if (force_resched) {
+	    DEBUG("Forced reschedule with preemption off\n");
+	} else {
+	    DEBUG("Preemption disabled, avoiding rescheduling pass and staying with current thread\n");
+	    return 0;
+	}
+    }
 
     INST_SCHED_IN();
 
@@ -1599,6 +1658,7 @@ struct nk_thread *_sched_need_resched(int have_lock)
 	    // current aperiodic thread has run out of time or is yielding
 	    // keep it on the aperiodic run queue
 	    //DEBUG_DUMP(rt_c,CUR_NOT_SPECIAL_STR);
+	    DEBUG("Set current aperiodic thread (%lu) to suspended\n",rt_c->thread->tid);
 	    rt_c->thread->status=NK_THR_SUSPENDED;
 	    if (PUT_APERIODIC(scheduler, rt_c)) { 
 		goto panic_queue;
@@ -1924,7 +1984,7 @@ struct nk_thread *_sched_need_resched(int have_lock)
 	
     default:
 	ERROR("Unknown current task type %d... just letting it run\n",rt_c->constraints.type);
-	return 0;
+	goto out_good_early;
 	break;
     }    
     
@@ -1980,13 +2040,14 @@ struct nk_thread *_sched_need_resched(int have_lock)
     set_timer(scheduler, rt_n, now);
     if (rt_n!=rt_c) {
 	if (rt_n->thread->status==NK_THR_RUNNING) { 
-	    ERROR("Switching to new thread that is already running (old tid=%llu\n",rt_c->thread->tid);
+	    ERROR("Switching to new thread that is already running (old tid=%llu (%s), new tid=%llu (%s))\n",rt_c->status,rt_c->thread->tid,rt_c->thread->name,rt_n->thread->tid,rt_n->thread->name);
 	    DUMP_ENTRY_CONTEXT();
 	}
 	// We may have switched away from a thread attempting to sleep
 	// before we were able to do so, in which case, don't reset its status
 	// we need to try again
 	if (rt_n->thread->status != NK_THR_WAITING) { 
+	    DEBUG("Switching new thread (%lu) from state %u to state %u\n",rt_n->thread->tid, rt_n->thread->status, NK_THR_RUNNING);
 	    rt_n->thread->status=NK_THR_RUNNING;
 	}
 	// The currently running thread has either been marked suspended
@@ -2023,10 +2084,11 @@ struct nk_thread *_sched_need_resched(int have_lock)
 	// the thread may be marked waiting as we may have been preempted in the 
 	// middle of going to sleep
 	if (rt_c->thread->status!=NK_THR_SUSPENDED && rt_c->thread->status!=NK_THR_WAITING && !yielding) { 
-	    ERROR("Staying with current thread, but it is not marked suspended or waiting or yielding (thread status is %u rt thread status is %u tid=%llu)\n",rt_c->thread->status,rt_c->status,rt_c->thread->tid);
+	    ERROR("Staying with current thread, but it is not marked suspended or waiting or yielding (thread status is %u rt thread status is %u tid=%llu (%s))\n",rt_c->thread->status,rt_c->status,rt_c->thread->tid,rt_c->thread->name);
 	    DUMP_ENTRY_CONTEXT();
 	}
-	if (rt_c->thread->status!=NK_THR_WAITING) { 
+	if (rt_c->thread->status!= NK_THR_WAITING) { 
+	    DEBUG("Switching current thread (%lu) from state %u to state %u\n",rt_c->thread->tid,rt_c->thread->status, NK_THR_RUNNING);
 	    rt_c->thread->status=NK_THR_RUNNING;
 	}
 
@@ -2043,7 +2105,7 @@ struct nk_thread *_sched_need_resched(int have_lock)
 
 struct nk_thread *nk_sched_need_resched()
 {
-    return _sched_need_resched(0);
+    return _sched_need_resched(0,0);
 }
 
 int nk_sched_thread_change_constraints(struct nk_sched_constraints *constraints)
@@ -2080,7 +2142,7 @@ int nk_sched_thread_change_constraints(struct nk_sched_constraints *constraints)
 	}
 	// we are now on the aperiodic run queue
 	// so we need to get running again with our new constraints
-	handle_special_switch(CHANGING,1,_local_flags);
+	handle_special_switch(CHANGING,1,_local_flags,0);
 	// we've now released the lock, so reacquire
 	LOCAL_LOCK(scheduler);
     }
@@ -2107,7 +2169,7 @@ int nk_sched_thread_change_constraints(struct nk_sched_constraints *constraints)
 	// we are now aperioidic
 	// since we are again on the run queue
 	// we need to kick ourselves off the cp
-	handle_special_switch(CHANGING,1,_local_flags);
+	handle_special_switch(CHANGING,1,_local_flags,0);
 	// when we come back, we note that we have failed
 	// we also have no lock
 	goto out_bad_no_unlock;
@@ -2119,7 +2181,7 @@ int nk_sched_thread_change_constraints(struct nk_sched_constraints *constraints)
 	DUMP_RT_PENDING(scheduler,"pending before handle special switch");
 	DUMP_APERIODIC(scheduler,"aperiodic before handle special switch");
 
-	handle_special_switch(CHANGING,1,_local_flags);
+	handle_special_switch(CHANGING,1,_local_flags,0);
 
 	// we now have released lock and interrupts are back to prior
 
@@ -2376,8 +2438,18 @@ extern void nk_thread_switch(nk_thread_t*);
 // before return if the lock is held
 // prior to any thread switch, the lock is released
 // interrupt state restoration operates just as any other switch
-static void handle_special_switch(rt_status what, int have_lock, uint8_t flags)
+// have_lock implies we have the lock and we have disabled interrupts, 
+// with flags being the restore interrupt value
+ static void handle_special_switch(rt_status what, int have_lock, uint8_t flags, spinlock_t *lock_to_release)
 {
+    int did_preempt_disable = 0;
+    int no_switch=0;
+
+    if (!preempt_is_disabled()) {
+	preempt_disable();
+	did_preempt_disable = 1;
+    }
+
     if (!have_lock) { 
 	// we always want a local critical section here
 	flags = irq_disable_save();
@@ -2405,8 +2477,14 @@ static void handle_special_switch(rt_status what, int have_lock, uint8_t flags)
 
     c->sched_state->status = what;
 
+    // force a rescheduling pass even though preemption is off
+    n = _sched_need_resched(have_lock,1);
 
-    n = _sched_need_resched(have_lock);
+    // at this point, the scheduler has been updated and so we can
+    // release the user's lock / flags
+    if (lock_to_release) { 
+	spin_unlock(lock_to_release);
+    }
 
     if (!n) {
 	switch (what) {
@@ -2427,12 +2505,13 @@ static void handle_special_switch(rt_status what, int have_lock, uint8_t flags)
 	    ERROR("Huh - unknown request %d in handle_special_switch()\n",what);
 	    break;
 	}
+	no_switch = 1;
 	goto out_good;
     }
 
 #ifdef NAUT_CONFIG_ENABLE_STACK_CHECK
-    if (c->rsp <= (uint64_t)(c->stack)) {
-	panic("This thread (%p, tid=%u) has run off the end of its stack! (start=%p, rsp=%p, start size=%lx)\n", 
+    if ((c->rsp <= (uint64_t)(c->stack)) || c->rsp >= (uint64_t)(c->stack+c->stack_size)) {
+	panic("This thread (%p, tid=%u) has run off the end (or beginning) of its stack! (start=%p, rsp=%p, start size=%lx)\n", 
 	      (void*)c,
 	      c->tid,
 	      c->stack,
@@ -2453,9 +2532,15 @@ static void handle_special_switch(rt_status what, int have_lock, uint8_t flags)
 	have_lock = 0;
     }
 
+    // Now preemption is enabled, but interrupts are 
+    // still off, so we will continue to run to completion
+    preempt_reset();
+
     // at this point, we have interrupts off
     // whatever we switch to will turn them back on
-
+    // our context will indicate interrupts off
+    // when we switch away, we will leave rflags.if=0 on
+    // the stack and preemption enabled
     nk_thread_switch(n);
     
     DEBUG("After return from switch (back in %llu \"%s\")\n", c->tid, c->name);
@@ -2464,6 +2549,13 @@ static void handle_special_switch(rt_status what, int have_lock, uint8_t flags)
     c->sched_state->status = last_status;
     if (have_lock) {
 	spin_unlock(&s->lock);
+    }
+    if (no_switch && did_preempt_disable) { 
+	// we are not doing a context switch, so we need to revert
+	// preemption state to what we had on entry
+	// if we had done a context switch, the preemption state
+	// would have been reset before the switch back to us
+	preempt_enable();
     }
     // and now we restore the interrupt state to 
     // what we had on entry
@@ -2478,9 +2570,9 @@ static void handle_special_switch(rt_status what, int have_lock, uint8_t flags)
  *
  */
 void 
-nk_sched_yield(void)
+nk_sched_yield(spinlock_t *lock_to_release)
 {
-    handle_special_switch(YIELDING,0,0);
+    handle_special_switch(YIELDING,0,0,lock_to_release);
 }
 
 
@@ -2489,12 +2581,13 @@ nk_sched_yield(void)
  *
  * unconditionally schedule some other thread
  * a thread sleeps only if it wants to stop being runnable
- *
+ * the thread can pass in a lock to release once
+ * the scheduling pass is complete
  */
 void 
-nk_sched_sleep(void)
+nk_sched_sleep(spinlock_t *lock_to_release)
 {
-    handle_special_switch(SLEEPING,0,0);
+    handle_special_switch(SLEEPING,0,0,lock_to_release);
 }
 
 static int rt_thread_check_deadlines(rt_thread *t, rt_scheduler *s, uint64_t now)
@@ -2597,7 +2690,6 @@ static uint64_t cur_time()
 {
     struct sys_info *sys = per_cpu_get(system);
     struct apic_dev *apic = sys->cpus[my_cpu_id()]->apic;
-
     return apic_cycles_to_realtime(apic, rdtsc());
 }
 
@@ -2741,11 +2833,11 @@ static int rt_thread_admit(rt_scheduler *scheduler, rt_thread *thread, uint64_t 
 	  thread->constraints.type==APERIODIC ? "Aperiodic" :
 	  thread->constraints.type==PERIODIC ? "Periodic" :
 	  thread->constraints.type==SPORADIC ? "Sporadic" : "Unknown",
-	  thread->constraints.interrupt_priorty_class,
+	  thread->constraints.interrupt_priority_class,
 	  util_limit,aper_res,spor_res,per_res);
 
     if (thread->constraints.interrupt_priority_class > 0xe) {
-	DEBUG("Rejecting thread with too high of an interrupt priorty class (%u)\n", thread->constraints.interrupt_priority_class);
+	DEBUG("Rejecting thread with too high of an interrupt priority class (%u)\n", thread->constraints.interrupt_priority_class);
 	return -1;
     }
 	
@@ -3005,6 +3097,7 @@ static int shared_init(struct cpu *my_cpu, struct nk_sched_config *cfg)
 
     ZERO(main);
 
+
     // need to be sure this is aligned, hence direct use of malloc here
     my_stack = malloc(PAGE_SIZE);
 
@@ -3021,6 +3114,16 @@ static int shared_init(struct cpu *my_cpu, struct nk_sched_config *cfg)
 	goto fail_free;
     }
 
+    // Since this is an already running "thread", it already has a stack.
+    // When we return to either init() or to smp_ap_entry(), a stack
+    // switch will be performed to the stack we just allocated.  
+    // It is possible that init() or smp_ap_entry()
+    // will end up popping stuff off of what the compiler thinks is the 
+    // *same* stack throughout.  The result is tha we could underrun the new stack
+    // and corrupt adjacent memory at a higher address.
+    // We guard against this by padding the stack pointer 
+    main->rsp -= 1024;
+
     main->bound_cpu = my_cpu_id(); // idle threads cannot move
     main->status = NK_THR_RUNNING;
     main->sched_state->status = ADMITTED;
@@ -3034,6 +3137,8 @@ static int shared_init(struct cpu *my_cpu, struct nk_sched_config *cfg)
     reset_stats(main->sched_state);
 
     put_cur_thread(main);
+
+    my_cpu->sched_state->current = main->sched_state;
 
     nk_sched_thread_post_create(main);
 
@@ -3144,7 +3249,7 @@ static void reaper(void *in, void **out)
 	DEBUG("Reaper sleeping\n");
 	nk_sleep(NAUT_CONFIG_AUTO_REAP_PERIOD_MS*1000000ULL);	
 	DEBUG("Reaping threads\n");
-	nk_sched_reap();
+	nk_sched_reap(1); // unconditional reap
     }
 }
 
