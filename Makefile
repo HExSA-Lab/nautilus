@@ -308,15 +308,30 @@ NAUT_INCLUDE      := -D__NAUTILUS__ -Iinclude \
 
 CPPFLAGS        := $(NAUT_INCLUDE) -D__NAUTILUS__
 
-COMMON_FLAGS := -O2 \
+COMMON_FLAGS :=            -O2 \
 			   -fno-omit-frame-pointer \
 			   -ffreestanding \
 			   -fno-stack-protector \
 			   -fno-strict-aliasing \
                            -fno-strict-overflow \
+                           -fno-delete-null-pointer-checks \
 			   -mno-red-zone \
 			   -mcmodel=large
-			  
+
+#
+# Add these for more recent compilers to avoid having
+# the compiler insert surprise ud2 instructions for you should
+# you derefence address zero
+#
+#                           -fno-isolate-erroneous-paths-attribute \
+#                           -fno-isolate-erroneous-paths-dereference \
+#			  
+#
+# 
+# For testing, optionally add -fsanitize=undefined
+#
+#
+#
 
 CXXFLAGS := $(COMMON_FLAGS) \
 			-fno-exceptions \
@@ -341,6 +356,11 @@ CFLAGS:=   $(COMMON_FLAGS) \
 		   #-Werror \
 		   #-Wmissing-prototypes \
 		   #-Wstrict-prototypes \
+
+#
+#                   -Wextra \
+#                   -Wpedantic \
+#
 
 # NOTE: We MUST have max-page-size set to this here. Otherwise things
 # go off the rails for the Grub multiboot setup because the linker
