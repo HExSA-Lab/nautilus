@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
@@ -25,6 +25,7 @@
 
 #include <nautilus/naut_types.h>
 #include <nautilus/list.h>
+#include <nautilus/buddy.h>
 
 #define MAX_MMAP_ENTRIES 128
 
@@ -88,12 +89,26 @@ void kmem_add_memory(struct mem_region * mem, ulong_t base_addr, size_t size);
 void * malloc(size_t size);
 void free(void * addr);
 
+int  kmem_sanity_check();
+
 
 /* arch specific */
 void arch_detect_mem_map (mmap_info_t * mm_info, mem_map_entry_t * memory_map, unsigned long mbd);
 void arch_reserve_boot_regions(unsigned long mbd);
 
 
-void kmem_dump_my_view();
+struct kmem_stats {
+    uint64_t total_num_pools; // how many memory pools there are
+    uint64_t total_blocks_free;
+    uint64_t total_bytes_free;
+    uint64_t min_alloc_size;
+    uint64_t max_alloc_size;
+    uint64_t max_pools;  // how many pools can we written in the following
+    uint64_t num_pools;   // how many pools were written in the following
+    struct buddy_pool_stats pool_stats[0];
+};
+
+uint64_t kmem_num_pools();
+void     kmem_stats(struct kmem_stats *stats);
 
 #endif /* !__MM_H__! */

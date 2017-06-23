@@ -234,6 +234,7 @@ buddy_init (ulong_t base_addr,
 	return NULL;
     }
 
+
     /* Initially all lists are empty */
     for (i = 0; i <= pool_order; i++) {
         INIT_LIST_HEAD(&mp->avail[i]);
@@ -320,7 +321,7 @@ buddy_alloc (struct buddy_mempool *mp, ulong_t order)
             list_add(&buddy_block->link, &mp->avail[j]);
         }
 
-	BUDDY_DEBUG("Returning block %p\n",block);
+	BUDDY_DEBUG("Returning block %p which is in memory pool %p-%p\n",block,mp->base_addr,mp->base_addr+(1ULL << mp->pool_order));
 
         return block;
     }
@@ -348,13 +349,19 @@ buddy_free(
     ASSERT(order <= mp->pool_order);
     ASSERT(!((uint64_t)addr % (1ULL<<order)));  // aligned to own size only
 
-    BUDDY_DEBUG("BUDDY FREE on memory pool: %p addr=%p order=%lu\n",mp,addr,order);
+    BUDDY_DEBUG("BUDDY FREE on memory pool: %p addr=%p base=%p order=%lu\n",mp,addr,mp->base_addr, order);
 
     /* Fixup requested order to be at least the minimum supported */
     if (order < mp->min_order) {
         order = mp->min_order;
 	BUDDY_DEBUG("updated order to %lu\n",order);
     }
+
+    ASSERT((uint64_t)addr>=(uint64_t)(mp->base_addr) &&
+	   (uint64_t)addr<(uint64_t)(mp->base_addr+(1ULL<<mp->pool_order)));
+
+    ASSERT(order<=mp->pool_order);
+
     /* Overlay block structure on the memory block being freed */
     struct block * block = (struct block *) addr;
 
@@ -413,25 +420,94 @@ buddy_free(
 }
 
 
-/**
- * Dumps the state of a buddy system memory allocator object to the console.
+/*
+  Sanity-checks and gets statistics of the buddy pool
  */
-void
-buddy_dump_mempool(struct buddy_mempool *mp)
+static int _buddy_sanity_check(struct buddy_mempool *mp, struct buddy_pool_stats *stats)
 {
+    int rc;
     ulong_t i;
     ulong_t num_blocks;
+    uint64_t total_bytes;
+    uint64_t total_blocks;
+    uint64_t min_alloc, max_alloc;
+    uint8_t flags;
     struct list_head *entry;
 
-    BUDDY_DEBUG("DUMP OF BUDDY MEMORY POOL:\n");
+    rc=0;
+
+    flags = spin_lock_irq_save(&mp->lock);
+
+    stats->start_addr = (void*)(mp->base_addr);
+    stats->end_addr = (void*)(mp->base_addr + (1ULL<<mp->pool_order));
+
+    total_bytes = 0;
+    total_blocks = 0;
+    min_alloc = 0;
+    max_alloc = 0;
+
+    //nk_vc_printf("buddy pool %p-%p, order=%lu, min order=%lu\n", mp->base_addr, mp->base_addr + (1ULL<<mp->pool_order),mp->pool_order,mp->min_order);
 
     for (i = mp->min_order; i <= mp->pool_order; i++) {
 
         /* Count the number of memory blocks in the list */
         num_blocks = 0;
-        list_for_each(entry, &mp->avail[i])
+        list_for_each(entry, &mp->avail[i])  {
+	    struct block *block = list_entry(entry, struct block, link);
+	    //nk_vc_printf("order %lu block %lu\n",i, num_blocks);
+	    //nk_vc_printf("entry %p - block %p order %lx\n",entry, block,block->order);
+	    if ((uint64_t)block<(uint64_t)mp->base_addr || 
+		(uint64_t)block>=(uint64_t)(mp->base_addr+(1ULL<<mp->pool_order))) { 
+		ERROR_PRINT("BLOCK %p IS OUTSIDE OF POOL RANGE (%p-%p)\n", block,
+			    mp->base_addr,(mp->base_addr+(1ULL<<mp->pool_order)));
+		rc|=-1;
+		break;
+	    }
+	    if (block->order != i) { 
+		ERROR_PRINT("BLOCK %p IS OF INCORRECT ORDER (%lu)\n", block, block->order);
+		ERROR_PRINT("FIRST WORDS: 0x%016lx 0x%016lx 0x%016lx 0x%016lx\n", ((uint64_t*)block)[0],((uint64_t*)block)[1],((uint64_t*)block)[2],((uint64_t*)block)[3]);
+		rc|=-1;
+		break;
+	    }
+	    if (!is_available(mp,block)) { 
+		ERROR_PRINT("BLOCK %p IS NOT MARKED AVAILABLE BUT IS ON FREE LIST\n", block);
+		ERROR_PRINT("FIRST WORDS: 0x%016lx 0x%016lx 0x%016lx 0x%016lx\n", ((uint64_t*)block)[0],((uint64_t*)block)[1],((uint64_t*)block)[2],((uint64_t*)block)[3]);
+		rc|=-1;
+		break;
+	    }
             ++num_blocks;
+	}
 
-        BUDDY_DEBUG("  order %2lu: %lu free blocks\n", i, num_blocks);
+	//nk_vc_printf("%lu blocks at order %lu\n",num_blocks,i);
+
+	if (min_alloc==0) { 
+	    min_alloc = 1ULL << mp->min_order ;
+	}
+	if (num_blocks>0) { 
+	    max_alloc = 1ULL << i;
+	}
+
+	total_blocks += num_blocks;
+	total_bytes += num_blocks * (1ULL << i);
     }
+    
+    stats->total_blocks_free = total_blocks;
+    stats->total_bytes_free = total_bytes;
+    stats->min_alloc_size = min_alloc;
+    stats->max_alloc_size = max_alloc;
+    
+    spin_unlock_irq_restore(&mp->lock,flags);
+
+    return rc;
+}
+
+void buddy_stats(struct buddy_mempool *mp, struct buddy_pool_stats *stats)
+{
+    _buddy_sanity_check(mp,stats);
+}
+
+int buddy_sanity_check(struct buddy_mempool *mp)
+{
+    struct buddy_pool_stats s;
+    return _buddy_sanity_check(mp,&s);
 }

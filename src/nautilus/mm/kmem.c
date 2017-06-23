@@ -39,10 +39,23 @@
 #define DEBUG_PRINT(fmt, args...)
 #endif
 
+#include <nautilus/backtrace.h>
+
+// turn this on to have a sanity check run before and after each
+// malloc and free
+#define SANITY_CHECK_PER_OP 0
+
 #define KMEM_DEBUG(fmt, args...) DEBUG_PRINT("KMEM: " fmt, ##args)
 #define KMEM_ERROR(fmt, args...) ERROR_PRINT("KMEM: " fmt, ##args)
 #define KMEM_PRINT(fmt, args...) INFO_PRINT("KMEM: " fmt, ##args)
 #define KMEM_WARN(fmt, args...)  WARN_PRINT("KMEM: " fmt, ##args)
+
+#ifndef NAUT_CONFIG_DEBUG_KMEM
+#define KMEM_DEBUG_BACKTRACE()
+#else
+#define KMEM_DEBUG_BACKTRACE() BACKTRACE(KMEM_DEBUG,3)
+#endif	
+	    
 
 /**
  * This specifies the minimum sized memory block to request from the underlying
@@ -448,6 +461,16 @@ malloc (size_t size)
     cpu_id_t my_id = my_cpu_id();
     struct kmem_data * my_kmem = &(nk_get_nautilus_info()->sys.cpus[my_id]->kmem);
 
+    KMEM_DEBUG("malloc of %lu bytes from:\n",size);
+    KMEM_DEBUG_BACKTRACE();
+
+#if SANITY_CHECK_PER_OP
+    if (kmem_sanity_check()) { 
+	panic("KMEM HAS GONE INSANE PRIOR TO MALLOC\n");
+	return 0;
+    }
+#endif
+
 
     /* Calculate the block order needed */
     order = ilog2(roundup_pow_of_two(size));
@@ -467,7 +490,11 @@ malloc (size_t size)
 	if (block) {
 	  hdr = block_hash_alloc(block);
 	  if (!hdr) {
+            KMEM_DEBUG("malloc cannot allocate header, releasing block\n");
+	    flags = spin_lock_irq_save(&zone->lock);
 	    buddy_free(zone,block,order);
+	    spin_unlock_irq_restore(&zone->lock, flags);
+	    block=0;
 	  }
 	}
 
@@ -483,8 +510,18 @@ malloc (size_t size)
     if (hdr) {
         kmem_bytes_allocated += (1UL << order);
     } else {
+	KMEM_DEBUG("malloc failed for size %lu order %lu\n",size,order);
         return NULL;
     }
+
+    KMEM_DEBUG("malloc succeeded: size %lu order %lu -> 0x%lx\n",size, order, block);
+      
+#if SANITY_CHECK_PER_OP
+    if (kmem_sanity_check()) { 
+	panic("KMEM HAS GONE INSANE AFTER MALLOC\n");
+	return 0;
+    }
+#endif
 
     /* Return address of the block */
     return block;
@@ -508,6 +545,16 @@ free (void * addr)
     struct kmem_block_hdr *hdr;
     struct buddy_mempool * zone;
 
+    KMEM_DEBUG("free of address %p from:\n", addr);
+    KMEM_DEBUG_BACKTRACE();
+
+#if SANITY_CHECK_PER_OP
+    if (kmem_sanity_check()) { 
+	panic("KMEM HAS GONE INSANE PRIOR TO FREE\n");
+	return;
+    }
+#endif
+
     if (!addr) {
         return;
     }
@@ -526,6 +573,87 @@ free (void * addr)
     kmem_bytes_allocated -= (1UL << hdr->order);
     buddy_free(zone, addr, hdr->order);
     spin_unlock_irq_restore(&zone->lock, flags);
+    KMEM_DEBUG("free succeeded: addr=0x%lx order=%lu\n",addr,hdr->order);
     block_hash_free_entry(hdr);
+
+#if SANITY_CHECK_PER_OP
+    if (kmem_sanity_check()) { 
+	panic("KMEM HAS GONE INSANE AFTER FREE\n");
+	return;
+    }
+#endif
+
 }
 
+
+typedef enum {GET,COUNT} stat_type_t;
+
+static uint64_t _kmem_stats(struct kmem_stats *stats, stat_type_t what)
+{
+    uint64_t cur;
+    struct mem_reg_entry * reg = NULL;
+    struct kmem_data * my_kmem = &(nk_get_nautilus_info()->sys.cpus[my_cpu_id()]->kmem);
+    if (what==GET) { 
+	uint64_t num = stats->max_pools;
+	memset(stats,0,sizeof(*stats));
+	stats->min_alloc_size=-1;
+	stats->max_pools = num;
+    }
+
+    // We will scan all memory from the current CPU's perspective
+    // Since every CPUs sees all memory pools (albeit in NUMA order)
+    // this will cover all memory
+    cur = 0;
+    list_for_each_entry(reg, &(my_kmem->ordered_regions), mem_ent) {
+	if (what==GET) { 
+	    struct buddy_mempool * zone = reg->mem->mm_state;
+	    struct buddy_pool_stats pool_stats;
+	    buddy_stats(zone,&pool_stats);
+	    if (cur<stats->max_pools) { 
+		stats->pool_stats[cur] = pool_stats;
+		stats->num_pools++;
+	    }
+	    stats->total_blocks_free += pool_stats.total_blocks_free;
+	    stats->total_bytes_free += pool_stats.total_bytes_free;
+	    if (pool_stats.min_alloc_size < stats->min_alloc_size) { 
+		stats->min_alloc_size = pool_stats.min_alloc_size;
+	    }
+	    if (pool_stats.max_alloc_size > stats->max_alloc_size) { 
+		stats->max_alloc_size = pool_stats.max_alloc_size;
+	    }
+	}
+	cur++;
+    }
+    stats->total_num_pools=cur;
+    return cur;
+}
+
+
+uint64_t kmem_num_pools()
+{
+    return _kmem_stats(0,COUNT);
+}
+
+void kmem_stats(struct kmem_stats *stats)
+{
+    _kmem_stats(stats,GET);
+}
+
+int kmem_sanity_check()
+{
+    int rc=0;
+    uint64_t cur;
+    struct mem_reg_entry * reg = NULL;
+    struct kmem_data * my_kmem = &(nk_get_nautilus_info()->sys.cpus[my_cpu_id()]->kmem);
+
+    list_for_each_entry(reg, &(my_kmem->ordered_regions), mem_ent) {
+	struct buddy_mempool * zone = reg->mem->mm_state;
+	if (buddy_sanity_check(zone)) { 
+	    ERROR_PRINT("buddy memory pool %p is insane\n", zone);
+	    rc|=-1;
+	}
+    }
+
+    return rc;
+}
+    

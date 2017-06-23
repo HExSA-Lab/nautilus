@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
@@ -224,6 +224,8 @@ mm_boot_reserve_mem (addr_t start, ulong_t size)
     uint32_t npages     = (size+PAGE_SIZE-1) / PAGE_SIZE;
     boot_mem_info_t * bm = &bootmem;
 
+    BMM_DEBUG("Reserving memory %p-%p (start page=0x%x, npages=0x%x)\n",start,start+size,start_page,npages);
+
     if (unlikely(boot_mm_inactive)) {
         panic("Invalid attempt to use boot memory allocator\n");    
     }
@@ -370,6 +372,8 @@ found:
         if (unlikely(test_and_set_bit(i, minfo->page_map)))
             panic("bit %u not set!\n", i);
     }
+
+    BMM_DEBUG("Allocated %d bytes, alignment %d (%d pages) at %p\n", size, align, areasize, ret);
 
     /* NOTE: we do NOT zero the memory! */
     return (void*)pa_to_va((ulong_t)ret);

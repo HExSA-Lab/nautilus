@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
@@ -50,6 +50,18 @@ struct buddy_mempool * buddy_init(ulong_t base_addr, ulong_t pool_order, ulong_t
 void buddy_free(struct buddy_mempool * mp, void * addr, ulong_t order);
 void * buddy_alloc(struct buddy_mempool * mp, ulong_t order);
 
-void buddy_dump_mempool(struct buddy_mempool *mp);
+int  buddy_sanity_check(struct buddy_mempool *mp);
+
+struct buddy_pool_stats {
+    void   *start_addr;
+    void   *end_addr;
+    uint64_t total_blocks_free;
+    uint64_t total_bytes_free;
+    uint64_t min_alloc_size;
+    uint64_t max_alloc_size;
+};
+
+void buddy_stats(struct buddy_mempool *mp, struct buddy_pool_stats *stats);
+
 
 #endif
