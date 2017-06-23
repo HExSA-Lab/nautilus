@@ -50,6 +50,8 @@
 #define DEBUG(fmt, args...) DEBUG_PRINT("vc: " fmt, ##args)
 #define INFO(fmt, args...) INFO_PRINT("vc: " fmt, ##args)
 
+static int up=0;
+
 static spinlock_t state_lock;
 
 #define STATE_LOCK_CONF uint8_t _state_lock_flags
@@ -111,7 +113,7 @@ struct nk_virtual_console {
     nk_keycode_t k_queue[Keycode_QUEUE_SIZE];
   } keyboard_queue;
   uint16_t BUF[VGA_WIDTH * VGA_HEIGHT];
-  uint8_t cur_x, cur_y, cur_attr;
+  uint8_t cur_x, cur_y, cur_attr, fill_attr;
   uint16_t head, tail;
   void    (*raw_noqueue_callback)(nk_scancode_t, void *priv);
   void     *raw_noqueue_callback_priv;
@@ -175,6 +177,7 @@ struct nk_virtual_console *nk_create_vc(char *name, enum nk_vc_type new_vc_type,
   new_vc->raw_noqueue_callback = callback;  
   new_vc->raw_noqueue_callback_priv = priv_data;
   new_vc->cur_attr = attr;
+  new_vc->fill_attr = attr;
   spinlock_init(&new_vc->queue_lock);
   spinlock_init(&new_vc->buf_lock);
   new_vc->head = 0;
@@ -334,7 +337,7 @@ static int _vc_scrollup_specific(struct nk_virtual_console *vc)
   for (i = VGA_WIDTH*(VGA_HEIGHT-1);
        i < VGA_WIDTH*VGA_HEIGHT; 
        i++) {
-    vc->BUF[i] = vga_make_entry(' ', vc->cur_attr);
+    vc->BUF[i] = vga_make_entry(' ', vc->fill_attr);
   }
 
   if(vc == cur_vc) {
@@ -798,6 +801,7 @@ static int _vc_clear_specific(struct nk_virtual_console *vc, uint8_t attr)
   uint16_t val = vga_make_entry (' ', attr);
 
   vc->cur_attr = attr;
+  vc->fill_attr = attr;
     
   for (i = 0; i < VGA_HEIGHT*VGA_WIDTH; i++) {
     vc->BUF[i] = val;
@@ -951,6 +955,15 @@ nk_keycode_t nk_dequeue_keycode(struct nk_virtual_console *vc)
   }
 }
 
+static int check(void *state)
+{
+    struct nk_virtual_console *vc = (struct nk_virtual_console *) state;
+
+    // this check is done without a lock since user of nk_vc_wait() will
+    // do a final check anyway
+    
+    return !is_queue_empty(vc);
+}
 
 void nk_vc_wait()
 {
@@ -960,7 +973,7 @@ void nk_vc_wait()
     vc = default_vc;
   }
 
-  nk_thread_queue_sleep(vc->waiting_threads);
+  nk_thread_queue_sleep_extended(vc->waiting_threads, check, vc);
 }
 
 
@@ -1110,6 +1123,9 @@ static int enqueue_scancode_as_keycode(struct nk_virtual_console *cur_vc, uint8_
 
 int nk_vc_handle_keyboard(nk_scancode_t scan) 
 {
+  if (!up) {
+    return 0;
+  }
   DEBUG("Input: %x\n",scan);
   switch (cur_vc->type) { 
   case RAW_NOQUEUE:
@@ -1132,6 +1148,9 @@ int nk_vc_handle_keyboard(nk_scancode_t scan)
 
 int nk_vc_handle_mouse(nk_mouse_event_t *m) 
 {
+  if (!up) {
+    return 0;
+  }
   // mouse events are not currently routed
   DEBUG("Discarding mouse event\n");
   DEBUG("Mouse Packet: buttons: %s %s %s\n",
@@ -1208,6 +1227,7 @@ static int start_list()
   
   while (!__sync_fetch_and_add(&vc_list_inited,0)) {
       // wait for vc list to be up
+      nk_yield();
   }
 
   INFO("List launched\n");
@@ -1228,7 +1248,14 @@ static void _chardev_consoles_print(struct nk_virtual_console *vc, char *data, u
     list_for_each(cur,&chardev_console_list) {
 	struct chardev_console *c = list_entry(cur,struct chardev_console, chardev_node);
 	if (c->cur_vc == vc) { 
-	    nk_char_dev_write(c->dev,len,data,NK_DEV_REQ_BLOCKING);
+	    uint64_t i;
+	    // translate lf->crlf
+	    for (i=0;i<len;i++) {
+		if (data[i]=='\n') { 
+		    nk_char_dev_write(c->dev,1,"\r",NK_DEV_REQ_BLOCKING);
+		}
+		nk_char_dev_write(c->dev,1,&data[i],NK_DEV_REQ_BLOCKING);
+	    }
 	}
     }
     
@@ -1285,7 +1312,6 @@ static void chardev_console(void *in, void **out)
         return;
     }
 
-
     // declare we are up
     __sync_fetch_and_add(&c->inited,1);
     
@@ -1293,6 +1319,7 @@ static void chardev_console(void *in, void **out)
     char buf[80];
 		
     snprintf(buf,80,"\n*** Console %s // prev=``1 next=``2 list=``3 ***\n",myname);
+
     nk_char_dev_write(c->dev,strlen(buf),buf,NK_DEV_REQ_BLOCKING);
 
     snprintf(buf,80,"\n*** %s ***\n",c->cur_vc->name);
@@ -1415,6 +1442,9 @@ int nk_vc_start_chardev_console(char *chardev)
     c->name[DEV_NAME_LEN-1] = 0;
     c->cur_vc = default_vc;
 
+    // make sure everyone sees this is zeroed...
+    __sync_fetch_and_and(&c->inited,0);
+
     if (nk_thread_start(chardev_console, c, 0, 1, PAGE_SIZE_4KB, &c->tid, 0)) {
 	ERROR("Failed to launch chardev console handler for %s\n",c->name);
 	free(c);
@@ -1422,6 +1452,7 @@ int nk_vc_start_chardev_console(char *chardev)
     }
     
     while (!__sync_fetch_and_add(&c->inited,0)) {
+	nk_yield();
 	// wait for console thread to start
     }
     
@@ -1480,6 +1511,8 @@ int nk_vc_init()
   phi_cons_clear_screen();
   phi_cons_set_cursor(cur_vc->cur_x, cur_vc->cur_y);
 #endif
+
+  up=1;
 
   return 0;
 }
