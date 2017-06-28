@@ -642,6 +642,13 @@ config DEBUG_FILESYSTEM
         help
                 Turn on debug prints for the filesystem interface
 
+config DEBUG_LOADER
+        bool "Debug loader"
+        depends on DEBUG_PRINTS
+        default n
+        help
+                Turn on debug prints for the loader
+
 endmenu
 
 

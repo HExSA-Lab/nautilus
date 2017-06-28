@@ -50,6 +50,7 @@
 #include <nautilus/blkdev.h>
 #include <nautilus/netdev.h>
 #include <nautilus/fs.h>
+#include <nautilus/loader.h>
 #include <nautilus/shell.h>
 
 #include <dev/apic.h>
@@ -400,6 +401,8 @@ init (unsigned long mbd,
     nk_fs_fat32_attach("ramdisk0","rootfs", 1);
 #endif
 #endif
+
+    nk_loader_init();
 
     launch_vmm_environment();
 

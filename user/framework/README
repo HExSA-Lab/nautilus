@@ -1,0 +1,35 @@
+Nautilus can load and execute "user" programs.  These run as
+components of the kernel itself.  At this point, they have only a
+minimal interface to the kernel symbols, exposed by a function
+dispatch table.  Think of a cross between a Linux kernel module and a
+DOS COM file.
+
+To build your own "user" program, clone this framework directory and
+then extend the code in main.c.  Note that it is important that the
+code in framework.c, framework.lds, and compilation/linking process
+reflected in the Makefile should not be changed.
+
+Within Nautilus, to load/execute/unload:
+
+struct nk_exec *e = nk_load_exec(path);
+if (e) { 
+   void *inarg;
+   void *outarg;
+   if (nk_start_exec(e,inarg,&outarg)) {
+      // error
+   } else {
+     // result is return from main func of exec
+   }
+   nk_unload_exec(e);  // will also free this
+}
+
+Currently, there is no complete elf loader in Nautilus.   
+"User" programs are ELF executibles conforming to the multiboot2
+specification with our "MB64" extensions for HRTs.   The executable
+must have the multiboot2 header, it must indicate MB64, and
+it must have the relocatable and HRT_EXE flags set.  
+
+The code is built similarly to a dark shadow capsule, except
+that stack and heap are managed by Nautilus.   The code must
+be statically linked and position independent. 
+

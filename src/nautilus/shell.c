@@ -29,6 +29,7 @@
 #include <nautilus/netdev.h>
 #include <nautilus/chardev.h>
 #include <nautilus/fs.h>
+#include <nautilus/loader.h>
 #include <nautilus/cpuid.h>
 #include <nautilus/msr.h>
 #include <nautilus/backtrace.h>
@@ -582,6 +583,38 @@ static int handle_meminfo(char *buf)
     return 0;
 }
 
+int handle_run(char *buf)
+{
+    char path[80];
+
+    if (sscanf(buf,"run %s", path)!=1) { 
+	nk_vc_printf("Can't determine what to run\n");
+	return 0;
+    }
+
+    struct nk_exec *e = nk_load_exec(path);
+
+    if (!e) { 
+	nk_vc_printf("Can't load %s\n", path);
+	return 0;
+    }
+
+    nk_vc_printf("Loaded executable, now running\n");
+    
+    if (nk_start_exec(e,0,0)) { 
+	nk_vc_printf("Failed to run %s\n", path);
+    }
+
+    nk_vc_printf("Unloading executable\n");
+    
+    if (nk_unload_exec(e)) { 
+	nk_vc_printf("Failed to unload %s\n",path);
+    }
+
+    return 0;
+}    
+	
+
 static int handle_cmd(char *buf, int n)
 {
   char name[MAX_CMD];
@@ -637,6 +670,7 @@ static int handle_cmd(char *buf, int n)
     nk_vc_printf("isotest\n");
     nk_vc_printf("test threads|...\n");
     nk_vc_printf("vm name [embedded image]\n");
+    nk_vc_printf("run path\n");
     return 0;
   }
 
@@ -947,6 +981,11 @@ static int handle_cmd(char *buf, int n)
     return 0;
   }
 #endif
+
+  if (!strncasecmp(buf,"run",3)) {
+    handle_run(buf);
+    return 0;
+  }
 
   if (!strncasecmp(buf,"threads",7)) { 
     if (sscanf(buf,"threads %d",&cpu)!=1) {
