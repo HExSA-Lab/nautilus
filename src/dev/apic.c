@@ -1049,7 +1049,9 @@ static void calibrate_apic_timer(struct apic_dev *apic)
     // Use APIC in one shot mode with the divider we will use 
     // in normal execution.  We will count down from a large number
     // and do not expect interrupts because it should not hit zero.
-    apic_write(apic, APIC_REG_LVTT, APIC_TIMER_ONESHOT | APIC_DEL_MODE_FIXED | APIC_TIMER_INT_VEC);
+    // timer is masked because we don't want an interrupt to occur at all
+    // On KNL, masking also seems to have the side effect of reseting the count
+    apic_write(apic, APIC_REG_LVTT, APIC_TIMER_ONESHOT | APIC_DEL_MODE_FIXED | APIC_TIMER_INT_VEC | APIC_TIMER_MASK);
     apic_write(apic, APIC_REG_TMDCR, APIC_TIMER_DIVCODE);
 
     // Now configure the PIT to count down the test period
@@ -1097,9 +1099,6 @@ static void calibrate_apic_timer(struct apic_dev *apic)
 
     // a known amount of real-time
     // has now finished
-
-    /* stop the APIC timer */
-    apic_write(apic, APIC_REG_LVTT, APIC_TIMER_DISABLE);
 
     // Now we have 1/TEST_TIME_SEC_RECIP seconds of real time in APIC timer ticks
     uint32_t apic_timer_ticks = 0xffffffff - apic_read(apic,APIC_REG_TMCCT) + 1;
@@ -1153,7 +1152,8 @@ static void calibrate_apic_timer(struct apic_dev *apic)
 
     for (i = 0; i < num_trials; i++) {
 	// set APIC for a long countdown time, longer than our test 
-	apic_write(apic, APIC_REG_LVTT, APIC_TIMER_ONESHOT | APIC_DEL_MODE_FIXED | APIC_TIMER_INT_VEC);
+	// mask to avoid interrupt, also to deal with mask side effect on KNL
+	apic_write(apic, APIC_REG_LVTT, APIC_TIMER_ONESHOT | APIC_DEL_MODE_FIXED | APIC_TIMER_INT_VEC | APIC_TIMER_MASK);
 	apic_write(apic, APIC_REG_TMDCR, APIC_TIMER_DIVCODE);
 	// start it
 	apic_write(apic, APIC_REG_TMICT, 0xffffffff);
@@ -1165,8 +1165,8 @@ static void calibrate_apic_timer(struct apic_dev *apic)
 
 	// now collect time using both
 	end = rdtsc();
-	apic_write(apic, APIC_REG_LVTT, APIC_TIMER_DISABLE);
 	tsc_diff = (end - start);
+
 	apic_diff = (0xffffffff - apic_read(apic, APIC_REG_TMCCT) + 1);
 	
 	scale = tsc_diff / apic_diff;
