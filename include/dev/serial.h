@@ -39,6 +39,7 @@ void serial_print(const char * format, ...);
 
 void serial_printlevel(int level, const char * format, ...);
 
+void serial_print_poll(const char *format, ...);
 
 void  serial_early_init(void);
 

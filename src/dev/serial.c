@@ -172,6 +172,8 @@ static int serial_do_read(void *state, uint8_t *dest)
 
 static void kick_output(struct serial_state *s);
 
+static void serial_putchar_early (uchar_t c);
+
 static int serial_do_write(void *state, uint8_t *src)
 {
     struct serial_state *s = (struct serial_state *)state;
@@ -293,7 +295,7 @@ static int serial_setup(struct serial_state *s)
     return 0;
 }  
 
-static int serial_irq_handler (excp_entry_t * excp, excp_vec_t vec);
+static int serial_irq_handler (excp_entry_t * excp, excp_vec_t vec, void *state);
 
 
 // 0 = success, -1 = fail, +1 = does not exist
@@ -329,15 +331,16 @@ static int serial_init_one(char *name, uint64_t addr, uint8_t irq, int mmio, str
 // assumes this is being done while lock held
 static void kick_output(struct serial_state *s)
 {
-    int more_data = 0;
+    uint64_t count=0;
 
     while (!serial_output_empty(s)) { 
 	uint8_t ls =  serial_read_reg(s,LSR);
-	if (ls & 0x40) { 
+	if (ls & 0x20) { 
 	    // transmit holding register is empty
 	    // drive a byte to the device
 	    uint8_t data = serial_output_pull(s);
 	    serial_write_reg(s,THR,data);
+	    count++;
 	} else {
 	    // chip is full, stop sending to it
 	    // but since we have more data, have it
@@ -354,29 +357,49 @@ static void kick_output(struct serial_state *s)
     uint8_t ier = serial_read_reg(s,IER);
     ier &= ~0x2;
     serial_write_reg(s,IER,ier);
-
  out:
-    nk_dev_signal((struct nk_dev*)(s->dev));
+    if (count>0) { 
+	nk_dev_signal((struct nk_dev*)(s->dev));
+    }
     return;
 }
 
 // assumes this is being done while lock held
 static void kick_input(struct serial_state *s)
 {
-
+    uint64_t count=0;
+    
     while (!serial_input_full(s)) { 
 	uint8_t ls =  serial_read_reg(s,LSR);
+	if (ls & 0x04) {
+	    // parity error, skip this byte
+	    continue;
+	}
+	if (ls & 0x08) { 
+	    // framing error, skip this byte
+	    continue;
+	}
+	if (ls & 0x10) { 
+	    // break interrupt, but we do want this byte
+	}
+	if (ls & 0x02) { 
+	    // overrun error - we have lost a byte
+	    // but we do want this next one
+	}
 	if (ls & 0x01) { 
 	    // data ready
 	    // grab a byte from the device if there is room
 	    uint8_t data = serial_read_reg(s,RBR);
 	    serial_input_push(s,data);
+	    count++;
 	} else {
 	    // chip is empty, stop receiving from it
 	    break;
 	}
     }
-    nk_dev_signal((struct nk_dev *)s->dev);
+    if (count>0) {
+	nk_dev_signal((struct nk_dev *)s->dev);
+    }
 }
 
 
@@ -443,7 +466,8 @@ static int drive_cmd_fsm(char c)
 
 static int 
 serial_irq_handler_early (excp_entry_t * excp,
-			  excp_vec_t vec)
+			  excp_vec_t vec,
+			  void *state)
 {
   char rcv_byte;
   char irr;
@@ -514,35 +538,45 @@ serial_irq_handler_early (excp_entry_t * excp,
   return 0;
 }
 
-static int serial_irq_handler_late(struct serial_state *s)
+static int serial_irq_handler_late(struct serial_state *s,excp_entry_t * excp,excp_vec_t vec, void *state)
 {
-    uint8_t irr;
+    uint8_t iir;
+    int done = 0;
+    
+    do {
+	iir = serial_read_reg(s,IIR);
 
-    irr = serial_read_reg(s,IIR);
+	switch (iir & 0xf)  {
+	case 0: // modem status reset + ignore
+	    (void)serial_read_reg(s,MSR);
+	    break;
+	case 2: // THR empty (can send more data)
+	    spin_lock(&s->output_lock);
+	    kick_output(s);
+	    spin_unlock(&s->output_lock);
+	    break;
+	case 4:  // received data available 
+	case 12: // received data available (FIFO timeout)
+	    spin_lock(&s->input_lock);
+	    kick_input(s);
+	    spin_unlock(&s->input_lock);
+	    break;
+	case 6: // line status reset + ignore
+	    (void)serial_read_reg(s,LSR);
+	    break;
+	case 1:   // done
+	    spin_lock(&s->output_lock);
+	    kick_output(s);
+	    spin_unlock(&s->output_lock);
+	    spin_lock(&s->input_lock);
+	    kick_input(s);
+	    spin_unlock(&s->input_lock);
+	    break;
+	default:  // wtf
+	    break;
+	}
 
-    switch (irr & 0xf)  {
-    case 0: // modem status reset + ignore
-	(void)serial_read_reg(s,MSR);
-	break;
-    case 2: // THR empty (can send more data)
-	spin_lock(&s->output_lock);
-	kick_output(s);
-	spin_unlock(&s->output_lock);
-	break;
-    case 4:  // received data available 
-    case 12: // received data available (FIFO timeout)
-	spin_lock(&s->input_lock);
-	kick_input(s);
-	spin_unlock(&s->input_lock);
-	break;
-    case 6: // line status reset + ignore
-	(void)serial_read_reg(s,LSR);
-	break;
-    case 1:   // no reason
-	break;
-    default:  // wtf
-	break;
-    }
+    } while ((iir & 0xf) != 1);
     
     return 0;
 }
@@ -551,7 +585,8 @@ static int serial_irq_handler_late(struct serial_state *s)
 
 static int 
 serial_irq_handler(excp_entry_t * excp,
-		   excp_vec_t vec)
+		   excp_vec_t vec,
+		   void *state)
 {
     int i;
     int rc=0;
@@ -559,7 +594,7 @@ serial_irq_handler(excp_entry_t * excp,
 #ifdef NAUT_CONFIG_SERIAL_REDIRECT 
     if (!early_dev) { 
 	// use the old handler until we have full functionality
-	return serial_irq_handler_early(excp,vec);
+	return serial_irq_handler_early(excp,vec,state);
     } 
 #endif
 
@@ -569,7 +604,7 @@ serial_irq_handler(excp_entry_t * excp,
     for (i=0;i<4;i++) { 
 	if (legacy[i].addr) { 
 	    // valid device
-	    rc |= serial_irq_handler_late(&legacy[i]);
+	    rc |= serial_irq_handler_late(&legacy[i], excp, vec, state);
 	}
     }
 
@@ -636,16 +671,16 @@ static void serial_putchar_early (uchar_t c)
 
     if (c == '\n') { 
 
-        /* wait for transmitter ready */
-        while( (inb(serial_io_addr + 5) & 0x40) == 0);
+        /* wait for transmitter holding register ready */
+        while( (inb(serial_io_addr + 5) & 0x20) == 0);
 
         /* send char */
         outb('\r', serial_io_addr + 0);
 
-        /* wait for transmitter ready */
     } 
 
-    while( (inb(serial_io_addr + 5) & 0x40) == 0);
+    /* wait for transmitter holding register ready */
+    while( (inb(serial_io_addr + 5) & 0x20) == 0);
 
     /* send char */
     outb(c, serial_io_addr + 0);
@@ -656,6 +691,9 @@ static void serial_putchar_early (uchar_t c)
 void serial_putchar(uchar_t c)
 {
     if (early_dev) { 
+	if (c=='\n') { 
+	    serial_do_write(early_dev,"\r");
+	}
 	serial_do_write(early_dev,&c);
     } else {
 	serial_putchar_early(c);
@@ -726,13 +764,24 @@ serial_mem_dump (uint8_t * start, int n)
 }
 
 
-static struct Output_Sink serial_output_sink;
+static struct Output_Sink serial_output_sink_poll;
+
+static void 
+Serial_Emit_Poll (struct Output_Sink * o, int ch) 
+{ 
+  serial_putchar_early((uchar_t)ch); 
+}
+
+static void 
+Serial_Finish_Poll (struct Output_Sink * o) { return; }
 
 static void 
 Serial_Emit (struct Output_Sink * o, int ch) 
 { 
   serial_putchar((uchar_t)ch); 
 }
+
+static struct Output_Sink serial_output_sink;
 
 static void 
 Serial_Finish (struct Output_Sink * o) { return; }
@@ -767,6 +816,34 @@ serial_print (const char * format, ...)
 }
 
 
+void 
+__serial_print_poll (const char * format, va_list ap) 
+{
+    uint8_t flags;
+
+    if (serial_device_ready) {
+        int flags = spin_lock_irq_save(&serial_lock);
+        Format_Output(&serial_output_sink_poll, format, ap);
+	spin_unlock_irq_restore(&serial_lock,flags);
+    } else {
+        vprintk(format, ap);
+    }
+}
+
+
+void 
+serial_print_poll(const char * format, ...)
+{
+  va_list args;
+  uint8_t iflag = irq_disable_save();
+
+  va_start(args, format);
+  __serial_print_poll(format, args);
+  va_end(args);
+
+  irq_enable_restore(iflag);
+}
+
 
 void 
 serial_printlevel (int level, const char * format, ...) 
@@ -798,6 +875,8 @@ serial_early_init (void)
 
   serial_output_sink.Emit = &Serial_Emit;
   serial_output_sink.Finish = &Serial_Finish;
+  serial_output_sink_poll.Emit = &Serial_Emit_Poll;
+  serial_output_sink_poll.Finish = &Serial_Finish_Poll;
 
 #if NAUT_CONFIG_SERIAL_REDIRECT
 #if NAUT_CONFIG_SERIAL_REDIRECT_PORT == 1 
