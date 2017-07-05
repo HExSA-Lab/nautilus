@@ -26,7 +26,6 @@
 
 #include <stddef.h>
 #include <stdarg.h>
-#include <dev/serial.h>
 
 #ifndef SERIAL_PRINT_DEBUG_LEVEL
 #define SERIAL_PRINT_DEBUG_LEVEL  10
