@@ -156,7 +156,7 @@ pic_spur_int_handler (excp_entry_t * excp,
                       addr_t unused)
 {
     WARN_PRINT("Received Spurious interrupt from PIC\n");
-    IRQ_HANDLER_END();
+    // No EOI should be done for a spurious interrupt
     return 0;
 }
 
