@@ -45,9 +45,11 @@ extern "C" {
  * These are non-NULL pointers that will result in page faults
  * under normal circumstances, used to verify that nobody uses
  * non-initialized list entries.
+ *
+ * These are non-canonical addresses and should cause a GPF
  */
-#define LIST_POISON1  ((void *) 0x00100100)
-#define LIST_POISON2  ((void *) 0x00200200)
+#define LIST_POISON1  ((void *) 0xf000000000100100ULL)
+#define LIST_POISON2  ((void *) 0xf000000000200200ULL)
 
 /*
  * Simple doubly linked list implementation.

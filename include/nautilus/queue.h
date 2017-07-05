@@ -45,13 +45,6 @@ typedef struct nk_queue_entry nk_queue_entry_t;
 nk_queue_t* nk_queue_create(void);
 void nk_queue_destroy(nk_queue_t * q, uint8_t free_entries);
 
-nk_queue_entry_t* nk_dequeue_entry(nk_queue_entry_t * entry);
-nk_queue_entry_t* nk_dequeue_entry_atomic(nk_queue_t * q, nk_queue_entry_t * entry);
-nk_queue_entry_t* nk_dequeue_first(nk_queue_t * q);
-nk_queue_entry_t* nk_dequeue_first_atomic(nk_queue_t * q);
-
-uint8_t nk_queue_empty_atomic(nk_queue_t * q);
-
 static inline uint8_t 
 nk_queue_empty(nk_queue_t * q) 
 {
@@ -65,12 +58,75 @@ nk_enqueue_entry (nk_queue_t * q, nk_queue_entry_t * entry)
 }
 
 
-static void 
+static inline void 
 nk_enqueue_entry_atomic (nk_queue_t * q, nk_queue_entry_t * entry)
 {
     uint8_t flags = spin_lock_irq_save(&(q->lock));
     list_add_tail(&(entry->node), &(q->queue));
     spin_unlock_irq_restore(&(q->lock), flags);
+}
+
+
+static inline nk_queue_entry_t*
+nk_dequeue_entry (nk_queue_entry_t * entry)
+{
+    list_del_init(&(entry->node));
+    return entry;
+}
+
+
+static inline nk_queue_entry_t* 
+nk_dequeue_entry_atomic (nk_queue_t * q, nk_queue_entry_t * entry)
+{
+    nk_queue_entry_t * ret = NULL;
+    uint8_t flags = spin_lock_irq_save(&(q->lock));
+    if (!nk_queue_empty(q)) {
+        ret = entry;
+        list_del_init(&(entry->node));
+    } 
+    spin_unlock_irq_restore(&(q->lock), flags);
+    return ret;
+}
+
+
+static inline nk_queue_entry_t* 
+nk_dequeue_first (nk_queue_t * q)
+{
+    nk_queue_entry_t * ret = NULL;
+    if (!nk_queue_empty(q)) {
+        struct list_head * first = q->queue.next;
+        ret = list_entry(first, nk_queue_entry_t, node);
+        list_del_init(first);
+    }
+    return ret;
+}
+
+
+static inline nk_queue_entry_t* 
+nk_dequeue_first_atomic (nk_queue_t * q)
+{
+    uint8_t flags = spin_lock_irq_save(&(q->lock));
+    nk_queue_entry_t * ret = NULL;
+    if (!nk_queue_empty(q)) {
+        struct list_head * first = q->queue.next;
+        ret = list_entry(first, nk_queue_entry_t, node);
+        list_del_init(&(ret->node));
+    }
+    spin_unlock_irq_restore(&(q->lock), flags);
+    return ret;
+}
+
+
+
+
+static inline uint8_t 
+nk_queue_empty_atomic (nk_queue_t * q)
+{
+    uint8_t ret = 1;
+    uint8_t flags = spin_lock_irq_save(&(q->lock));
+    ret = list_empty(&(q->queue));
+    spin_unlock_irq_restore(&(q->lock), flags);
+    return ret;
 }
 
 

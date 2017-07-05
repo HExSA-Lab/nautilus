@@ -131,7 +131,7 @@ int nk_cancel_timer(struct nk_timer *t)
     }
     if (cur==&(t->node)) {
 	DEBUG("Canceling timer %p\n",t);
-	list_del(cur);
+	list_del_init(cur);
 	// if anyone is waiting on it, it's their problem.... 
     } else {
 	DEBUG("Not canceling timer %p as not in active list\n",t);
@@ -213,7 +213,7 @@ uint64_t nk_timer_handler (void)
 	if (now >= cur->time_ns) { 
 	    DEBUG("Found expired timer %p\n",cur);
 	    cur->signaled = 1;
-	    list_del(&cur->node);
+	    list_del_init(&cur->node);
 	    if (!(cur->flags & TIMER_SPIN)) { 
 		// wake waiters
 		DEBUG("Waking threads\n");
