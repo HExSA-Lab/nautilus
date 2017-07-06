@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
@@ -200,8 +200,11 @@ init (unsigned long mbd, unsigned long magic)
     nk_cxx_init();
 #endif 
 
-    /* interrupts on */
+    nk_sched_start();
+
     sti();
+
+    /* interrupts are now on */
 
     nk_vc_init();
 

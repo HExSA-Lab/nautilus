@@ -84,9 +84,14 @@ struct nk_sched_constraints {
     } ;
 } ;
 
-// Call these on the BSP and APs at boot time
+// Call this on the BSP at boot time, before the APs are running
 int nk_sched_init(struct nk_sched_config *cfg);
+// Call this on the APs at boot time
 int nk_sched_init_ap(struct nk_sched_config *cfg);
+// Call this on BSP and APs at boot time after the APs are running
+// but interrupts are still off - it will turn interrupts on
+void nk_sched_start();
+
 
 // Initialize the scheduling state of a new thread
 // It will have the defaults (aperiodic, medium priority) if

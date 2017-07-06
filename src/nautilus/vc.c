@@ -1318,11 +1318,11 @@ static void chardev_console(void *in, void **out)
 
     char buf[80];
 		
-    snprintf(buf,80,"\n*** Console %s // prev=``1 next=``2 list=``3 ***\n",myname);
+    snprintf(buf,80,"\r\n*** Console %s // prev=``1 next=``2 list=``3 ***\r\n",myname);
 
     nk_char_dev_write(c->dev,strlen(buf),buf,NK_DEV_REQ_BLOCKING);
 
-    snprintf(buf,80,"\n*** %s ***\n",c->cur_vc->name);
+    snprintf(buf,80,"\r\n*** %s ***\r\n",c->cur_vc->name);
     nk_char_dev_write(c->dev,strlen(buf),buf,NK_DEV_REQ_BLOCKING);
     
 
@@ -1375,17 +1375,17 @@ static void chardev_console(void *in, void **out)
 		struct list_head *cur;
 		int i;
 		char which;
-		strcpy(buf,"\nList of VCs \n\n");
+		strcpy(buf,"\r\nList of VCs \r\n\r\n");
 		nk_char_dev_write(c->dev,strlen(buf),buf,NK_DEV_REQ_BLOCKING);
 		i=0;
 		list_for_each(cur,&vc_list) {
-		    snprintf(buf,80,"%c : %s\n", 'a'+i, list_entry(cur,struct nk_virtual_console, vc_node)->name);
+		    snprintf(buf,80,"%c : %s\r\n", 'a'+i, list_entry(cur,struct nk_virtual_console, vc_node)->name);
 		    nk_char_dev_write(c->dev,strlen(buf),buf,NK_DEV_REQ_BLOCKING);
 		    i++;
 		}
 		// get user input
 		if (nk_char_dev_read(c->dev,1,&which,NK_DEV_REQ_BLOCKING)!=1) { 
-		    nk_char_dev_write(c->dev,7,"\nERROR\n",NK_DEV_REQ_BLOCKING);
+		    nk_char_dev_write(c->dev,7,"\r\nERROR\n\n",NK_DEV_REQ_BLOCKING);
 		    next_node = cur_node;
 		    break;
 		} 
@@ -1413,7 +1413,7 @@ static void chardev_console(void *in, void **out)
 	    } else {
 		char buf[80];
 		
-		snprintf(buf,80,"\n*** %s ***\n",c->cur_vc->name);
+		snprintf(buf,80,"\r\n*** %s ***\r\n",c->cur_vc->name);
 		
 		nk_char_dev_write(c->dev,strlen(buf),buf,NK_DEV_REQ_BLOCKING);
 	    }

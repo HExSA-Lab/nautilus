@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
@@ -382,8 +382,11 @@ default_init (unsigned long mbd,
     // we have malloc and the device framework functional
     serial_init();
 
-    /* interrupts on */
+    nk_sched_start();
+
     sti();
+
+    /* interrupts are now on */
 
     runtime_init();
 

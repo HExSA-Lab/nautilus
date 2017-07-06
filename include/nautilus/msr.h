@@ -29,7 +29,7 @@ extern "C" {
 
 #include <nautilus/naut_types.h>
 
-
+#define IA32_TIME_STAMP_COUNTER 0x10
 #define IA32_MSR_EFER      0xc0000080
 #define IA32_MSR_APIC_BASE 0x1b
 #define     MSR_APIC_IS_BSP(x)   (x & 0x100)

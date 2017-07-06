@@ -484,7 +484,7 @@ apic_timer_setup (struct apic_dev * apic, uint32_t quantum)
 
     calibrate_apic_timer(apic);
 
-    apic_set_oneshot_timer(apic,apic_realtime_to_ticks(apic,1000000000/NAUT_CONFIG_HZ));
+    apic_set_oneshot_timer(apic,apic_realtime_to_ticks(apic,1000000000ULL/NAUT_CONFIG_HZ));
 }
 
 
@@ -946,7 +946,6 @@ apic_init (struct cpu * core)
 
 void apic_set_oneshot_timer(struct apic_dev *apic, uint32_t ticks) 
 {
-
     apic_write(apic, APIC_REG_LVTT, APIC_TIMER_ONESHOT | APIC_DEL_MODE_FIXED | APIC_TIMER_INT_VEC);
     apic_write(apic, APIC_REG_TMDCR, APIC_TIMER_DIVCODE);
 
@@ -992,18 +991,18 @@ uint32_t apic_cycles_to_ticks(struct apic_dev *apic, uint64_t cycles)
 
 uint32_t apic_realtime_to_ticks(struct apic_dev *apic, uint64_t ns)
 {
-    return ((ns*1000)/apic->ps_per_tick);
+    return ((ns*1000ULL)/apic->ps_per_tick);
 }
 
 
 uint64_t apic_realtime_to_cycles(struct apic_dev *apic, uint64_t ns)
 {
-    return (ns*apic->cycles_per_us)/1000;
+    return (ns*apic->cycles_per_us)/1000ULL;
 }
 
 uint64_t apic_cycles_to_realtime(struct apic_dev *apic, uint64_t cycles)
 {
-    return 1000*(cycles/(apic->cycles_per_us));
+    return 1000ULL*(cycles/(apic->cycles_per_us));
 }
 
 

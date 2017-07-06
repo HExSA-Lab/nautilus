@@ -330,7 +330,10 @@ smp_ap_finish (struct cpu * core)
     BARRIER_WHILE(smp_core_count != core->system->num_cpus);
 #endif
 
-    SMP_DEBUG("Core %u ready, enabling interrupts\n", core->id);
+    nk_sched_start();
+
+    SMP_DEBUG("Core %u ready - enabling interrupts\n", core->id);
+
     sti();
 
 #ifdef NAUT_CONFIG_PROFILE
