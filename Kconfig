@@ -86,8 +86,7 @@ menu "Platform/Arch Options"
           bool "4KB Pages"
 
     endchoice
-            
-        
+
     config PALACIOS
     	bool "Support for creating VMs using Palacios"
         depends on X86_64_HOST
@@ -202,6 +201,7 @@ config VIRTUAL_CONSOLE_SERIAL_MIRROR_ALL
         target virtual consoles;  direct displays
         (screen clears, display char, etc) are not
         currently mirrored.
+
 
 
   menu "Scheduler Options"
@@ -403,7 +403,48 @@ config DEBUG_ISOCORE
    help
       Adds debugging output for isolated core execution
       The low-level code does not have debugging output
-   
+
+
+menu "Garbage Collection Options"
+
+   config GARBAGE_COLLECTION
+   bool "Enable Garbage Collection"
+   default n
+   help
+      If enabled, a conservative garbage collector is
+      used to garbage collect the kernel/HRT.  mallocs() pass to the
+      GC, frees() are ignored, and mallocs can trigger global GC
+
+   choice 
+    prompt "Select Garbage Collector"
+    depends on GARBAGE_COLLECTION
+    default ENABLE_BDWGC
+
+     config ENABLE_BDWGC
+      bool "BDWGC"
+      default n
+      depends on GARBAGE_COLLECTION
+      help
+        If enabled, the BDWGC garbage colector is used.
+
+   endchoice
+ 
+   config DEBUG_BDWGC
+       bool "Debug the BDWGC garbage collector"
+       default n
+       depends on ENABLE_BDWGC
+       help
+         If enabled, print debugging output from BDWGC
+
+  config TEST_BDWGC 
+   bool "Include the BDWGC garbage collection test suite"
+   default n
+   depends on ENABLE_BDWGC
+   help
+      Adddes test suite for BDWGC, which can be run from the shell
+
+ endmenu
+
 endmenu
 
 menu "AeroKernel Performance Optimizations"
@@ -711,15 +752,11 @@ menu "Parallel Runtime Integration"
           bool "No parallel runtime"
           
      endchoice
-        
+       
 
 endmenu
-
-
-
 
 source "src/dev/Kconfig"
 
 source "src/fs/Kconfig"
-
 

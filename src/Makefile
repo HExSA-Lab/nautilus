@@ -4,6 +4,7 @@ obj-y += \
 	asm/ \
 	dev/ \
         fs/  \
+        gc/  \
 	acpi/ \
 	test/  
 

@@ -48,6 +48,10 @@
 #include <nautilus/isocore.h>
 #endif
 
+#ifdef NAUT_CONFIG_TEST_BDWGC
+#include <gc/bdwgc/bdwgc.h>
+#endif
+
 #define MAX_CMD 80
 
 struct burner_args {
@@ -467,6 +471,13 @@ static int handle_test(char *buf)
 	return test_threads();
     }
 
+#ifdef NAUT_CONFIG_TEST_BDWGC
+    if (!strncasecmp(what,"bdwgc",5)) { 
+	nk_vc_printf("Testing BDWGC garbage collector\n");
+	return nk_gc_bdwgc_test();
+    }
+#endif
+
  dunno:
     nk_vc_printf("Unknown test request\n");
     return -1;
@@ -668,7 +679,7 @@ static int handle_cmd(char *buf, int n)
     nk_vc_printf("blktest dev r|w start count\n");
     nk_vc_printf("blktest dev r|w start count\n");
     nk_vc_printf("isotest\n");
-    nk_vc_printf("test threads|...\n");
+    nk_vc_printf("test threads|bdwgc|...\n");
     nk_vc_printf("vm name [embedded image]\n");
     nk_vc_printf("run path\n");
     return 0;

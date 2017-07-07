@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
@@ -168,6 +168,7 @@ char * strstr (const char * haystack, const char * needle);
 int atoi (const char * buf);
 int strtoi (const char * nptr, char ** endptr);
 long strtol(const char * str, char ** endptr, int base);
+long atol(const char *nptr);
 uint64_t atox (const char * buf);
 uint64_t strtox (const char * nptr, char ** endptr);
 void str_toupper (char * s);

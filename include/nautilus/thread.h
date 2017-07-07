@@ -199,6 +199,10 @@ struct nk_thread {
 
     struct nk_virtual_console *vc;
 
+#ifdef NAUT_CONFIG_GARBAGE_COLLECTION
+    void  *gc_state;
+#endif
+
     char name[MAX_THREAD_NAME];
 
     const void * tls[TLS_MAX_KEYS];

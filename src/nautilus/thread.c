@@ -34,6 +34,9 @@
 #include <nautilus/errno.h>
 #include <nautilus/mm.h>
 
+#ifdef NAUT_CONFIG_ENABLE_BDWGC
+#include <gc/bdwgc/bdwgc.h>
+#endif
 
 extern uint8_t malloc_cpus_ready;
 
@@ -193,6 +196,13 @@ _nk_thread_init (nk_thread_t * t,
 	THREAD_ERROR("Could not create scheduler state for thread\n");
 	return -EINVAL;
     }
+
+#ifdef NAUT_CONFIG_ENABLE_BDWGC
+    if (!(t->gc_state = nk_gc_bdwgc_thread_state_init(t))) {
+	THREAD_ERROR("Failed to initialize GC state for thread\n");
+	return -1;
+    }
+#endif
 
     t->waitq = nk_thread_queue_create();
 
@@ -619,6 +629,11 @@ nk_thread_destroy (nk_thread_id_t t)
     nk_thread_queue_destroy(thethread->waitq);
 
     nk_sched_thread_state_deinit(thethread);
+
+#ifdef NAUT_CONFIG_ENABLE_BDWGC
+    nk_gc_bdwgc_thread_state_deinit(thethread);
+#endif
+
     free(thethread->stack);
     free(thethread);
     

@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
@@ -425,6 +425,13 @@ strtoi (const char * nptr, char ** endptr)
 
     return ret;
 }
+
+long int
+atol (const char *nptr)
+{
+  return strtol (nptr, (char **) NULL, 10); 
+}
+
 
 extern long simple_strtol(const char*, char**, unsigned int);
 long 

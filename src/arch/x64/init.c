@@ -93,6 +93,10 @@
 #include <dev/vesa.h>
 #endif
 
+#ifdef NAUT_CONFIG_ENABLE_BDWGC
+#include <gc/bdwgc/bdwgc.h>
+#endif
+
 extern spinlock_t printk_lock;
 
 
@@ -300,6 +304,11 @@ init (unsigned long mbd,
      * allocated in the boot mem allocator are kept reserved */
     mm_boot_kmem_init();
 
+#ifdef NAUT_CONFIG_ENABLE_BDWGC
+    // Bring up the garbage collector if enabled
+    nk_gc_bdwgc_init();
+#endif
+
     disable_8259pic();
 
     i8254_init(naut);
@@ -322,12 +331,14 @@ init (unsigned long mbd,
 
     pci_init(naut);
 
+
     nk_sched_init(&sched_cfg);
 
     /* we now switch away from the boot-time stack in low memory */
     naut = smp_ap_stack_switch(get_cur_thread()->rsp, get_cur_thread()->rsp, naut);
 
     mm_boot_kmem_cleanup();
+
 
     smp_setup_xcall_bsp(naut->sys.cpus[0]);
 
