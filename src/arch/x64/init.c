@@ -365,9 +365,11 @@ init (unsigned long mbd,
     vga_init();
     serial_init();
 
+	nk_sched_start();
 
-    /* interrupts on */
     sti();
+
+    /* interrupts are now on */
 
     nk_vc_init();
 
