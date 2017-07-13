@@ -243,6 +243,8 @@ GC_API void * GC_CALL GC_generic_malloc(size_t lb, int k)
     size_t lg;
     DCL_LOCK_STATE;
 
+    BDWGC_DEBUG("malloc %lu bytes\n",lb);
+
     if(SMALL_OBJ(lb)) {
         lg = GC_size_map[lb];
         opp = (void **)&(GC_objfreelist[lg]);

@@ -46,12 +46,17 @@
 #define BDWGC_ERROR(fmt, args...) ERROR_PRINT("bdwgc: gc_state=%p: " fmt, !get_cur_thread() ? 0 : get_cur_thread()->gc_state, ##args)
 
 
-#define BDWGC_SPECIFIC_THREAD_STATE(t) ((bdwgc_thread_state*)(t->gc_state))
+#define BDWGC_SPECIFIC_THREAD_TLFS(t) ((t) ? (t)->gc_state ? &(((bdwgc_thread_state*)((t)->gc_state))->tlfs) : 0 : 0)
+#define BDWGC_THREAD_TLFS() (BDWGC_SPECIFIC_THREAD_TLFS(get_cur_thread()))
+
+#define BDWGC_SPECIFIC_THREAD_STATE(t) ((t) ? (bdwgc_thread_state*)((t)->gc_state) : 0)
 #define BDWGC_THREAD_STATE() (BDWGC_SPECIFIC_THREAD_STATE(get_cur_thread()))
 
-#define BDWGC_SPECIFIC_STACK_BOTTOM(t) ((void*)((uint64_t)(t)->stack + (t)->stack_size - sizeof(uint64_t)))
-#define BDWGC_STACK_BOTTOM() (BDWGC_SPECIFIC_STACK_BOTTOM(get_cur_thread()))
+#define BDWGC_SPECIFIC_STACK_TOP(t) ((t) ? ((void*)((uint64_t)(t)->rsp)) : 0 )
+#define BDWGC_STACK_TOP() (BDWGC_SPECIFIC_STACK_TOP(get_cur_thread()))
 
+#define BDWGC_SPECIFIC_STACK_BOTTOM(t) ((t) ? ((void*)((uint64_t)(t)->stack + (t)->stack_size - 0)) : 0)
+#define BDWGC_STACK_BOTTOM() (BDWGC_SPECIFIC_STACK_BOTTOM(get_cur_thread()))
 
 /* A generic pointer to which we can add        */
 /* byte displacements and which can be used     */

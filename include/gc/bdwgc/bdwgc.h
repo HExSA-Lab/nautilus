@@ -30,6 +30,9 @@
 int  nk_gc_bdwgc_init();
 void nk_gc_bdwgc_deinit();
 
+// force a GC -r returns 0 if successful
+int  nk_gc_bdwgc_collect();
+
 void *nk_gc_bdwgc_thread_state_init(struct nk_thread *thread);
 void  nk_gc_bdwgc_thread_state_deinit(struct nk_thread *thread);
 

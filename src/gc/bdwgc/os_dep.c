@@ -1159,7 +1159,7 @@ GC_INNER word GC_page_size = 0;
 #   define STACKBOTTOM (ptr_t)pthread_get_stackaddr_nppthread_get_stackaddr_np(pthread_self())
 # elif defined(NAUT)
 #   include <nautilus/thread.h>
-#   define STACKBOTTOM ((ptr_t)(get_cur_thread()->stack + get_cur_thread()->stack_size - sizeof(uint64_t)))
+#   define STACKBOTTOM (get_cur_thread() ? ((ptr_t)(get_cur_thread()->stack + get_cur_thread()->stack_size - sizeof(uint64_t))) : 0)
 # endif
 
   ptr_t GC_get_main_stack_base(void)
@@ -1763,7 +1763,7 @@ void GC_register_data_segments(void)
       /* Try a little harder to find malloc heap.                       */
         size_t req_size = 10000;
         do {
-          void *p = malloc(req_size);
+          void *p = kmem_malloc(req_size);
           if (0 == p) {
             free(new_l);
             return;

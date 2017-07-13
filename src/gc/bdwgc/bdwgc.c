@@ -126,13 +126,27 @@ void nk_gc_bdwgc_thread_state_deinit(struct nk_thread *t)
 
 int  nk_gc_bdwgc_init()
 {
-    //    GC_COND_INIT();
-    BDWGC_INFO("inited\n");
+    // We cannot do a GC until threads are up... 
+    GC_set_dont_precollect(1);
+    // Fail to the kernel allocator if we cannot allocate
+    GC_set_oom_fn(kmem_malloc); 
+    // Initialize
+    GC_INIT();
+    // Give us an intial heap so we don't do a collection
+    // until we have threads up
+    GC_expand_hp(64*1024*1024);
+    BDWGC_INFO("inited - initial heap size: %lu (%lu unmapped bytes)\n",GC_get_heap_size(),GC_get_unmapped_bytes());
     return 0;
 }
 void nk_gc_bdwgc_deinit()
 {
     BDWGC_INFO("deinited\n");
+}
+
+int nk_gc_bdwgc_collect()
+{
+    GC_gcollect();
+    return 0;
 }
 
 #ifdef NAUT_CONFIG_TEST_BDWGC

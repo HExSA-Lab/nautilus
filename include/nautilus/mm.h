@@ -86,10 +86,28 @@ struct mem_region;
 struct mem_region * kmem_get_base_zone(void);
 struct mem_region * kmem_get_region_by_addr(ulong_t addr);
 void kmem_add_memory(struct mem_region * mem, ulong_t base_addr, size_t size);
-void * malloc(size_t size);
-void free(void * addr);
+
+// These functions operate the core memory allocator directly
+// You want to use the malloc()/free() wrappers defined below 
+// unless you know  what you are doing
+void * kmem_malloc(size_t size);
+void   kmem_free(void * addr);
 
 int  kmem_sanity_check();
+
+#ifdef NAUT_CONFIG_ENABLE_BDWGC
+void * GC_memalign(size_t, size_t);
+void * GC_malloc(size_t);
+#ifdef NAUT_CONFIG_ALIGN_BDWGC
+#define malloc(s) ({ size_t __a = 1ULL<<(sizeof(size_t)*8UL - __builtin_clzl(s) - 1); __a <<= !!((s)&(~__a));  GC_memalign(__a,s); })
+#else
+#define malloc(s) GC_malloc(s)
+#endif
+#define free(a) 
+#else
+#define malloc(s) kmem_malloc(s)
+#define free(a) kmem_free(a)
+#endif
 
 
 /* arch specific */

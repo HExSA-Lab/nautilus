@@ -136,24 +136,25 @@ GC_bool GC_is_thread_tsd_valid(void *tsd);
 
 GC_API void * GC_CALL GC_malloc(size_t bytes)
 {
-  //  BDWGC_DEBUG("Allocating %d bytes for thread %p\n", bytes, get_cur_thread());
+    BDWGC_DEBUG("Allocating %d bytes for thread %p\n", bytes, get_cur_thread());
     size_t granules = ROUNDED_UP_GRANULES(bytes);
     void *result;
 
-    //if (EXPECT(0 == &(get_cur_thread()-> gc_state -> tlfs), FALSE)) {
-    if (0 == (void *)&(BDWGC_THREAD_STATE() -> tlfs))
+    if (!BDWGC_THREAD_TLFS())
       {
-        BDWGC_DEBUG("ENTER CORE MALLOC %p (tid %d)\n", get_cur_thread(), get_cur_thread()->tid);
+        BDWGC_DEBUG("ENTER CORE MALLOC %p\n", get_cur_thread());
         result =  GC_core_malloc(bytes);
-        sti();
+        BDWGC_DEBUG("core malloc is returning %p\n", result);
         return result; 
       }
     
     GC_ASSERT(GC_is_initialized);
 
+    BDWGC_DEBUG("FAST_MALLOC_GRANS\n");
+
     GC_FAST_MALLOC_GRANS(result,
                          granules,
-                         BDWGC_THREAD_STATE() -> tlfs.normal_freelists,
+                         BDWGC_THREAD_TLFS()->normal_freelists,
                          DIRECT_GRANULES,
                          NORMAL,
                          GC_core_malloc(bytes),
@@ -163,6 +164,8 @@ GC_API void * GC_CALL GC_malloc(size_t bytes)
       GC_err_printf("GC_malloc(%u) = %p : %u\n",
                         (unsigned)bytes, result, (unsigned)GC_gc_no);
 #   endif
+
+    BDWGC_DEBUG("Malloc is returning %p\n",result);
     return result;
 }
 
@@ -170,7 +173,7 @@ GC_API void * GC_CALL GC_malloc(size_t bytes)
 GC_API void * GC_CALL GC_malloc_atomic(size_t bytes)
 {
     size_t granules = ROUNDED_UP_GRANULES(bytes);
-    void *tsd = &(BDWGC_THREAD_STATE() -> tlfs); 
+    void *tsd = BDWGC_THREAD_TLFS();
     void *result;
     void **tiny_fl;
 

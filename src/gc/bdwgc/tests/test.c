@@ -1373,6 +1373,8 @@ int bdwgc_test_leak_detector()
 }
 #endif
 
+uint64_t heap_at_start, unmapped_at_start;
+
 #define NUMBER_ROUND_UP(v, bound) ((((v) + (bound) - 1) / (bound)) * (bound))
 
 void check_heap_stats(void)
@@ -1485,6 +1487,12 @@ void check_heap_stats(void)
                   " (heapsize: %lu, expected: %lu)\n",
             (unsigned long)(GC_get_heap_size() + GC_get_unmapped_bytes()),
             (unsigned long)max_heap_sz);
+	GC_printf("NOTE THAT THIS IS PROBABLY OK IN NAUTILUS\n"
+		  "  We are continuously using GC, and started with a heap\n"
+		  "  of %lu bytes with %lu bytes unmapped (total %lu bytes), so we\n"
+		  "  expect that the total will be >%lu\n",
+		  heap_at_start, unmapped_at_start, heap_at_start+unmapped_at_start, max_heap_sz);
+
         FAIL;
     }
 #   ifdef THREADS
@@ -1627,7 +1635,16 @@ int test_bdwgc_main(void)
     int code = 0;
     int i;
     
-    GC_COND_INIT();
+
+    // Already initialized at boot - we are not a process
+    //    GC_COND_INIT();
+
+
+    heap_at_start = GC_get_heap_size();
+    unmapped_at_start = GC_get_unmapped_bytes();
+
+    GC_printf("Starting test - heap size = %lu (preallocated at %lu), unmapped = %lu\n", heap_at_start,64*1024*1024,unmapped_at_start);
+
     n_tests = 0;
     BDWGC_DEBUG("MAIN_BREAK_1\n");
     

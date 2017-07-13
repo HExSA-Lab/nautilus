@@ -2881,7 +2881,7 @@ extern char _data_end[];
 #   define GET_MEM(bytes) (struct hblk*)ps3_get_mem(bytes)
 # elif defined(NAUT)
 #   include <nautilus/mm.h>
-#   define GET_MEM(bytes) HBLKPTR(malloc((size_t)(bytes) + GC_page_size) \
+#   define GET_MEM(bytes) HBLKPTR(kmem_malloc((size_t)(bytes) + GC_page_size) \
                                           + GC_page_size-1)
 # else
     ptr_t GC_unix_get_mem(GC_word bytes);

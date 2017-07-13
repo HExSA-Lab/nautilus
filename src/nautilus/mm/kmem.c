@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
@@ -452,7 +452,7 @@ nk_kmem_init (void)
  *       Failure: NULL
  */
 void *
-malloc (size_t size)
+kmem_malloc (size_t size)
 {
     void *block = 0;
     struct kmem_block_hdr *hdr = NULL;
@@ -540,7 +540,7 @@ malloc (size_t size)
  *       kmem_alloc().
  */
 void
-free (void * addr)
+kmem_free (void * addr)
 {
     struct kmem_block_hdr *hdr;
     struct buddy_mempool * zone;

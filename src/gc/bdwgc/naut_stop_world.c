@@ -51,9 +51,8 @@
 
 GC_INNER void GC_stop_world(void)
 {
-  BDWGC_DEBUG("Stopping the world from thread %p tid %lu\n", get_cur_thread(),get_cur_thread()->tid);
-  // kick everyone else out into an interrupt handler here... 
-  cli();
+    BDWGC_DEBUG("Stopping the world from thread %p tid %lu\n", get_cur_thread(),get_cur_thread()->tid);
+    nk_sched_stop_world();
 }
 
 
@@ -62,7 +61,7 @@ GC_INNER void GC_stop_world(void)
 GC_INNER void GC_start_world(void)
 {
     BDWGC_DEBUG("Starting the world from %p (tid %lu)\n", get_cur_thread(),get_cur_thread()->tid);
-  sti();
+    nk_sched_start_world();
 }
 
 
@@ -76,7 +75,7 @@ static void push_thread_stack(nk_thread_t *t, void *state)
   
   traced_stack_sect = BDWGC_SPECIFIC_THREAD_STATE(t) -> traced_stack_sect;
 
-  lo = t -> stack;
+  lo = BDWGC_SPECIFIC_STACK_TOP(t);
   hi = BDWGC_SPECIFIC_STACK_BOTTOM(t);
   
   if (traced_stack_sect != NULL
@@ -87,21 +86,28 @@ static void push_thread_stack(nk_thread_t *t, void *state)
     //    traced_stack_sect = traced_stack_sect->prev;
   }
   
-  BDWGC_DEBUG("Pushing stack for thread (%p, tid=%u), range = [%p,%p)\n", t, t->tid, lo, hi);
-      
-  if (0 == lo) panic("GC_push_all_stacks: sp not set!");
-  //GC_push_all_stack_sections(lo, hi, traced_stack_sect);
-  GC_push_all_stack_sections(lo, hi, NULL);
-  total_size += hi - lo; /* lo <= hi */
-      
+  if (lo==hi) { 
+      BDWGC_DEBUG("Skipping stack as it is empty\n");
+  } else {
+      BDWGC_DEBUG("Pushing stack for thread (%p, tid=%u), range = [%p,%p)\n", t, t->tid, lo, hi);
+      //GC_push_all_stack_sections(lo, hi, traced_stack_sect);
+      GC_push_all_stack_sections(lo, hi, NULL);
+      total_size += hi - lo; /* lo <= hi */
+  }
 }
 
 /* We hold allocation lock.  Should do exactly the right thing if the   */
 /* world is stopped.  Should not fail if it isn't.                      */
 GC_INNER void GC_push_all_stacks(void)
-{
-  BDWGC_DEBUG("Pushing stacks from thread %p\n", get_cur_thread());
-  nk_sched_map_threads(-1,push_thread_stack,0);
+{									
+    if (!get_cur_thread()) { 
+	BDWGC_ERROR("We are doing a garbage collection before threads are active..\n");
+	panic("Garbage collection before threads active!\n");
+	return;
+    } else {
+	BDWGC_DEBUG("Pushing stacks from thread %p\n", get_cur_thread());
+	nk_sched_map_threads(-1,push_thread_stack,0);
+    }
 }
 
 

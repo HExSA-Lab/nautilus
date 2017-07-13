@@ -459,6 +459,71 @@ static int handle_blktest(char * buf)
     return 0;
 }
 
+static int test_stop()
+{
+    int i;
+
+#define N 16
+    
+    for (i=0;i<N;i++) { 
+	nk_vc_printf("Stopping world iteration %d\n",i);
+	nk_sched_stop_world();
+	nk_vc_printf("Executing during stopped world iteration %d\n",i);
+	nk_sched_start_world();
+    }
+
+    return 0;
+
+}
+
+#ifdef NAUT_CONFIG_ISOCORE
+
+static void isotest(void *arg)
+{
+    // note trying to do anything in here with NK
+    // features, even a print, is unlikely to work due to
+    // relocation, interrupts off, etc.   
+    //serial_print("Hello from isocore, my arg is %p\n", arg);
+    serial_putchar('H');
+    serial_putchar('I');
+    serial_putchar('!');
+    serial_putchar('\n');
+    while (1) { }  // does actually get here in testing
+}
+
+static int test_iso()
+{
+    void (*code)(void*) = isotest;
+    uint64_t codesize = PAGE_SIZE_4KB; // we are making pretend here
+    uint64_t stacksize = PAGE_SIZE_4KB;
+    void *arg = (void*)0xdeadbeef;
+
+    nk_vc_printf("Testing isolated core - this will not return!\n");
+
+    return nk_isolate(code, 
+		      codesize,
+		      stacksize,
+		      arg);
+}
+
+
+#endif
+
+#ifdef NAUT_CONFIG_GARBAGE_COLLECTION
+static int handle_collect(char *buf)
+{
+#ifdef NAUT_CONFIG_ENABLE_BDWGC
+    nk_vc_printf("Doing BDWGC global garbage collection\n");
+    int rc = nk_gc_bdwgc_collect();
+    nk_vc_printf("BDWGC global garbage collection done result: %d\n",rc);
+    return 0;
+#else
+    nk_vc_printf("No garbage collector is enabled...\n");
+    return 0;
+#endif
+}
+#endif
+
 static int handle_test(char *buf)
 {
     char what[80];
@@ -470,6 +535,17 @@ static int handle_test(char *buf)
     if (!strncasecmp(what,"thread",6)) { 
 	return test_threads();
     }
+
+    if (!strncasecmp(what,"stop",4)) { 
+	return test_stop();
+    }
+
+#ifdef NAUT_CONFIG_ISOCORE
+    if (!strncasecmp(what,"iso",3)) { 
+	test_iso();
+	return 0;
+    }
+#endif
 
 #ifdef NAUT_CONFIG_TEST_BDWGC
     if (!strncasecmp(what,"bdwgc",5)) { 
@@ -524,36 +600,6 @@ static int handle_benchmarks(char * buf)
     return 0;
 }
 
-#ifdef NAUT_CONFIG_ISOCORE
-
-static void isotest(void *arg)
-{
-    // note trying to do anything in here with NK
-    // features, even a print, is unlikely to work due to
-    // relocation, interrupts off, etc.   
-    //serial_print("Hello from isocore, my arg is %p\n", arg);
-    serial_putchar('H');
-    serial_putchar('I');
-    serial_putchar('!');
-    serial_putchar('\n');
-    while (1) { }  // does actually get here in testing
-}
-
-static int handle_isotest(char *buf)
-{
-    void (*code)(void*) = isotest;
-    uint64_t codesize = PAGE_SIZE_4KB; // we are making pretend here
-    uint64_t stacksize = PAGE_SIZE_4KB;
-    void *arg = (void*)0xdeadbeef;
-
-    return nk_isolate(code, 
-		      codesize,
-		      stacksize,
-		      arg);
-}
-
-
-#endif
 
 static int handle_meminfo(char *buf)
 {
@@ -656,13 +702,7 @@ static int handle_cmd(char *buf, int n)
   }
 #endif
 
-#ifdef NAUT_CONFIG_ISOCORE
-  if (!strncasecmp(buf,"isotest",4)) { 
-    handle_isotest(buf);
-    return 0;
-  }
-#endif
-  
+ 
   if (!strncasecmp(buf,"help",4)) { 
     nk_vc_printf("help\nexit\nvcs\ncores [n]\ntime [n]\nthreads [n]\n");
     nk_vc_printf("devs | fses | ofs | cat [path]\n");
@@ -670,6 +710,9 @@ static int handle_cmd(char *buf, int n)
     nk_vc_printf("regs [t]\npeek [bwdq] x | mem x n [s] | poke [bwdq] x y\nin [bwd] addr | out [bwd] addr data\nrdmsr x [n] | wrmsr x y\ncpuid f [n] | cpuidsub f s\n");
     nk_vc_printf("meminfo [detail]\n");
     nk_vc_printf("reap\n");
+#ifdef NAUT_CONFIG_GARBAGE_COLLECTION
+    nk_vc_printf("collect\n");
+#endif
     nk_vc_printf("burn a name size_ms tpr priority\n");
     nk_vc_printf("burn s name size_ms tpr phase size deadline priority\n");
     nk_vc_printf("burn p name size_ms tpr phase period slice\n");
@@ -678,8 +721,7 @@ static int handle_cmd(char *buf, int n)
     nk_vc_printf("bench\n");
     nk_vc_printf("blktest dev r|w start count\n");
     nk_vc_printf("blktest dev r|w start count\n");
-    nk_vc_printf("isotest\n");
-    nk_vc_printf("test threads|bdwgc|...\n");
+    nk_vc_printf("test threads|stop|iso|bdwgc|...\n");
     nk_vc_printf("vm name [embedded image]\n");
     nk_vc_printf("run path\n");
     return 0;
@@ -742,9 +784,16 @@ static int handle_cmd(char *buf, int n)
   }
 
   if (!strncasecmp(buf,"reap",4)) { 
-      nk_sched_reap(1); // unconditional reap
+    nk_sched_reap(1); // unconditional reap
     return 0;
   }
+
+#ifdef NAUT_CONFIG_GARBAGE_COLLECTION
+  if (!strncasecmp(buf,"collect",7)) { 
+      handle_collect(buf); 
+      return 0;
+  }
+#endif
 
   if (sscanf(buf,"regs %lu",&tid)==1) { 
       nk_thread_t *t = nk_find_thread_by_tid(tid);

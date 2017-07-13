@@ -414,6 +414,9 @@ menu "Garbage Collection Options"
       If enabled, a conservative garbage collector is
       used to garbage collect the kernel/HRT.  mallocs() pass to the
       GC, frees() are ignored, and mallocs can trigger global GC
+      WARNING: Garbage collection in Nautilus is a highly experimental feature.   If you
+      don't know if you need this, you do not.
+
 
    choice 
     prompt "Select Garbage Collector"
@@ -426,9 +429,18 @@ menu "Garbage Collection Options"
       depends on GARBAGE_COLLECTION
       help
         If enabled, the BDWGC garbage colector is used.
+        WARNING: BDWGC integration in Nautilus is a highly experimental feature.   If you
+        don't know if you need this, you do not.
 
    endchoice
  
+   config ALIGN_BDWGC
+       bool "Force allocations in the BDWGC garbage collector to be aligned to their own size"
+       default n
+       depends on ENABLE_BDWGC
+       help
+         If enabled, BDWGC allocations will be aligned to their own size, as in the buddy system allocator
+
    config DEBUG_BDWGC
        bool "Debug the BDWGC garbage collector"
        default n

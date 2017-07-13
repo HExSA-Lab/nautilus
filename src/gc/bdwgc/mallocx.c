@@ -452,14 +452,24 @@ GC_API void * GC_CALL GC_memalign(size_t align, size_t lb)
     size_t new_lb;
     size_t offset;
     ptr_t result;
+    
+    BDWGC_DEBUG("Allocating %lu bytes with alignment %lu\n",lb,align);
 
-    if (align <= GRANULE_BYTES) return GC_malloc(lb);
+    if (align <= GRANULE_BYTES) {
+	result = GC_malloc(lb);
+	BDWGC_DEBUG("Less than or equal to granule %lu - returning %p\n", GRANULE_BYTES,result);
+	return result;
+    }
     if (align >= HBLKSIZE/2 || lb >= HBLKSIZE/2) {
         if (align > HBLKSIZE) {
-          return (*GC_get_oom_fn())(LONG_MAX-1024); /* Fail */
+	    result = (*GC_get_oom_fn())(lb);
+	    BDWGC_DEBUG("Unable to handle alignment>%lu - handed to OOM fn - returning %p\n",HBLKSIZE,result);
+	    return result;
         }
-        return GC_malloc(lb <= HBLKSIZE? HBLKSIZE : lb);
+        result = GC_malloc(lb <= HBLKSIZE? HBLKSIZE : lb);
             /* Will be HBLKSIZE aligned.        */
+	BDWGC_DEBUG("Request alignment is set to %lu - SUCCEED - returning %p\n",HBLKSIZE,result);
+	return result;
     }
     /* We could also try to make sure that the real rounded-up object size */
     /* is a multiple of align.  That would be correct up to HBLKSIZE.      */
@@ -475,6 +485,7 @@ GC_API void * GC_CALL GC_memalign(size_t align, size_t lb)
     }
     result = (void *) ((ptr_t)result + offset);
     GC_ASSERT((word)result % align == 0);
+    BDWGC_DEBUG("Long path is returning %p\n", result);
     return result;
 }
 

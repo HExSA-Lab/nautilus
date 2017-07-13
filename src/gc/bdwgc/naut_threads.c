@@ -108,7 +108,7 @@ void GC_push_thread_structures(void)
 
 
 
-static void mark_thread_local_fls(nk_thread_t *t, void *state)
+static void mark_thread_local_fls(struct nk_thread *t, void *state)
 {
   if (t->gc_state == NULL) {
     BDWGC_DEBUG("Initializing gc_state for %p (tid %d)\n", t, t->tid);
@@ -153,7 +153,7 @@ GC_INNER void GC_init_parallel(void)
   
   /* Initialize thread local free lists if used.      */
   LOCK();
-  GC_init_thread_local(&(BDWGC_THREAD_STATE()->tlfs));
+  GC_init_thread_local(BDWGC_THREAD_TLFS());
   UNLOCK();
 }
 
@@ -335,7 +335,7 @@ GC_INNER void GC_thr_init(void)
 # if defined(GC_ASSERTIONS)
     void GC_check_tls_for(GC_tlfs p);
 
-    static void check_thread_tls (nk_thread_t *t)
+    static void check_thread_tls (struct nk_thread * t, void * state)
     {
        GC_check_tls_for(&(BDWGC_SPECIFIC_THREAD_STATE(t) -> tlfs));
     }
