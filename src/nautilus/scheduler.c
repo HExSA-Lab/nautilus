@@ -126,6 +126,16 @@ struct nk_sched_global_state {
 static volatile uint64_t sync_count=0;
 static volatile uint64_t tsc_start=-1ULL;
 
+// only one core can do a world stop at a time
+// this lock is also used to signal that we are starting
+// or ending a world stop
+static volatile uint64_t     stopping;
+// all stopping cores synchronize via this barrier
+static nk_counting_barrier_t stop_barrier;
+// flags storage for the the core initiating the world stop
+static volatile uint8_t      stop_flags;
+
+
 static struct nk_sched_global_state global_sched_state;
 
 //
@@ -659,6 +669,52 @@ void nk_sched_map_threads(int cpu, void (func)(struct nk_thread *t, void *state)
     }
 
     GLOBAL_UNLOCK();
+}
+
+
+void nk_sched_stop_world()
+{
+    uint64_t num_cpus = nk_get_num_cpus();
+    uint64_t my_cpu_id = my_cpu_id();
+    uint64_t i;
+
+    // scheduler cannot stop us
+    // note that an interrupt will still land us in the
+    // stop-world test in need_resched
+    preempt_disable();
+    // wait until we are the sole world stopper
+    // perhaps participating in other world stops along the way
+    PAUSE_WHILE(!__sync_bool_compare_and_swap(&stopping,0,1));
+    
+    // Now we want to make sure nothing can interrupt us
+    // and we might as well reset the scheduler now as well
+    stop_flags = irq_disable_save();
+    preempt_enable();  // interrupts are still off - scheduler is not going to preempt us
+    
+    // kick everyone else to get them to stop
+    for (i=0;i<num_cpus;i++) { 
+	if (i!=my_cpu_id) {
+	    nk_sched_kick_cpu(i);
+	}
+    }
+
+    // wait for them all to stop
+    nk_counting_barrier(&stop_barrier);
+
+}
+
+void nk_sched_start_world()
+{
+    // indicate that we are restarting the world
+    __sync_fetch_and_and(&stopping,0);
+
+    // wait for them to notice 
+    nk_counting_barrier(&stop_barrier);
+    
+    // now allow interrupts again locally
+    // so the scheduler can preempt us
+    irq_enable_restore(stop_flags);
+    
 }
 
 
@@ -1573,6 +1629,31 @@ static inline void set_interrupt_priority(rt_thread *t)
 struct nk_thread *_sched_need_resched(int have_lock, int force_resched)
 {
     LOCAL_LOCK_CONF;
+
+
+    // even before we check for preemptability, we 
+    // need to handle a world stop, which we always do
+    if (stopping) {
+	uint64_t num_cpus = nk_get_num_cpus();
+	DEBUG("World stop signalled\n");
+	// We now wait for everyone else to stop
+	nk_counting_barrier(&stop_barrier);
+	// everyone's stopped... we are now waiting for
+	// the world stopper to restart us all
+	PAUSE_WHILE(stopping);
+	// we've been restarted - we'll now wait for everyone
+	nk_counting_barrier(&stop_barrier);
+	// everyone's now restarted
+	// if we got here due to the world stopper's kick
+	// we should avoid running the scheduler
+	if (!force_resched && !per_cpu_get(system)->cpus[my_cpu_id()]->apic->in_timer_interrupt) {
+	    DEBUG("Resuming from world stop without scheduling pass\n");
+	    return 0;
+	} else {
+	    // Otherwise, we will continue with running the scheduler
+	    DEBUG("Resuming from world stop with scheduling pass\n");
+	}
+    }
 
     if (preempt_is_disabled())  {
 	if (force_resched) {
@@ -3229,6 +3310,8 @@ static int init_global_state()
     }
 
     spinlock_init(&global_sched_state.lock);
+
+    nk_counting_barrier_init(&stop_barrier,nk_get_num_cpus());
 
     return 0;
 

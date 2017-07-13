@@ -177,6 +177,15 @@ void nk_sched_dump_time(int cpu);
 // cpu==-means all cpus
 void nk_sched_map_threads(int cpu, void (func)(struct nk_thread *t, void *state), void *state);
 
+// Provide ability to stop and start the world from the caller
+// This forces all cores, except the caller out into an interrupt
+// handler, where they will wait for the world to start again
+// for the caller, interrupts will be disabled and the calling thread
+// or interrupt handler will run uninterrupted until it 
+// starts the world again
+void nk_sched_stop_world();
+void nk_sched_start_world();
+
 
 // Invoked by interrupt handler wrapper and other code
 // to cause thread context switches
