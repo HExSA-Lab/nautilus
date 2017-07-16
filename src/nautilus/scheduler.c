@@ -51,6 +51,20 @@
 #include <nautilus/backtrace.h>
 #include <dev/apic.h>
 
+// enforce lower limits on period and slice / sporadic size
+#define ENFORCE_LOWER_LIMITS 1
+// period/slice/sporadic size can be no smaller than these (in ns)
+// in the future these will be determined at boot time
+// the slice lower limit is also the sporadic size lower limit
+#define PERIOD_LOWER_LIMIT 20000
+#define SLICE_LOWER_LIMIT  10000
+
+// enforce granularity of period and slice / sporadic size
+#define ENFORCE_GRANULARITY 1
+// period/slice/sporadic size can be no smaller than these (in ns)
+// in the future these will be determined at boot time
+#define GRANULARITY 2000
+
 #define INSTRUMENT    0
 
 #define SANITY_CHECKS 0
@@ -1984,6 +1998,7 @@ struct nk_thread *_sched_need_resched(int have_lock, int force_resched)
 		// SHOULD have completed, not relative to the current time
 		rt_c->deadline = rt_c->deadline + rt_c->constraints.periodic.period;
 		rt_c->run_time = 0;
+		rt_c->arrival_count++;
 		// and it has immediately arrived again, so stash it
 		// into the EDF queue
 		if (CUR_IS_NOT_SPECIAL) {
@@ -2968,7 +2983,7 @@ static int rt_thread_admit(rt_scheduler *scheduler, rt_thread *thread, uint64_t 
 	DEBUG("Rejecting thread with too high of an interrupt priority class (%u)\n", thread->constraints.interrupt_priority_class);
 	return -1;
     }
-	
+
     
     switch (thread->constraints.type) {
     case APERIODIC:
@@ -2985,11 +3000,27 @@ static int rt_thread_admit(rt_scheduler *scheduler, rt_thread *thread, uint64_t 
 	uint64_t rms_limit;
 	uint64_t our_limit;
 
+	if (ENFORCE_GRANULARITY && 
+	    ((thread->constraints.periodic.period % GRANULARITY) || 
+	     (thread->constraints.periodic.slice % GRANULARITY))) {
+	    DEBUG("Rejecting thread because period and/or slice do not meet granularity requirement of %lu ns\n", GRANULARITY);
+	    return -1;
+	}
+	
+	if (ENFORCE_LOWER_LIMITS &&
+	    ((thread->constraints.periodic.period < PERIOD_LOWER_LIMIT) ||
+	     (thread->constraints.periodic.slice < SLICE_LOWER_LIMIT))) {
+	    DEBUG("Rejecting thread because period and/or slice are below the lower limits of %lu / %lu ns\n", PERIOD_LOWER_LIMIT,SLICE_LOWER_LIMIT);
+	    return -1;
+	}
+
 	get_periodic_util(scheduler,&cur_util,&cur_count);
 	rms_limit = get_periodic_util_rms_limit(cur_count+1);
 	our_limit = MIN(rms_limit,per_res);
 
 	DEBUG("Periodic admission:  this_util=%llu cur_util=%llu rms_limit=%llu our_limit=%llu\n",this_util,cur_util,rms_limit,our_limit);
+
+
 
 	if (cur_util+this_util < our_limit) { 
 	    // admit task
@@ -3011,6 +3042,18 @@ static int rt_thread_admit(rt_scheduler *scheduler, rt_thread *thread, uint64_t 
 	uint64_t time_left;
 	uint64_t cur_util, cur_count;
 	uint64_t our_limit;
+
+	if (ENFORCE_GRANULARITY && 
+	    (thread->constraints.sporadic.size % GRANULARITY)) {
+	    DEBUG("Rejecting thread because sporadic size does not meet granularity requirement of %lu ns\n", GRANULARITY);
+	    return -1;
+	}
+
+	if (ENFORCE_LOWER_LIMITS &&
+	    (thread->constraints.sporadic.size < SLICE_LOWER_LIMIT)) {
+	    DEBUG("Rejecting thread because sporadic size is below the lower slice limit of %lu\n", SLICE_LOWER_LIMIT);
+	    return -1;
+	}
 
 	if ((now + 
 	     thread->constraints.sporadic.phase + 
