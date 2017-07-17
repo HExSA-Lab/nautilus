@@ -143,6 +143,8 @@ static volatile uint64_t tsc_start=-1ULL;
 // only one core can do a world stop at a time
 // this lock is also used to signal that we are starting
 // or ending a world stop
+// 0 => not stopping / no stopper
+// k => stopping / stopper = k-1
 static volatile uint64_t     stopping;
 // all stopping cores synchronize via this barrier
 static nk_counting_barrier_t stop_barrier;
@@ -690,6 +692,7 @@ void nk_sched_stop_world()
 {
     uint64_t num_cpus = nk_get_num_cpus();
     uint64_t my_cpu_id = my_cpu_id();
+    uint64_t stopper = my_cpu_id+1;
     uint64_t i;
 
     // scheduler cannot stop us
@@ -698,7 +701,7 @@ void nk_sched_stop_world()
     preempt_disable();
     // wait until we are the sole world stopper
     // perhaps participating in other world stops along the way
-    PAUSE_WHILE(!__sync_bool_compare_and_swap(&stopping,0,1));
+    PAUSE_WHILE(!__sync_bool_compare_and_swap(&stopping,0,stopper));
     
     // Now we want to make sure nothing can interrupt us
     // and we might as well reset the scheduler now as well
@@ -1647,25 +1650,32 @@ struct nk_thread *_sched_need_resched(int have_lock, int force_resched)
 
     // even before we check for preemptability, we 
     // need to handle a world stop, which we always do
-    if (stopping) {
-	uint64_t num_cpus = nk_get_num_cpus();
-	DEBUG("World stop signalled\n");
-	// We now wait for everyone else to stop
-	nk_counting_barrier(&stop_barrier);
-	// everyone's stopped... we are now waiting for
-	// the world stopper to restart us all
-	PAUSE_WHILE(stopping);
-	// we've been restarted - we'll now wait for everyone
-	nk_counting_barrier(&stop_barrier);
-	// everyone's now restarted
-	// if we got here due to the world stopper's kick
-	// we should avoid running the scheduler
-	if (!force_resched && !per_cpu_get(system)->cpus[my_cpu_id()]->apic->in_timer_interrupt) {
-	    DEBUG("Resuming from world stop without scheduling pass\n");
+    if (stopping) { 
+	// if we are the world stopper, we got here via 
+	// an interrupt, and we need to resume without
+	if (stopping==(my_cpu_id()+1)) { 
+	    DEBUG("Stopping self interrupted - resuming\n");
 	    return 0;
 	} else {
-	    // Otherwise, we will continue with running the scheduler
-	    DEBUG("Resuming from world stop with scheduling pass\n");
+	    uint64_t num_cpus = nk_get_num_cpus();
+	    DEBUG("World stop signalled\n");
+	    // We now wait for everyone else to stop
+	    nk_counting_barrier(&stop_barrier);
+	    // everyone's stopped... we are now waiting for
+	    // the world stopper to restart us all
+	    PAUSE_WHILE(stopping);
+	    // we've been restarted - we'll now wait for everyone
+	    nk_counting_barrier(&stop_barrier);
+	    // everyone's now restarted
+	    // if we got here due to the world stopper's kick
+	    // we should avoid running the scheduler
+	    if (!force_resched && !per_cpu_get(system)->cpus[my_cpu_id()]->apic->in_timer_interrupt) {
+		DEBUG("Resuming from world stop without scheduling pass\n");
+		return 0;
+	    } else {
+		// Otherwise, we will continue with running the scheduler
+		DEBUG("Resuming from world stop with scheduling pass\n");
+	    }
 	}
     }
 

@@ -86,14 +86,18 @@ static inline void nk_counting_barrier(volatile nk_counting_barrier_t *b)
 
     if (old==(b->size-1)) {
         // I'm the last to the party
+	// We need to be sure that these operations occur in order 
+	// and are fully visible in order
         *curp ^= 0x1;
+	__asm__ __volatile__ ("mfence" : : : "memory");
         *countp = 0;
+	__asm__ __volatile__ ("mfence" : : : "memory");
     } else {
         // k1om compiler does not know what "volatile" means
         // hence this hand-coding.
-        do {
-            __asm__ __volatile__( "pause; movq %1, %0" : "=r"(old) : "m"(*countp) : );
-        } while (old);
+	while ( ({ __asm__ __volatile__( "movq %1, %0" : "=r"(old) : "m"(*countp) : ); old; }) ) {
+	    __asm__ __volatile__ ("pause");
+	}
     }
 }
 
