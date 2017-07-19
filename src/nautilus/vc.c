@@ -34,6 +34,9 @@
 #include <nautilus/printk.h>
 #include <dev/serial.h>
 #include <dev/vga.h>
+
+#include <nautilus/shell.h>
+
 #ifdef NAUT_CONFIG_XEON_PHI
 #include <arch/k1om/xeon_phi.h>
 #endif
@@ -1161,6 +1164,17 @@ int nk_vc_handle_mouse(nk_mouse_event_t *m)
   return 0;
 }
 
+static int num_shells=0;
+
+static void new_shell()
+{
+    char name[80];
+    sprintf(name,"shell-%d",num_shells);
+    num_shells++;
+    nk_launch_shell(name,0);
+}
+
+
 static int vc_list_inited=0;
 
 static void list(void *in, void **out)
@@ -1190,7 +1204,7 @@ static void list(void *in, void **out)
   while (1) {
     nk_vc_clear(0xf9);
    
-    nk_vc_print("List of VCs (space to regenerate)\n\n");
+    nk_vc_print("List of VCs (space to regenerate, plus for new shell)\n\n");
 
     i=0;
     list_for_each(cur,&vc_list) {
@@ -1200,6 +1214,11 @@ static void list(void *in, void **out)
 
     int c = nk_vc_getchar(1);
     
+    if (c=='+') {
+	new_shell();
+	continue;
+    }
+
     i=0;
     list_for_each(cur,&vc_list) {
       if (c == (i+'a')) { 
@@ -1375,7 +1394,7 @@ static void chardev_console(void *in, void **out)
 		struct list_head *cur;
 		int i;
 		char which;
-		strcpy(buf,"\r\nList of VCs \r\n\r\n");
+		strcpy(buf,"\r\nList of VCs (+ = new shell)\r\n\r\n");
 		nk_char_dev_write(c->dev,strlen(buf),buf,NK_DEV_REQ_BLOCKING);
 		i=0;
 		list_for_each(cur,&vc_list) {
@@ -1389,13 +1408,17 @@ static void chardev_console(void *in, void **out)
 		    next_node = cur_node;
 		    break;
 		} 
-		i=0;
-		list_for_each(cur,&vc_list) {
-		    if (which == (i+'a')) { 
-			next_node = cur;
-			break;
+		if (which=='+') {
+		    new_shell();
+		} else {
+		    i=0;
+		    list_for_each(cur,&vc_list) {
+			if (which == (i+'a')) { 
+			    next_node = cur;
+			    break;
+			}
+			i++;
 		    }
-		    i++;
 		}
 	    }
 		break;
