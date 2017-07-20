@@ -306,7 +306,7 @@ buddy_alloc (struct buddy_mempool *mp, ulong_t order)
         }
 
         block = list_entry(list->next, struct block, link);
-        list_del(&block->link);
+        list_del_init(&block->link);
         mark_allocated(mp, block);
 
 	BUDDY_DEBUG("Found block %p at order %lu\n",block,j);
@@ -389,7 +389,7 @@ buddy_free(
 	BUDDY_DEBUG("buddy merge\n");
 
         /* OK, we're good to go... buddy merge! */
-        list_del(&buddy->link);
+        list_del_init(&buddy->link);
         if (buddy < block) {
             block = buddy;
 	}
