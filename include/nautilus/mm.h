@@ -87,11 +87,36 @@ struct mem_region * kmem_get_base_zone(void);
 struct mem_region * kmem_get_region_by_addr(ulong_t addr);
 void kmem_add_memory(struct mem_region * mem, ulong_t base_addr, size_t size);
 
+// this the range of heap addresses used by the boot allocator [low,high)
+void kmem_inform_boot_allocation(void *low, void *high);
+
 // These functions operate the core memory allocator directly
 // You want to use the malloc()/free() wrappers defined below 
 // unless you know  what you are doing
 void * kmem_malloc(size_t size);
+void * kmem_mallocz(size_t size);
 void   kmem_free(void * addr);
+
+// Support functions for garbage collection
+// We currently assume these are done with the world stopped,
+// hence no locking
+
+// find the matching block that contains addr and its flags
+// returns nonzero if the addr is invalid or within no allocated block
+// user flags are allocate from low bit up, while kmem's flags are allocated
+// high bit down
+int  kmem_find_block(void *any_addr, void **block_addr, uint64_t *block_size, uint64_t *flags);
+// set the flags of an allocated block
+int  kmem_set_block_flags(void *block_addr, uint64_t flags);
+// apply an mask to all the blocks (and mask unless or=1)
+int  kmem_mask_all_blocks_flags(uint64_t mask, int or);
+
+// range of addresses used for internal kmem state that should be
+// ignored when pointer-chasing the heap, for example in a GC
+void kmem_get_internal_pointer_range(void **start, void **end);
+
+// check to see if the masked flags match the given flags
+int  kmem_apply_to_matching_blocks(uint64_t mask, uint64_t flags, int (*func)(void *block, void *state), void *state);
 
 int  kmem_sanity_check();
 
@@ -105,8 +130,18 @@ void * GC_malloc(size_t);
 #endif
 #define free(a) 
 #else
+#ifdef NAUT_CONFIG_ENABLE_PDSGC
+void *nk_gc_pdsgc_malloc(uint64_t);
+#define malloc(s) nk_gc_pdsgc_malloc(s)
+#ifdef NAUT_CONFIG_EXPLICIT_ONLY_PDSGC
+#define free(s) kmem_free(s)
+#else
+#define free(s) 
+#endif
+#else
 #define malloc(s) kmem_malloc(s)
 #define free(a) kmem_free(a)
+#endif
 #endif
 
 

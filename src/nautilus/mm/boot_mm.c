@@ -263,6 +263,30 @@ mm_boot_free_vmem (addr_t start, ulong_t size)
 }
 
 
+#define ALIGN_CEIL(x,a) ( (x)%(a) ? ((x)/(a) + 1) * (a) : (x) )
+
+static addr_t addr_low=-1;
+static addr_t addr_high=0;
+
+static void update_boot_range(addr_t start, addr_t end)
+{
+    if (start<addr_low) { 
+	addr_low = start;
+    }
+    if (end>addr_high) {
+	addr_high = end;
+    }
+    
+    BMM_DEBUG("Boot range is now %p-%p\n",addr_low,addr_high);
+}
+
+
+// Get the highest allocated address - for kmem.c
+void *boot_mm_get_cur_top()
+{
+    return (void*) addr_high;
+}
+
 /*
  * this is our main boot memory allocator, based on a simple 
  * bitmap scan. 
@@ -376,7 +400,12 @@ found:
     BMM_DEBUG("Allocated %d bytes, alignment %d (%d pages) at %p\n", size, align, areasize, ret);
 
     /* NOTE: we do NOT zero the memory! */
-    return (void*)pa_to_va((ulong_t)ret);
+    addr_t addr = pa_to_va((ulong_t)ret);
+
+
+    update_boot_range(addr,ALIGN_CEIL(addr+size,align));
+
+    return (void*)addr;
 }
 
 
@@ -476,6 +505,7 @@ add_free_pages (struct mem_region * region)
     return count*PAGE_SIZE;
 }
 
+
 /*
  * this makes the transfer to the kmem allocator, 
  * we won't be using the boot bitmap allocator anymore
@@ -514,6 +544,7 @@ mm_boot_kmem_init (void)
 
     BMM_PRINT("    =======\n");
     BMM_PRINT("    [TOTAL] (%lu.%lu MB)\n", count/1000000, count%1000000);
+
 }
 
 void 
@@ -549,4 +580,9 @@ mm_boot_kmem_cleanup (void)
 
     BMM_PRINT("    =======\n");
     BMM_PRINT("    [TOTAL] (%lu.%lu MB)\n", count/1000000, count%1000000);
+
+    BMM_PRINT("    Boot allocation range: %p-%p\n",(void*)addr_low, (void*)addr_high);
+
+    kmem_inform_boot_allocation((void*)addr_low,(void*)addr_high);
+   
 }

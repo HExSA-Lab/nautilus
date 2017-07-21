@@ -98,6 +98,7 @@ struct kmem_block_hdr {
     void *   addr;   /* address of block */
     uint64_t order;  /* order of the block allocated from buddy system */
     struct buddy_mempool * zone; /* zone to which this block belongs */
+    uint64_t flags;  /* flags for this allocated block */
 } __packed;
 
 
@@ -211,6 +212,7 @@ static inline void block_hash_free_entry(struct kmem_block_hdr *b)
 {
   b->addr = 0;
   b->zone = 0;
+  b->flags = 0;
   __sync_fetch_and_and (&b->order,0);
 }
 
@@ -337,6 +339,10 @@ kmem_add_memory (struct mem_region * mem,
     kmem_bytes_managed += chunk_size*num_chunks;
 }
 
+void *boot_mm_get_cur_top();
+
+static void *kmem_private_start;
+static void *kmem_private_end;
 
 /* 
  * initializes the kernel memory pools based on previously 
@@ -352,6 +358,8 @@ nk_kmem_init (void)
     uint64_t total_mem=0;
     uint64_t total_phys_mem=0;
     
+    kmem_private_start = boot_mm_get_cur_top();
+
     /* initialize the global zone list */
     INIT_LIST_HEAD(&glob_zone_list);
 
@@ -386,7 +394,7 @@ nk_kmem_init (void)
         list_for_each_entry(mem, &loc_dom->regions, entry) {
             struct mem_reg_entry * newent = mm_boot_alloc(sizeof(struct mem_reg_entry));
             if (!newent) {
-                ERROR_PRINT("Could not allocate mem region entry\n");
+                KMEM_ERROR("Could not allocate mem region entry\n");
                 return -1;
             }
             newent->mem = mem;
@@ -436,23 +444,46 @@ nk_kmem_init (void)
       return -1;
     }
 
+
+    // the assumption here is that no further boot_mm allocations will
+    // be made by kmem from this point on
+    kmem_private_end = boot_mm_get_cur_top();
+
     return 0;
+}
+
+
+// A fake header representing the boot allocations
+static void     *boot_start;
+static void     *boot_end;
+static uint64_t  boot_flags;
+
+void kmem_inform_boot_allocation(void *low, void *high)
+{
+    KMEM_DEBUG("Handling boot range %p-%p\n", low, high);
+    boot_start = low;
+    boot_end = high;
+    boot_flags = 0;
+    KMEM_PRINT("   boot range: %p-%p   kmem private: %p-%p\n",
+ 	       low, high, kmem_private_start, kmem_private_end);
 }
 
 
 /**
  * Allocates memory from the kernel memory pool. This will return a memory
- * region that is at least 16-byte aligned. The memory returned is zeroed.
+ * region that is at least 16-byte aligned. The memory returned is 
+ * optionally zeroed.
  *
  * Arguments:
  *       [IN] size: Amount of memory to allocate in bytes.
+ *       [IN] zero: Whether to zero the whole allocated block
  *
  * Returns:
  *       Success: Pointer to the start of the allocated memory.
  *       Failure: NULL
  */
-void *
-kmem_malloc (size_t size)
+static void *
+_kmem_malloc (size_t size, int zero)
 {
     void *block = 0;
     struct kmem_block_hdr *hdr = NULL;
@@ -461,7 +492,7 @@ kmem_malloc (size_t size)
     cpu_id_t my_id = my_cpu_id();
     struct kmem_data * my_kmem = &(nk_get_nautilus_info()->sys.cpus[my_id]->kmem);
 
-    KMEM_DEBUG("malloc of %lu bytes from:\n",size);
+    KMEM_DEBUG("malloc of %lu bytes (zero=%d) from:\n",size,zero);
     KMEM_DEBUG_BACKTRACE();
 
 #if SANITY_CHECK_PER_OP
@@ -515,7 +546,11 @@ kmem_malloc (size_t size)
     }
 
     KMEM_DEBUG("malloc succeeded: size %lu order %lu -> 0x%lx\n",size, order, block);
-      
+ 
+    if (zero) { 
+	memset(block,0,1ULL << hdr->order);
+    }
+     
 #if SANITY_CHECK_PER_OP
     if (kmem_sanity_check()) { 
 	panic("KMEM HAS GONE INSANE AFTER MALLOC\n");
@@ -525,6 +560,17 @@ kmem_malloc (size_t size)
 
     /* Return address of the block */
     return block;
+}
+
+
+void *kmem_malloc(size_t size)
+{
+    return _kmem_malloc(size,0);
+}
+
+void *kmem_mallocz(size_t size)
+{
+    return _kmem_malloc(size,1);
 }
 
 
@@ -655,5 +701,126 @@ int kmem_sanity_check()
     }
 
     return rc;
+}
+
+
+void  kmem_get_internal_pointer_range(void **start, void **end)
+{
+    *start = kmem_private_start;
+    *end = kmem_private_end;
+}
+
+int  kmem_find_block(void *any_addr, void **block_addr, uint64_t *block_size, uint64_t *flags)
+{
+    uint64_t i;
+    uint64_t order;
+    addr_t   zone_base;
+    uint64_t zone_min_order;
+    uint64_t zone_max_order;
+    addr_t   any_offset;
+    struct mem_region *reg;
+
+    if (!(reg = kmem_get_region_by_addr((addr_t)any_addr))) {
+	// not in any region we manage
+	return -1;
+    }
+
+    if (any_addr>=boot_start && any_addr<boot_end) { 
+	// in some boot_mm allocation that we treat as a single block
+	*block_addr = boot_start;
+	*block_size = boot_end-boot_start;
+	*flags = boot_flags;
+	KMEM_DEBUG("Search of %p found boot block (%p-%p)\n", any_addr, boot_start, boot_end);
+	return 0;
+    }
+
+    zone_base = reg->mm_state->base_addr;
+    zone_min_order = reg->mm_state->min_order;
+    zone_max_order = reg->mm_state->pool_order;
+
+    any_offset = (addr_t)any_addr - (addr_t)zone_base;
+    
+    for (order=zone_min_order;order<=zone_max_order;order++) {
+	addr_t mask = ~((1ULL << order)-1);
+	void *search_addr = (void*)(zone_base + (any_offset & mask));
+	struct kmem_block_hdr *hdr = block_hash_find_entry(search_addr);
+	// must exist and must be allocated
+	if (hdr && hdr->order) { 
+	    *block_addr = search_addr;
+	    *block_size = 0x1ULL<<hdr->order;
+	    *flags = hdr->flags;
+	    return 0;
+	    
+	}
+    }
+    return -1;
+}
+
+
+// set the flags of an allocated block
+int  kmem_set_block_flags(void *block_addr, uint64_t flags)
+{
+    if (block_addr>=boot_start && block_addr<boot_end) { 
+	boot_flags = flags;
+	return 0;
+
+    } else {
+
+	struct kmem_block_hdr *h =  block_hash_find_entry(block_addr);
+	
+	if (!h) { 
+	    return -1;
+	} else {
+	    h->flags = flags;
+	    return 0;
+	}
+    }
+}
+
+// applies only to allocated blocks
+int  kmem_mask_all_blocks_flags(uint64_t mask, int or)
+{
+    uint64_t i;
+
+    if (!or) { 
+	boot_flags &= mask;
+	for (i=0;i<block_hash_num_entries;i++) { 
+	    if (block_hash_entries[i].order) { 
+		block_hash_entries[i].flags &= mask;
+	    }
+	}
+    } else {
+	boot_flags |= mask;
+	for (i=0;i<block_hash_num_entries;i++) { 
+	    if (block_hash_entries[i].order) { 
+		block_hash_entries[i].flags |= mask;
+	    }
+	}
+    }
+
+    return 0;
+}
+    
+int  kmem_apply_to_matching_blocks(uint64_t mask, uint64_t flags, int (*func)(void *block, void *state), void *state)
+{
+    uint64_t i;
+    
+    if (((boot_flags & mask) == flags)) {
+	if (func(boot_start,state)) { 
+	    return -1;
+	}
+    }
+
+    for (i=0;i<block_hash_num_entries;i++) { 
+	if (block_hash_entries[i].order) { 
+	    if ((block_hash_entries[i].flags & mask) == flags) {
+		if (func(block_hash_entries[i].addr,state)) { 
+		    return -1;
+		}
+	    }
+	}
+    } 
+    
+    return 0;
 }
     
