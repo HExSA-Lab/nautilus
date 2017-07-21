@@ -48,8 +48,12 @@
 #include <nautilus/isocore.h>
 #endif
 
-#ifdef NAUT_CONFIG_TEST_BDWGC
+#ifdef NAUT_CONFIG_ENABLE_BDWGC
 #include <gc/bdwgc/bdwgc.h>
+#endif
+
+#ifdef NAUT_CONFIG_ENABLE_PDSGC
+#include <gc/pdsgc/pdsgc.h>
 #endif
 
 #define MAX_CMD 80
@@ -518,8 +522,43 @@ static int handle_collect(char *buf)
     nk_vc_printf("BDWGC global garbage collection done result: %d\n",rc);
     return 0;
 #else
+#ifdef NAUT_CONFIG_ENABLE_PDSGC
+    nk_vc_printf("Doing PDSGC global garbage collection\n");
+    struct nk_gc_pdsgc_stats s;
+    int rc = nk_gc_pdsgc_collect(&s);
+    nk_vc_printf("PDSGC global garbage collection done result: %d\n",rc);
+    nk_vc_printf("%lu blocks / %lu bytes freed\n",
+		 s.num_blocks, s.total_bytes);
+    nk_vc_printf("smallest freed block: %lu bytes, largest freed block: %lu bytes\n",
+		 s.min_block, s.max_block);
+    return 0;
+#else 
     nk_vc_printf("No garbage collector is enabled...\n");
     return 0;
+#endif
+#endif
+}
+
+static int handle_leaks(char *buf)
+{
+#ifdef NAUT_CONFIG_ENABLE_BDWGC
+    nk_vc_printf("Leak detection not available for BDWGC\n");
+    return 0;
+#else
+#ifdef NAUT_CONFIG_ENABLE_PDSGC
+    nk_vc_printf("Doing PDSGC global leak detection\n");
+    struct nk_gc_pdsgc_stats s;
+    int rc = nk_gc_pdsgc_leak_detect(&s);
+    nk_vc_printf("PDSGC global leak detection done result: %d\n",rc);
+    nk_vc_printf("%lu blocks / %lu bytes have leaked\n",
+		 s.num_blocks, s.total_bytes);
+    nk_vc_printf("smallest leaked block: %lu bytes, largest leaked block: %lu bytes\n",
+		 s.min_block, s.max_block);
+    return 0;
+#else 
+    nk_vc_printf("No garbage collector is enabled...\n");
+    return 0;
+#endif
 #endif
 }
 #endif
@@ -551,6 +590,13 @@ static int handle_test(char *buf)
     if (!strncasecmp(what,"bdwgc",5)) { 
 	nk_vc_printf("Testing BDWGC garbage collector\n");
 	return nk_gc_bdwgc_test();
+    }
+#endif
+
+#ifdef NAUT_CONFIG_ENABLE_PDSGC
+    if (!strncasecmp(what,"pdsgc",5)) { 
+	nk_vc_printf("Testing PDSGC garbage collector\n");
+	return nk_gc_pdsgc_test();
     }
 #endif
 
@@ -711,7 +757,7 @@ static int handle_cmd(char *buf, int n)
     nk_vc_printf("meminfo [detail]\n");
     nk_vc_printf("reap\n");
 #ifdef NAUT_CONFIG_GARBAGE_COLLECTION
-    nk_vc_printf("collect\n");
+    nk_vc_printf("collect | leaks\n");
 #endif
     nk_vc_printf("burn a name size_ms tpr priority\n");
     nk_vc_printf("burn s name size_ms tpr phase size deadline priority\n");
@@ -721,7 +767,7 @@ static int handle_cmd(char *buf, int n)
     nk_vc_printf("bench\n");
     nk_vc_printf("blktest dev r|w start count\n");
     nk_vc_printf("blktest dev r|w start count\n");
-    nk_vc_printf("test threads|stop|iso|bdwgc|...\n");
+    nk_vc_printf("test threads|stop|iso|bdwgc|pdsgc|...\n");
     nk_vc_printf("vm name [embedded image]\n");
     nk_vc_printf("run path\n");
     return 0;
@@ -791,6 +837,13 @@ static int handle_cmd(char *buf, int n)
 #ifdef NAUT_CONFIG_GARBAGE_COLLECTION
   if (!strncasecmp(buf,"collect",7)) { 
       handle_collect(buf); 
+      return 0;
+  }
+#endif
+
+#ifdef NAUT_CONFIG_GARBAGE_COLLECTION
+  if (!strncasecmp(buf,"leak",4)) { 
+      handle_leaks(buf); 
       return 0;
   }
 #endif

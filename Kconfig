@@ -421,7 +421,7 @@ menu "Garbage Collection Options"
    choice 
     prompt "Select Garbage Collector"
     depends on GARBAGE_COLLECTION
-    default ENABLE_BDWGC
+    default ENABLE_PDSGC
 
      config ENABLE_BDWGC
       bool "BDWGC"
@@ -430,6 +430,15 @@ menu "Garbage Collection Options"
       help
         If enabled, the BDWGC garbage colector is used.
         WARNING: BDWGC integration in Nautilus is a highly experimental feature.   If you
+        don't know if you need this, you do not.
+
+     config ENABLE_PDSGC
+      bool "PDSGC"
+      default n
+      depends on GARBAGE_COLLECTION
+      help
+        If enabled, the home-grown PDSGC garbage colector is used.
+        WARNING: PDSGC integration in Nautilus is a highly experimental feature.   If you
         don't know if you need this, you do not.
 
    endchoice
@@ -441,12 +450,29 @@ menu "Garbage Collection Options"
        help
          If enabled, BDWGC allocations will be aligned to their own size, as in the buddy system allocator
 
+
    config DEBUG_BDWGC
        bool "Debug the BDWGC garbage collector"
        default n
        depends on ENABLE_BDWGC
        help
          If enabled, print debugging output from BDWGC
+
+   config EXPLICIT_ONLY_PDSGC
+       bool "Only use PDSGC explictly"
+       default n
+       depends on ENABLE_PDSGC
+       help
+         If enabled failing mallocs do *not* trigger gc and frees do
+         deallocation.  PDSGC can then be used to explicitly leak check
+         or explicitly do garbage collection of leaked data
+
+   config DEBUG_PDSGC
+       bool "Debug the PDSGC garbage collector"
+       default n
+       depends on ENABLE_PDSGC
+       help
+         If enabled, print debugging output from PDSGC
 
   config TEST_BDWGC 
    bool "Include the BDWGC garbage collection test suite"
