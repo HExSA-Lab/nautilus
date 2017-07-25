@@ -97,6 +97,10 @@
 #include <gc/bdwgc/bdwgc.h>
 #endif
 
+#ifdef NAUT_CONFIG_ENABLE_PDSGC
+#include <gc/pdsgc/pdsgc.h>
+#endif
+
 extern spinlock_t printk_lock;
 
 
@@ -305,8 +309,13 @@ init (unsigned long mbd,
     mm_boot_kmem_init();
 
 #ifdef NAUT_CONFIG_ENABLE_BDWGC
-    // Bring up the garbage collector if enabled
+    // Bring up the BDWGC garbage collector if enabled
     nk_gc_bdwgc_init();
+#endif
+
+#ifdef NAUT_CONFIG_ENABLE_PDSGC
+    // Bring up the PDSGC garbage collector if enabled
+    nk_gc_pdsgc_init();
 #endif
 
     disable_8259pic();
