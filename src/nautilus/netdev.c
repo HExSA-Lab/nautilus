@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2016, Peter Dinda <pdinda@northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
@@ -90,28 +90,30 @@ int nk_net_dev_get_characteristics(struct nk_net_dev *dev, struct nk_net_dev_cha
     return di->get_characteristics(d->state,c);
 }
 
-#define ERR -1ULL
-#define OK 1ULL
+
+struct op {
+    int                 completed;
+    nk_net_dev_status_t status;
+    struct nk_net_dev   *dev;
+};
+
 
 static void generic_send_callback(nk_net_dev_status_t status, void *context)
 {
+    struct op *o = (struct op*) context;
     DEBUG("generic send callback (status = 0x%lx) for %p\n",status,context);
-    if (status) { 
-	*(uint64_t *)context = ERR;
-    } else {
-	*(uint64_t *)context = OK;
-    }
-
+    o->status = status;
+    o->completed = 1;
+    nk_dev_signal((struct nk_dev *)o->dev);
 }
 
 static void generic_receive_callback(nk_net_dev_status_t status, void *context)
 {
+    struct op *o = (struct op*) context;
     DEBUG("generic receive callback (status = 0x%lx) for %p\n", status, context);
-    if (status) { 
-	*(uint64_t *)context = ERR;
-    } else {
-	*(uint64_t *)context = OK;
-    }
+    o->status = status;
+    o->completed = 1;
+    nk_dev_signal((struct nk_dev *)o->dev);
 }
 
 
@@ -140,7 +142,11 @@ int nk_net_dev_send_packet(struct nk_net_dev *dev,
 	    DEBUG("packet send not possible\n");
 	    return -1;
 	} else {
-	    volatile uint64_t completion = 0;
+	    volatile struct op o;
+
+	    o.completed = 0;
+	    o.status = 0;
+	    o.dev = dev;
 
 	    if (type==NK_DEV_REQ_NONBLOCKING) { 
 		if (di->post_send(d->state,src,len,0,0)) { 
@@ -151,15 +157,15 @@ int nk_net_dev_send_packet(struct nk_net_dev *dev,
 		    return 0;
 		}
 	    } else {
-		if (di->post_send(d->state,src,len,generic_send_callback,(void*)&completion)) { 
+		if (di->post_send(d->state,src,len,generic_send_callback,(void*)&o)) { 
 		    ERROR("Failed to launch send\n");
 		    return -1;
 		} else {
 		    DEBUG("Packet launch started, waiting for completion\n");
-		    while (!completion) {
+		    while (!o.completed) {
 			nk_dev_wait((struct nk_dev *)dev);
 		    }
-		    return (completion==OK ? 0 : -1);
+		    return o.status;
 		}
 	    }
 	
@@ -196,7 +202,11 @@ int nk_net_dev_receive_packet(struct nk_net_dev *dev,
 	    DEBUG("packet receive not possible\n");
 	    return -1;
 	} else {
-	    volatile uint64_t completion = 0;
+	    volatile struct op o;
+
+	    o.completed = 0;
+	    o.status = 0;
+	    o.dev = dev;
 
 	    if (type==NK_DEV_REQ_NONBLOCKING) { 
 		if (di->post_receive(d->state,dest,len,0,0)) { 
@@ -207,15 +217,15 @@ int nk_net_dev_receive_packet(struct nk_net_dev *dev,
 		    return 0;
 		}
 	    } else {
-		if (di->post_receive(d->state,dest,len,generic_receive_callback,(void*)&completion)) { 
+		if (di->post_receive(d->state,dest,len,generic_receive_callback,(void*)&o)) { 
 		    ERROR("Failed to post receive\n");
 		    return -1;
 		} else {
 		    DEBUG("Packet receive posted, waiting for completion\n");
-		    while (!completion) {
+		    while (!o.completed) {
 			nk_dev_wait((struct nk_dev *)d);
 		    }
-		    return (completion==OK ? 0 : -1);
+		    return o.status;
 		}
 	    }
 	}
