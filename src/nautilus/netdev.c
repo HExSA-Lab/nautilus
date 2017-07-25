@@ -90,16 +90,28 @@ int nk_net_dev_get_characteristics(struct nk_net_dev *dev, struct nk_net_dev_cha
     return di->get_characteristics(d->state,c);
 }
 
-static void generic_send_callback(void *context)
+#define ERR -1ULL
+#define OK 1ULL
+
+static void generic_send_callback(nk_net_dev_status_t status, void *context)
 {
-    DEBUG("generic send callback for %p\n",context);
-    *(uint64_t *)context = 1;
+    DEBUG("generic send callback (status = 0x%lx) for %p\n",status,context);
+    if (status) { 
+	*(uint64_t *)context = ERR;
+    } else {
+	*(uint64_t *)context = OK;
+    }
+
 }
 
-static void generic_receive_callback(void *context)
+static void generic_receive_callback(nk_net_dev_status_t status, void *context)
 {
-    DEBUG("generic receive callback for %p\n",context);
-    *(uint64_t *)context = 1;
+    DEBUG("generic receive callback (status = 0x%lx) for %p\n", status, context);
+    if (status) { 
+	*(uint64_t *)context = ERR;
+    } else {
+	*(uint64_t *)context = OK;
+    }
 }
 
 
@@ -107,7 +119,7 @@ int nk_net_dev_send_packet(struct nk_net_dev *dev,
 			   uint8_t *src, 
 			   uint64_t len, 
 			   nk_dev_request_type_t type,
-			   void (*callback)(void *state),
+			   void (*callback)(nk_net_dev_status_t status, void *state),
 			   void *state)
 {
     struct nk_dev *d = (struct nk_dev *)(&(dev->dev));
@@ -147,7 +159,7 @@ int nk_net_dev_send_packet(struct nk_net_dev *dev,
 		    while (!completion) {
 			nk_dev_wait((struct nk_dev *)dev);
 		    }
-		    return 0;
+		    return (completion==OK ? 0 : -1);
 		}
 	    }
 	
@@ -162,7 +174,7 @@ int nk_net_dev_receive_packet(struct nk_net_dev *dev,
 			      uint8_t *dest, 
 			      uint64_t len, 
 			      nk_dev_request_type_t type,
-			      void (*callback)(void *state),
+			      void (*callback)(nk_net_dev_status_t status, void *state),
 			      void *state)
 {
     struct nk_dev *d = (struct nk_dev *)(&(dev->dev));
@@ -203,7 +215,7 @@ int nk_net_dev_receive_packet(struct nk_net_dev *dev,
 		    while (!completion) {
 			nk_dev_wait((struct nk_dev *)d);
 		    }
-		    return 0;
+		    return (completion==OK ? 0 : -1);
 		}
 	    }
 	}
