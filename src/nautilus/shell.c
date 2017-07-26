@@ -36,6 +36,7 @@
 #include <nautilus/backtrace.h>
 #include <test/ipi.h>
 #include <test/threads.h>
+#include <test/net_udp_echo.h>
 
 #ifdef NAUT_CONFIG_PALACIOS
 #include <nautilus/vmm.h>
@@ -607,6 +608,22 @@ static int handle_test(char *buf)
 	return nk_gc_pdsgc_test();
     }
 #endif
+    
+    char nic[80];
+    char ip[80];
+    uint32_t port, num;
+    
+    if (sscanf(buf,"test udp_echo %s %s %u %u",nic,ip,&port,&num)==4) { 
+	nk_vc_printf("Testing udp echo server\n");
+	test_net_udp_echo(nic,ip,port,num);
+	return 0;
+    } 
+
+    if (sscanf(buf,"test udp_echo %s",nic)==1) { 
+	nk_vc_printf("Testing udp echo server\n");
+	test_net_udp_echo(nic,"10.10.10.10",5000,20);
+	return 0;
+    }
 
  dunno:
     nk_vc_printf("Unknown test request\n");
@@ -775,7 +792,8 @@ static int handle_cmd(char *buf, int n)
     nk_vc_printf("bench\n");
     nk_vc_printf("blktest dev r|w start count\n");
     nk_vc_printf("blktest dev r|w start count\n");
-    nk_vc_printf("test threads|stop|iso|bdwgc|pdsgc|...\n");
+    nk_vc_printf("test threads|stop|iso|bdwgc|pdsgc|\n");
+    nk_vc_printf("     udp_echo nic ip port num|...\n");
     nk_vc_printf("vm name [embedded image]\n");
     nk_vc_printf("run path\n");
     return 0;
