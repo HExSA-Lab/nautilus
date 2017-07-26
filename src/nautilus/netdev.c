@@ -165,6 +165,7 @@ int nk_net_dev_send_packet(struct nk_net_dev *dev,
 		    while (!o.completed) {
 			nk_dev_wait((struct nk_dev *)dev);
 		    }
+		    DEBUG("Packet launch completed\n");
 		    return o.status;
 		}
 	    }
@@ -225,6 +226,7 @@ int nk_net_dev_receive_packet(struct nk_net_dev *dev,
 		    while (!o.completed) {
 			nk_dev_wait((struct nk_dev *)d);
 		    }
+		    DEBUG("Packet receive completed\n");
 		    return o.status;
 		}
 	    }
