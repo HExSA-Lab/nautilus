@@ -55,6 +55,8 @@
 #else
 #define KMEM_DEBUG_BACKTRACE() BACKTRACE(KMEM_DEBUG,3)
 #endif	
+
+#define KMEM_ERROR_BACKTRACE() BACKTRACE(KMEM_ERROR,3)
 	    
 
 /**
@@ -608,7 +610,8 @@ kmem_free (void * addr)
     hdr = block_hash_find_entry(addr);
 
     if (!hdr) { 
-      KMEM_DEBUG("Failed to find entry for block %p\n",addr);
+      KMEM_ERROR("Failed to find entry for block %p in kmem_free()\n",addr);
+      KMEM_ERROR_BACKTRACE();
       return;
     }
 

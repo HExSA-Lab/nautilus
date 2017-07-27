@@ -913,8 +913,6 @@ int nk_sched_thread_pre_destroy(nk_thread_t * t)
     
     GLOBAL_UNLOCK();
     
-    free(r);
-
     return 0;
 }
 
