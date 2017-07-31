@@ -196,5 +196,8 @@ struct nk_thread *nk_sched_need_resched(void);
 // ns
 uint64_t nk_sched_get_runtime(struct nk_thread *t);
 
+// what are the threads scheduling constraints
+int nk_sched_thread_get_constraints(struct nk_thread *t, struct nk_sched_constraints *c);
+
 struct nk_thread *nk_find_thread_by_tid(uint64_t tid);
 #endif /* _SCHEDULER_H */

@@ -34,6 +34,8 @@
 #include <nautilus/smp.h>
 #include <nautilus/irq.h>
 #include <nautilus/thread.h>
+#include <nautilus/group.h>
+#include <nautilus/group_sched.h>
 #include <nautilus/timer.h>
 #include <nautilus/idle.h>
 #include <nautilus/percpu.h>
@@ -353,6 +355,9 @@ default_init (unsigned long mbd,
     pci_init(naut);
 
     nk_sched_init(&sched_cfg);
+
+    nk_thread_group_init();
+    nk_group_sched_init();
 
     smp_setup_xcall_bsp(naut->sys.cpus[0]);
 

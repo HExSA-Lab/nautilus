@@ -3101,6 +3101,13 @@ static int rt_thread_admit(rt_scheduler *scheduler, rt_thread *thread, uint64_t 
     }
 }
 
+int nk_sched_thread_get_constraints(struct nk_thread *t, struct nk_sched_constraints *c)
+{
+    rt_thread *r = t->sched_state;
+    *c = r->constraints;
+    return 0;
+}
+
 static inline uint64_t get_avg_per(rt_priority_queue *runnable, rt_priority_queue *pending, rt_thread *new_thread)
 {
     uint64_t sum_period = 0;
