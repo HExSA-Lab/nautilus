@@ -648,12 +648,33 @@ menu Debugging
       help
         Turn on debug prints for threads
 
+    config DEBUG_GROUP
+      bool "Debug Groups"
+      depends on DEBUG_PRINTS
+      default n
+      help
+        Turn on debug prints for group
+
+    config DEBUG_GROUP_BARRIER
+      bool "Debug Group Barrier"
+      depends on DEBUG_GROUP
+      default n
+      help
+        Turn on debug prints for group barrier
+
     config DEBUG_SCHED
       bool "Debug Scheduler"
       depends on DEBUG_PRINTS
       default n
       help
         Turn on debug prints for the scheduler
+
+    config DEBUG_GROUP_SCHED
+      bool "Debug Group Scheduling"
+      depends on DEBUG_PRINTS
+      default n
+      help
+        Turn on debug prints for group scheduling
 
     config DEBUG_TIMERS
       bool "Debug Timers"
