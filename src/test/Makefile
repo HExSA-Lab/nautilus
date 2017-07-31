@@ -1,6 +1,7 @@
 CXXFLAGS += -DSHARED_LOWLEVEL -DCOMPILE_TIME_MIN_LEVEL=LEVEL_DEBUG  -D__LEGION__
 #-DDEBUG_LOWLEVEL -DDEBUG_HIGHLEVEL 
 obj-y  = threads.o
+obj-y += groups.o
 obj-y += net_udp_echo.o
 
 obj-$(NAUT_CONFIG_X86_64_HOST) += ipi.o
