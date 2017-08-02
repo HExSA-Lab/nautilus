@@ -95,6 +95,7 @@ void kmem_inform_boot_allocation(void *low, void *high);
 // unless you know  what you are doing
 void * kmem_malloc(size_t size);
 void * kmem_mallocz(size_t size);
+void * kmem_realloc(void * ptr, size_t size);
 void   kmem_free(void * addr);
 
 // Support functions for garbage collection
@@ -119,6 +120,12 @@ void kmem_get_internal_pointer_range(void **start, void **end);
 int  kmem_apply_to_matching_blocks(uint64_t mask, uint64_t flags, int (*func)(void *block, void *state), void *state);
 
 int  kmem_sanity_check();
+
+/* KCH: I don't believe the GC implementations support realloc explicitly. 
+ * Can ifdef later it if need be
+ */
+#define realloc(p, s) kmem_realloc(p, s)
+
 
 #ifdef NAUT_CONFIG_ENABLE_BDWGC
 void * GC_memalign(size_t, size_t);

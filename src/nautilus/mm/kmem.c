@@ -631,6 +631,48 @@ kmem_free (void * addr)
 
 }
 
+/*
+ * This is a *dead simple* implementation of realloc that tries to change the
+ * size of the allocation pointed to by ptr to size, and returns ptr.  Realloc will
+ * malloc a new block of memory, copy as much of the old data as it can, and free the
+ * old block. If ptr is NULL, this is equivalent to a malloc for the specified size.
+ *
+ */
+void * 
+kmem_realloc (void * ptr, size_t size)
+{
+	struct kmem_block_hdr *hdr;
+	size_t old_size;
+	void * tmp = NULL;
+
+	/* this is just a malloc */
+	if (!ptr) {
+		return kmem_malloc(size);
+	}
+
+	hdr = block_hash_find_entry(ptr);
+
+	if (!hdr) {
+		KMEM_DEBUG("Realloc failed to find entry for block %p\n", ptr);
+		return NULL;
+	}
+
+	old_size = 1 << hdr->order;
+	tmp = kmem_malloc(size);
+	if (!tmp) {
+		panic("Realloc failed\n");
+	}
+
+	if (old_size >= size) {
+		memcpy(tmp, ptr, size);
+	} else {
+		memcpy(tmp, ptr, old_size);
+	}
+	
+	kmem_free(ptr);
+	return tmp;
+}
+
 
 typedef enum {GET,COUNT} stat_type_t;
 
