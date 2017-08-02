@@ -702,7 +702,24 @@ $(BIN_NAME): $(nautilus)
 
 nautilus: $(BIN_NAME)
 
+# New function to run a Python script which generates Lua test code,
+# addition of a separate flag (LUA_BUILD_FLAG) which is set to indicate
+# that the debug symbols we need for wrapping Nautilus functions will
+# be available during the second build (which we need to generate appropriate 
+# function wrappers)
+define lua__
+	@python scripts/parse_gdb.py
+
+	LUA_BUILD_FLAG=1 make
+endef
+
+# if NAUT_CONFIG_LUA_TEST is defined then call the function lua__ to
+# generate additional wrapper code
+
 isoimage: nautilus
+ifdef NAUT_CONFIG_LUA_TEST
+	$(call lua__)
+endif
 	cp $(BIN_NAME) iso/boot
 	$(GRUBMKRESCUE) -o $(ISO_NAME) iso
 

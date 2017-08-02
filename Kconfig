@@ -798,3 +798,20 @@ source "src/dev/Kconfig"
 
 source "src/fs/Kconfig"
 
+menu "Lua support"
+
+	config LOAD_LUA
+		bool "Enable Lua support in Nautilus"
+		default n
+		help 
+		  Initial port of he Lua 5.2.4 runtime to Nautilus
+
+	config LUA_TEST
+		bool "Test framework for invoking Nautilus functions from Lua"
+		default n
+		depends on LOAD_LUA
+		help
+		  Nautilus functionas are made available to Lua externally
+endmenu
+
+
