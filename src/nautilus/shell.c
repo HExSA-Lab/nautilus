@@ -23,6 +23,7 @@
 
 #include <nautilus/nautilus.h>
 #include <nautilus/shell.h>
+#include <nautilus/libccompat.h>
 #include <nautilus/vc.h>
 #include <nautilus/dev.h>
 #include <nautilus/blkdev.h>
@@ -54,6 +55,13 @@
 
 #ifdef NAUT_CONFIG_ENABLE_PDSGC
 #include <gc/pdsgc/pdsgc.h>
+#endif
+
+#ifdef NAUT_CONFIG_LOAD_LUA
+#include <lua/lua.h>
+#include <lua/lualib.h>
+#include <lua/lauxlib.h>
+#include <dev/lua_script.h>
 #endif
 
 #define MAX_CMD 80
@@ -1128,6 +1136,13 @@ static int handle_cmd(char *buf, int n)
       handle_meminfo(buf);
       return 0;
   }
+
+#ifdef NAUT_CONFIG_LOAD_LUA
+	if (!strncasecmp(buf, "lua", 3)) {
+		handle_lua_cmd(buf);
+		return 0;
+	}
+#endif
 
   nk_vc_printf("Don't understand \"%s\"\n",buf);
   return 0;
