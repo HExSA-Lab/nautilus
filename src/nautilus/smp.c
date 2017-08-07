@@ -38,6 +38,11 @@
 #include <dev/ioapic.h>
 #include <dev/apic.h>
 
+#ifdef NAUT_CONFIG_ENABLE_REMOTE_DEBUGGING 
+#include <nautilus/gdb-stub.h>
+#endif
+
+
 #ifndef NAUT_CONFIG_DEBUG_SMP
 #undef DEBUG_PRINT
 #define DEBUG_PRINT(fmt, args...)
@@ -290,6 +295,13 @@ smp_ap_setup (struct cpu * core)
 
     // set GS base (for per-cpu state)
     msr_write(MSR_GS_BASE, (uint64_t)core_addr);
+
+#ifdef NAUT_CONFIG_ENABLE_REMOTE_DEBUGGING 
+    if (nk_gdb_init_ap() != 0) {
+        ERROR_PRINT("Could not initialize remote debugging for core %u\n", core->id);
+	return -1;
+    }
+#endif
     
     apic_init(core);
 

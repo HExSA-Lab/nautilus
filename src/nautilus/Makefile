@@ -54,4 +54,6 @@ obj-$(NAUT_CONFIG_REAL_MODE_INTERFACE) += realmode.o
 
 obj-$(NAUT_CONFIG_ISOCORE) += isocore.o
 
+obj-$(NAUT_CONFIG_ENABLE_REMOTE_DEBUGGING) += gdb-stub.o
+
 

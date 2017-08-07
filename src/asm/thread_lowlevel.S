@@ -29,6 +29,9 @@
  */
     
 
+// We assume that %gs-based updates are safe in this code since we should only get
+// here if the scheduler is running, which implies percpu is running
+    
 /* 
  * We come in like this:
  * ----------

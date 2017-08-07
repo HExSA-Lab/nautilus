@@ -577,6 +577,33 @@ menu Debugging
       make sure that a thread hasn't overrun its allocated 
       stack
 
+   config ENABLE_REMOTE_DEBUGGING
+    depends on !HVM_HRT
+    bool "Enable Remote Debugging"
+    default n
+    help
+      This allows remote debugging, currently using GDB.  It integrates
+      a GDB stub that talks (currently) via a serial port using
+      polled operation.   You must also enable the relevant port
+      in the serial configuration under the device section.  
+      Note that the kernel will halt at startup until the 
+      debugger attaches.  
+
+    config ATTACH_REMOTE_DEBUGGER_AT_BOOT
+     depends on ENABLE_REMOTE_DEBUGGING
+     bool "Attach the remote debugger at boot"
+     default n
+     help
+       Attach the remote debugger as part of the initialization
+       process at boot, before other CPUs are up
+
+    config DEBUG_REMOTE_DEBUGGER
+     depends on ENABLE_REMOTE_DEBUGGING
+     bool "Debug Remote Debugger"
+     default n
+     help
+        Turn on debug prints for the remote debugger subsystem
+
     config DEBUG_PAGING
       bool "Debug Paging"
       depends on DEBUG_PRINTS

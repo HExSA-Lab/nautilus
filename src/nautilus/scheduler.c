@@ -137,6 +137,8 @@ struct nk_sched_global_state {
     int                  reaping;
 };
 
+static volatile int scheduler_ready = 0;
+
 static volatile uint64_t sync_count=0;
 static volatile uint64_t tsc_start=-1ULL;
 
@@ -690,11 +692,19 @@ void nk_sched_map_threads(int cpu, void (func)(struct nk_thread *t, void *state)
 
 void nk_sched_stop_world()
 {
+    // this must happen before any of the lookups...
+    if (!scheduler_ready) {
+        return;
+    }
+
+    
     uint64_t num_cpus = nk_get_num_cpus();
     uint64_t my_cpu_id = my_cpu_id();
     uint64_t stopper = my_cpu_id+1;
     uint64_t i;
 
+
+    
     // scheduler cannot stop us
     // note that an interrupt will still land us in the
     // stop-world test in need_resched
@@ -722,6 +732,10 @@ void nk_sched_stop_world()
 
 void nk_sched_start_world()
 {
+    if (!scheduler_ready) {
+      return;
+    }
+
     // indicate that we are restarting the world
     __sync_fetch_and_and(&stopping,0);
 
@@ -815,6 +829,20 @@ void nk_sched_thread_state_deinit(struct nk_thread *thread)
 {
     FREE(thread->sched_state);
     thread->sched_state=0;
+}
+
+struct nk_thread *nk_sched_get_cur_thread_on_cpu(int cpu)
+{
+    if (!scheduler_ready) {
+        return 0;
+    }
+    
+    if (cpu>=0 && cpu<nk_get_num_cpus()) {
+        struct sys_info *sys = per_cpu_get(system);
+        return sys->cpus[cpu]->sched_state->current->thread;
+    } else {
+        return 0;
+    }
 }
 
 struct nk_sched_thread_state *nk_sched_thread_state_init(struct nk_thread *thread,
@@ -1577,6 +1605,7 @@ static void set_timer(rt_scheduler *scheduler, rt_thread *thread, uint64_t now)
 
     uint32_t ticks = apic_realtime_to_ticks(apic, 
 					    scheduler->tsc.set_time - now + scheduler->slack);
+
     
     if (cur_time() >= scheduler->tsc.set_time) {
 	DEBUG("Time of next clock has already passed (cur_time=%llu, set_time=%llu)\n",
@@ -3530,6 +3559,10 @@ void nk_sched_start()
     set_timer(my_cpu->sched_state, main->sched_state, now);
 
     DEBUG("Startup done main tid=%lu\n",main->tid);
+
+    if (my_cpu->is_bsp) { 
+      scheduler_ready = 1;
+    }
 
 }
     

@@ -31,6 +31,9 @@
 #include <dev/ps2.h>
 #include <nautilus/vc.h>
 #include <nautilus/dev.h>
+#ifdef NAUT_CONFIG_ENABLE_REMOTE_DEBUGGING
+#include <nautilus/gdb-stub.h>
+#endif
 
 #ifndef NAUT_CONFIG_DEBUG_PS2
 #undef DEBUG_PRINT
@@ -475,10 +478,28 @@ kbd_handler (excp_entry_t * excp, excp_vec_t vec, void *state)
       nk_thread_exit(ret);
     }
 #endif
+
+#ifdef NAUT_CONFIG_ENABLE_REMOTE_DEBUGGING
+    if (scan == 0x42) {
+      // F8 down - stop
+        nk_gdb_handle_exception(excp, vec, 0, (void *)0x1ULL);
+      // now ignore the key
+      goto out;
+    }
+    if (scan == 0xc2) {
+      // F8 up - ignore the key
+      goto out;
+    }
+#endif
+    
     
     switcher(scan);
+
+    goto out; // to avoid label warning
     
   }
+
+ out:
 
   IRQ_HANDLER_END();
   return 0;

@@ -1,5 +1,7 @@
 menu "Device options"
 
+menu "Serial Options"
+
 config SERIAL_REDIRECT
     bool "Serial Redirect"
     depends on !HVM_HRT
@@ -19,7 +21,26 @@ config SERIAL_REDIRECT_PORT
     default "1"
     help
       Specifies which serial port to use for serial redirection. E.g. 1 is COM1.
+      This must be different from your debug port!
+
+config SERIAL_DEBUGGER
+    bool "Serial Debugger"
+    depends on ENABLE_REMOTE_DEBUGGING
+    default n
+    help
+        Provide a simple serial interface to a remote debugger
+
+config SERIAL_DEBUGGER_PORT
+    depends on SERIAL_DEBUGGER
+    int "Serial COM Port for remote debugger interface"
+    range 1 4
+    default "2"
+    help
+      Specifies which serial port to use for serial connection to 
+      a remote debugger (e.g. gdb).   1 is COM1, etc.  This must
+      be different from your redirect port!
       
+endmenu      
 
 config APIC_FORCE_XAPIC_MODE
     bool "Force APIC to use XAPIC mode"

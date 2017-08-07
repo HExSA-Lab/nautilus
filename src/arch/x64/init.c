@@ -55,6 +55,11 @@
 #include <nautilus/loader.h>
 #include <nautilus/shell.h>
 
+#ifdef NAUT_CONFIG_ENABLE_REMOTE_DEBUGGING 
+#include <nautilus/gdb-stub.h>
+#endif
+
+
 #include <dev/apic.h>
 #include <dev/pci.h>
 #include <dev/hpet.h>
@@ -273,6 +278,11 @@ init (unsigned long mbd,
 
     // Bring serial device up early so we can have output
     serial_early_init();
+
+#ifdef NAUT_CONFIG_ENABLE_REMOTE_DEBUGGING 
+    nk_gdb_init();
+#endif
+
 
     nk_dev_init();
     nk_char_dev_init();

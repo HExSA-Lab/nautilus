@@ -65,12 +65,24 @@ END(early_irq_handlers)
 .align 16
 GLOBAL(early_irq_common)
 
+    SAVE_GPRS()
+
+    // Interrupts are enabled only after per-cpu functonality
+    // is enabled (and gsbase is set), so these are safe to execute
+    // without a guard
+    
     incw %gs:8   // increment interrupt nesting level -
 	         // cpu is now in interrupt context
     incq %gs:16  // increment interrupt count
 
-    SAVE_GPRS()
-
+    // we must save the stack pointer early to support
+    // both remote debugging and garbage collection, both
+    // of which can either occur during an exception or
+    // can depend on having every thread's rsp snapshotted
+    // correctly during a world stop
+    movq %gs:0x0, %rax
+    movq %rsp, (%rax)
+    
 
 #ifdef NAUT_CONFIG_PROFILE
     callq nk_irq_prof_enter
@@ -111,9 +123,15 @@ GLOBAL(early_irq_common)
 
 thr_return:
     RESTORE_GPRS()
+
+    
     addq $16, %rsp  // pop the vector and the error code
+
+    // This update is safe to do since if interrupts are on
+    // gsbase has already been set
     decw %gs:8      // decrement interrupt nesting level
 	            // we may now be outside of interrupt context
+
     iretq
 
 irq_err:
@@ -129,10 +147,29 @@ GLOBAL(early_excp_common)
 
     SAVE_GPRS()
 
+    // Exceptions may occur before gsbase is set, for example breakpoints
+    // or bugs in early code - so we need to guard
+    // execution of the following code
+
+    movl $0xc0000101, %ecx    // gsbase msr
+    rdmsr
+    orl %edx, %eax            
+    je skip_per_cpu_update1    // skip if gsbase==0
+    
     incw %gs:8   // increment interrupt nesting level -
 	         // cpu is now in interrupt context 
     incq %gs:24  // increment exception count
-	
+
+    // we must save the stack pointer early to support
+    // both remote debugging and garbage collection, both
+    // of which can either occur during an exception or
+    // can depend on having every thread's rsp snapshotted
+    // correctly during a world stop
+    movq %gs:0x0, %rax
+    movq %rsp, (%rax)
+
+skip_per_cpu_update1:   
+    
     movq 120(%rsp), %rsi
     cmpq $32, %rsi
     jge excp_err
@@ -152,11 +189,19 @@ no_pf:
     testq %rax, %rax
     jnz excp_err
 
+    // we need to guard the per-cpu update here
+    movl $0xc0000101, %ecx    // gsbase msr
+    rdmsr
+    orl %edx, %eax            
+    je skip_per_cpu_update2    // skip if gsbase==0
+    decw %gs:8      // decrement interrupt nesting level
+	            // we may now be outside of interrupt context
+
+skip_per_cpu_update2:   
+    
     RESTORE_GPRS()
     /* pop error code and excp number */
     addq $16, %rsp
-    decw %gs:8      // decrement interrupt nesting level
-	            // we may now be outside of interrupt context
     iretq
 
 excp_err:

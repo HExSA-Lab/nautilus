@@ -40,6 +40,11 @@ void serial_printlevel(int level, const char * format, ...);
 
 void serial_print_poll(const char *format, ...);
 
+#ifdef NAUT_CONFIG_SERIAL_DEBUGGER
+int serial_debugger_put(uint8_t c);
+int serial_debugger_get(uint8_t *c);
+#endif
+
 void  serial_early_init(void);
 
 void  serial_init(void);
