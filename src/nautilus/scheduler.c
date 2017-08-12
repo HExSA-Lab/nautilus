@@ -265,6 +265,8 @@ typedef struct nk_sched_percpu_state {
 
     uint64_t num_thefts;   // how many threads I've successfully stolen
 
+    uint64_t reinject_count;  // how many timer/kick interrupts I've had to reinject
+
 #if INSTRUMENT
     uint64_t resched_fast_num;
     uint64_t resched_fast_sum;
@@ -590,12 +592,13 @@ void nk_sched_dump_cores(int cpu_arg)
 
 	    s = sys->cpus[cpu]->sched_state;
 	    LOCAL_LOCK(s);
-	    snprintf(buf,256,"%dc %s %unl %luin %luex %lut %s %utp %lup %lur %lua %lum (%s) (%luul %lusp %luap %luaq %luadp) (%luapic)\n",
+	    snprintf(buf,256,"%dc %s %unl %luin %luex %luri %lut %s %utp %lup %lur %lua %lum (%s) (%luul %lusp %luap %luaq %luadp) (%luapic)\n",
 		     cpu, 
 		     intr_model,
 		     sys->cpus[cpu]->interrupt_nesting_level,
 		     sys->cpus[cpu]->interrupt_count,
 		     sys->cpus[cpu]->exception_count,
+		     sys->cpus[cpu]->sched_state->reinject_count,
 		     s->current->thread->tid, 
 		     s->current->thread->is_idle ? "(idle)" : s->current->thread->name[0] ? s->current->thread->name : "(noname)",
 		     s->current->thread->sched_state->constraints.interrupt_priority_class,
@@ -1602,9 +1605,14 @@ static void set_timer(rt_scheduler *scheduler, rt_thread *thread, uint64_t now)
 
     scheduler->tsc.start_time = now;
     scheduler->tsc.set_time = MIN(next_arrival,next_preempt);
-
+    
+  
+    // the set time has been computed based on the "now" argument
+    // which is the start of the scheduling pass.   We need to set
+    // the cycle counter delay based on the set time relative 
+    // to the current time
     uint32_t ticks = apic_realtime_to_ticks(apic, 
-					    scheduler->tsc.set_time - now + scheduler->slack);
+					    scheduler->tsc.set_time - cur_time() + scheduler->slack);
 
     
     if (cur_time() >= scheduler->tsc.set_time) {
@@ -1710,7 +1718,21 @@ struct nk_thread *_sched_need_resched(int have_lock, int force_resched)
 	if (force_resched) {
 	    DEBUG("Forced reschedule with preemption off\n");
 	} else {
+	    struct apic_dev *a = per_cpu_get(system)->cpus[my_cpu_id()]->apic;
 	    DEBUG("Preemption disabled, avoiding rescheduling pass and staying with current thread\n");
+
+	    if (a->in_timer_interrupt || a->in_kick_interrupt) {
+		// We are about to lose a timer interrupt
+		// and we need to reinject it so that it shows up again
+		DEBUG("Reinjecting timer: in_timer=%d, in_kick=%d\n", 
+		      a->in_timer_interrupt, a->in_kick_interrupt);
+		//BACKTRACE(DEBUG,3);
+		apic_update_oneshot_timer(a, 
+					  apic_realtime_to_ticks(a, NAUT_CONFIG_INTERRUPT_REINJECTION_DELAY_NS),
+					  IF_EARLIER);
+		per_cpu_get(system)->cpus[my_cpu_id()]->sched_state->reinject_count++;
+	    }
+	    // do not context switch
 	    return 0;
 	}
     }

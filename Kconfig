@@ -244,6 +244,15 @@ config VIRTUAL_CONSOLE_SERIAL_MIRROR_ALL
         the scheduling quantum for aperiodic (but not RT)
         threads.
 
+    config INTERRUPT_REINJECTION_DELAY_NS
+       int "Interrupt Reinjection Delay (in ns)"
+       default "10000"
+       help
+        If a timer or kick interrupt occurs when the cpu
+        is not preemptable, it will be reinjected (as a timer
+        interrupt) after this delay.   The result is that 
+        scheduler-driving interrupts is not lost, just delayed.
+
     config AUTO_REAP
        bool "Reap threads automatically"
        default n
