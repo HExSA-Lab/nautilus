@@ -34,6 +34,7 @@
 #include <nautilus/cpuid.h>
 #include <nautilus/msr.h>
 #include <nautilus/backtrace.h>
+#include <dev/pci.h>
 #include <test/ipi.h>
 #include <test/threads.h>
 #include <test/groups.h>
@@ -750,6 +751,45 @@ int handle_run(char *buf)
 
     return 0;
 }    
+
+int handle_pci(char *buf)
+{
+  int bus, slot, func, off;
+
+  if (strncmp(buf,"pci l",5)==0) { 
+    pci_dump_device_list();
+    return 0;
+  }
+
+  if (sscanf(buf,"pci raw %x %x %x\n", &bus, &slot, &func)==3) { 
+    int i,j;
+    uint32_t v;
+    for (i=0;i<256;i+=32) {
+      nk_vc_printf("%02x:", i);
+      for (j=0;j<8;j++) {
+	v = pci_cfg_readl(bus,slot,func,i+j*4);
+	nk_vc_printf(" %08x",v);
+      } 
+      nk_vc_printf("\n");
+    }
+    return 0;
+  }
+
+  if (sscanf(buf,"pci dev %x %x %x\n", &bus, &slot, &func)==3) { 
+    pci_dump_device(pci_find_device(bus,slot,func));
+    return 0;
+  }
+
+  if (!strncmp(buf,"pci dev",7)) {
+    pci_dump_devices();
+    return 0;
+  }
+
+  nk_vc_printf("unknown pci command\n");
+
+  return -1;
+}    
+	
 	
 
 static int handle_cmd(char *buf, int n)
@@ -786,6 +826,7 @@ static int handle_cmd(char *buf, int n)
   if (!strncasecmp(buf,"help",4)) { 
     nk_vc_printf("help\nexit\nvcs\ncores [n]\ntime [n]\nthreads [n]\n");
     nk_vc_printf("devs | fses | ofs | cat [path]\n");
+    nk_vc_printf("pci list | pci raw/dev bus slot func | pci dev\n");
     nk_vc_printf("shell name\n");
     nk_vc_printf("regs [t]\npeek [bwdq] x | mem x n [s] | poke [bwdq] x y\nin [bwd] addr | out [bwd] addr data\nrdmsr x [n] | wrmsr x y\ncpuid f [n] | cpuidsub f s\n");
     nk_vc_printf("meminfo [detail]\n");
@@ -818,6 +859,11 @@ static int handle_cmd(char *buf, int n)
 
   if (!strncasecmp(buf,"devs",4)) {
     nk_dev_dump_devices();
+    return 0;
+  }
+
+  if (!strncasecmp(buf,"pci",3)) {
+    handle_pci(buf);
     return 0;
   }
 

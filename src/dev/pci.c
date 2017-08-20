@@ -454,3 +454,264 @@ pci_init (struct naut_info * naut)
     return 0;
 }
 
+int pci_map_over_devices(int (*f)(struct pci_dev *d, void *s), uint16_t vendor, uint16_t device, void *state)
+{
+  struct pci_info *pci = nk_get_nautilus_info()->sys.pci;
+  struct list_head *curbus, *curdev;
+  int rc=0;
+  
+  if (!pci) { 
+    PCI_ERROR("No PCI info available\n");
+    return -1;
+  }
+
+  list_for_each(curbus,&(pci->bus_list)) { 
+
+    struct pci_bus *bus = list_entry(curbus,struct pci_bus,bus_node);
+
+    list_for_each(curdev, &(bus->dev_list)) { 
+      struct pci_dev *pdev = list_entry(curdev,struct pci_dev,dev_node);
+
+      if (vendor==0xffff || pdev->cfg.vendor_id==vendor) { 
+	if (device==0xffff || pdev->cfg.device_id==device) { 
+	  rc |= f(pdev,state);
+	}
+      }
+    }
+  }
+
+  return rc;
+}
+
+static int dump_dev_base(struct pci_dev *d, void *s)
+{
+  nk_vc_printf("%x:%x.0 : %04x:%04x\n",
+	       d->bus->num, d->num, d->cfg.vendor_id, d->cfg.device_id);
+  return 0;
+}
+
+
+int pci_dump_device_list()
+{
+  return pci_map_over_devices(dump_dev_base,-1,-1,0);
+}
+
+struct device_query {
+  uint8_t bus, slot, fun;
+  struct pci_dev *dev;
+};
+
+static int find_dev(struct pci_dev *d, void *s)
+{
+  struct device_query *q = (struct device_query *)s;
+  if (d->num==q->slot && d->bus->num==q->bus) { 
+    q->dev = d;
+  }
+  return 0;
+}
+
+
+struct pci_dev *pci_find_device(uint8_t bus, uint8_t slot, uint8_t fun)
+{
+  struct device_query q = {.bus=bus, .slot=slot, .fun=fun, .dev=0 };
+  if (pci_map_over_devices(find_dev,-1,-1,&q)) { 
+    return 0;
+  } else {
+    return q.dev;
+  }
+}
+
+int pci_dump_device(struct pci_dev *d)
+{
+  int i;
+  uint8_t *data;
+
+  if (!d) { 
+    return 0;
+  }
+
+#define SHOWIT(x) nk_vc_printf("%-24s: 0x%x\n", #x  , d->cfg.x)
+
+  SHOWIT(vendor_id);
+  SHOWIT(device_id);
+  SHOWIT(cmd);
+  SHOWIT(status);
+  SHOWIT(rev_id);
+  SHOWIT(prog_if);
+  nk_vc_printf("%-24s: 0x%x (%s)\n",
+	       "subclass", d->cfg.subclass,
+	       d->cfg.class_code==PCI_SUBCLASS_BRIDGE_PCI ? "pci bridge" : "UNKNOWN");
+
+  nk_vc_printf("%-24s: 0x%x (%s)\n",
+	       "class_code", d->cfg.class_code,
+	       d->cfg.class_code==PCI_CLASS_LEGACY ? "legacy" :
+	       d->cfg.class_code==PCI_CLASS_STORAGE ? "storage" :
+	       d->cfg.class_code==PCI_CLASS_NET ? "net" :
+	       d->cfg.class_code==PCI_CLASS_DISPLAY ? "display" :
+	       d->cfg.class_code==PCI_CLASS_MULTIM ? "multim" : // wtf?
+	       d->cfg.class_code==PCI_CLASS_MEM ? "mem" :
+	       d->cfg.class_code==PCI_CLASS_BRIDGE ? "bridge" :
+	       d->cfg.class_code==PCI_CLASS_SIMPLE ? "simple" :
+	       d->cfg.class_code==PCI_CLASS_BSP ? "bsp" :
+	       d->cfg.class_code==PCI_CLASS_INPUT ? "input" :
+	       d->cfg.class_code==PCI_CLASS_DOCK ? "dock" :
+	       d->cfg.class_code==PCI_CLASS_PROC ? "proc" :
+	       d->cfg.class_code==PCI_CLASS_SERIAL ? "serial" :
+	       d->cfg.class_code==PCI_CLASS_WIRELESS ? "wireless" :
+	       d->cfg.class_code==PCI_CLASS_INTIO ? "intio" :
+	       d->cfg.class_code==PCI_CLASS_SAT ? "sat" :
+	       d->cfg.class_code==PCI_CLASS_CRYPTO ? "crypto" :
+	       d->cfg.class_code==PCI_CLASS_SIG ? "sig" :
+	       d->cfg.class_code==PCI_CLASS_NOCLASS ? "noclass" : "UNKNOWN");
+  SHOWIT(cl_size);
+  SHOWIT(lat_timer);
+  nk_vc_printf("%-24s: 0x%x (%s)\n",
+	       "hdr_type", d->cfg.hdr_type,
+	       d->cfg.hdr_type==0 ? "device" :
+	       d->cfg.hdr_type==1 ? "PCI<->PCI bridge" : "other");
+
+  SHOWIT(bist);
+  
+  if (d->cfg.hdr_type==0) { 
+
+#define SHOWITDEV(x) nk_vc_printf("%-24s: 0x%x\n", #x  , d->cfg.dev_cfg.x)
+    SHOWITDEV(bars[0]);
+    SHOWITDEV(bars[1]);
+    SHOWITDEV(bars[2]);
+    SHOWITDEV(bars[3]);
+    SHOWITDEV(bars[4]);
+    SHOWITDEV(bars[5]);
+    SHOWITDEV(cardbus_cis_ptr);
+    SHOWITDEV(subsys_vendor_id);
+    SHOWITDEV(subsys_id);
+    SHOWITDEV(exp_rom_bar);
+    SHOWITDEV(cap_ptr);
+    SHOWITDEV(rsvd[0]);
+    SHOWITDEV(rsvd[1]);
+    SHOWITDEV(rsvd[2]);
+    SHOWITDEV(rsvd[3]);
+    SHOWITDEV(rsvd[4]);
+    SHOWITDEV(rsvd[5]);
+    SHOWITDEV(rsvd[6]);
+    SHOWITDEV(intr_line);
+    SHOWITDEV(intr_pin);
+    SHOWITDEV(min_grant);
+    SHOWITDEV(max_latency);
+
+    data = (uint8_t*)d->cfg.dev_cfg.data;
+    nk_vc_printf("%-24s: 0x","data");
+    for (i=0;i<48*4;i++) {  
+      nk_vc_printf("%02x",data[i]);
+    }
+    nk_vc_printf("\n");
+#if 1
+    nk_vc_printf("%-24s:   ","data-text");
+    for (i=0;i<48*4;i++) {  
+      nk_vc_printf("%c",isalnum(data[i]) ? data[i] : '.') ;
+    }
+    nk_vc_printf("\n");
+#endif
+
+    data = (uint8_t*)&d->cfg;
+
+    if (d->cfg.status & (1<<4)) { 
+      nk_vc_printf("%-24s: ","capabilities");
+      uint8_t co = d->cfg.dev_cfg.cap_ptr & ~0x3;
+      while (co) {
+	uint8_t cap = data[co];
+	co = data[co+1];
+	nk_vc_printf("0x%02x (%s) ", cap,
+		     cap==0x1 ? "PMI" :
+		     cap==0x2 ? "AGP" :
+		     cap==0x3 ? "VPD" :
+		     cap==0x4 ? "SlotID" :
+		     cap==0x5 ? "MSI" :
+		     cap==0x6 ? "CompactHotSwap" :
+		     cap==0x7 ? "PCI-X" :
+		     cap==0x8 ? "HyperTransport" :
+		     cap==0x9 ? "VendorSpecific" :
+		     cap==0xa ? "Debug" :
+		     cap==0xb ? "CompactCtrl" :
+		     cap==0xc ? "HotPlug" :
+		     cap==0xd ? "BridgeSubsysVendorID" :
+		     cap==0xe ? "AGP8x" :
+		     cap==0xf ? "SecureDev" : 
+		     cap==0x10 ? "PCIExpress" : 
+		     cap==0x11 ? "MSI-X" : 
+		     cap==0x12 ? "SATADataIndex" :
+		     cap==0x13 ? "PCIAdvancedFeatues" :
+		     cap==0x14 ? "PCIEnhancedAlloc" : "UNKNOWN");
+      }
+      nk_vc_printf("\n");
+    }
+		     
+
+  } else if (d->cfg.hdr_type==1) { 
+
+#define SHOWITP2P(x) nk_vc_printf("%-24s: 0x%x\n", #x  , d->cfg.pci_to_pci_bridge_cfg.x)
+
+    SHOWITP2P(bars[0]);
+    SHOWITP2P(bars[1]);
+    SHOWITP2P(primary_bus_num);
+    SHOWITP2P(secondary_bus_num);
+    SHOWITP2P(sub_bus_num);
+    SHOWITP2P(secondary_lat_timer);
+    SHOWITP2P(io_base);
+    SHOWITP2P(io_limit);
+    SHOWITP2P(secondary_status);
+    SHOWITP2P(mem_base);
+    SHOWITP2P(mem_limit);
+    SHOWITP2P(prefetch_mem_base);
+    SHOWITP2P(prefetch_mem_limit);
+    SHOWITP2P(prefetch_base_upper);
+    SHOWITP2P(prefetch_limit_upper);
+    SHOWITP2P(io_base_upper);
+    SHOWITP2P(io_limit_upper);
+    SHOWITP2P(cap_ptr);
+    SHOWITP2P(rsvd[0]);
+    SHOWITP2P(rsvd[1]);
+    SHOWITP2P(rsvd[2]);
+    SHOWITP2P(exp_rom_bar);
+    SHOWITP2P(intr_line);
+    SHOWITP2P(intr_pin);
+    SHOWITP2P(bridge_ctrl);
+
+    uint8_t *data = (uint8_t*)d->cfg.pci_to_pci_bridge_cfg.data;
+
+    nk_vc_printf("%-24s: ","data");
+    for (i=0;i<48*4;i++) {  
+      nk_vc_printf("%02x",data[i]);
+    }
+    nk_vc_printf("\n");
+#if 1
+    nk_vc_printf("%-24s: ","data-text");
+    for (i=0;i<48*4;i++) {  
+      nk_vc_printf("%c",isalnum(data[i]) ? data[i] : '.') ;
+    }
+    nk_vc_printf("\n");
+#endif
+  } else {
+    nk_vc_printf("No further info for this type\n");
+  }
+
+    
+  return 0;
+}  
+
+
+static int dump_dev(struct pci_dev *d, void *s)
+{
+  nk_vc_printf("%-24s: %x:%x.0\n","LOCATION", d->bus->num, d->num);
+
+  pci_dump_device(d);
+
+  nk_vc_printf("\n");
+
+  return 0;
+}
+
+
+int pci_dump_devices()
+{
+  return pci_map_over_devices(dump_dev,-1,-1,0);
+}

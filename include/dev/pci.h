@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
@@ -179,6 +179,8 @@ struct pci_info {
 
 
 
+// these can only touch the "traditional" 256 byte config space
+
 uint16_t pci_cfg_readw(uint8_t bus, uint8_t slot, uint8_t fun, uint8_t off);
 uint32_t pci_cfg_readl(uint8_t bus, uint8_t slot, uint8_t fun, uint8_t off);
 
@@ -186,6 +188,22 @@ void pci_cfg_writew(uint8_t bus, uint8_t slot, uint8_t fun, uint8_t off, uint16_
 void pci_cfg_writel(uint8_t bus, uint8_t slot, uint8_t fun, uint8_t off, uint32_t val);
 
 int pci_init (struct naut_info * naut);
+
+// vendor or device -1 means match all, otherwise
+// restrict to vendor and/or device given
+int pci_map_over_devices(int (*f)(struct pci_dev *d, void *s), uint16_t vendor, uint16_t device, void *state);
+
+// list devices to the current VC
+int pci_dump_device_list();
+
+// find device structure given location
+struct pci_dev *pci_find_device(uint8_t bus, uint8_t slot, uint8_t fun);
+
+// print out human readable config space info for device on the VC
+int pci_dump_device(struct pci_dev *d);
+
+// print all devices to the current VC
+int pci_dump_devices();
 
 
 #endif
