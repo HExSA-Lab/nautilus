@@ -11,12 +11,13 @@
  * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
+ * Copyright (c) 2017, Peter Dinda <pdinda@northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
  *                     The Hobbes Project <http://xstack.sandia.gov/hobbes>
  * All rights reserved.
  *
- * Author: Kyle C. Hale <kh@u.northwestern.edu>
- *
+ * Authors: Kyle C. Hale <kh@u.northwestern.edu>
+ *          Peter Dinda <pdinda@northwestern.edu>
  * This is free software.  You are permitted to use,
  * redistribute, and modify it as specified in the file "LICENSE.txt".
  */
@@ -164,11 +165,30 @@ struct pci_cfg_space {
 } __packed;
 
 
+typedef enum {PCI_MSI_NONE=0, PCI_MSI_32, PCI_MSI_64, PCI_MSI_32_PER_VEC, PCI_MSI_64_PER_VEC} pci_msi_type_t;
+
+struct pci_msi_info {
+  int              enabled;
+  pci_msi_type_t   type;
+  uint8_t          co;  // offset of capability in the config space
+
+  // these come from a query of the device
+  int       num_vectors_needed;
+  
+  // these come from the user -  these reflect how the
+  // user configured the device
+  int       base_vec; // interrupt will occur on [vec,vec+num_vecs_used)
+  int       num_vecs; 
+  int       target_cpu;
+};
+
 struct pci_dev {
     uint32_t num;
+    uint32_t fun;
     struct pci_bus * bus;
     struct list_head dev_node;
-    struct pci_cfg_space cfg;
+    struct pci_cfg_space cfg;   // only a snapshot at boot!
+    struct pci_msi_info  msi;   
 };
 
 
@@ -187,6 +207,8 @@ uint32_t pci_cfg_readl(uint8_t bus, uint8_t slot, uint8_t fun, uint8_t off);
 void pci_cfg_writew(uint8_t bus, uint8_t slot, uint8_t fun, uint8_t off, uint16_t val);
 void pci_cfg_writel(uint8_t bus, uint8_t slot, uint8_t fun, uint8_t off, uint32_t val);
 
+
+
 int pci_init (struct naut_info * naut);
 
 // vendor or device -1 means match all, otherwise
@@ -198,6 +220,72 @@ int pci_dump_device_list();
 
 // find device structure given location
 struct pci_dev *pci_find_device(uint8_t bus, uint8_t slot, uint8_t fun);
+
+// find matching devices by vendor_id/dev_id
+// on input *num => number of slots available in array
+// on output *num => number of slots used in array
+int pci_find_matching_devices(uint16_t vendor_id, uint16_t device_id,
+			      struct pci_dev *dev[], uint32_t *num);
+
+uint16_t pci_dev_cfg_readw(struct pci_dev *dev, uint8_t off);
+uint32_t pci_dev_cfg_readl(struct pci_dev *dev, uint8_t off);
+void     pci_dev_cfg_writew(struct pci_dev *dev, uint8_t off, uint16_t val);
+void     pci_dev_cfg_writel(struct pci_dev *dev, uint8_t off, uint32_t val);
+
+// returns the offset in the config space of the capability
+// or zero if the capability does not exist
+uint8_t  pci_dev_get_capability(struct pci_dev *dev, uint8_t cap_id);
+
+// target cpu must currently be a single, physical cpu
+// after enabling, msi is *off* and the mask bits (if available)
+// are set.   In other words, this brings up MSI, but leaves it
+// in a MASKED state.  An unmask is needed
+int pci_dev_enable_msi(struct pci_dev *dev, int base_vec, int num_vecs, 
+		       int target_cpu);
+		       
+// if there is no per-vec masking, then this will mask/unmask all
+// vec=-1 means to unmask all vectors on the device
+int pci_dev_mask_msi(struct pci_dev *dev, int vec);
+int pci_dev_unmask_msi(struct pci_dev *dev, int vec);
+
+// this makes no sense with no per-vec masking
+// with no per-vec masking, it always returns 0
+// with per-vec masking it returns the pending bit
+int pci_dev_is_pending_msi(struct pci_dev *dev, int vec);
+
+/*
+  There is currently no specific support for registering MSI interrupt handlers,
+  You want to follow roughly these steps:
+
+  struct pci_dev *d = ... find the device... - it must have MSI...
+  int num_vecs = d->msi.num_vectors_needed;
+
+  int base_vec;
+
+  // try to find an aligned chunk of vectors we can use
+  // note that prioritization here is your problem
+  if (idt_find_and_reserve_range(num_vecs,aligned=1,&base_vec) {
+     // fail - cannot find aligned block of vectors
+  }
+  if (pci_dev_enable_msi(d,base_vec,num_vecs, target_cpu=?) {
+     // failed to enable...
+  }
+  // now register your handlers
+  for (i=base_vec;i<base_vec+num_vecs;i++) { 
+     if (register_int_handler(i, handler, state)) { 
+         // failed.... 
+     }
+  }
+  // Now we can unmask 
+  for (i=base_vec;i<base_vec+num_vecs;i++) { 
+     if (pci_dev_unmask_msi(d, i)) {
+         // failed.... 
+     }
+  }
+  // now we should be seeing interrupts
+*/
+ 
+
 
 // print out human readable config space info for device on the VC
 int pci_dump_device(struct pci_dev *d);
