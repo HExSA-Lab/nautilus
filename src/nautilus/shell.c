@@ -71,6 +71,11 @@
 #include <nautilus/gdb-stub.h>
 #endif
 
+#ifdef NAUT_CONFIG_PROFILE
+#include <nautilus/instrument.h>
+#endif
+
+
 #define MAX_CMD 80
 
 struct burner_args {
@@ -826,6 +831,10 @@ static int handle_cmd(char *buf, int n)
   if (!strncasecmp(buf,"help",4)) { 
     nk_vc_printf("help\nexit\nvcs\ncores [n]\ntime [n]\nthreads [n]\n");
     nk_vc_printf("devs | fses | ofs | cat [path]\n");
+#ifdef NAUT_CONFIG_PROFILE
+    nk_vc_printf("profile\n");
+#endif
+
     nk_vc_printf("pci list | pci raw/dev bus slot func | pci dev\n");
     nk_vc_printf("shell name\n");
     nk_vc_printf("regs [t]\npeek [bwdq] x | mem x n [s] | poke [bwdq] x y\nin [bwd] addr | out [bwd] addr data\nrdmsr x [n] | wrmsr x y\ncpuid f [n] | cpuidsub f s\n");
@@ -851,6 +860,13 @@ static int handle_cmd(char *buf, int n)
     nk_vc_printf("run path\n");
     return 0;
   }
+
+#ifdef NAUT_CONFIG_PROFILE
+  if (!strncasecmp(buf,"profile",7)) {
+    nk_instrument_query();
+    return 0;
+  }
+#endif
 
   if (!strncasecmp(buf,"vcs",3)) {
     nk_switch_to_vc_list();
