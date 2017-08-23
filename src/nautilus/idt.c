@@ -139,6 +139,21 @@ null_irq_handler (excp_entry_t * excp,
     return 0;
 }
 
+int
+reserved_irq_handler (excp_entry_t * excp,
+		      excp_vec_t vector,
+		      void       *state)
+{
+  printk("[Reserved IRQ] (vector=0x%x)\n    RIP=(%p)     (core=%u)\n", 
+	 vector,
+	 (void*)excp->rip,
+	 my_cpu_id());
+  printk("You probably have a race between reservation and assignment....\n");
+  printk("   you probably want to mask the interrupt first...\n");
+
+  return 0;
+}
+
 
 static int
 df_handler (excp_entry_t * excp,
@@ -175,6 +190,14 @@ idt_assign_entry (ulong_t entry, ulong_t handler_addr, ulong_t state_addr)
         return -1;
     }
 
+#ifndef NAUT_CONFIG_REMOTE_DEBUGGING
+    if (idt_handler_table[entry]!=(ulong_t)null_excp_handler &&
+	idt_handler_table[entry]!=(ulong_t)null_irq_handler &&
+	idt_handler_table[entry]!=(ulong_t)reserved_irq_handler) { 
+      WARN_PRINT("Assigning to non-null/non-reserved IDT entry...\n");
+    }
+#endif
+
     idt_handler_table[entry] = handler_addr;
     idt_state_table[entry]   = state_addr;
 
@@ -194,6 +217,48 @@ idt_get_entry (ulong_t entry, ulong_t *handler_addr, ulong_t *state_addr)
     *state_addr = idt_state_table[entry];
 
     return 0;
+}
+
+
+int idt_find_and_reserve_range(ulong_t numentries, int aligned, ulong_t *first)
+{
+  ulong_t h, s;
+  int i,j;
+
+  if (numentries>32) { 
+    return -1;
+  }
+
+  for (i=32;i<(NUM_IDT_ENTRIES-numentries+1);) {
+
+    if (idt_handler_table[i]==(ulong_t)null_irq_handler) { 
+      for (j=0; 
+	   (i+j)<NUM_IDT_ENTRIES && 
+	     j<numentries &&
+	     idt_handler_table[i+j]==(ulong_t)null_irq_handler;
+	   j++) {
+      }
+
+      if (j==numentries) { 
+	// found it!
+	for (j=0;j<numentries;j++) { 
+	  idt_handler_table[i+j]=(ulong_t)reserved_irq_handler;
+	}
+	*first=i;
+	return 0;
+      } else {
+	if (aligned) { 
+	  i=i+numentries;
+	} else {
+	  i=i+j;
+	}
+      }
+    } else {
+      i++;
+    }
+  }
+
+  return -1;
 }
 
 
