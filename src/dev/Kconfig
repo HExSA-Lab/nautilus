@@ -78,6 +78,15 @@ config DEBUG_PCI
     help 
         Turn on debug prints for PCI devices
 
+config DISABLE_PS2_MOUSE
+    bool "Disable PS2 Mouse"
+    default n
+    help
+        Unconditionally disable PS2 mouse support
+        This is useful on bizarro platforms that either do not
+        have it or do not emulate it
+
+
 config DEBUG_PS2
     bool "Debug PS2 interface (Keyboard/Mouse)"
     depends on DEBUG_PRINTS

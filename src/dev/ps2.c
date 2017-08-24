@@ -550,8 +550,24 @@ int ps2_mouse_reset()
     ps2_cmd_t cmd;
     uint32_t rc;
 
+#ifdef NAUT_CONFIG_DISABLE_PS2_MOUSE
+    DEBUG("treating mouse as nonexistent\n");
+    return -1;
+#endif
+
     DEBUG("Reseting mouse\n");
 
+    // does the mouse port exist?
+    ps2_wait(INPUT);
+    outb(0xa9,KBD_CMD_REG);
+    ps2_wait(OUTPUT);
+    cmd.val = inb(KBD_DATA_REG);
+    
+    if (cmd.val!=0) { 
+	INFO("mouse does not exist\n");
+	return -1;
+    }
+    
     // enable mouse in PS2 controller
     ps2_wait(INPUT);
     outb(0xa8,KBD_CMD_REG); 
@@ -582,6 +598,7 @@ int ps2_mouse_reset()
 	DEBUG("Mouse reset good\n");
     } else {
 	ERROR("Mouse reset failed (%x)\n",rc);
+	return -1;
     }
 
     // determine mouse type
@@ -589,6 +606,7 @@ int ps2_mouse_reset()
     rc = mouse_read(); 
     if (rc!=0xfa) { 
 	ERROR("On reset, mouse did not return ack, but rather 0x%x\n",rc);
+	return -1;
     } else {
 	rc = mouse_read();
 	DEBUG("Mouse is of type 0x%x (%s)\n",rc, rc==0 ? "generic ps/2" : "something weird");
@@ -599,6 +617,7 @@ int ps2_mouse_reset()
     rc = mouse_read(); 
     if (rc!=0xfa) { 
 	ERROR("On config, mouse did not return ack, but rather 0x%x\n",rc);
+	return -1;
     }
 
     // set stream mode (shouldn't have to do this)
@@ -606,6 +625,7 @@ int ps2_mouse_reset()
     rc = mouse_read();
     if (rc!=0xfa) { 
 	ERROR("Cannot set stream mode (%x)\n",rc);
+	return -1;
     }
 
     // enable mouse data reporting
@@ -613,6 +633,7 @@ int ps2_mouse_reset()
     rc = mouse_read(); 
     if (rc!=0xfa) { 
 	ERROR("On enable, mouse did not return ack, but rather 0x%x\n",rc);
+	return -1;
     }
     
     DEBUG("Mouse reset done\n");
@@ -687,11 +708,22 @@ int ps2_kbd_reset()
   return 0;
 }
 
+#define HAVE_NO_KEYBOARD        -1
+#define HAVE_KEYBOARD_AND_MOUSE 0
+#define HAVE_KEYBOARD           1
+
 int ps2_reset()
 {
-  ps2_kbd_reset();
-  ps2_mouse_reset();
-  return 0;
+  if (ps2_kbd_reset()) { 
+    return HAVE_NO_KEYBOARD;
+  } else {
+      //    return HAVE_KEYBOARD;
+    if (ps2_mouse_reset()) { 
+      return HAVE_KEYBOARD;
+    } else {
+      return HAVE_KEYBOARD_AND_MOUSE;
+    }
+  }
 }
 
 static struct nk_dev_int kops = {
@@ -706,14 +738,27 @@ static struct nk_dev_int mops = {
    
 int ps2_init(struct naut_info * naut)
 {
+  int rc;
+
   INFO("init\n");
-  register_irq_handler(1, kbd_handler, NULL);
-  register_irq_handler(12, mouse_handler, NULL);
-  ps2_reset();
-  nk_dev_register("ps2-keyboard",NK_DEV_GENERIC,0,&kops,0);
-  nk_dev_register("ps2-mouse",NK_DEV_GENERIC,0,&mops,0);
-  nk_unmask_irq(1);
-  nk_unmask_irq(12);
+
+  rc=ps2_reset();
+  
+  if (rc==HAVE_NO_KEYBOARD) { 
+    return -1;
+  } else {
+    if (rc==HAVE_KEYBOARD || rc == HAVE_KEYBOARD_AND_MOUSE) { 
+      nk_dev_register("ps2-keyboard",NK_DEV_GENERIC,0,&kops,0);
+      register_irq_handler(1, kbd_handler, NULL);
+      nk_unmask_irq(1);
+    } 
+    if (rc==HAVE_KEYBOARD_AND_MOUSE) { 
+      nk_dev_register("ps2-mouse",NK_DEV_GENERIC,0,&mops,0);
+      register_irq_handler(12, mouse_handler, NULL);
+      nk_unmask_irq(12);
+    }
+  }
+
   return 0;
 }
 
