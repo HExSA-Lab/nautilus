@@ -190,14 +190,6 @@ idt_assign_entry (ulong_t entry, ulong_t handler_addr, ulong_t state_addr)
         return -1;
     }
 
-#ifndef NAUT_CONFIG_REMOTE_DEBUGGING
-    if (idt_handler_table[entry]!=(ulong_t)null_excp_handler &&
-	idt_handler_table[entry]!=(ulong_t)null_irq_handler &&
-	idt_handler_table[entry]!=(ulong_t)reserved_irq_handler) { 
-      WARN_PRINT("Assigning to non-null/non-reserved IDT entry...\n");
-    }
-#endif
-
     idt_handler_table[entry] = handler_addr;
     idt_state_table[entry]   = state_addr;
 
