@@ -30,6 +30,7 @@ void nk_gc_bdsgc_deinit();
 // A malloc that requires a GC will stop the world
 // for the duration
 void *nk_gc_pdsgc_malloc(uint64_t size);
+void *nk_gc_pdsgc_malloc_specific(uint64_t size, int cpu);
 
 struct nk_gc_pdsgc_stats
 {

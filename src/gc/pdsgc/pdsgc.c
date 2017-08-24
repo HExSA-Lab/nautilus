@@ -70,12 +70,12 @@ static void *kmem_internal_start, *kmem_internal_end;
 
 int  nk_gc_pdsgc_init()
 {
-    gc_stack = kmem_malloc(GC_STACK_SIZE);
+    gc_stack = kmem_mallocz(GC_STACK_SIZE);
     if (!gc_stack) {
 	ERROR("Failed to allocate GC stack\n");
 	return -1;
     } 
-    gc_thread_stack_limits = kmem_malloc(sizeof(struct thread_stack_limits)*GC_MAX_THREADS);
+    gc_thread_stack_limits = kmem_mallocz(sizeof(struct thread_stack_limits)*GC_MAX_THREADS);
     if (!gc_thread_stack_limits) {
 	ERROR("Failed to allocate GC thread stack limits array\n");
 	return -1;
@@ -91,13 +91,13 @@ void nk_gc_bdsgc_deinit()
     INFO("deinit\n");
 }
 
-void *nk_gc_pdsgc_malloc(uint64_t size)
+void *nk_gc_pdsgc_malloc_specific(uint64_t size, int cpu)
 {
     DEBUG("Allocate %lu bytes\n",size);
 
     // We want a block that has had any old pointers stored
-    // in it nuked, hence the mallocz
-    void *block = kmem_mallocz(size);
+    // in it nuked, hence the zero
+    void *block = kmem_malloc_specific(size,cpu,1);
 
     if (block) { 
 	DEBUG("Success - returning %p\n",block);
@@ -114,7 +114,7 @@ void *nk_gc_pdsgc_malloc(uint64_t size)
 	    return 0;
 	} else {
 	    DEBUG("Garbage collection succeeded, trying again\n");
-	    block = kmem_mallocz(size);
+	    block = kmem_malloc_specific(size,cpu,1);
 	    if (block) { 
 		DEBUG("Success after garbage  collection - returning %p\n", block);
 		//BACKTRACE(DEBUG,4);
@@ -126,6 +126,11 @@ void *nk_gc_pdsgc_malloc(uint64_t size)
 	}
 #endif
     } 
+}
+
+void *nk_gc_pdsgc_malloc(uint64_t size)
+{
+    return nk_gc_pdsgc_malloc_specific(size,-1);
 }
 
 // Of course, this linear scan data structure will not scale...

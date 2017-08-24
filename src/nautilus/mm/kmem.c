@@ -478,6 +478,7 @@ void kmem_inform_boot_allocation(void *low, void *high)
  *
  * Arguments:
  *       [IN] size: Amount of memory to allocate in bytes.
+ *       [IN] cpu:  affinity cpu (-1 => current cpu)
  *       [IN] zero: Whether to zero the whole allocated block
  *
  * Returns:
@@ -485,13 +486,20 @@ void kmem_inform_boot_allocation(void *low, void *high)
  *       Failure: NULL
  */
 static void *
-_kmem_malloc (size_t size, int zero)
+_kmem_malloc (size_t size, int cpu, int zero)
 {
     void *block = 0;
     struct kmem_block_hdr *hdr = NULL;
     struct mem_reg_entry * reg = NULL;
     ulong_t order;
-    cpu_id_t my_id = my_cpu_id();
+    cpu_id_t my_id;
+
+    if (cpu<0 || cpu>= nk_get_num_cpus()) {
+	my_id = my_cpu_id();
+    } else {
+	my_id = cpu;
+    }
+
     struct kmem_data * my_kmem = &(nk_get_nautilus_info()->sys.cpus[my_id]->kmem);
 
     KMEM_DEBUG("malloc of %lu bytes (zero=%d) from:\n",size,zero);
@@ -567,14 +575,18 @@ _kmem_malloc (size_t size, int zero)
 
 void *kmem_malloc(size_t size)
 {
-    return _kmem_malloc(size,0);
+    return _kmem_malloc(size,-1,0);
 }
 
 void *kmem_mallocz(size_t size)
 {
-    return _kmem_malloc(size,1);
+    return _kmem_malloc(size,-1,1);
 }
 
+void *kmem_malloc_specific(size_t size, int cpu, int zero)
+{
+    return _kmem_malloc(size,cpu,zero);
+}
 
 /**
  * Frees memory previously allocated with kmem_alloc().
