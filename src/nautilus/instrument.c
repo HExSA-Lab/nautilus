@@ -32,6 +32,17 @@
 
 #include <nautilus/instrument.h>
 
+
+#define INFO(fmt, args...) INFO_PRINT("instrument: " fmt, ##args)
+#define ERROR(fmt, args...) ERROR_PRINT("instrument: " fmt, ##args)
+
+#ifdef NAUT_CONFIG_DEBUG_PROFILE
+#define DEBUG(fmt, args...) DEBUG_PRINT("instrument: " fmt, ##args)
+#else
+#define DEBUG(fmt, args...) 
+#endif
+
+
 static uint8_t instr_active = 0;
 static uint64_t instr_start_count = 0;
 static uint64_t instr_end_count = 0;
@@ -145,50 +156,84 @@ nk_profile_func_exit (const char *func)
 }
 
 
-/* TODO: calibrate and subtract the overhead of instrumentation */
 void 
-nk_instrument_init (void) 
+nk_instrument_clear (void) 
 {
     int i;
+
+    DEBUG("Clearing Instrumentation\n");
+
     uint8_t flags = irq_disable_save();
     
     for (i = 0; i < nk_get_nautilus_info()->sys.num_cpus; i++) {
-        printk("init instrumentation for cpu %u\n", i);
-
         struct cpu * this_cpu = nk_get_nautilus_info()->sys.cpus[i];
         int flags2 = spin_lock_irq_save(&this_cpu->lock);
         if (!this_cpu) {
-            ERROR_PRINT("Could not get CPU\n");
+            ERROR("Could not get CPU\n");
             spin_unlock_irq_restore(&this_cpu->lock, flags2);
             return;
         }
 
-        this_cpu->instr_data = malloc(sizeof(struct nk_instr_data));
-        memset(this_cpu->instr_data, 0, sizeof(struct nk_instr_data));
-        this_cpu->instr_data->mallocstat.min_latency = ULONG_MAX;
-        this_cpu->instr_data->irqstat.min_latency    = ULONG_MAX;
-        this_cpu->instr_data->thr_switch.min_latency = ULONG_MAX;
+	if (!this_cpu->instr_data) { 
+	    // first time
 
-        this_cpu->instr_data->func_htable = nk_create_htable(0, instr_hash_fn, instr_eq_fn);
-        if (!this_cpu->instr_data->func_htable) {
-            ERROR_PRINT("Could not create instrumentation hash table for core %u\n",
-                    i);
-            spin_unlock_irq_restore(&this_cpu->lock, flags2);
-            return;
-        }
+	    this_cpu->instr_data = malloc(sizeof(struct nk_instr_data));
+	    memset(this_cpu->instr_data, 0, sizeof(struct nk_instr_data));
+	    this_cpu->instr_data->mallocstat.min_latency = ULONG_MAX;
+	    this_cpu->instr_data->freestat.min_latency = ULONG_MAX;
+	    this_cpu->instr_data->irqstat.min_latency    = ULONG_MAX;
+	    this_cpu->instr_data->thr_switch.min_latency = ULONG_MAX;
 
-        spin_unlock_irq_restore(&this_cpu->lock, flags2);
+	    this_cpu->instr_data->func_htable = nk_create_htable(0, instr_hash_fn, instr_eq_fn);
+	    if (!this_cpu->instr_data->func_htable) {
+		ERROR("Could not create instrumentation hash table for core %u\n",
+		      i);
+		spin_unlock_irq_restore(&this_cpu->lock, flags2);
+		return;
+	    }
+	    
+	} else {
+	    // reinit
+	    memset(&this_cpu->instr_data->mallocstat, 0, sizeof(struct malloc_data));
+	    memset(&this_cpu->instr_data->freestat, 0, sizeof(struct free_data));
+	    memset(&this_cpu->instr_data->irqstat,0,sizeof(struct irq_data));
+	    memset(&this_cpu->instr_data->thr_switch,0,sizeof(struct thread_switch_data));
+	    this_cpu->instr_data->mallocstat.min_latency = ULONG_MAX;
+	    this_cpu->instr_data->freestat.min_latency = ULONG_MAX;
+	    this_cpu->instr_data->irqstat.min_latency    = ULONG_MAX;
+	    this_cpu->instr_data->thr_switch.min_latency = ULONG_MAX;
+	    
+	    // blow away htable and delete values (keys are just func addresses, so not freed)
+	    nk_free_htable(this_cpu->instr_data->func_htable, 1, 0);
+
+	    this_cpu->instr_data->func_htable = nk_create_htable(0, instr_hash_fn, instr_eq_fn);
+
+	    if (!this_cpu->instr_data->func_htable) {
+		ERROR("Could not create instrumentation hash table for core %u\n",
+		      i);
+		spin_unlock_irq_restore(&this_cpu->lock, flags2);
+		return;
+	    }
+	}
+	spin_unlock_irq_restore(&this_cpu->lock, flags2);
     }
 
     irq_enable_restore(flags);
 }
 
+/* TODO: calibrate and subtract the overhead of instrumentation */
+void 
+nk_instrument_init (void) 
+{
+    nk_instrument_clear();
+    INFO("inited\n");
+}
 
 void
 nk_instrument_start (void)
 {
     struct timespec ts;
-    printk("Beginning Instrumentation\n");
+    DEBUG("Beginning Instrumentation\n");
     clock_gettime(CLOCK_MONOTONIC, &ts);
     instr_start_count = 1000000000 * ts.tv_sec + ts.tv_nsec;
     atomic_cmpswap(instr_active, 0, 1);
@@ -200,7 +245,7 @@ nk_instrument_end (void)
     struct timespec te;
     clock_gettime(CLOCK_MONOTONIC, &te);
     instr_end_count = 1000000000 * te.tv_sec + te.tv_nsec;
-    printk("Deactivating instrumentation\n");
+    DEBUG("Deactivating instrumentation\n");
     atomic_cmpswap(instr_active, 1, 0);
 }
 
@@ -235,6 +280,54 @@ nk_malloc_exit (void)
     }
 
     md = &(per_cpu_get(instr_data)->mallocstat);
+    
+    clock_gettime(CLOCK_MONOTONIC, &te);
+
+    end = 1000000000 * te.tv_sec + te.tv_nsec;
+    if (end < md->start_count) {
+        return;
+    }
+    time = end - md->start_count;
+    if (time < md->min_latency) {
+        md->min_latency = time;
+    }
+    if (time > md->max_latency) {
+        md->max_latency = time;
+    }
+    md->avg_latency = (((md->avg_latency * (md->count - 1)) + time)/ md->count);
+}
+
+void
+nk_free_enter (void)
+{
+    struct free_data * md = NULL;
+    struct timespec ts;
+
+    if (!instr_active) {
+        return;
+    }
+
+    md = &(per_cpu_get(instr_data)->freestat);
+    md->count++;
+
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+
+    md->start_count = 1000000000 * ts.tv_sec + ts.tv_nsec;
+}
+
+void
+nk_free_exit (void)
+{
+    struct free_data * md = NULL;
+    struct timespec te;
+    uint64_t end;
+    uint64_t time;
+
+    if (!instr_active) {
+        return;
+    }
+
+    md = &(per_cpu_get(instr_data)->freestat);
     
     clock_gettime(CLOCK_MONOTONIC, &te);
 
@@ -370,7 +463,7 @@ nk_instrument_query (void)
         printk("Function Table Stats for Core %u:\n", i);
         struct nk_hashtable_iter * iter = nk_create_htable_iter(this_cpu->instr_data->func_htable);
         if (!iter) {
-            ERROR_PRINT("Could not iterate over function htable on core %u\n", i);
+            ERROR("Could not iterate over function htable on core %u\n", i);
             continue;
         }
 
@@ -402,6 +495,16 @@ nk_instrument_query (void)
                 this_cpu->instr_data->mallocstat.avg_latency,
                 this_cpu->instr_data->mallocstat.max_latency,
                 this_cpu->instr_data->mallocstat.min_latency);
+
+        printk("Free Stats for Core %u:\n", i);
+
+        /* print free data */
+        printk("\tCount: %16u Lat - Avg: %16llunsec, Max: %16llunsec Min: %16llunsec\n", 
+                this_cpu->instr_data->freestat.count,
+                this_cpu->instr_data->freestat.avg_latency,
+                this_cpu->instr_data->freestat.max_latency,
+                this_cpu->instr_data->freestat.min_latency);
+
         printk("IRQ Stats for Core %u:\n", i);
         printk("\tCount: %16u Lat - Avg: %16llunsec Max: %16llunsec Min: %16llunsec\n", 
                 this_cpu->instr_data->irqstat.count,

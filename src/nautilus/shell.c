@@ -766,7 +766,7 @@ int handle_pci(char *buf)
     return 0;
   }
 
-  if (sscanf(buf,"pci raw %x %x %x\n", &bus, &slot, &func)==3) { 
+  if (sscanf(buf,"pci raw %x %x %x", &bus, &slot, &func)==3) { 
     int i,j;
     uint32_t v;
     for (i=0;i<256;i+=32) {
@@ -780,7 +780,7 @@ int handle_pci(char *buf)
     return 0;
   }
 
-  if (sscanf(buf,"pci dev %x %x %x\n", &bus, &slot, &func)==3) { 
+  if (sscanf(buf,"pci dev %x %x %x", &bus, &slot, &func)==3) { 
     pci_dump_device(pci_find_device(bus,slot,func));
     return 0;
   }
@@ -795,6 +795,34 @@ int handle_pci(char *buf)
   return -1;
 }    
 	
+
+int handle_instrument(char *buf)
+{
+    char what[80];
+
+    if (sscanf(buf,"inst%s* %s", what)==1) { 
+	if (!strncasecmp(what,"sta",3)) {
+	    nk_vc_printf("starting instrumentation\n");
+	    nk_instrument_start();
+	    return 0;
+	} else if (!strncasecmp(what,"e",1) || !strncasecmp(what,"sto",3)) {
+	    nk_vc_printf("ending instrumentation\n");
+	    nk_instrument_end();
+	    return 0;
+	} else if (!strncasecmp(what,"c",1)) {
+	    nk_vc_printf("clearing instrumentation\n");
+	    nk_instrument_clear();
+	    return 0;
+	} else if (!strncasecmp(what,"q",1)) {
+	    nk_vc_printf("querying instrumentation\n");
+	    nk_instrument_query();
+	    return 0;
+	} 
+    }
+    nk_vc_printf("unknown instrumentation request\n");
+    return 0;
+}
+    
 	
 
 static int handle_cmd(char *buf, int n)
@@ -832,7 +860,7 @@ static int handle_cmd(char *buf, int n)
     nk_vc_printf("help\nexit\nvcs\ncores [n]\ntime [n]\nthreads [n]\n");
     nk_vc_printf("devs | fses | ofs | cat [path]\n");
 #ifdef NAUT_CONFIG_PROFILE
-    nk_vc_printf("profile\n");
+    nk_vc_printf("instrument start|end/stop|clear|query\n");
 #endif
 
     nk_vc_printf("pci list | pci raw/dev bus slot func | pci dev\n");
@@ -862,9 +890,9 @@ static int handle_cmd(char *buf, int n)
   }
 
 #ifdef NAUT_CONFIG_PROFILE
-  if (!strncasecmp(buf,"profile",7)) {
-    nk_instrument_query();
-    return 0;
+  if (!strncasecmp(buf,"inst",4)) {
+      handle_instrument(buf);
+      return 0;
   }
 #endif
 

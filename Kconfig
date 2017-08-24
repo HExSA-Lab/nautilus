@@ -570,6 +570,13 @@ menu Debugging
       help
         Profile select function entries and exits
 
+    config DEBUG_PROFILE
+      bool "Debug Profiling"
+      default n
+      depends on PROFILE
+      help
+        Turn on debug prints for the profiler subsystem
+
     config SILENCE_UNDEF_ERR
       bool "Silence Errors for Undefined Functions"
       default n

@@ -37,6 +37,8 @@ extern "C" {
 #define NK_PROFILE_EXIT() nk_profile_func_exit(__func__)
 #define NK_MALLOC_PROF_ENTRY() nk_malloc_enter()
 #define NK_MALLOC_PROF_EXIT() nk_malloc_exit()
+#define NK_FREE_PROF_ENTRY() nk_free_enter()
+#define NK_FREE_PROF_EXIT() nk_free_exit()
 #else
 #define NK_PROFILE_ENTRY() 
 #define NK_PROFILE_EXIT()
@@ -44,11 +46,21 @@ extern "C" {
 #define NK_PROFILE_EXIT_NAME(s)
 #define NK_MALLOC_PROF_ENTRY()
 #define NK_MALLOC_PROF_EXIT()
+#define NK_FREE_PROF_ENTRY() 
+#define NK_FREE_PROF_EXIT() 
 #endif
 
 struct nk_hashtable;
 
 struct malloc_data {
+    uint64_t count;
+    uint64_t start_count;
+    uint64_t avg_latency;
+    uint64_t max_latency;
+    uint64_t min_latency;
+};
+
+struct free_data {
     uint64_t count;
     uint64_t start_count;
     uint64_t avg_latency;
@@ -76,6 +88,7 @@ struct nk_instr_data {
     struct nk_hashtable * func_htable;
     struct irq_data irqstat;
     struct malloc_data mallocstat;
+    struct free_data freestat;
     struct thread_switch_data thr_switch;
 };
 
@@ -89,10 +102,13 @@ void nk_irq_prof_exit(void);
 
 void nk_malloc_enter(void);
 void nk_malloc_exit(void);
+void nk_free_enter(void);
+void nk_free_exit(void);
 void nk_instrument_init(void);
 void nk_instrument_start(void);
 void nk_instrument_end(void);
 void nk_instrument_query(void);
+void nk_instrument_clear(void);
 void nk_instrument_calibrate(unsigned loops);
 
 
