@@ -115,9 +115,11 @@
 
 #if SANITY_CHECKS
 #define PAD 0
+#define MALLOC_SPECIFIC(x,c) ({ void *p  = malloc_specific((x)+2*PAD,c); if (!p) { panic("Failed to Allocate %d bytes\n",x); } memset(p,0,(x)+2*PAD); p+PAD; })
 #define MALLOC(x) ({ void *p  = malloc((x)+2*PAD); if (!p) { panic("Failed to Allocate %d bytes\n",x); } memset(p,0,(x)+2*PAD); p+PAD; })
 #define FREE(x) do {if (x) { free(x-PAD); x=0;} } while (0)
 #else // no sanity checks
+#define MALLOC_SPECIFIC(x,c) malloc_specific(x,c)
 #define MALLOC(x) malloc(x)
 #define FREE(x) free(x)
 #endif // sanity checks
@@ -851,7 +853,7 @@ struct nk_thread *nk_sched_get_cur_thread_on_cpu(int cpu)
 struct nk_sched_thread_state *nk_sched_thread_state_init(struct nk_thread *thread,
 							 struct nk_sched_constraints *constraints)
 {
-    struct nk_sched_thread_state *t = (struct nk_sched_thread_state *)MALLOC(sizeof(struct nk_sched_thread_state));
+    struct nk_sched_thread_state *t = (struct nk_sched_thread_state *)MALLOC_SPECIFIC(sizeof(struct nk_sched_thread_state),thread->current_cpu);
     struct sys_info *sys = per_cpu_get(system);
     rt_scheduler *sched = sys->cpus[my_cpu_id()]->sched_state;
     struct nk_sched_constraints *c;
@@ -892,14 +894,10 @@ struct nk_sched_thread_state *nk_sched_thread_state_init(struct nk_thread *threa
     return t;
 }
 
-static int initial_placement(nk_thread_t *t)
+int nk_sched_initial_placement()
 {
-    if (t->bound_cpu>=0) { 
-	return t->bound_cpu;
-    } else {
-	struct sys_info * sys = per_cpu_get(system);
-	return (int)(get_random() % sys->num_cpus);
-    }
+    struct sys_info * sys = per_cpu_get(system);
+    return (int)(get_random() % sys->num_cpus);
 }
 
 int nk_sched_thread_post_create(nk_thread_t * t)
@@ -907,9 +905,9 @@ int nk_sched_thread_post_create(nk_thread_t * t)
     GLOBAL_LOCK_CONF;
 
     nk_sched_reap(0); // conditional reap to make room for new thread
-    
-    t->current_cpu = initial_placement(t);
 
+    // the caller is expected to have already set current_cpu!
+    
     GLOBAL_LOCK();
 
     if (rt_list_enqueue(global_sched_state.thread_list, t->sched_state)) {
@@ -1197,7 +1195,7 @@ static void rt_list_deinit(rt_list *l)
 
 static rt_node* rt_node_init(rt_thread *t) 
 {
-    rt_node *node = (rt_node *)MALLOC(sizeof(rt_node));
+    rt_node *node = (rt_node *)MALLOC_SPECIFIC(sizeof(rt_node),t->thread->current_cpu);
     if (node) { 
 	node->thread = t;
 	node->next = NULL;
@@ -3223,7 +3221,7 @@ static inline uint64_t get_min_per(rt_priority_queue *runnable, rt_priority_queu
 
 static struct nk_sched_percpu_state *init_local_state(struct nk_sched_config *cfg)
 {
-    struct nk_sched_percpu_state *state = (struct nk_sched_percpu_state*)MALLOC(sizeof(struct nk_sched_percpu_state));
+    struct nk_sched_percpu_state *state = (struct nk_sched_percpu_state*)MALLOC_SPECIFIC(sizeof(struct nk_sched_percpu_state),my_cpu_id());
 
     if (!state) {
         ERROR("Could not allocate rt state\n");
@@ -3327,7 +3325,7 @@ static int shared_init(struct cpu *my_cpu, struct nk_sched_config *cfg)
     flags = irq_disable_save();
 
     // first we need to add our current thread as the current thread
-    main  = MALLOC(sizeof(nk_thread_t));
+    main  = MALLOC_SPECIFIC(sizeof(nk_thread_t),my_cpu_id());
     if (!main) {
         ERROR_PRINT("Could not allocate main thread\n");
 	goto fail_free;
@@ -3337,7 +3335,7 @@ static int shared_init(struct cpu *my_cpu, struct nk_sched_config *cfg)
 
 
     // need to be sure this is aligned, hence direct use of malloc here
-    my_stack = malloc(PAGE_SIZE);
+    my_stack = malloc_specific(PAGE_SIZE,my_cpu_id());
 
     if (!my_stack) {
         ERROR("Couldn't allocate stack\n");
@@ -3347,7 +3345,7 @@ static int shared_init(struct cpu *my_cpu, struct nk_sched_config *cfg)
 
     main->stack_size = PAGE_SIZE;
 
-    if (_nk_thread_init(main, my_stack, 1, my_cpu->id, NULL)) {
+    if (_nk_thread_init(main, my_stack, 1, my_cpu->id, my_cpu->id, NULL)) {
 	ERROR("Failed to init thread\n");
 	goto fail_free;
     }
@@ -3363,6 +3361,7 @@ static int shared_init(struct cpu *my_cpu, struct nk_sched_config *cfg)
     main->rsp -= 1024;
 
     main->bound_cpu = my_cpu_id(); // idle threads cannot move
+    main->current_cpu = main->bound_cpu;
     main->status = NK_THR_RUNNING;
     main->sched_state->status = ADMITTED;
 

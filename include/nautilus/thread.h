@@ -220,6 +220,7 @@ _nk_thread_init (nk_thread_t * t,
 		 void * stack, 
 		 uint8_t is_detached, 
 		 int bound_cpu, // -1 => not bound
+		 int placement_cpu, // must be >=0 - where thread will go initially
 		 nk_thread_t * parent);
 
 

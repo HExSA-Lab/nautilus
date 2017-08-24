@@ -162,6 +162,7 @@ _nk_thread_init (nk_thread_t * t,
 		 void * stack, 
 		 uint8_t is_detached, 
 		 int bound_cpu, 
+		 int placement_cpu,
 		 nk_thread_t * parent)
 {
     struct sys_info * sys = per_cpu_get(system);
@@ -183,6 +184,7 @@ _nk_thread_init (nk_thread_t * t,
     t->refcount   = is_detached ? 1 : 2; // thread references itself as well
     t->parent     = parent;
     t->bound_cpu  = bound_cpu;
+    t->current_cpu = placement_cpu;
     t->fpu_state_offset = offsetof(struct nk_thread, fpu_state);
 
     INIT_LIST_HEAD(&(t->children));
@@ -319,9 +321,9 @@ nk_thread_create (nk_thread_fun_t fun,
 {
     struct sys_info * sys = per_cpu_get(system);
     nk_thread_t * t = NULL;
-    int current_cpu = -1;
+    int placement_cpu = bound_cpu<0 ? nk_sched_initial_placement() : bound_cpu;
 
-    t = malloc(sizeof(nk_thread_t));
+    t = malloc_specific(sizeof(nk_thread_t),placement_cpu);
 
     if (!t) {
         THREAD_ERROR("Could not allocate thread struct\n");
@@ -331,10 +333,10 @@ nk_thread_create (nk_thread_fun_t fun,
     memset(t, 0, sizeof(nk_thread_t));
 
     if (stack_size) {
-        t->stack      = (void*)malloc(stack_size);
+        t->stack      = (void*)malloc_specific(stack_size,placement_cpu);
         t->stack_size = stack_size;
     } else {
-        t->stack      = (void*)malloc(PAGE_SIZE);
+        t->stack      = (void*)malloc_specific(PAGE_SIZE,placement_cpu);
         t->stack_size =  PAGE_SIZE;
     }
 
@@ -344,7 +346,7 @@ nk_thread_create (nk_thread_fun_t fun,
 	return -EINVAL;
     }
 
-    if (_nk_thread_init(t, t->stack, is_detached, bound_cpu, get_cur_thread()) < 0) {
+    if (_nk_thread_init(t, t->stack, is_detached, bound_cpu, placement_cpu, get_cur_thread()) < 0) {
         THREAD_ERROR("Could not initialize thread\n");
         goto out_err;
     }
