@@ -874,7 +874,7 @@ void     pci_dev_cfg_writew(struct pci_dev *dev, uint8_t off, uint16_t val)
 
 void     pci_dev_cfg_writel(struct pci_dev *dev, uint8_t off, uint32_t val)
 {
-  pci_cfg_writew(dev->bus->num,dev->num,dev->fun,off,val);
+  pci_cfg_writel(dev->bus->num,dev->num,dev->fun,off,val);
 }
 
 uint8_t  pci_dev_get_capability(struct pci_dev *d, uint8_t cap_id)
@@ -933,7 +933,8 @@ int pci_dev_enable_msi(struct pci_dev *dev, int base_vec, int num_vecs, int targ
 {
   uint32_t mar_low;
   uint16_t mdr;
-  uint16_t ctrl;
+  uint32_t ctrl;
+  uint16_t cmd;
   uint8_t co;
   int log2_num_vecs;
   
@@ -954,7 +955,16 @@ int pci_dev_enable_msi(struct pci_dev *dev, int base_vec, int num_vecs, int targ
     PCI_ERROR("Invalid MSI enable request\n");
   }
 
-  log2_num_vecs = 32-__builtin_clz(num_vecs);
+
+  // we need to disable the interrupt pin first
+  
+  cmd = pci_dev_cfg_readw(dev,0x4);
+  cmd |= 0x400;
+  pci_dev_cfg_writew(dev,0x4,cmd);
+
+  PCI_DEBUG("legacy interrupt disabled (cmd=%x)\n",cmd);
+
+  log2_num_vecs = 32-(__builtin_clz(num_vecs)+1);
   
   mar_low  = 0xfee00000;
   mar_low |= (target_cpu & 0xff) << 12;
@@ -966,11 +976,14 @@ int pci_dev_enable_msi(struct pci_dev *dev, int base_vec, int num_vecs, int targ
   // We use LEV=0 because we don't care and are using edge
   // We use TM=0 to get edge
   
-  ctrl = pci_dev_cfg_readw(dev,co+2);
+  // this gets us the type and next ptr as well, but 
+  // manipulating ctrl seems to require a 32 bit write...
+
+  ctrl = pci_dev_cfg_readl(dev,co);
 
   PCI_DEBUG("initial ctrl: 0x%x\n",ctrl);
 
-  ctrl &= 0xff8e;  // clear multiple message enable, clear msi-enable
+  ctrl &= 0xff8e0000;  // clear multiple message enable, clear msi-enable
   ctrl |= (log2_num_vecs & 0x7)<<4;  // set multiple message enable
 
   PCI_DEBUG("updated: mdr=0x%x, mar_low=0x%x, ctrl=0x%x\n",mdr,mar_low,ctrl);
@@ -979,21 +992,21 @@ int pci_dev_enable_msi(struct pci_dev *dev, int base_vec, int num_vecs, int targ
   case PCI_MSI_32:
     pci_dev_cfg_writel(dev,co+4,mar_low);
     pci_dev_cfg_writew(dev,co+8,mdr);
-    pci_dev_cfg_writew(dev,co+2,ctrl);
+    pci_dev_cfg_writel(dev,co,ctrl);
     PCI_DEBUG("enabled as MSI32 (masked)\n");
     break;
   case PCI_MSI_32_PER_VEC:
     pci_dev_cfg_writel(dev,co+4,mar_low);
     pci_dev_cfg_writew(dev,co+8,mdr);
     pci_dev_cfg_writel(dev,co+12,0xffffffff); // mask all
-    pci_dev_cfg_writew(dev,co+2,ctrl);
+    pci_dev_cfg_writel(dev,co,ctrl);
     PCI_DEBUG("enabled as MSI32 with per vec mask (all masked)\n");
     break;
   case PCI_MSI_64:
     pci_dev_cfg_writel(dev,co+8,0x0); // high addr
     pci_dev_cfg_writel(dev,co+4,mar_low);
     pci_dev_cfg_writew(dev,co+12,mdr);
-    pci_dev_cfg_writew(dev,co+2,ctrl);
+    pci_dev_cfg_writel(dev,co,ctrl);
     PCI_DEBUG("enabled as MSI64 (masked)\n");
     break;
   case PCI_MSI_64_PER_VEC:
@@ -1001,7 +1014,7 @@ int pci_dev_enable_msi(struct pci_dev *dev, int base_vec, int num_vecs, int targ
     pci_dev_cfg_writel(dev,co+4,mar_low);
     pci_dev_cfg_writew(dev,co+12,mdr);
     pci_dev_cfg_writel(dev,co+16,0xffffffff); // mask all
-    pci_dev_cfg_writew(dev,co+2,ctrl);
+    pci_dev_cfg_writel(dev,co,ctrl);
     PCI_DEBUG("enabled as MSI64 with per vec mask (all masked)\n");
     break;
   default:
@@ -1009,7 +1022,8 @@ int pci_dev_enable_msi(struct pci_dev *dev, int base_vec, int num_vecs, int targ
     return -1;
     break;
   }
-    
+
+  dev->msi.co = co;
   dev->msi.base_vec = base_vec;
   dev->msi.num_vecs = num_vecs;
   dev->msi.target_cpu=target_cpu;
@@ -1023,7 +1037,7 @@ int pci_dev_enable_msi(struct pci_dev *dev, int base_vec, int num_vecs, int targ
 int pci_dev_mask_msi(struct pci_dev *dev, int vec)
 {
   uint32_t mask;
-  uint16_t ctrl;
+  uint32_t ctrl;
   uint8_t  co;
 
   if (!dev->msi.enabled) { 
@@ -1033,32 +1047,32 @@ int pci_dev_mask_msi(struct pci_dev *dev, int vec)
 
   co = dev->msi.co;
 
-  ctrl = pci_dev_cfg_readw(dev,co+2);
+  ctrl = pci_dev_cfg_readl(dev,co);
 
   switch (dev->msi.type) { 
   case PCI_MSI_32:
   case PCI_MSI_64:
     // masking means to disable msi
-    ctrl &= ~0x1;
-    pci_dev_cfg_writew(dev,co+2,ctrl);
+    ctrl &= ~0x10000;
+    pci_dev_cfg_writel(dev,co,ctrl);
     PCI_DEBUG("masked as a non-per-vec-masking device\n");
     break;
   case PCI_MSI_32_PER_VEC:
     // masking means to enable msi and mask the given vector
-    ctrl |= 0x1;
+    ctrl |= 0x10000;
     mask=pci_dev_cfg_readl(dev,co+12);
     mask |= 0x1 << (vec-dev->msi.base_vec);
     pci_dev_cfg_writel(dev,co+12,mask);
-    pci_dev_cfg_writew(dev,co+2,ctrl);
+    pci_dev_cfg_writel(dev,co,ctrl);
     PCI_DEBUG("masked as a 32 bit per-vec-masking device\n");
     break;
   case PCI_MSI_64_PER_VEC:
     // masking means to enable msi and mask the given vector
-    ctrl |= 0x1;
+    ctrl |= 0x10000;
     mask=pci_dev_cfg_readl(dev,co+16);
     mask |= 0x1 << (vec-dev->msi.base_vec);
     pci_dev_cfg_writel(dev,co+16,mask);
-    pci_dev_cfg_writew(dev,co+2,ctrl);
+    pci_dev_cfg_writel(dev,co,ctrl);
     PCI_DEBUG("masked as a 64 bit per-vec-masking device\n");
     break;
   default:
@@ -1074,7 +1088,7 @@ int pci_dev_mask_msi(struct pci_dev *dev, int vec)
 int pci_dev_unmask_msi(struct pci_dev *dev, int vec)
 {
   uint32_t mask;
-  uint16_t ctrl;
+  uint32_t ctrl;
   uint8_t co;
 
   if (!dev->msi.enabled) { 
@@ -1084,32 +1098,33 @@ int pci_dev_unmask_msi(struct pci_dev *dev, int vec)
 
   co = dev->msi.co;
 
-  ctrl = pci_dev_cfg_readw(dev,co+2);
+  ctrl = pci_dev_cfg_readl(dev,co);
+
 
   switch (dev->msi.type) { 
   case PCI_MSI_32:
   case PCI_MSI_64:
     // unmasking means to enable msi
-    ctrl |= 0x1;
-    pci_dev_cfg_writew(dev,co+2,ctrl);
+    ctrl |= 0x10000;
+    pci_dev_cfg_writel(dev,co,ctrl);
     PCI_DEBUG("unmasked as a non-per-vec-masking device\n");
     break;
   case PCI_MSI_32_PER_VEC:
     // unmasking means to enable msi and unmask the given vector
-    ctrl |= 0x1;
+    ctrl |= 0x10000;
     mask=pci_dev_cfg_readl(dev,co+12);
     mask &= ~(0x1 << (vec-dev->msi.base_vec));
     pci_dev_cfg_writel(dev,co+12,mask);
-    pci_dev_cfg_writew(dev,co+2,ctrl);
+    pci_dev_cfg_writel(dev,co,ctrl);
     PCI_DEBUG("unmasked as a 32 bit per-vec-masking device\n");
     break;
   case PCI_MSI_64_PER_VEC:
     // unmasking means to enable msi and unmask the given vector
-    ctrl |= 0x1;
+    ctrl |= 0x10000;
     mask=pci_dev_cfg_readl(dev,co+16);
     mask &= ~(0x1 << (vec-dev->msi.base_vec));
     pci_dev_cfg_writel(dev,co+16,mask);
-    pci_dev_cfg_writew(dev,co+2,ctrl);
+    pci_dev_cfg_writel(dev,co,ctrl);
     PCI_DEBUG("unmasked as a 64 bit per-vec-masking device\n");
     break;
   default:
