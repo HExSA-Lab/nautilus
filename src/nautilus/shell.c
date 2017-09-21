@@ -796,6 +796,7 @@ int handle_pci(char *buf)
 }    
 	
 
+#ifdef NAUT_CONFIG_PROFILE
 int handle_instrument(char *buf)
 {
     char what[80];
@@ -822,6 +823,7 @@ int handle_instrument(char *buf)
     nk_vc_printf("unknown instrumentation request\n");
     return 0;
 }
+#endif
     
 	
 
