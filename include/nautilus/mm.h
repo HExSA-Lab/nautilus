@@ -93,6 +93,7 @@ void kmem_inform_boot_allocation(void *low, void *high);
 // These functions operate the core memory allocator directly
 // You want to use the malloc()/free() wrappers defined below 
 // unless you know  what you are doing
+void * kmem_malloc_specific(size_t size, int cpu, int zero);
 void * kmem_malloc(size_t size);
 void * kmem_mallocz(size_t size);
 void * kmem_realloc(void * ptr, size_t size);
@@ -131,23 +132,27 @@ int  kmem_sanity_check();
 void * GC_memalign(size_t, size_t);
 void * GC_malloc(size_t);
 #ifdef NAUT_CONFIG_ALIGN_BDWGC
-#define malloc(s) ({ size_t __a = 1ULL<<(sizeof(size_t)*8UL - __builtin_clzl(s) - 1); __a <<= !!((s)&(~__a));  GC_memalign(__a,s); })
+#define malloc(s) ({ NK_MALLOC_PROF_ENTRY(); void *p; size_t __a = 1ULL<<(sizeof(size_t)*8UL - __builtin_clzl(s) - 1); __a <<= !!((s)&(~__a));  p = GC_memalign(__a,s); NK_MALLOC_PROF_EXIT(); p; })
 #else
-#define malloc(s) GC_malloc(s)
+#define malloc(s) ({ NK_MALLOC_PROF_ENTRY(); void *p = GC_malloc(s); NK_MALLOC_PROF_EXIT(); p; })
 #endif
+#define malloc_specific(s,c) malloc(s)
 #define free(a) 
 #else
 #ifdef NAUT_CONFIG_ENABLE_PDSGC
 void *nk_gc_pdsgc_malloc(uint64_t);
-#define malloc(s) nk_gc_pdsgc_malloc(s)
+void *nk_gc_pdsgc_malloc_specific(uint64_t, int cpu);
+#define malloc(s) ({  NK_MALLOC_PROF_ENTRY(); void *p = nk_gc_pdsgc_malloc(s); NK_MALLOC_PROF_EXIT(); p; })
 #ifdef NAUT_CONFIG_EXPLICIT_ONLY_PDSGC
-#define free(s) kmem_free(s)
+#define free(s) NK_FREE_PROF_ENTRY(); kmem_free(s); NK_FREE_PROF_EXIT();
 #else
 #define free(s) 
 #endif
+#define malloc_specific(s,c) nk_gc_pdsgc_malloc_specific(s,c)
 #else
-#define malloc(s) kmem_malloc(s)
-#define free(a) kmem_free(a)
+#define malloc(s) ({ NK_MALLOC_PROF_ENTRY(); void *p = kmem_malloc(s); NK_MALLOC_PROF_EXIT(); p; })
+#define malloc_specific(s,c) ({ NK_MALLOC_PROF_ENTRY(); void *p = kmem_malloc_specific(s,c,0); NK_MALLOC_PROF_EXIT(); p; })
+#define free(a) NK_FREE_PROF_ENTRY(); kmem_free(a); NK_FREE_PROF_EXIT();
 #endif
 #endif
 
