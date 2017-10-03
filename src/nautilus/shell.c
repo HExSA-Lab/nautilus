@@ -76,6 +76,12 @@
 #include <nautilus/instrument.h>
 #endif
 
+
+#ifdef NAUT_CONFIG_OMP_RT_TESTS
+#include <test/test_omp.h>
+#endif
+
+
 #define MAX_CMD 80
 
 struct burner_args {
@@ -592,7 +598,17 @@ static int handle_test(char *buf)
     if (sscanf(buf,"test %s",what)!=1) { 
 	goto dunno;
     }
-    
+
+#ifdef NAUT_CONFIG_OMP_RT_TESTS
+    if (!strncasecmp(what,"ompb",4)) { 
+	return test_ompbench();
+    }
+
+    if (!strncasecmp(what,"omp",3)) { 
+	return test_omp();
+    }
+#endif
+
     if (!strncasecmp(what,"thread",6)) { 
 	return test_threads();
     }
@@ -1044,8 +1060,8 @@ static int handle_cmd(char *buf, int n)
     nk_vc_printf("bench\n");
     nk_vc_printf("blktest dev r|w start count\n");
     nk_vc_printf("blktest dev r|w start count\n");
-    nk_vc_printf("test threads|groups|stop|iso|bdwgc|pdsgc|\n");
-    nk_vc_printf("     udp_echo nic ip port num|...\n");
+    nk_vc_printf("test threads|groups|stop|iso|bdwgc|pdsgc|omp|ompbench|\n");
+    nk_vc_printf("     udp_echo nic ip port num| ...\n"); 
     nk_vc_printf("vm name [embedded image]\n");
     nk_vc_printf("run path\n");
     return 0;
