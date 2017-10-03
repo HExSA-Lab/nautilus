@@ -66,6 +66,9 @@
 #include <dev/ioapic.h>
 #include <dev/i8254.h>
 #include <dev/ps2.h>
+#ifdef NAUT_CONFIG_GPIO
+#include <dev/gpio.h>
+#endif
 #include <dev/serial.h>
 #include <dev/vga.h>
 #ifdef NAUT_CONFIG_VIRTIO_PCI
@@ -279,6 +282,11 @@ init (unsigned long mbd,
     // Bring serial device up early so we can have output
     serial_early_init();
 
+#ifdef NAUT_CONFIG_GPIO
+    nk_gpio_init();
+    nk_gpio_cpu_mask_add(1); // consider cpu 1 writes only
+#endif
+
 #ifdef NAUT_CONFIG_ENABLE_REMOTE_DEBUGGING 
     nk_gdb_init();
 #endif
@@ -288,6 +296,7 @@ init (unsigned long mbd,
     nk_char_dev_init();
     nk_block_dev_init();
     nk_net_dev_init();
+
 
     nk_vc_print(NAUT_WELCOME);
     

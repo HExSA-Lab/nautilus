@@ -24,3 +24,6 @@ obj-$(NAUT_CONFIG_VESA) += vesa.o
 ifdef NAUT_CONFIG_LOAD_LUA
 obj-y +=lua_script.o
 endif
+
+obj-$(NAUT_CONFIG_GPIO) += gpio.o
+

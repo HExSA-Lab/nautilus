@@ -83,8 +83,8 @@ config DISABLE_PS2_MOUSE
     default n
     help
         Unconditionally disable PS2 mouse support
-        This is useful on bizarro platforms that either do not
-        have it or do not emulate it
+        This is useful on bizarro platforms that have broken or
+        disabled PS2 emulation where we can't detect it
 
 
 config DEBUG_PS2
@@ -93,6 +93,29 @@ config DEBUG_PS2
     default n
     help
         Turn on debug prints for the keyboard/mouse on the PS/2 interface
+
+config GPIO
+    bool "GPIO support"
+    default n
+    help
+       Provide parallel port GPIO device driver
+
+config GPIO_PORT
+    hex "Port"
+    default 0xe010
+    depends on GPIO
+    help
+       Parallel port I/O port to use
+       Common: 0x378  = first legacy parallel port
+               0x278  = second legacy parallel port
+               0xd010 = port in NU test Phi (lspci to find out)
+
+config DEBUG_GPIO
+    bool "Debug GPIO interface (parallel port)"
+    depends on DEBUG_PRINTS && GPIO
+    default n
+    help
+        Turn on debug prints for the parallel port GPIO device
 
 config DEBUG_PIT
     bool "Debug PIT"

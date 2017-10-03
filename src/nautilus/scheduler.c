@@ -1608,8 +1608,8 @@ static void set_timer(rt_scheduler *scheduler, rt_thread *thread, uint64_t now)
     // the set time has been computed based on the "now" argument
     // which is the start of the scheduling pass.   We need to set
     // the cycle counter delay based on the set time relative 
-    // to the current time
-    uint32_t ticks = apic_realtime_to_ticks(apic, 
+    // to the *current time*
+    uint32_t ticks = apic_realtime_to_ticks(apic,  
 					    scheduler->tsc.set_time - cur_time() + scheduler->slack);
 
     
