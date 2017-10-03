@@ -77,6 +77,9 @@
 #ifdef NAUT_CONFIG_E1000_PCI
 #include <dev/e1000_pci.h>
 #endif
+#ifdef NAUT_CONFIG_E1000E_PCI
+#include <dev/e1000e_pci.h>
+#endif
 #ifdef NAUT_CONFIG_RAMDISK
 #include <dev/ramdisk.h>
 #endif
@@ -113,6 +116,11 @@
 #ifdef NAUT_CONFIG_ENABLE_PDSGC
 #include <gc/pdsgc/pdsgc.h>
 #endif
+
+#ifdef NAUT_CONFIG_OMP_RT
+#include <rt/omp/omp.h>
+#endif
+
 
 extern spinlock_t printk_lock;
 
@@ -220,6 +228,11 @@ runtime_init (void)
 #ifdef NAUT_CONFIG_NESL_RT
         nesl_nautilus_main();
 #endif
+
+#ifdef NAUT_CONFIG_OMP_RT
+	nk_omp_init();
+#endif
+	
 }
 
 
@@ -439,6 +452,10 @@ init (unsigned long mbd,
 
 #ifdef NAUT_CONFIG_E1000_PCI
     e1000_pci_init(naut);
+#endif
+
+#ifdef NAUT_CONFIG_E1000E_PCI
+    e1000e_pci_init(naut);
 #endif
 
     nk_fs_init();

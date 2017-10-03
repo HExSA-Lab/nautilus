@@ -850,7 +850,26 @@ menu "Parallel Runtime Integration"
             help 
               Directory where the intended NDPC runtime is installed
 
-        config NO_RT
+        config OMP_RT
+          bool  "OpenMP RT (GOMP-compatible)"
+	       
+
+        config OMP_RT_DEBUG
+            bool "Debug OpenMP RT";
+	    default n
+            depends on OMP_RT
+            help 
+              Debugging output for the OpenMP RT
+
+        config OMP_RT_TESTS
+            bool "Include in tests/benchmarks for OpenMP RT";
+	    default n
+            depends on OMP_RT
+            help 
+              Include OpenMP simple tests and Edinburgh microbenchmarks
+
+
+      config NO_RT
           bool "No parallel runtime"
           
      endchoice
