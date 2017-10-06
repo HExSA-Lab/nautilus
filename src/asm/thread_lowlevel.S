@@ -27,7 +27,9 @@
 /* NOTE: the below offsets and constants are VERY fragile
  * make sure to check assumptions elsewhere when changing them
  */
-    
+
+
+#define GPIO_OUTPUT 1
 
 // We assume that %gs-based updates are safe in this code since we should only get
 // here if the scheduler is running, which implies percpu is running
@@ -66,12 +68,21 @@ ENTRY(nk_thread_switch)
 	
 ENTRY(nk_thread_switch_intr_entry)
 
+#if GPIO_OUTPUT && defined(NAUT_CONFIG_GPIO)
+    // GPIO output
+    pushq %rdi
+    movq $0x8, %rdi   // bit 3 set
+    movq $0x0, %rsi    // or it high
+    callq nk_gpio_output_mask
+    popq %rdi
+#endif
+	
 #ifdef NAUT_CONFIG_PROFILE
     pushq %rdi
     callq nk_thr_switch_prof_enter
     popq %rdi
 #endif
-
+	
     movq %gs:0x0, %rax
 
     movq %rsp, (%rax)   /* save the current stack pointer */
@@ -98,6 +109,13 @@ ENTRY(nk_thread_switch_intr_entry)
     callq nk_thr_switch_prof_exit
 #endif
 
+#if GPIO_OUTPUT && defined(NAUT_CONFIG_GPIO)
+    movq $0x18, %rdi   // bit 3+4 (irq goes low too)
+    notq %rdi         // clear
+    movq $0x1, %rsi    // and it low
+    callq nk_gpio_output_mask
+#endif
+	
     RESTORE_GPRS()      /* load the new thread's GPRs */
 
     leaq 16(%rsp), %rsp /* pop off the vector and the error code */

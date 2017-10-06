@@ -50,6 +50,7 @@
 #include <nautilus/random.h>
 #include <nautilus/backtrace.h>
 #include <dev/apic.h>
+#include <dev/gpio.h>
 
 // enforce lower limits on period and slice / sporadic size
 #define ENFORCE_LOWER_LIMITS 1
@@ -819,7 +820,7 @@ void nk_sched_reap(int uncond)
     GLOBAL_UNLOCK();
 
     // Now reap
-    if (reap_count>0) { 
+    if (reap_count!=0) { 
 	// reverse order to potentially improve frees
 	for (i=reap_count;i>0;i--) { 
 	    nk_thread_destroy(reap_pool[i-1]->thread);
@@ -1679,7 +1680,8 @@ static inline void set_interrupt_priority(rt_thread *t)
 struct nk_thread *_sched_need_resched(int have_lock, int force_resched)
 {
     LOCAL_LOCK_CONF;
-
+    
+    NK_GPIO_OUTPUT_MASK(0x4,GPIO_OR);
 
     // even before we check for preemptability, we 
     // need to handle a world stop, which we always do
@@ -1688,6 +1690,7 @@ struct nk_thread *_sched_need_resched(int have_lock, int force_resched)
 	// an interrupt, and we need to resume without
 	if (stopping==(my_cpu_id()+1)) { 
 	    DEBUG("Stopping self interrupted - resuming\n");
+	    NK_GPIO_OUTPUT_MASK(~0x4,GPIO_AND);
 	    return 0;
 	} else {
 	    uint64_t num_cpus = nk_get_num_cpus();
@@ -1704,6 +1707,7 @@ struct nk_thread *_sched_need_resched(int have_lock, int force_resched)
 	    // we should avoid running the scheduler
 	    if (!force_resched && !per_cpu_get(system)->cpus[my_cpu_id()]->apic->in_timer_interrupt) {
 		DEBUG("Resuming from world stop without scheduling pass\n");
+		NK_GPIO_OUTPUT_MASK(~0x4,GPIO_AND);
 		return 0;
 	    } else {
 		// Otherwise, we will continue with running the scheduler
@@ -1731,6 +1735,7 @@ struct nk_thread *_sched_need_resched(int have_lock, int force_resched)
 		per_cpu_get(system)->cpus[my_cpu_id()]->sched_state->reinject_count++;
 	    }
 	    // do not context switch
+	    NK_GPIO_OUTPUT_MASK(~0x4,GPIO_AND);
 	    return 0;
 	}
     }
@@ -2201,6 +2206,8 @@ struct nk_thread *_sched_need_resched(int have_lock, int force_resched)
 
     INST_SCHED_OUT(resched_fast);
 
+    NK_GPIO_OUTPUT_MASK(~0x4,GPIO_AND);
+
     return 0;
 
  out_good:
@@ -2276,6 +2283,7 @@ struct nk_thread *_sched_need_resched(int have_lock, int force_resched)
 	    LOCAL_UNLOCK(scheduler);
 	}
 	INST_SCHED_OUT(resched_slow);
+	NK_GPIO_OUTPUT_MASK(~0x4,GPIO_AND);
 	return rt_n->thread;
     } else {
 	// we are not switching threads
@@ -2296,6 +2304,7 @@ struct nk_thread *_sched_need_resched(int have_lock, int force_resched)
 	    LOCAL_UNLOCK(scheduler);
 	}
 	INST_SCHED_OUT(resched_slow_noswitch);
+	NK_GPIO_OUTPUT_MASK(~0x4,GPIO_AND);
 	return 0;
     }
 }

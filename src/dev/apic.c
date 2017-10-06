@@ -35,6 +35,8 @@
 #include <dev/i8254.h>
 #include <lib/bitops.h>
 
+#include <dev/gpio.h>
+
 #ifndef NAUT_CONFIG_DEBUG_APIC
 #undef DEBUG_PRINT
 #define DEBUG_PRINT(fmt, args...)
@@ -1185,6 +1187,8 @@ static void calibrate_apic_timer(struct apic_dev *apic)
 
 static int apic_timer_handler(excp_entry_t * excp, excp_vec_t vec, void *state)
 {
+    NK_GPIO_OUTPUT_MASK(0x2,GPIO_OR);
+
     struct apic_dev * apic = (struct apic_dev*)per_cpu_get(apic);
 
     uint64_t time_to_next_ns;
@@ -1222,6 +1226,8 @@ static int apic_timer_handler(excp_entry_t * excp, excp_vec_t vec, void *state)
     }
 
     IRQ_HANDLER_END();
+
+    NK_GPIO_OUTPUT_MASK(~0x2,GPIO_AND);
 
     return 0;
 }

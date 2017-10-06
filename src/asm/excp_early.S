@@ -23,6 +23,8 @@
 #include <nautilus/idt.h>
 #include <nautilus/thread.h>
 
+#define GPIO_OUTPUT 1
+
 .code64
 .macro make_excp_handler v
     .if (ERR_CODE_EXCP_MASK >> \v) & 1
@@ -67,6 +69,11 @@ GLOBAL(early_irq_common)
 
     SAVE_GPRS()
 
+#if GPIO_OUTPUT && defined(NAUT_CONFIG_GPIO)
+    movq $0x10, %rdi   // bit 4
+    movq $0x0, %rsi    // or it high
+    callq nk_gpio_output_mask
+#endif
     // Interrupts are enabled only after per-cpu functonality
     // is enabled (and gsbase is set), so these are safe to execute
     // without a guard
@@ -122,6 +129,13 @@ GLOBAL(early_irq_common)
     jmp nk_thread_switch_intr_entry 
 
 thr_return:
+#if GPIO_OUTPUT && defined(NAUT_CONFIG_GPIO)
+    movq $0x10, %rdi   // bit 4
+    notq %rdi          // clear
+    movq $0x1, %rsi    // and it low
+    callq nk_gpio_output_mask
+#endif
+
     RESTORE_GPRS()
 
     

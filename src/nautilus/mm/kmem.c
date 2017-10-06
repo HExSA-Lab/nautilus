@@ -34,6 +34,8 @@
 #include <nautilus/intrinsics.h>
 #include <nautilus/percpu.h>
 
+#include <dev/gpio.h>
+
 #ifndef NAUT_CONFIG_DEBUG_KMEM
 #undef DEBUG_PRINT
 #define DEBUG_PRINT(fmt, args...)
@@ -488,6 +490,7 @@ void kmem_inform_boot_allocation(void *low, void *high)
 static void *
 _kmem_malloc (size_t size, int cpu, int zero)
 {
+    NK_GPIO_OUTPUT_MASK(0x20,GPIO_OR);
     int first = 1;
     void *block = 0;
     struct kmem_block_hdr *hdr = NULL;
@@ -560,6 +563,7 @@ _kmem_malloc (size_t size, int cpu, int zero)
 	    goto retry;
 	}
 	KMEM_DEBUG("malloc failed for size %lu order %lu\n",size,order);
+	NK_GPIO_OUTPUT_MASK(~0x20,GPIO_AND);
         return NULL;
     }
 
@@ -575,6 +579,8 @@ _kmem_malloc (size_t size, int cpu, int zero)
 	return 0;
     }
 #endif
+
+    NK_GPIO_OUTPUT_MASK(~0x20,GPIO_AND);
 
     /* Return address of the block */
     return block;
