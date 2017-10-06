@@ -488,6 +488,7 @@ void kmem_inform_boot_allocation(void *low, void *high)
 static void *
 _kmem_malloc (size_t size, int cpu, int zero)
 {
+    int first = 1;
     void *block = 0;
     struct kmem_block_hdr *hdr = NULL;
     struct mem_reg_entry * reg = NULL;
@@ -512,12 +513,13 @@ _kmem_malloc (size_t size, int cpu, int zero)
     }
 #endif
 
-
     /* Calculate the block order needed */
     order = ilog2(roundup_pow_of_two(size));
     if (order < MIN_ORDER) {
         order = MIN_ORDER;
     }
+
+ retry:
 
     /* scan the blocks in order of affinity */
     list_for_each_entry(reg, &(my_kmem->ordered_regions), mem_ent) {
@@ -551,6 +553,12 @@ _kmem_malloc (size_t size, int cpu, int zero)
     if (hdr) {
         kmem_bytes_allocated += (1UL << order);
     } else {
+	// attempt to get memory back by reaping threads now...
+	if (first) {
+	    nk_sched_reap(1);
+	    first=0;
+	    goto retry;
+	}
 	KMEM_DEBUG("malloc failed for size %lu order %lu\n",size,order);
         return NULL;
     }
@@ -881,3 +889,52 @@ int  kmem_apply_to_matching_blocks(uint64_t mask, uint64_t flags, int (*func)(vo
     return 0;
 }
     
+
+// We also create malloc, etc, functions to link to
+// This is needed for C++ support or anything else
+// that expects these to exist in some object file...
+
+// First we generate functions using the macros, which means
+// we get the glue logic from the macros, e.g., to the garbage collectors
+
+static inline void *ext_malloc(size_t size)
+{
+    // this is expanded using the malloc wrapper in mm.h
+    return malloc(size);
+}
+
+static inline void ext_free(void *p)
+{
+    // this is expanded using the free wrapper in mm.h
+    free(p);
+}
+
+static inline void *ext_realloc(void *p, size_t s)
+{
+    // this is expanded using the realloc wrapper in mm.h
+    return realloc(p,s);
+}
+
+// Next we blow away the macros
+
+#undef malloc
+#undef free
+#undef realloc
+
+
+// Finally, we generate the linkable functions
+
+void *malloc(size_t size)
+{
+    return ext_malloc(size);
+}
+
+void free(void *p)
+{
+    return ext_free(p);
+}
+
+void *realloc(void *p, size_t n)
+{
+    return ext_realloc(p,n);
+}
