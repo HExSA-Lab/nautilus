@@ -1,0 +1,3 @@
+ datatype fact = int;
+ datatype a = int;
+function fact (a) = if ( a <= 1 ) then a else a * fact(a + ( -1 ));

@@ -796,11 +796,7 @@ endmenu
 
 
 
-menu "Parallel Runtime Integration"
-
-    choice 
-        prompt "Selection of Parallel Runtime"
-        default NO_RT
+menu "Parallel Runtimes"
 
         config LEGION_RT
           bool "Legion RT"
@@ -822,37 +818,48 @@ menu "Parallel Runtime Integration"
         config NDPC_RT
           bool  "NDPC RT"
           depends on CXX_SUPPORT
+	  help
+	     Include the NDPC run-time
 
-        config NDPC_RT_ROOT
-            string "NDPC RT Root"
+        config NDPC_RT_DEBUG
+            bool "Debug NDPC RT";
+	    default n
             depends on NDPC_RT
             help 
-              Directory where the intended NDPC runtime is installed
+              Debugging output for the NDPC RT
 
-        config NDPC_RT_TEST_OBJ
-            string "NDPC RT Test Object File"
+        config NDPC_RT_TESTS
+            bool "Include in tests/benchmarks for NDPC RT";
+	    default n
             depends on NDPC_RT
             help 
-              File that contains a function test_ndpc()
+              Include NDPC simple tests 
 
-        config NESL_RT
+	config NESL_RT
           bool  "NESL RT"
+	  default n
+	  help
+	     Include the NESL run-time (VCODE engine)
 
-        config NESL_RT_ROOT
-            string "NESL RT Root"
+        config NESL_RT_DEBUG
+            bool "Debug NESL RT";
+	    default n
             depends on NESL_RT
             help 
-              Directory where the intended NESL runtime is installed
+              Debugging output for the NESL RT
 
-        config NESL_NDPC_RT_ROOT
-            string "NESL NDPC RT Root"
+        config NESL_RT_TESTS
+            bool "Include in tests/benchmarks for NESL RT";
+	    default n
             depends on NESL_RT
             help 
-              Directory where the intended NDPC runtime is installed
+              Include NESL simple tests 
 
         config OMP_RT
           bool  "OpenMP RT (GOMP-compatible)"
-	       
+	  default n
+	  help
+	      Include the GOMP-compatible OpenMP run-time
 
         config OMP_RT_DEBUG
             bool "Debug OpenMP RT";
@@ -868,12 +875,11 @@ menu "Parallel Runtime Integration"
             help 
               Include OpenMP simple tests and Edinburgh microbenchmarks
 
-
-      config NO_RT
-          bool "No parallel runtime"
-          
-     endchoice
-       
+       config RACKET_RT
+            bool "Racket RT (via Multiverse)";
+	    default y
+            help 
+              Racket support (via Multiverse only - no special code)
 
 endmenu
 

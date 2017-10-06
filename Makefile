@@ -576,11 +576,6 @@ ifdef NAUT_CONFIG_DEBUG_INFO
 CFLAGS		+= -g
 endif
 
-ifdef NAUT_CONFIG_NDPC_RT
-CFLAGS		+= -I$(NAUT_CONFIG_NDPC_RT_ROOT)
-libs-y          += $(NAUT_CONFIG_NDPC_RT_TEST_OBJ) $(NAUT_CONFIG_NDPC_RT_ROOT)/libndpc.a
-endif
-
 ifdef NAUT_CONFIG_NESL_RT
 CFLAGS		+= -I$(NAUT_CONFIG_NESL_RT_ROOT)
 libs-y          += $(NAUT_CONFIG_NESL_RT_ROOT)/lib/libvinterp.a $(NAUT_CONFIG_NESL_RT_ROOT)/lib/libcvl-serial.a /usr/lib64/libl.a /usr/lib64/libm.a  $(NAUT_CONFIG_NESL_NDPC_RT_ROOT)/libndpc.a 

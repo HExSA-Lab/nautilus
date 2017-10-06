@@ -1,0 +1,3 @@
+ datatype a = Collection<int>;
+ datatype timestwo = Collection<int>;
+function timestwo (a) = { x * 2 : x in a };

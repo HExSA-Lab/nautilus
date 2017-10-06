@@ -1,0 +1,13 @@
+datatype first=float;
+datatype a=float;
+datatype b=float;
+
+function first(a,b) = 
+ with 
+   twicea=float
+ in
+   let
+     twicea = 2.0*a
+   in
+     twicea + b*53.9;
+

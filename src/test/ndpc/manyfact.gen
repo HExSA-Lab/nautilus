@@ -1,0 +1,6 @@
+ datatype fact = int;
+ datatype a = int;
+function fact (a) = if ( a <= 1 ) then a else a * fact(a + ( -1 ));
+ datatype manyfact = Collection<int>;
+ datatype c = Collection<int>;
+function manyfact (c) = { fact(x) : x in c };

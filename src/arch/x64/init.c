@@ -94,7 +94,7 @@
 #endif
 
 #ifdef NAUT_CONFIG_NDPC_RT
-#include "ndpc_preempt_threads.h"
+#include <rt/ndpc/ndpc.h>
 #endif
 
 #ifdef NAUT_CONFIG_PALACIOS
@@ -137,45 +137,6 @@ struct nk_sched_config sched_cfg = {
 };
 
 
-#ifdef NAUT_CONFIG_NDPC_RT
-void ndpc_rt_test()
-{
-    printk("Testing NDPC Library and Executable\n");
-
-    
-
-#if 1
-    // this function will be linked to nautilus
-    test_ndpc();
-#else
-    thread_id_t tid;
-    
-    ndpc_init_preempt_threads();
-    
-    tid = ndpc_fork_preempt_thread();
-
-    if (!tid) { 
-        printk("Error in initial fork\n");
-        return;
-    } 
-
-
-    if (tid!=ndpc_my_preempt_thread()) { 
-        printk("Parent!\n");
-        ndpc_join_preempt_thread(tid);
-        printk("Joinend with foo\n");
-    } else {
-        printk("Child!\n");
-        return;
-    }
-
-    ndpc_deinit_preempt_threads();
-
-#endif 
-
-
-}
-#endif /* !NAUT_CONFIG_NDPC_RT */
 
 
 static int 
@@ -222,7 +183,7 @@ runtime_init (void)
 
 
 #ifdef NAUT_CONFIG_NDPC_RT
-        ndpc_rt_test();
+        nk_ndpc_init();
 #endif
 
 #ifdef NAUT_CONFIG_NESL_RT
