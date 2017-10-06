@@ -103,11 +103,18 @@ static int __noinline __attribute__((noclone)) test_fork_join(int nump, int numt
     int i,j;
 
     PRINT("Starting on threads fork/join stress test (%d passes, %d threads)\n",nump,numt);
+
+    nk_thread_id_t t;
     
     for (i=0;i<nump;i++) {
 	PRINT("Starting to fork %d threads on pass %d\n",numt,i);
-	for (j=0;j<numt;j++) { 
-	    if (nk_thread_fork()==0) { 
+	for (j=0;j<numt;j++) {
+	    t = nk_thread_fork();
+	    if (t==NK_BAD_THREAD_ID) {
+		PRINT("Failed to fork thread\n");
+		return 0;
+	    }
+	    if (t==0) { 
 		// child thread
 		char buf[32];
 		struct nk_thread *t = get_cur_thread();
@@ -201,16 +208,28 @@ static void __noinline __attribute__((noclone)) _test_recursive_fork_join(uint64
 
     PRINT("Hello from forked tid %lu at pass %lu depth %lu\n", get_cur_thread()->tid, pass, depth);
 
+    nk_thread_id_t l,r;
+    
     if (depth==DEPTH) { 
 	return;
     } else {
-	if (nk_thread_fork() == 0) {
+	l = nk_thread_fork();
+	if (l==NK_BAD_THREAD_ID) {
+	    PRINT("Failed to fork left thread\n");
+	    return 0;
+	}
+	if (l == 0) {
 	    // left child
 	    _test_recursive_fork_join(depth+1,pass);
 	    nk_thread_exit(0);
 	    return;
-	} 
-	if (nk_thread_fork() == 0) {
+	}
+	r = nk_thread_fork();
+	if (r==NK_BAD_THREAD_ID) {
+	    PRINT("Failed to fork right thread\n");
+	    return 0;
+	}
+	if (r == 0) {
 	    // right child
 	    _test_recursive_fork_join(depth+1,pass);
 	    nk_thread_exit(0);

@@ -322,7 +322,6 @@ nk_thread_create (nk_thread_fun_t fun,
     struct sys_info * sys = per_cpu_get(system);
     nk_thread_t * t = NULL;
     int placement_cpu = bound_cpu<0 ? nk_sched_initial_placement() : bound_cpu;
-
     t = malloc_specific(sizeof(nk_thread_t),placement_cpu);
 
     if (!t) {
@@ -341,6 +340,7 @@ nk_thread_create (nk_thread_fun_t fun,
     }
 
     if (!t->stack) { 
+	
 	THREAD_ERROR("Failed to allocate a stack\n");
 	free(t);
 	return -EINVAL;
@@ -1067,7 +1067,8 @@ nk_get_parent_tid (void)
  * note that this isn't called directly. It is vectored
  * into from an assembly stub
  *
- * On success, pareant gets child's tid, child gets 0
+ * On success, parent gets child's tid, child gets 0
+ * On failure, parent gets NK_BAD_THREAD_ID
  */
 nk_thread_id_t 
 __thread_fork (void)
@@ -1089,6 +1090,7 @@ __thread_fork (void)
 	THREAD_ERROR("Parent's top of stack (%p) exceeds boundaries of stack (%p-%p)\n",
 		     rsp, parent->stack, parent->stack+parent->stack_size);
 	panic("Detected stack out of bounds in parent during fork\n");
+	return NK_BAD_THREAD_ID;
     }
 #endif
 
@@ -1133,7 +1135,7 @@ __thread_fork (void)
                          CPU_ANY)     // not bound to any particular CPU
             < 0) {
         THREAD_ERROR("Could not fork thread\n");
-        return 0;
+        return NK_BAD_THREAD_ID;
     }
 
     t = (nk_thread_t*)tid;
@@ -1177,7 +1179,7 @@ __thread_fork (void)
 	THREAD_ERROR("Child's rsp (%p) exceeds boundaries of stack (%p-%p)\n",
 		     t->rsp, t->stack, t->stack+t->stack_size);
 	panic("Detected stack out of bounds in child during fork\n");
-	return 0;
+	return NK_BAD_THREAD_ID;
     }
 #endif
 
@@ -1190,7 +1192,7 @@ __thread_fork (void)
     if (nk_sched_make_runnable(t,t->current_cpu,1)) { 
 	THREAD_ERROR("Scheduler failed to run thread (%p, tid=%u) on cpu %u\n",
 		    t, t->tid, t->current_cpu);
-	return 0;
+	return NK_BAD_THREAD_ID;
     }
 
     THREAD_DEBUG("Forked thread made runnable: %p (tid=%lu)\n",t,t->tid);

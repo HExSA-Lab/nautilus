@@ -46,6 +46,9 @@ extern "C" {
 
 // opaque pointer given to users
 typedef void* nk_thread_id_t;
+// this bad id value is intended for use with fork
+// which cannot do error reporting the usual way
+#define NK_BAD_THREAD_ID ((void*)(-1ULL))
 typedef void (*nk_thread_fun_t)(void * input, void ** output);
 typedef uint64_t nk_stack_size_t;
 
@@ -81,6 +84,7 @@ nk_thread_start (nk_thread_fun_t fun,
 //     current function, which returns into
 //     the thread cleanup logic instead of to
 //     the caller
+// on error, parents gets NK_BAD_THREAD_ID
 extern nk_thread_id_t nk_thread_fork(void);
 
 // Allow a child thread to set output explicitly
