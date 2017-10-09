@@ -355,7 +355,8 @@ nk_thread_create (nk_thread_fun_t fun,
     
     t->fun = fun;
     t->input = input;
-    t->output = output;
+    t->output_loc = output;
+    t->output = 0;    
     
     if (nk_sched_thread_post_create(t)) {
 	THREAD_ERROR("Scheduler does not accept thread creation\n");
@@ -579,7 +580,15 @@ void nk_thread_exit (void * retval)
 
     // at this point, we have the lock on our wait queue and preemption is disabled
 
-    me->output      = retval;
+    // we must not overwrite a previous setting of the output value
+    // for example from a fork...
+    if (!me->output) { 
+	me->output      = retval;
+	if (me->output_loc) {
+	    *me->output_loc = retval;
+	}
+    }
+    
     me->status      = NK_THR_EXITED;
 
     // force arch and compiler to do above writes now
@@ -741,16 +750,22 @@ nk_join_all_children (int (*func)(void * res))
 
 
 /* 
- * nk_set_thread_fork_output
+ * nk_set_thread_output
  *
  * @result: the output to set
  *
  */
 void
-nk_set_thread_fork_output (void * result)
+nk_set_thread_output (void * result)
 {
     nk_thread_t* t = get_cur_thread();
-    t->output = result;
+    // output written exactly once
+    if (!t->output) {
+	t->output = result;
+	if (t->output_loc) { 
+	    *t->output_loc = result;
+	}
+    }
 }
 
 

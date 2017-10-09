@@ -88,9 +88,11 @@ nk_thread_start (nk_thread_fun_t fun,
 extern nk_thread_id_t nk_thread_fork(void);
 
 // Allow a child thread to set output explicitly
-// since it has no start function to which we can
-// pass an output pointer
-void nk_set_thread_fork_output(void * result);
+// This is not overwritten by an nk_thread_exit()
+// or by subsequnt calls to nk_set_thread_output().
+// thread function itself may write the output
+// with its own semantics if needed
+void nk_set_thread_output(void * result);
 
 // Give a thread a name
 int nk_thread_name(nk_thread_id_t tid, char *name);
@@ -195,7 +197,8 @@ struct nk_thread {
 
     uint8_t is_idle;
 
-    void * output;
+    void **output_loc;  // where the thread should write output
+    void * output;      // our capture of the thread output (from exit)
     void * input;
     nk_thread_fun_t fun;
 
