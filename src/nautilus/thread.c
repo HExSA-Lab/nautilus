@@ -1093,6 +1093,8 @@ __thread_fork (void)
     nk_thread_t * t;
     nk_stack_size_t size, alloc_size;
     uint64_t     rbp1_offset_from_ret0_addr;
+    uint64_t     rbp_stash_offset_from_ret0_addr;
+    uint64_t     rbp_offset_from_ret0_addr;
     void         *child_stack;
     uint64_t     rsp;
 
@@ -1119,6 +1121,10 @@ __thread_fork (void)
     void *rbp1      = __builtin_frame_address(1);                   // caller rbp, *rbp1 = rbp2  (forker's frame)
     void *rbp_tos   = __builtin_frame_address(STACK_CLONE_DEPTH);   // should scan backward to avoid having this be zero or crazy
     void *ret0_addr = rbp0 + 8;
+    // this is the address at which the fork wrapper (nk_thread_fork) stashed
+    // the current value of rbp - this must conform to the REG_SAVE model
+    // in thread_low_level.S
+    void *rbp_stash_addr = ret0_addr + 10*8; 
 
     // we're being called with a stack not as deep as STACK_CLONE_DEPTH...
     // fail back to a single frame...
@@ -1138,6 +1144,9 @@ __thread_fork (void)
     //THREAD_DEBUG("rbp0=%p rbp1=%p rbp_tos=%p, ret0_addr=%p\n", rbp0, rbp1, rbp_tos, ret0_addr);
 
     rbp1_offset_from_ret0_addr = rbp1 - ret0_addr;
+
+    rbp_stash_offset_from_ret0_addr = rbp_stash_addr - ret0_addr;
+    rbp_offset_from_ret0_addr = (*(void**)rbp_stash_addr) - ret0_addr;
 
     alloc_size = parent->stack_size;
 
@@ -1172,13 +1181,28 @@ __thread_fork (void)
     memcpy(child_stack + alloc_size - size, ret0_addr, size - LAUNCHPAD);
     t->rsp = (uint64_t)(child_stack + alloc_size - size);
 
+    // Update the child's snapshot of rbp on its stack (that was done
+    // by nk_thread_fork()) with the corresponding position in the child's stack
+    // when nk_thread_fork() unwinds the GPRs, it will end up with rbp pointing
+    // into the cloned stack
+    void **rbp_stash_ptr = (void**)(t->rsp + rbp_stash_offset_from_ret0_addr);
+    *rbp_stash_ptr = (void*)(t->rsp + rbp_offset_from_ret0_addr);
+
+
+    // Determine caller's rbp copy and return addres in the child stack
     void **rbp2_ptr = (void**)(t->rsp + rbp1_offset_from_ret0_addr);
     void **ret2_ptr = rbp2_ptr+1;
 
-    // rbp2 we don't care about
+    THREAD_DEBUG("Fork: parent stashed rbp=%p, rsp=%p child stashed &rbp=%p rbp=%p, rsp=%p\n",
+		 rbp0, rsp, rbp_stash_ptr, *rbp_stash_ptr, t->rsp);
+    
+    
+    // rbp2 we don't care about since we will not not
+    // return from the caller in the child, but rather go into the thread cleanup
     *rbp2_ptr = 0x0ULL;
 
     // fix up the return address to point to our thread cleanup function
+    // so when caller returns, the thread exists
     *ret2_ptr = &thread_cleanup;
 
     // now we need to setup the interrupt stack etc.
