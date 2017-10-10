@@ -216,7 +216,7 @@ static void __noinline __attribute__((noclone)) _test_recursive_fork_join(uint64
 	l = nk_thread_fork();
 	if (l==NK_BAD_THREAD_ID) {
 	    PRINT("Failed to fork left thread\n");
-	    return 0;
+	    return;
 	}
 	if (l == 0) {
 	    // left child
@@ -227,7 +227,7 @@ static void __noinline __attribute__((noclone)) _test_recursive_fork_join(uint64
 	r = nk_thread_fork();
 	if (r==NK_BAD_THREAD_ID) {
 	    PRINT("Failed to fork right thread\n");
-	    return 0;
+	    return;
 	}
 	if (r == 0) {
 	    // right child
