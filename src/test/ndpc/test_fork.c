@@ -1,12 +1,13 @@
 #include <nautilus/nautilus.h>
 #include <rt/ndpc/ndpc_preempt_threads.h>
 
-#define NUM_FORK 8
+#define NUM_FORK 16
 
 static int bar(int x ) 
 {
 
     int sum=0;
+
 
     nk_vc_printf("bar (tid=%p x=%d) launch\n",(void*) ndpc_my_preempt_thread(),x);
 
@@ -18,7 +19,7 @@ static int bar(int x )
 
     nk_vc_printf("bar (tid=%p) = %d\n",(void*)ndpc_my_preempt_thread(),sum);
 
-    ndpc_set_result_of_forked_preempt_thread((void*)(long long)sum);
+    ndpc_set_result_of_forked_preempt_thread((void*)(long)sum);
 
     return 0;
 }
@@ -43,18 +44,21 @@ int foo(int piecewise)
 	}
 	
 	if (tid[i]==ndpc_my_preempt_thread()) { 
+	    //nk_bind_vc(get_cur_thread(),get_cur_thread()->parent->vc);
 	    nk_vc_printf( "I am the child thread and will now do some work\n");
 	    bar(i);
 	    return 0; // this will kill the thread
 	    
 	} else {
-	    //nk_vc_printf( "I am the parent, printing threads and going to sleep for a while\n");
+	    nk_vc_printf( "I am the parent, printing threads and going to sleep for a while\n");
 	    //dump_threads();
 	    //sleep(rand()%5);
 	}
 	
 		    
     }
+
+    nk_vc_printf("I am the parent and am joining\n");
 
     if (piecewise) { 
 	nk_vc_printf("Now joining thread by thread\n");

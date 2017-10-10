@@ -28,7 +28,7 @@ NDPC_TEST(prod2)
 	NDPC_PRINTF("function call failed\n");
     } else {
 	for (i=0;i<output.numitems();i++) { 
-	    NDPC_PRINTF("%d\n",output[i]);
+	    NDPC_PRINTF("prod2(%d,%d)=%d\n",input1[i],input2[i],output[i]);
 	}
     }
 

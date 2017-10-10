@@ -40,7 +40,7 @@ int ndpc_init_preempt_threads()
 
 int ndpc_create_preempt_thread(thread_func_t func,
 			       void *input,
-			       void *output,
+			       void **output,
 			       proc_bind_t proc_bind,
 			       stack_size_t stack_size,
 			       thread_id_t *thread_id)
@@ -82,7 +82,7 @@ thread_id_t ndpc_my_parent_preempt_thread()
 int ndpc_set_result_of_forked_preempt_thread(void *result)
 {
     DEBUG("set_result_of_forked_preeempt_thread(%p)\n",result);
-    nk_set_thread_fork_output(result);
+    nk_set_thread_output(result);
     return 0;
 }
 

@@ -15,6 +15,7 @@ static int test() {
         }
     }
     ndpc_join_child_preempt_threads();
+    return 0;
 }
 
 int ndpc_test_barrier_fork() {

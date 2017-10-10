@@ -60,15 +60,13 @@ int __attribute__ ((noinline)) timestwo(Collection<int> &ret, Collection<int> &a
  // parallelize this!
  for (__t3 = 0; __t3 < __t4; __t3++) { 
   x = a[__t3];
-  //  NDPC_PRINTF("Parent - t3=%d x=%d\n", __t3, x   );
-if (ndpc_fork_preempt_thread()==ndpc_my_preempt_thread()) {
-    NDPC_PRINTF("Child - t3=%d, x=%d\n", __t3, x);
+  if (ndpc_fork_preempt_thread()==ndpc_my_preempt_thread()) {
  __t1 = x ;
  __t2 = 2 ;
  __t0 = __t1 * __t2 ;
 ret[__t3] = __t0;
 return 0;
-}
+  } 
 }
 ndpc_join_child_preempt_threads();
 }

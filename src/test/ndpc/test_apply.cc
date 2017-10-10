@@ -1,7 +1,7 @@
 #define NDPC_NAUTILUS_KERNEL
 #include "ndpc_glue.h"
 #include "apply.hh"
-#include "vector.hh"
+#include "vector.hh" 
 
 using namespace std;
 
@@ -32,7 +32,7 @@ NDPC_TEST(apply)
 
     ndpc_deinit_preempt_threads();
 
-    NDPC_PRINTF("Done testing apply\n");
+    NDPC_PRINTF("Done testing  apply\n"); 
 
     return 0;
 }

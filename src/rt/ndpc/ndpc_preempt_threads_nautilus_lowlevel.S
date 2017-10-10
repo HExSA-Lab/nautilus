@@ -9,7 +9,6 @@
 	
 // Note that nk_thread_fork will see us as part of the stack frame
 // of our caller provided we do not manipulate %rbp
-
 .global ndpc_fork_preempt_thread
 ndpc_fork_preempt_thread:
 	call nk_thread_fork     // do actual fork here

@@ -26,7 +26,7 @@ typedef void *thread_id_t;
 typedef int proc_bind_t; 
 // thread returns error code
 typedef int (*thread_func_t)(void *input,
-			     void *output);
+			     void **output);
 // 0 = system decides stack size
 typedef unsigned stack_size_t; 
 // invoke init on all processors
@@ -34,7 +34,7 @@ int ndpc_init_preempt_threads();
 
 int ndpc_create_preempt_thread(thread_func_t func,
 			       void *input,
-			       void *output,
+			       void **output,
 			       proc_bind_t proc_bind,
 			       stack_size_t stack_size,
 			       thread_id_t *thread_id);

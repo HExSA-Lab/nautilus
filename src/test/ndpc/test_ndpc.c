@@ -19,7 +19,7 @@ int test_ndpc()
     test_ndpc_fact();
     test_ndpc_manyfact();
     test_ndpc_apply();
-    //test_ndpc_prod2();
+    test_ndpc_prod2();
     
     return 0;
 }

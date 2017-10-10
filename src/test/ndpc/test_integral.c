@@ -6,12 +6,11 @@
 #define NUM_THREADS 16
 #define NUM_LOOP    100000
 
-static int test(void *input, void *output)
+static int test(void *input, void **output)
 {
     int me = (int)(long)(input);
     int i=0;
     volatile int j;
-
 
     nk_vc_printf("I am the child thread. Spinnng\n");
     while(i<10) { 
@@ -20,6 +19,7 @@ static int test(void *input, void *output)
 	for (j=0;j<NUM_LOOP;j++) {}
     }
 
+  
     return 0;
 	
 }
