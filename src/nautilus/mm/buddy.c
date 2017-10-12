@@ -320,6 +320,8 @@ buddy_alloc (struct buddy_mempool *mp, ulong_t order)
 	    BUDDY_DEBUG("Inserted buddy block %p into order %lu\n",buddy_block,j);
             list_add(&buddy_block->link, &mp->avail[j]);
         }
+	
+	block->order = j;
 
 	BUDDY_DEBUG("Returning block %p which is in memory pool %p-%p\n",block,mp->base_addr,mp->base_addr+(1ULL << mp->pool_order));
 
