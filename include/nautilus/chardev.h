@@ -39,8 +39,15 @@ struct nk_char_dev_int {
     // either succeeds (returns zero) or fails (returns -1)
     int (*get_characteristics)(void *state, struct nk_char_dev_characteristics *c); 
     // returns 1 on success, 0 for would block, -1 for error
+    // must be non-blocking
     int (*read)(void *state, uint8_t *dest);
     int (*write)(void *state, uint8_t *src);
+    // returns whether device is currently readable or writeable or both
+    // or in error state
+#define NK_CHARDEV_READABLE  1
+#define NK_CHARDEV_WRITEABLE 2
+#define NK_CHARDEV_ERROR     4
+    int (*status)(void *state);
 };
 
 
@@ -72,7 +79,9 @@ uint64_t nk_char_dev_write(struct nk_char_dev *dev,
 			   uint8_t *src, 
 			   nk_dev_request_type_t type);
 
-
+// returns combination of readable/writeable/error
+// no guarantee that this status will not change
+int nk_char_dev_status(struct nk_char_dev *dev);
 
 #endif
 

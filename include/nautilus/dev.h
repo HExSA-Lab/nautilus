@@ -76,7 +76,7 @@ int            nk_dev_unregister(struct nk_dev *);
 
 struct nk_dev *nk_dev_find(char *name);
 
-void nk_dev_wait(struct nk_dev *);
+void nk_dev_wait(struct nk_dev*, int (*cond_check)(void *state), void *state);
 void nk_dev_signal(struct nk_dev *);
 
 void nk_dev_dump_devices();

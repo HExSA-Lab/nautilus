@@ -131,7 +131,10 @@ struct nk_dev *nk_dev_find(char *name)
 }
 
 
-void nk_dev_wait(struct nk_dev *d)
+
+void nk_dev_wait(struct nk_dev *d,
+		 int (*cond_check)(void *state),
+		 void *state)
 {
     if (get_cpu()->interrupt_nesting_level) { 
 	// We are in an interrupt context, and 
@@ -140,7 +143,7 @@ void nk_dev_wait(struct nk_dev *d)
     } else {
 	// We are in a thread context and we will
 	// put ourselves to sleep
-	nk_thread_queue_sleep_extended(d->waiting_threads, 0, 0);
+	nk_thread_queue_sleep_extended(d->waiting_threads, cond_check, state);
     }
 }
 

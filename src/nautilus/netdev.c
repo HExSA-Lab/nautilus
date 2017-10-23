@@ -116,6 +116,12 @@ static void generic_receive_callback(nk_net_dev_status_t status, void *context)
     nk_dev_signal((struct nk_dev *)o->dev);
 }
 
+static int generic_cond_check(void* state)
+{
+    struct op *o = (struct op*) state;
+    return o->completed;
+}
+
 
 int nk_net_dev_send_packet(struct nk_net_dev *dev, 
 			   uint8_t *src, 
@@ -163,7 +169,7 @@ int nk_net_dev_send_packet(struct nk_net_dev *dev,
 		} else {
 		    DEBUG("Packet launch started, waiting for completion\n");
 		    while (!o.completed) {
-			nk_dev_wait((struct nk_dev *)dev);
+			nk_dev_wait((struct nk_dev *)dev, generic_cond_check, (void*)&o);
 		    }
 		    DEBUG("Packet launch completed\n");
 		    return o.status;
@@ -224,7 +230,7 @@ int nk_net_dev_receive_packet(struct nk_net_dev *dev,
 		} else {
 		    DEBUG("Packet receive posted, waiting for completion\n");
 		    while (!o.completed) {
-			nk_dev_wait((struct nk_dev *)d);
+			nk_dev_wait((struct nk_dev *)d, generic_cond_check, (void*)&o);
 		    }
 		    DEBUG("Packet receive completed\n");
 		    return o.status;

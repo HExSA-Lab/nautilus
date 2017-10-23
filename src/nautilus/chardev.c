@@ -90,6 +90,17 @@ int nk_char_dev_get_characteristics(struct nk_char_dev *dev, struct nk_char_dev_
     return di->get_characteristics(d->state,c);
 }
 
+static int is_readable(void *state)
+{
+    struct nk_char_dev *d = (struct nk_char_dev *)state;
+    return nk_char_dev_status(d) & NK_CHARDEV_READABLE;
+}
+
+static int is_writeable(void *state)
+{
+    struct nk_char_dev *d = (struct nk_char_dev *)state;
+    return nk_char_dev_status(d) & NK_CHARDEV_WRITEABLE;
+}
 
 uint64_t nk_char_dev_read(struct nk_char_dev *dev, 
 			  uint64_t count, 
@@ -117,7 +128,7 @@ uint64_t nk_char_dev_read(struct nk_char_dev *dev,
 		    if (type==NK_DEV_REQ_NONBLOCKING) { 
 			return num;
 		    } else {
-			nk_dev_wait((struct nk_dev *)dev);
+			nk_dev_wait((struct nk_dev *)dev, is_readable, dev);
 		    }
 		} else {
 		    num++;
@@ -158,7 +169,7 @@ uint64_t nk_char_dev_write(struct nk_char_dev *dev,
 		    if (type==NK_DEV_REQ_NONBLOCKING) { 
 			return num;
 		    } else {
-			nk_dev_wait((struct nk_dev *)dev);
+			nk_dev_wait((struct nk_dev *)dev, is_writeable, dev);
 		    }
 		} else {
 		    num++;
@@ -173,3 +184,16 @@ uint64_t nk_char_dev_write(struct nk_char_dev *dev,
     }
 }
 
+
+int nk_char_dev_status(struct nk_char_dev *dev)
+{
+    struct nk_dev *d = (struct nk_dev *)(&(dev->dev));
+    struct nk_char_dev_int *di = (struct nk_char_dev_int *)(d->interface);
+
+    if (di->status) {
+	return di->status(dev);
+    } else {
+	// default to readable/writable
+	return NK_CHARDEV_READABLE | NK_CHARDEV_WRITEABLE;
+    }
+}

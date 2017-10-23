@@ -191,6 +191,7 @@ static int serial_do_read(void *state, uint8_t *dest)
     return rc;
 }
 
+
 static void kick_output(struct serial_state *s);
 
 static void serial_putchar_early (uchar_t c);
@@ -224,10 +225,34 @@ static void serial_do_write_wait(void *state, uint8_t *src)
 }
 
 
+static int serial_do_status(void *state)
+{
+    struct serial_state *s = (struct serial_state *)state;
+
+    int rc = 0;
+    int flags;
+
+    flags = spin_lock_irq_save(&s->input_lock);
+    if (!serial_input_empty(s)) {
+	rc |= NK_CHARDEV_READABLE;
+    }
+    spin_unlock_irq_restore(&s->input_lock, flags);
+
+    flags = spin_lock_irq_save(&s->output_lock);
+    if (!serial_output_full(s)) {
+	rc |= NK_CHARDEV_WRITEABLE;
+    }
+    spin_unlock_irq_restore(&s->output_lock, flags);
+    
+    return rc;
+}
+
+
 static struct nk_char_dev_int chardevops = {
     .get_characteristics = serial_do_get_characteristics,
     .read = serial_do_read,
-    .write = serial_do_write
+    .write = serial_do_write,
+    .status = serial_do_status
 };
 
 

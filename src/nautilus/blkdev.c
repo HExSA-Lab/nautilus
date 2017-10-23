@@ -96,6 +96,14 @@ void generic_callback(void *context)
 }
 
 
+static int generic_cond_check(void* state)
+{
+    uint64_t *o = (uint64_t*) state;
+    return *o;
+}
+
+
+
 int nk_block_dev_read(struct nk_block_dev *dev, 
 		      uint64_t blocknum, 
 		      uint64_t count, 
@@ -139,7 +147,7 @@ int nk_block_dev_read(struct nk_block_dev *dev,
 		} else {
 		    DEBUG("readblocks started, waiting for completion\n");
 		    while (!completion) { 
-			nk_dev_wait((struct nk_dev *)d);
+			nk_dev_wait((struct nk_dev *)d,generic_cond_check,(void*)&completion);
 		    }
 		    return 0;
 		}
@@ -193,10 +201,10 @@ int nk_block_dev_write(struct nk_block_dev *dev,
 		if (di->write_blocks(d->state,blocknum,count,src,generic_callback,(void*)&completion)) {
 		    ERROR("failed to start up writeblocks\n");
 		    return -1;
-		} else {
+ 		} else {
 		    DEBUG("writeblocks started, waiting for completion\n");
 		    while (!completion) { 
-			nk_dev_wait((struct nk_dev *)d);
+			nk_dev_wait((struct nk_dev *)d, generic_cond_check, (void*)&completion);
 		    }
 		    return 0;
 		}
