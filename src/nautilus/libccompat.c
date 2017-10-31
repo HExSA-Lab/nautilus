@@ -394,7 +394,7 @@ int fflush (FILE * f)
 }
 
 void (*signal(int sig, void (*func)(int)))(int ){
-//    printk("\nSIGNAL Function:");
+	return NULL;
 }
 
 //For LUA Support
