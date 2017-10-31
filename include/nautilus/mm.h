@@ -23,6 +23,10 @@
 #ifndef __MM_H__
 #define __MM_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <nautilus/naut_types.h>
 #include <nautilus/list.h>
 #include <nautilus/buddy.h>
@@ -111,7 +115,7 @@ int  kmem_find_block(void *any_addr, void **block_addr, uint64_t *block_size, ui
 // set the flags of an allocated block
 int  kmem_set_block_flags(void *block_addr, uint64_t flags);
 // apply an mask to all the blocks (and mask unless or=1)
-int  kmem_mask_all_blocks_flags(uint64_t mask, int or);
+int  kmem_mask_all_blocks_flags(uint64_t mask, int ormask);
 
 // range of addresses used for internal kmem state that should be
 // ignored when pointer-chasing the heap, for example in a GC
@@ -175,5 +179,9 @@ struct kmem_stats {
 
 uint64_t kmem_num_pools();
 void     kmem_stats(struct kmem_stats *stats);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* !__MM_H__! */
