@@ -66,9 +66,9 @@ typedef int clockid_t;
 #define SIGINT				0
 #define SIG_DFL				0
 
-#define stdin				0
-#define stdout				1
-#define stderr				2
+#define stdin				((void*)0UL)
+#define stdout				((void*)1UL)
+#define stderr				((void*)2UL)
 
 // /* Standard streams.  */
 // extern struct _IO_FILE *stdin;		/* Standard input stream.  */
@@ -181,6 +181,9 @@ void *realloc(void *ptr, size_t size);
 int feof(FILE*);
 int getc(FILE*);
 
+
+int fileno(FILE*);
+    
 char *fgets(char *restrict s, int n, FILE *restrict stream); 
 FILE *freopen(const char *fname, const char *mode,FILE *stream);
 
@@ -202,6 +205,8 @@ int rename(const char *old, const char *new);
 
 int remove(const char *path);
 
+int isatty(int fd);
+    
 
 /*==================*
 *    				*
@@ -222,7 +227,7 @@ struct tm {
 };
 
 
-#define GEN_HDR(x) int x (void);
+#define GEN_HDR(x) int x ();
 
 // Structures.
 
@@ -288,7 +293,7 @@ GEN_HDR(__strtof_l)
 //GEN_HDR(stderr)
 GEN_HDR(wmemset)
 //GEN_HDR(stdin)
-GEN_HDR(fileno)
+//GEN_HDR(fileno)
 GEN_HDR(__fxstat64)
 GEN_HDR(putc)
 GEN_HDR(__wcscoll_l)

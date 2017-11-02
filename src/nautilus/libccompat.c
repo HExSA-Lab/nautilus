@@ -39,6 +39,8 @@
 #include <dev/hpet.h>
 
 
+int errno=0;
+
 #define GEN_DEF(x) \
     int x (void) { \
         UNDEF_FUN_ERR(); \
@@ -394,7 +396,8 @@ int fflush (FILE * f)
 }
 
 void (*signal(int sig, void (*func)(int)))(int ){
-	return NULL;
+    //    printk("\nSIGNAL Function:");
+    return 0;
 }
 
 //For LUA Support
@@ -620,6 +623,17 @@ int getc(FILE* arg)
     return -1;
 
 }
+
+int fileno(FILE* f)
+{
+    return 0;
+}
+
+int isatty(int fd)
+{
+    return 0;
+}
+
 //LUA SPECIFIC....................
 size_t strftime(char *str, size_t maxsize, const char *format, const struct tm *timeptr)
 {
@@ -798,7 +812,7 @@ GEN_DEF(__strtof_l)
 //GEN_DEF(stderr)
 GEN_DEF(wmemset)
 //GEN_DEF(stdin)
-GEN_DEF(fileno)
+//GEN_DEF(fileno)
 GEN_DEF(__fxstat64)
 GEN_DEF(putc)
 GEN_DEF(__wcscoll_l)
