@@ -1,0 +1,16 @@
+The files in this directory are used to create the serial version
+of CVL.  Installation should be relatively simple:  just
+
+make -f Makefile.dist cvl
+
+Possible problems: 
+1. syntax errors at compile time: your compiler might define _STDC_ 
+   but not really be an ANSI C compiler.  You'll have to hunt these
+   down.
+2. the rank functions (rk*_l**) aren't working: check that the #defines
+   are correct for your machine, in particular whether FP_LITTLE_ENDIAN
+   was correctly defined.
+
+If you encounter any problems, please send email to sipelstein@cs.cmu.edu
+Submitted fixes will be incorporated quickly; fixes that I need to figure
+out will take a little longer.

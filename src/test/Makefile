@@ -5,9 +5,9 @@ obj-y  = threads.o
 obj-y += groups.o
 obj-y += net_udp_echo.o
 
-obj-$(NAUT_CONFIG_OMP_RT_TESTS) += omp/
-
+obj-$(NAUT_CONFIG_OMP_RT_TESTS)  += omp/
 obj-$(NAUT_CONFIG_NDPC_RT_TESTS) += ndpc/
+obj-$(NAUT_CONFIG_NESL_RT_TESTS) += nesl/
 
 obj-$(NAUT_CONFIG_X86_64_HOST) += ipi.o
 obj-$(NAUT_CONFIG_X86_64_HOST) += benchmark.o

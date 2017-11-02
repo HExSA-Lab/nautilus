@@ -121,6 +121,10 @@
 #include <rt/omp/omp.h>
 #endif
 
+#ifdef NAUT_CONFIG_NESL_RT
+#include <rt/nesl/nesl.h>
+#endif
+
 
 extern spinlock_t printk_lock;
 
@@ -187,7 +191,7 @@ runtime_init (void)
 #endif
 
 #ifdef NAUT_CONFIG_NESL_RT
-        nesl_nautilus_main();
+	nk_nesl_init();
 #endif
 
 #ifdef NAUT_CONFIG_OMP_RT

@@ -1,0 +1,22 @@
+These files comprise the source code for the VCODE interpreter.  
+VCODE is a stack-based intermediate code with segmented vectors
+as the primary data-type.  The documentation for VCODE should be
+found in the doc directory of this release.
+
+To compile:
+In most cases, you should just be able to type "make" in the 
+top-level nesl distribution directory.  If this fails, do the following:
+1. Examine the file config.h.  Make any requires changes.
+2. Read the Makefile and make any needed changes to the compiler
+and default flags.
+
+If you find problems:
+If you have any problems installing or executing the VCODE interpreter,
+please send mail to nesl-bugs@cs.cmu.edu, and we will try to get back
+to you as soon as possible.
+
+Authorship:
+The Vcode interpreter was written by Jay Sipelstein (sipelstein@cs.cmu.edu).
+
+Copyright:
+Please see the full copyright in the top-level of the NESL distribution.

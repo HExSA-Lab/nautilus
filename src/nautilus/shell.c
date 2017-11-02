@@ -85,6 +85,14 @@
 #include <test/test_ndpc.h>
 #endif
 
+#ifdef NAUT_CONFIG_NESL_RT
+#include <rt/nesl/nesl.h>
+#endif
+
+#ifdef NAUT_CONFIG_NESL_RT_TESTS
+#include <test/test_nesl.h>
+#endif
+
 
 #define MAX_CMD 80
 
@@ -619,6 +627,12 @@ static int handle_test(char *buf)
     }
 #endif
 
+#ifdef NAUT_CONFIG_NESL_RT_TESTS
+    if (!strncasecmp(what,"nesl",4)) {
+	return test_nesl();
+    }
+#endif
+
     if (!strncasecmp(what,"thread",6)) { 
 	return test_threads();
     }
@@ -1070,7 +1084,7 @@ static int handle_cmd(char *buf, int n)
     nk_vc_printf("bench\n");
     nk_vc_printf("blktest dev r|w start count\n");
     nk_vc_printf("blktest dev r|w start count\n");
-    nk_vc_printf("test threads|groups|stop|iso|bdwgc|pdsgc|omp|ompbench|ndpc|\n");
+    nk_vc_printf("test threads|groups|stop|iso|bdwgc|pdsgc|omp|ompbench|ndpc|nesl|\n");
     nk_vc_printf("     udp_echo nic ip port num| ...\n"); 
     nk_vc_printf("vm name [embedded image]\n");
     nk_vc_printf("run path\n");

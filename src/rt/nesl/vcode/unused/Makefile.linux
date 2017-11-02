@@ -1,0 +1,202 @@
+# Makefile for VCODE interpreter
+#
+# It assumes that the following variables are already set (passed in from
+# the top-level Makefile):
+# TOPCC		C compiler and flags
+# CVLLIB 	Name of the CVL library to link with (null or with "-l" prefix)
+# EXTRALIB	Any other libraries to link with (null or with "-l" prefix)
+# EXTRADIR	Path to look for EXTRALIB (null or with "-L" prefix)
+#
+# To compile for the CM-5: there's a special cm5 target.  It uses TOPCC 
+#   but ignores CVLLIB.
+#
+# To compile for CM-5 using MPI: there's a special cm5mpi target.  It uses
+#   TOPCC but ignores CVLLIB.  Call with EXTRALIB=-lmpi and EXTRADIR=-Lmpipath,
+#   where mpipath is the path to your MPI library.
+#
+# To compile for other machines using MPI: call with EXTRALIB=-lmpi and 
+#   EXTRADIR=-Lmpipath, where mpipath is the path to your MPI library.  TOPCC
+#   should include -DMPI and -DMPI_arch, where arch is your architecture.
+#
+# To compile for the CM-2: call with EXTRALIB=-lparis
+#
+# To compile for the cray: set the INCDIR and LIBDIR to the correct paths, use
+#   CRAYVINTERP instead of VINTERP, use CRAYOPTFLAGS instead of OPTFLAGS,
+#   set TOPCC to the local compiler (probably 'cc'), and kill any DEBUG_FLAGS
+#   the compiler complains about.
+
+# default in case TOPCC isn't defined
+TOPCC = gcc -g 
+
+CC = $(TOPCC)
+#DEBUG_FLAGS = -DSPEEDHACKS 
+CFLAGS = $(DEBUG_FLAGS) -I$(INCDIR) 
+
+
+SRCS = $(SRC1) $(SRC2) $(SRC3)
+
+OBJS = $(SRC1:.c=.o) $(SRC2:.c=.o)
+
+LIBS = -lm $(CVLLIB) $(EXTRALIB) -lm -lfl -L../cvl/serial/run-time -lndpc -lpthread -lrt
+
+LFLAGS = -L$(LIBDIR) $(EXTRADIR)
+
+TESTFILE = nesltest.vcode
+
+vinterp:	$(OBJS)
+	$(CC) $(LFLAGS) -o vinterp $(OBJS) $(LIBS)
+
+test:	vinterp $(TESTFILE)
+	./vinterp -c -m 500000 $(TESTFILE)
+
+clean: 
+	-rm -f $(OBJS) vinterp $(SRC2) 
+
+.c.o:
+	$(CC) $(CFLAGS) -c $*.c
+
+lex.yy.c:	tokens.flex
+	flex tokens.flex
+
+lex.yy.o:	y.tab.h vcode.h parse.h vcode_hash.h lex.yy.c
+	$(CC) -c $(CFLAGS) lex.yy.c
+
+y.tab.c y.tab.h:	grammar.yy
+	bison -y -d grammar.yy
+
+y.tab.o:	vcode.h parse.h y.tab.c
+	$(CC) -c $(CFLAGS) y.tab.c
+
+# DO NOT DELETE THIS LINE -- make depend depends on it.
+
+actions.o: actions.c
+actions.o: config.h
+actions.o: vcode.h
+actions.o: y.tab.h
+actions.o: symbol_table.h
+actions.o: vcode.h
+actions.o: link_list.h
+actions.o: program.h
+actions.o: vcode.h
+actions.o: constant.h
+actions.o: vcode.h
+actions.o: vstack.h
+actions.o: vcode.h
+actions.o: parse.h
+actions.o: parse.h
+link_list.o: link_list.c
+link_list.o: config.h
+link_list.o: vcode.h
+link_list.o: vstack.h
+link_list.o: vcode.h
+link_list.o: program.h
+link_list.o: vcode.h
+link_list.o: symbol_table.h
+link_list.o: vcode.h
+main.o: main.c
+main.o: config.h
+main.o: vcode.h
+main.o: y.tab.h
+main.o: symbol_table.h
+main.o: vcode.h
+main.o: link_list.h
+main.o: parse.h
+main.o: vstack.h
+main.o: vcode.h
+main.o: program.h
+main.o: vcode.h
+main.o: stack.h
+main.o: vstack.h
+main.o: program.h
+main.o: check_args.h
+main.o: rtstack.h
+main.o: constant.h
+main.o: vcode.h
+main.o: vstack.h
+main.o: parse.h
+main.o: io.h
+symbol_table.o: symbol_table.c
+symbol_table.o: config.h
+symbol_table.o: vcode.h
+symbol_table.o: symbol_table.h
+symbol_table.o: vcode.h
+program.o: program.c
+program.o: config.h
+program.o: vcode.h
+program.o: y.tab.h
+program.o: symbol_table.h
+program.o: vcode.h
+program.o: vstack.h
+program.o: vcode.h
+program.o: program.h
+program.o: vcode.h
+program.o: constant.h
+program.o: vcode.h
+program.o: vstack.h
+program.o: parse.h
+vcode_table.o: vcode_table.c
+vcode_table.o: config.h
+vcode_table.o: vcode.h
+vcode_table.o: y.tab.h
+rtstack.o: rtstack.c
+rtstack.o: config.h
+rtstack.o: vcode.h
+rtstack.o: rtstack.h
+stack.o: stack.c
+stack.o: config.h
+stack.o: vcode.h
+stack.o: vstack.h
+stack.o: vcode.h
+stack.o: program.h
+stack.o: vcode.h
+stack.o: constant.h
+stack.o: vcode.h
+stack.o: vstack.h
+stack.o: parse.h
+stack.o: stack.h
+stack.o: vstack.h
+stack.o: program.h
+stack.o: io.h
+vstack.o: vstack.c
+vstack.o: config.h
+vstack.o: vcode.h
+vstack.o: vstack.h
+vstack.o: vcode.h
+check_args.o: check_args.c
+check_args.o: config.h
+check_args.o: vcode.h
+check_args.o: y.tab.h
+check_args.o: vstack.h
+check_args.o: vcode.h
+check_args.o: stack.h
+check_args.o: vstack.h
+check_args.o: program.h
+check_args.o: vcode.h
+check_args.o: program.h
+check_args.o: check_args.h
+cvl_table.o: cvl_table.c
+constant.o: constant.c
+constant.o: config.h
+constant.o: vcode.h
+constant.o: parse.h
+constant.o: program.h
+constant.o: vcode.h
+constant.o: constant.h
+constant.o: vcode.h
+constant.o: vstack.h
+constant.o: vcode.h
+constant.o: parse.h
+io.o: io.c
+io.o: config.h
+io.o: vcode.h
+io.o: vstack.h
+io.o: vcode.h
+io.o: program.h
+io.o: vcode.h
+io.o: constant.h
+io.o: vcode.h
+io.o: vstack.h
+io.o: parse.h
+io.o: stack.h
+io.o: vstack.h
+io.o: program.h

@@ -829,7 +829,7 @@ menu "Parallel Runtimes"
               Debugging output for the NDPC RT
 
         config NDPC_RT_TESTS
-            bool "Include in tests/benchmarks for NDPC RT";
+            bool "Include tests/benchmarks for NDPC RT";
 	    default n
             depends on NDPC_RT
             help 
@@ -849,7 +849,7 @@ menu "Parallel Runtimes"
               Debugging output for the NESL RT
 
         config NESL_RT_TESTS
-            bool "Include in tests/benchmarks for NESL RT";
+            bool "Include tests/benchmarks for NESL RT";
 	    default n
             depends on NESL_RT
             help 
@@ -869,7 +869,7 @@ menu "Parallel Runtimes"
               Debugging output for the OpenMP RT
 
         config OMP_RT_TESTS
-            bool "Include in tests/benchmarks for OpenMP RT";
+            bool "Include tests/benchmarks for OpenMP RT";
 	    default n
             depends on OMP_RT
             help 
