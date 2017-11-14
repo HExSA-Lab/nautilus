@@ -177,6 +177,24 @@ void str_toupper (char * s);
 void str_tolower (char * s);
 
 
+// Conversion to strings
+// Caller must make buffers large enough...
+int ultoa(unsigned long x, char *buf, int numdigits);
+int ltoa(long x, char *buf, int numdigits);
+int utoa(unsigned x, char *buf, int numdigits);
+int itoa(int x, char *buf, int numdigits);
+int ustoa(unsigned short x, char *buf, int numdigits);
+int stoa(short x, char *buf, int numdigits);
+int uctoa(unsigned char x, char *buf, int numdigits);
+int ctoa(char x, char *buf, int numdigits);
+
+// dtoa_r and strtod are declared here, but implemented
+// in dtoa.c, not naut_string.c
+char *dtoa_r(double x, int mode, int ndigits, int *decpt, int *sign, char **rve, char *buf, size_t blen);
+#define ftoa_r(x,m,nd,dp,sn,rve,b,bl) dtoa(x,m,nd,dp,sn,rve,b,bl)
+int  dtoa_printf_helper(double x, char pf_mode, int ndigits, int prec, char *buf, size_t blen);
+double strtod(const char *s, char **se);
+
 #ifdef __cplusplus
 }
 #endif

@@ -44,6 +44,7 @@ obj-y += \
         loader.o \
         shell.o \
 	fprintk.o \
+        dtoa.o \
 
 obj-$(NAUT_CONFIG_PROFILE) += instrument.o
 obj-$(NAUT_CONFIG_XEON_PHI) += sfi.o

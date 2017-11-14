@@ -140,6 +140,12 @@
  * Jork Loeser 9/20/99
  */
 
+/* 
+ * Support added for %f %g %e via dtoa
+ *
+ * Peter Dinda 2017
+ */
+
 //#define isdigit(d) ((d) >= '0' && (d) <= '9')
 #define Ctod(c) ((c) - '0')
 
@@ -204,6 +210,7 @@ void _doprnt (register const char * fmt,
 	int		base;
 	char		c;
 	int		longopt;
+	double          d;
 
 	while (*fmt != '\0') {
 	    if (*fmt != '%') {
@@ -515,6 +522,33 @@ void _doprnt (register const char * fmt,
 		    base = 10;
 		    goto print_unsigned;
 
+
+	        case 'e':
+	        case 'f':
+	        case 'g':
+	        case 'E':
+	        case 'F':
+	        case 'G':
+		    {
+			char buf[160];
+			char *c;
+			int dec, sign;
+			int pos;
+			
+			d = (double) va_arg(args, double);
+			
+			dtoa_printf_helper(d,*fmt,length,prec,buf,160);
+			
+			c = buf;
+			(*putc)(putc_arg,'@');
+			while (*c) {
+			    (*putc)(putc_arg, *c++);
+			}
+			
+		    }
+
+		    break;
+		    
 		case 'p':
 		    padc = '0';
 		    length = 8;
@@ -549,6 +583,7 @@ void _doprnt (register const char * fmt,
 		    base = radix;
 		    goto print_unsigned;
 
+		    
 		print_signed:
 		    if (longopt>1)
 			n = va_arg(args, long long);

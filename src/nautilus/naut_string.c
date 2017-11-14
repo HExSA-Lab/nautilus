@@ -463,6 +463,76 @@ atox (const char * buf) {
     return ret;
 }
 
+static void reverse(char *str, int n)
+{
+    int i;
+    char temp;
+
+    for (i=0;i<n/2;i++) {
+	temp = str[i];
+	str[i] = str[n-i-1];
+	str[n-i-1] = temp;
+    }
+}
+
+int ultoa(unsigned long x, char *buf, int numdigits)
+{
+    int i;
+
+    for (i=0; i==0 || x  ; i++, x=x/10) {
+	buf[i] = '0' + (x%10);
+    }
+    
+    if (numdigits) {
+	for (; i<numdigits; i++) {
+	    buf[i] = '0';
+	}
+    }
+    reverse(buf,i);
+    buf[i] = 0;
+    return i;
+}
+
+int ltoa(long x, char *buf, int numdigits)
+{
+    if (x<0) {
+	*buf++ = '-';
+	return 1+ultoa((unsigned long)(-x),buf,numdigits);
+    } else {
+	return ultoa((unsigned long)(x),buf,numdigits);
+    }
+}
+
+int utoa(unsigned x, char *buf, int numdigits)
+{
+    return ultoa((unsigned long)x,buf,numdigits);
+}
+
+int itoa(int x, char *buf, int numdigits)
+{
+    return ltoa((long)x,buf,numdigits);
+}
+
+int ustoa(unsigned short x, char *buf, int numdigits)
+{
+    return ultoa((unsigned long)x,buf,numdigits);
+}
+int stoa(short x, char *buf, int numdigits)
+{
+    return ltoa((long)x,buf,numdigits);
+}
+
+int uctoa(unsigned char x, char *buf, int numdigits)
+{
+    return ultoa((unsigned long)x,buf,numdigits);
+}
+
+int ctoa(char x, char *buf, int numdigits)
+{
+    return ltoa((long)x,buf,numdigits);
+}
+
+
 //For Lua Support
 char *
 __strtok_r(char *s, const char *delim, char **last)

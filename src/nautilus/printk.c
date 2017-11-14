@@ -543,7 +543,9 @@ enum format_type {
 	FORMAT_TYPE_INT,
 	FORMAT_TYPE_NRCHARS,
 	FORMAT_TYPE_SIZE_T,
-	FORMAT_TYPE_PTRDIFF
+	FORMAT_TYPE_PTRDIFF,
+	FORMAT_TYPE_FLOAT,
+	FORMAT_TYPE_DOUBLE,
 };
 
 struct printf_spec {
@@ -553,6 +555,7 @@ struct printf_spec {
 	int			base;
 	int			precision;	/* # of digits/chars */
 	int			qualifier;
+        char                    fp_fmt;
 };
 
 static char *number(char *buf, char *end, unsigned long long num,
@@ -986,6 +989,20 @@ qualifier:
 	/* default base */
 	spec->base = 10;
 	switch (*fmt) {
+	case 'f':
+	case 'g':
+	case 'e':
+	case 'F':
+	case 'G':
+	case 'E':
+	    if (spec->qualifier == 'L' || spec->qualifier == 'l') { 
+		spec->type = FORMAT_TYPE_DOUBLE;
+	    } else {
+		spec->type = FORMAT_TYPE_FLOAT;
+	    }
+	    spec->fp_fmt = *fmt;
+	    return ++fmt - start;
+	    
 	case 'c':
 		spec->type = FORMAT_TYPE_CHAR;
 		return ++fmt - start;
@@ -1194,6 +1211,32 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list args)
 			}
 			break;
 		}
+
+		case FORMAT_TYPE_FLOAT:
+		case FORMAT_TYPE_DOUBLE: {
+		    char buf[160];
+		    char *c;
+		    int numdigits, prec;
+		    int k;
+		    
+		    if (spec.precision != -1) {
+			numdigits = spec.precision;
+		    } else {
+			numdigits = 6;
+		    }
+		    prec = numdigits;
+
+		    double d = (double) va_arg(args,double);
+
+		    dtoa_printf_helper(d,spec.fp_fmt,numdigits,prec,buf,160);
+		    
+		    for (c=buf ; *c && str<(end-1); str++, c++) {
+			*str = *c;
+		    }
+		    *str=0;
+		}
+		    break;
+		    
 
 		default:
 			switch (spec.type) {
