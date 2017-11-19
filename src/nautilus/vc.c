@@ -12,6 +12,7 @@
  *
  * Copyright (c) 2016, Peter Dinda
  * Copyright (c) 2016, Yang Wu, Fei Luo and Yuanhui Yang
+ * Copyright (c) 2017, Kyle C. Hale
  * Copyright (c) 2016, The V3VEE Project  <http://www.v3vee.org> 
  *                     The Hobbes Project <http://xstack.sandia.gov/hobbes>
  * All rights reserved.
@@ -19,6 +20,7 @@
  * Authors:  Peter Dinda <pdinda@northwestern.edu>
  *           Yang Wu, Fei Luo and Yuanhui Yang
  *           {YangWu2015, FeiLuo2015, YuanhuiYang2015}@u.northwestern.edu
+ *           Kyle C. Hale <khale@cs.iit.edu>
  *
  * This is free software.  You are permitted to use,
  * redistribute, and modify it as specified in the file "LICENSE.txt".
@@ -118,8 +120,8 @@ struct nk_virtual_console {
   uint16_t BUF[VGA_WIDTH * VGA_HEIGHT];
   uint8_t cur_x, cur_y, cur_attr, fill_attr;
   uint16_t head, tail;
-  void    (*raw_noqueue_callback)(nk_scancode_t, void *priv);
-  void     *raw_noqueue_callback_priv;
+  struct nk_vc_ops *ops;
+  void *ops_priv;
   uint32_t num_threads;
   struct list_head vc_node;
   nk_thread_queue_t *waiting_threads;
@@ -163,7 +165,11 @@ static inline void copy_vc_to_display(struct nk_virtual_console *vc)
 }
 
 
-struct nk_virtual_console *nk_create_vc(char *name, enum nk_vc_type new_vc_type, uint8_t attr, void (*callback)(nk_scancode_t, void *priv), void *priv_data) 
+struct nk_virtual_console *nk_create_vc (char *name, 
+					 enum nk_vc_type new_vc_type, 
+					 uint8_t attr, 
+					 struct nk_vc_ops *ops,
+					 void *priv_data) 
 {
   STATE_LOCK_CONF;
   int i;
@@ -177,8 +183,7 @@ struct nk_virtual_console *nk_create_vc(char *name, enum nk_vc_type new_vc_type,
   memset(new_vc, 0, sizeof(struct nk_virtual_console));
   new_vc->type = new_vc_type;
   strncpy(new_vc->name,name,32);
-  new_vc->raw_noqueue_callback = callback;  
-  new_vc->raw_noqueue_callback_priv = priv_data;
+  new_vc->ops = ops;
   new_vc->cur_attr = attr;
   new_vc->fill_attr = attr;
   spinlock_init(&new_vc->queue_lock);
@@ -390,7 +395,7 @@ static int _vc_display_char_specific(struct nk_virtual_console *vc, uint8_t c, u
     return 0;
   }
 
-  uint16_t val = vga_make_entry (c, attr);
+  uint16_t val = vga_make_entry(c, attr);
 
   if(x >= VGA_WIDTH || y >= VGA_HEIGHT) {
     return -1;
@@ -535,6 +540,13 @@ static int _vc_putchar_specific(struct nk_virtual_console *vc, uint8_t c)
   if (!vc) { 
     return 0;
   }
+
+  if (c == ASCII_BS) {
+	  vc->cur_x--;
+	  _vc_display_char_specific(vc, ' ', vc->fill_attr, vc->cur_x, vc->cur_y);
+	  return 0;
+  }
+	
   if (c == '\n') {
     vc->cur_x = 0;
 #ifdef NAUT_CONFIG_XEON_PHI
@@ -555,7 +567,9 @@ static int _vc_putchar_specific(struct nk_virtual_console *vc, uint8_t c)
 #endif
     }
     return 0;
-  }
+  } 
+	
+	
   _vc_display_char_specific(vc, c, vc->cur_attr, vc->cur_x, vc->cur_y);
   vc->cur_x++;
   if (vc->cur_x == VGA_WIDTH) {
@@ -1071,21 +1085,47 @@ int nk_vc_getchar()
   return nk_vc_getchar_extended(1);
 }
 
-int nk_vc_gets(char *buf, int n, int display)
+int nk_vc_gets (char *buf, int n, int display)
 {
   int i;
   int c;
-  for (i=0;i<(n-1);i++) {
+
+start:
+
+  for (i = 0; i < n-1; i++) {
+
     buf[i] = nk_vc_getchar();
+
+    if (buf[i] == ASCII_BS) {
+
+    	buf[i--] = 0; // kill the backspace
+
+	if (i < 0) {
+		goto start;
+	} 
+
+	buf[i--] = 0; // kill the prev char
+
+	if (display) {
+		nk_vc_putchar(ASCII_BS);
+	}
+
+	continue;
+    }
+
     if (display) { 
       nk_vc_putchar(buf[i]);
     }
+
     if (buf[i] == '\n') {
       buf[i] = 0;
       return i;
     }
+
   }
+
   buf[n-1]=0;
+
   return n-1;
 }
 
@@ -1133,7 +1173,9 @@ int nk_vc_handle_keyboard(nk_scancode_t scan)
   switch (cur_vc->type) { 
   case RAW_NOQUEUE:
     DEBUG("Delivering event to console %s via callback\n",cur_vc->name);
-    cur_vc->raw_noqueue_callback(scan, cur_vc->raw_noqueue_callback_priv);
+    if (cur_vc->ops && cur_vc->ops->raw_noqueue) {
+	    cur_vc->ops->raw_noqueue(scan, cur_vc->ops_priv);
+    }
     return 0;
     break;
   case RAW:

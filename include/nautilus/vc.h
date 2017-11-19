@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2016, Yang Wu, Fei Luo and Yuanhui Yang
  * Copyright (c) 2016, Peter Dinda
@@ -35,10 +35,15 @@ struct nk_thread;
 enum nk_vc_type {RAW, COOKED, RAW_NOQUEUE};
 struct nk_virtual_console;
 
+struct nk_vc_ops {
+	void (*raw_noqueue)(nk_scancode_t, void *priv);
+};
+
 struct nk_virtual_console *nk_create_vc(char *name,
 					enum nk_vc_type new_vc_type,
 					uint8_t attr,
-					void (*raw_noqueue_callback)(nk_scancode_t, void *private), void *priv); 
+					struct nk_vc_ops * ops,
+				 	void *priv); 
 
 int nk_destroy_vc(struct nk_virtual_console *vc);
 
