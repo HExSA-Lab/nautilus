@@ -92,7 +92,7 @@ static inline void setb(ulong_t nr, volatile char *addr)
     offset = nr/8;
     bitoffset = nr % 8;
 
-    addr[offset] |= (0x1UL << offset);
+    addr[offset] |= (0x1UL << bitoffset);
 
 }
 
@@ -102,7 +102,7 @@ static inline void clearb(ulong_t nr, volatile char *addr)
     offset = nr/8;
     bitoffset = nr % 8;
 
-    addr[offset] &= ~(0x1UL << offset);
+    addr[offset] &= ~(0x1UL << bitoffset);
 
 }
 /**
