@@ -558,11 +558,12 @@ _kmem_malloc (size_t size, int cpu, int zero)
     } else {
 	// attempt to get memory back by reaping threads now...
 	if (first) {
+	    KMEM_DEBUG("malloc initially failed for size %lu order %lu attempting reap\n",size,order);
 	    nk_sched_reap(1);
 	    first=0;
 	    goto retry;
 	}
-	KMEM_DEBUG("malloc failed for size %lu order %lu\n",size,order);
+	KMEM_DEBUG("malloc permanently failed for size %lu order %lu\n",size,order);
 	NK_GPIO_OUTPUT_MASK(~0x20,GPIO_AND);
         return NULL;
     }
@@ -633,6 +634,11 @@ kmem_free (void * addr)
         return;
     }
 
+
+    // Note that if the user is doing a double-free, it is possible
+    // that we race on the block hash entry and so could end up invoking
+    // the buddy free more than once
+    
     hdr = block_hash_find_entry(addr);
 
     if (!hdr) { 
