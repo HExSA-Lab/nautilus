@@ -57,7 +57,7 @@ int prog_num;
     new_link_entry->next = link_list;
     link_list = new_link_entry;
 
-    (void) strncpy(new_link_entry->fn_name, id, FN_NAME_MAX);
+    (void) strncpy(new_link_entry->fn_name, id, FN_NAME_MAX); new_link_entry->fn_name[FN_NAME_MAX-1] = 0;
     new_link_entry->prog_num = prog_num;
 }
 

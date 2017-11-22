@@ -101,12 +101,12 @@ thread_group_tester(void *in, void **out) {
   int tid = nk_thread_group_join(dst);
   end = rdtsc();
 
-  dur_array[tid][0] = end - start;
-
   if (tid < 0) {
     DEBUG("group join failed\n");
     return;
   }
+
+  dur_array[tid][0] = end - start;
 
   char *name = (char *)MALLOC(MAX_GROUP_NAME*sizeof(char));
   if (name == NULL) {
@@ -160,7 +160,9 @@ thread_group_tester(void *in, void **out) {
 
   //change_constraint measure
   start = rdtsc();
-  nk_sched_thread_change_constraints(constraints);
+  if (nk_sched_thread_change_constraints(constraints)) {
+      DEBUG("Failed to change thread constraints\n");
+  }
   end = rdtsc();
 
   dur_array[tid][3] = end - start;

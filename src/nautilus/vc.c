@@ -182,7 +182,7 @@ struct nk_virtual_console *nk_create_vc (char *name,
   }
   memset(new_vc, 0, sizeof(struct nk_virtual_console));
   new_vc->type = new_vc_type;
-  strncpy(new_vc->name,name,32);
+  strncpy(new_vc->name,name,32); new_vc->name[31]=0;
   new_vc->ops = ops;
   new_vc->cur_attr = attr;
   new_vc->fill_attr = attr;

@@ -2109,12 +2109,12 @@ struct nk_thread *_sched_need_resched(int have_lock, int force_resched)
 	} else {
 	    // We are sticking with the current thread
 	    DEBUG("Sticking with current sporadic task\n");
+	    rt_n = rt_c;
 	    // we are still NK_THR_RUNNING at this point
 	    // we mark it "suspended" to meet expectation of 
 	    // the outbound code.   This is a common expectation
 	    // of aperiodic, periodic, and sporadic tasks
 	    rt_n->thread->status = NK_THR_SUSPENDED;
-	    rt_n = rt_c;
 	    goto out_good;
 	}
 
@@ -2633,7 +2633,7 @@ int nk_sched_cpu_mug(int old_cpu, uint64_t maxcount, uint64_t *actualcount)
     LOCAL_LOCK_CONF;
     struct sys_info *sys = per_cpu_get(system);
     int new_cpu = my_cpu_id();
-    rt_scheduler *os = sys->cpus[old_cpu]->sched_state;
+    rt_scheduler *os;
     rt_scheduler *ns = sys->cpus[new_cpu]->sched_state;
     rt_thread *prosp[maxcount];
     uint64_t count=0;

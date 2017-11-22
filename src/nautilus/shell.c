@@ -1343,6 +1343,7 @@ static int handle_cmd(char *buf, int n)
 	  data &= 0xffffffff;
 	  outl((uint32_t) data, (uint16_t)addr);
 	  nk_vc_printf("IO[0x%04lx] = 0x%08lx\n",addr,data);
+	  break;
       default:
 	  nk_vc_printf("Unknown size requested\n");
 	  break;

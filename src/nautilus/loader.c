@@ -456,7 +456,6 @@ struct nk_exec *nk_load_exec(char *path)
     return e;
 	
  out_bad:
-    return 0;
     if (!FS_FD_ERR(fd)) { nk_fs_close(fd); }
     if (page) { free(page); }
     if (e && e->blob) { free(e->blob); }

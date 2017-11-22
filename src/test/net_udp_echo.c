@@ -250,8 +250,11 @@ static inline uint64_t ntoh64(uint64_t v) {
 // convert a string of an ip address to uint32_t
 static uint32_t ip_strtoint(char* str) {
   uint8_t a, b, c, d;
-  sscanf(str, "%hhu.%hhu.%hhu.%hhu", &a, &b, &c, &d );
-  return  ( a << 24 ) | ( b << 16 ) | ( c << 8 ) | d;
+  if (sscanf(str, "%hhu.%hhu.%hhu.%hhu", &a, &b, &c, &d )!=4) {
+      return 0;
+  } else {
+      return  ( a << 24 ) | ( b << 16 ) | ( c << 8 ) | d;
+  }
 }
 
 // convert uint32_t representation of an ip address to
@@ -567,7 +570,7 @@ static void print_udp_header(struct udp_header* pkt) {
   DEBUG("\t length %d\n", pkt_len);
   DEBUG("\t checksum 0x%04x\n", ntoh16(pkt->checksum));
   char* pkt_data = (uint8_t *)pkt + sizeof(*pkt);
-  pkt_data[pkt_len+1] = '\0';
+  pkt_data[((uint32_t)pkt_len)+1] = '\0';
   DEBUG("\t data: %s\n", pkt_data);
 }
 

@@ -61,7 +61,7 @@ int prog_num;
     new_hash_entry->next = node_table[hash_val];
     node_table[hash_val] = new_hash_entry;
 
-    (void) strncpy(new_hash_entry->fn_name, id, FN_NAME_MAX);
+    (void) strncpy(new_hash_entry->fn_name, id, FN_NAME_MAX); new_hash_entry->fn_name[FN_NAME_MAX-1] = 0;
     new_hash_entry->prog_num = prog_num;
 }
 

@@ -57,7 +57,7 @@
 typedef union ps2_status {
     uint8_t  val;
     struct {
-	uint8_t obf:1;  // output buffer full (0=> can read from 0x60)
+	uint8_t obf:1;  // output buffer full (1=> can read from 0x60)
 	uint8_t ibf:1;  // input buffer full (0=> can write to either port)
 	uint8_t sys:1;  // set on successful reset
 	uint8_t a2:1;   // last address (0=>0x60, 1=>0x64)
@@ -94,9 +94,9 @@ static int ps2_wait(wait_t w)
 
     do {
 	status.val = inb(KBD_STATUS_REG);
-	//	INFO("obf=%d ibf=%d req=%s\n",status.obf, status.ibf, w==INPUT ? "input" : "output");
-    } while (!((status.obf && (w==OUTPUT)) ||
-	       ((!status.ibf) && (w==INPUT))));
+	//      INFO("obf=%d ibf=%d req=%s\n",status.obf, status.ibf, w==INPUT ? "input" : "output");
+    } while (((!status.obf) && (w==OUTPUT)) ||
+	     ((status.ibf) && (w==INPUT))) ;
 
     return 0;
 } 
@@ -717,7 +717,6 @@ int ps2_reset()
   if (ps2_kbd_reset()) { 
     return HAVE_NO_KEYBOARD;
   } else {
-      //    return HAVE_KEYBOARD;
     if (ps2_mouse_reset()) { 
       return HAVE_KEYBOARD;
     } else {

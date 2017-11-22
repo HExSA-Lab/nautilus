@@ -84,7 +84,7 @@ struct nk_dev *nk_dev_register(char *name, nk_dev_type_t type, uint64_t flags, s
 	return 0;
     }
 
-    strncpy(d->name,name,DEV_NAME_LEN);
+    strncpy(d->name,name,DEV_NAME_LEN); d->name[DEV_NAME_LEN-1] = 0;
     d->type = type;
     d->flags = flags;
     d->state = state;

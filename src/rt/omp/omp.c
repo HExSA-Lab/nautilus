@@ -577,7 +577,8 @@ void GOMP_parallel_start(void (*f)(void*), void *d, unsigned numthreads)
     for (i=1;i<numthreads;i++) { 
 	struct omp_thread *c = (struct omp_thread *) malloc(sizeof(*c));
 	if (!c) { 
-	    ERROR("Failed to allocate block\n");
+	    ERROR("Failed to allocate block - running as function\n");
+	    f(d);
 	} else {
 	    memset(c,0,sizeof(*c));
 	    c->cookie=OMP_COOKIE;
@@ -591,8 +592,12 @@ void GOMP_parallel_start(void (*f)(void*), void *d, unsigned numthreads)
 	    c->in=d;
 	    c->team_leader = p;
 	    DEBUG("thread %d: cookie=%lx, team=%d, num_threads_in_team=%d, thread_num_in_team=%d, level=%d, num_threads_in_level=%d,f=%p, in=%p, thread_num=%d, thread=%p\n", i, c->cookie, c->team, c->num_threads_in_team, c->thread_num_in_team, c->level, c->num_threads_in_level, c->f, c->in, c->thread_num, c->thread);
-	    nk_thread_start(parallel_start_wrapper,
-			    c,0,0,TSTACK_DEFAULT,0,-1);
+	    if (nk_thread_start(parallel_start_wrapper,
+				c,0,0,TSTACK_DEFAULT,0,-1)) {
+		DEBUG("failed to launch as thread, running as function\n");
+		free(c);
+		f(d);
+	    }
 	}
     }
 }
@@ -719,8 +724,11 @@ void GOMP_task (void (*fn) (void *),
 	c->team_leader = p;
 	
 	DEBUG("thread: cookie=%lx, team=%d, num_threads_in_team=%d, thread_num_in_team=%d, level=%d, num_threads_in_level=%d,f=%p, in=%p, thread_num=%d, thread=%p\n", c->cookie, c->team, c->num_threads_in_team, c->thread_num_in_team, c->level, c->num_threads_in_level, c->f, c->in, c->thread_num, c->thread);
-	nk_thread_start(parallel_start_wrapper,
-			c,0,0,TSTACK_DEFAULT,0,-1);
+	if (nk_thread_start(parallel_start_wrapper,
+			    c,0,0,TSTACK_DEFAULT,0,-1)) {
+	    ERROR("Failed to start thread for task, running as function\n");
+	    fn(data);
+	}
     }
 }
 

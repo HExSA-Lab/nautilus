@@ -151,7 +151,7 @@ thread_group_member_create(void) {
     return NULL;
   }
 
-  if (memset(group_member, 0, sizeof(group_member)) == NULL) {
+  if (memset(group_member, 0, sizeof(group_member_t)) == NULL) {
     FREE(group_member);
     ERROR("Fail to clear memory for group member!\n");
     return NULL;
@@ -172,6 +172,7 @@ thread_group_member_destroy(group_member_t *group_member) {
 }
 
 // assign a new id for a new group
+// returns -1ULL on failure, positive number otherwise
 static uint64_t
 thread_group_get_next_group_id(void) {
   parallel_thread_group_list_t * l = &parallel_thread_group_list;
@@ -298,7 +299,7 @@ nk_thread_group_create(char *name) {
 
   new_group->group_leader = -1;
 
-  ret = strncpy(new_group->group_name,name,MAX_GROUP_NAME);
+  ret = strncpy(new_group->group_name,name,MAX_GROUP_NAME);  new_group->group_name[MAX_GROUP_NAME-1] = 0;
 
   if (ret == NULL) {
     FREE(new_group);
@@ -318,7 +319,7 @@ nk_thread_group_create(char *name) {
 
   new_group->group_id = thread_group_get_next_group_id();
 
-  if (new_group->group_id < 0) {
+  if (new_group->group_id == -1ULL) {
     ERROR("Fail to assign group id!\n");
     FREE(new_group);
     return NULL;
@@ -415,6 +416,13 @@ nk_thread_group_leave(nk_thread_group_t *group) {
     if (cur_thread == leaving_member->thread) {
       break;
     }
+  }
+
+  if (!leaving_member) {
+      ERROR("Unable to find self within thread group\n");
+      spin_unlock(&group->group_lock);
+      thread_group_barrier_leave(&group->group_barrier);
+      return -1;
   }
 
   if (cur == &group->group_member_array[my_cpu_id()]) {

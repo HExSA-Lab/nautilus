@@ -820,7 +820,10 @@ time_int80 (void)
 {
     int i;
     uint64_t start;
-    register_int_handler(0x80, int80_handler, NULL);
+    if (register_int_handler(0x80, int80_handler, NULL)) {
+	PRINT("FAILED TO REGISTER HANDLER FOR INT 0x80\n");
+	return;
+    }
     sti();
     for (i = 0; i < TRIALS; i++) {
         rdtscll(start);
