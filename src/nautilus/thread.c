@@ -372,8 +372,25 @@ nk_thread_create (nk_thread_fun_t fun,
     return 0;
 
 out_err:
+    if (t->waitq) { 
+	nk_thread_queue_destroy(t->waitq);
+    }
+    if (t->sched_state) { 
+	nk_sched_thread_state_deinit(t);
+    }
+
+#ifdef NAUT_CONFIG_ENABLE_BDWGC
+    if (t->gc_state) {
+	nk_gc_bdwgc_thread_state_deinit(t);
+    }
+#endif
+
+    // note that VC is not assigned on thread creation
+    // so we do not need to clean it up
+    
     free(t->stack);
     free(t);
+
     return -EINVAL;
 }
 

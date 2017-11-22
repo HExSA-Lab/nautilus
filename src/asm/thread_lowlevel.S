@@ -45,6 +45,8 @@
  */
 .section .text
 .code64
+
+
 ENTRY(nk_thread_switch)
     pushq %rax
     movq 8(%rsp), %rax   /* save return address */
@@ -82,6 +84,7 @@ ENTRY(nk_thread_switch_intr_entry)
     callq nk_thr_switch_prof_enter
     popq %rdi
 #endif
+
 	
     movq %gs:0x0, %rax
 
@@ -93,6 +96,15 @@ ENTRY(nk_thread_switch_intr_entry)
     leaq (%rax, %rbx, 1), %rbx
     fxsave (%rbx)
 #endif
+
+// On a thread exit we must avoid saving thread state
+// or using the stack at all since at this point the thread and its stack
+// might already be deleted.  Interrupts are off, however.
+// We also want to save the cost of any state saves
+// We should get here via a JUMP
+// Note that the first three instructions establish the new stack
+// and thread structure	
+ENTRY(nk_thread_switch_on_exit)
 
     movq %rdi, %rax     /* load up pointer to the next thread */
     movq %rax, %gs:0x0  /* make it the new current thread */
@@ -125,9 +137,30 @@ ENTRY(nk_thread_switch_intr_entry)
 
     iretq               /* and off we go */
 
+// rdi = new thread
+// rsi = target address to write
+// edx = value to write (as 4 bytes)
+ENTRY(nk_thread_switch_exit_helper)
+	// reset interrupt nesting
+	// the context switch will decrement it to zero
+	movw $1,  %gs:8
+	// reset preemption disable level
+        movw $0, %gs:10
+	// note that interrupts are still off
 
+	// We now mark ourselves as toast for the reaper
+	movl %edx, (%rsi)
+	
+	// At this point, we are racing with the reaper on a different core,
+	// which might take away our stack.  However, we have interrupts
+	// off locally, so as long as *we* don't use the stack, we should be OK
+	jmp nk_thread_switch_on_exit
 
+	// and this should never happen...
+	retq
+	
 
+	
 ENTRY(nk_thread_entry) 
 
 #ifdef NAUT_CONFIG_ENABLE_STACK_CHECK

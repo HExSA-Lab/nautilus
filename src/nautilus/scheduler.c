@@ -180,6 +180,7 @@ typedef struct rt_list {
 
 static rt_list*   rt_list_init();
 static void       rt_list_deinit(rt_list *l);
+static int        _rt_list_enqueue(rt_list *l, rt_thread *t, rt_node *newnode);
 static int        rt_list_enqueue(rt_list *l, rt_thread *t);
 static rt_thread* rt_list_dequeue(rt_list *l);
 static rt_thread* rt_list_remove(rt_list *l, rt_node *n);
@@ -416,7 +417,7 @@ typedef struct nk_sched_percpu_state {
 typedef struct nk_sched_constraints  rt_constraints;
 typedef nk_sched_constraint_type_t rt_type;
 
-typedef enum { ARRIVED,            // no admission control done
+typedef enum { ARRIVED=0,          // no admission control done
 	       ADMITTED,           // admitted
 	       CHANGING,           // admitted for new constraints, now changing to them
 	       YIELDING,           // explit yield of slice
@@ -425,6 +426,7 @@ typedef enum { ARRIVED,            // no admission control done
 	       EXITING,            // being removed from RT and non-RT run/arrival queues
                                    // will not return
 	       DENIED,             // not admitted
+	       REAPABLE,           // it's OK for the reaper to destroy the thread
              } rt_status;
 
 typedef struct nk_sched_thread_state {
@@ -493,8 +495,12 @@ static inline uint64_t get_random();
 
 static void print_thread(rt_thread *r, void *priv)
 {
+    ASSERT(r);
+    ASSERT(r->thread);
+
     nk_thread_t  * t = r->thread;
     int cpu = (int)(uint64_t)priv;
+
 
 #define US(ns) ((ns)/1000ULL)
 #define MS(ns) ((ns)/1000000ULL)
@@ -520,7 +526,8 @@ static void print_thread(rt_thread *r, void *priv)
 		     r->status==YIELDING ? "yie" :
 		     r->status==EXITING ? "exi" :
 		     r->status==SLEEPING ? "sle" :
-		     r->status==DENIED ? "den" : "UNK",
+		     r->status==DENIED ? "den" :
+		     r->status==REAPABLE ? "rea" : "UNK",
 		     CO(r->start_time),
 		     CO(r->cur_run_time),
 		     CO(r->run_time),
@@ -557,10 +564,13 @@ static rt_thread *reap_pool[MAX_QUEUE];
 
 static void pre_reap_thread(rt_thread *r, void *priv)
 {
+    ASSERT(r);
+    ASSERT(r->thread);
+
     nk_thread_t  * t = r->thread;
     rt_node      * temp;
 
-    if (reap_count<MAX_QUEUE && !t->refcount && t->status==NK_THR_EXITED && r->status==EXITING) { 
+    if (reap_count<MAX_QUEUE && !t->refcount && t->status==NK_THR_EXITED && r->status==REAPABLE) {
 	DEBUG("Reaping tid %llu (%s)\n",t->tid,t->name);
 	reap_pool[reap_count++] = r;
     }
@@ -792,25 +802,45 @@ struct nk_thread *nk_find_thread_by_tid(uint64_t tid)
 
 void nk_sched_reap(int uncond)
 {
+    DEBUG("Executing Reap (%s)\n", uncond? "UNCOND": "cond");
+    
     GLOBAL_LOCK_CONF;
     struct sys_info *sys = per_cpu_get(system);
     struct apic_dev *apic = sys->cpus[my_cpu_id()]->apic;
     uint64_t i;
 
+    if (in_interrupt_context()) {
+	// never reap in interrupt context, even unconditionally
+	// if this means a memory allocation or thread creation occuring
+	// from an interrupt handler fails, so be it
+	DEBUG("Ignoring %sconditional reap while in interrupt context\n", uncond ? "un" : "");
+	return;
+    }
+
     if (!uncond && global_sched_state.num_threads < ((NAUT_CONFIG_MAX_THREADS * 95)/100)) {
 	// unless we are unconditionally reaping, do not reap if we still
 	// have a lot of threads left....
+	DEBUG("Ignoring conditional reap with %lu threads\n", global_sched_state.num_threads);
 	return;
     }
 
     if (!__sync_bool_compare_and_swap(&global_sched_state.reaping,0,1)) {
-	// reaping is already in progress elsewhere
+	// reaping pass is already in progress elsewhere
+	// we will wait for it to  inish.  In this way, our caller
+	// will also see the benefit of that pass
+	DEBUG("%sconditional reap waiting on previous reap to complete\n", uncond ? "un" : "");
+	while (__sync_fetch_and_or(&global_sched_state.reaping,0)) {
+	    // wait for the reapping pass to finish
+	}
+	DEBUG("%sconditional reap - previous reap now complete, ignoring this reap\n", uncond ? "un" : "");
 	return;
     }
 
-    reap_count = 0;
+    DEBUG("Reap begins (%lu threads)\n", global_sched_state.num_threads);
 
     GLOBAL_LOCK();
+
+    reap_count = 0;
 
     // We need to do this in two phases since
     // destroy thread also needs the global lock
@@ -820,13 +850,23 @@ void nk_sched_reap(int uncond)
     GLOBAL_UNLOCK();
 
     // Now reap
+    // We are still holding global_sched_state.reaping, so
+    // we must have exclusive access to the reap_pool built
+    // in the previous step
     if (reap_count!=0) { 
 	// reverse order to potentially improve frees
 	for (i=reap_count;i>0;i--) { 
+	    DEBUG("Reaping thread %lu\n", reap_pool[i-1]->thread->tid);
+	    // thread destruction calls back to pre_destory, which
+	    // will acquire the global lock when it removes the thread from
+	    // the global thread list, hence we do not need to hold
+	    // global lock here.
 	    nk_thread_destroy(reap_pool[i-1]->thread);
 	}
     }
 
+    DEBUG("%sconditional reap ends (%lu threads)\n", uncond ? "un" : "", global_sched_state.num_threads);
+    
     // done with reaping - another core can now go
     global_sched_state.reaping = 0;
 }
@@ -885,7 +925,7 @@ struct nk_sched_thread_state *nk_sched_thread_state_init(struct nk_thread *threa
 
 
     if (c->type == PERIODIC) {
-        t->deadline = cur_time() + c->periodic.period;
+	t->deadline = cur_time() + c->periodic.period;
     } else if (c->type == SPORADIC) {
         t->deadline = cur_time() + c->sporadic.deadline;
     }
@@ -908,10 +948,37 @@ int nk_sched_thread_post_create(nk_thread_t * t)
     nk_sched_reap(0); // conditional reap to make room for new thread
 
     // the caller is expected to have already set current_cpu!
+
+    // we allocate the new thread node here because a malloc inside
+    // of the global list enqueue could itself trigger a reap
+    // in which case we would deadlock, since reaping also acquires the
+    // global scheduler lock
+
+    rt_node *n = rt_node_init(t->sched_state); 
+    
+    DEBUG("create: node %p for thread %p (%lu)\n",n,t->sched_state,t->sched_state->thread->tid);
+    
+    if (!n) {
+    	ERROR("Failed to allocate rt_node in post create\n");
+    	return 0;
+    }
+    
+    // now we can safely acquire the lock and put the new thread
+    // on the global thread list
     
     GLOBAL_LOCK();
 
-    if (rt_list_enqueue(global_sched_state.thread_list, t->sched_state)) {
+    if (global_sched_state.num_threads >= MAX_QUEUE) {
+	DEBUG("Scheduler vetos thread creation as there are %lu active threads in system\n", global_sched_state.num_threads);
+	DEBUG("You can increase the maximum of %lu active threads using NAUT_CONFIG_MAX_THREADS\n", NAUT_CONFIG_MAX_THREADS);
+	GLOBAL_UNLOCK();
+	rt_node_deinit(n);
+	return -1;
+    }
+    
+    // this enqueue avoids any malloc and thus no reap should be
+    // triggered by it
+    if (_rt_list_enqueue(global_sched_state.thread_list, t->sched_state, n)) {
 	ERROR("Failed to add new thread to global thread list\n");
 	GLOBAL_UNLOCK();
 	return -1;
@@ -922,8 +989,10 @@ int nk_sched_thread_post_create(nk_thread_t * t)
 	  t, t->tid, global_sched_state.num_threads);
     
     GLOBAL_UNLOCK();
+
     return 0;
 }
+
 
 
 int nk_sched_thread_pre_destroy(nk_thread_t * t)
@@ -1194,13 +1263,21 @@ static void rt_list_deinit(rt_list *l)
 }
 
 
+ 
+// node setup without allocation
+static void _rt_node_init(rt_node *node, rt_thread *t)
+{
+    node->thread = t;
+    node->next = NULL;
+    node->prev = NULL;
+}
+
+// node setup with allocation
 static rt_node* rt_node_init(rt_thread *t) 
 {
     rt_node *node = (rt_node *)MALLOC_SPECIFIC(sizeof(rt_node),t->thread->current_cpu);
     if (node) { 
-	node->thread = t;
-	node->next = NULL;
-	node->prev = NULL;
+	_rt_node_init(node,t);
     }
     return node;
 }
@@ -1215,35 +1292,45 @@ static int rt_list_empty(rt_list *l)
     return (l->head == NULL);
 }
 
-static int rt_list_enqueue(rt_list *l, rt_thread *t) 
+// insert with pre-allocated node structure
+// no memory allocation
+static int _rt_list_enqueue(rt_list *l, rt_thread *t, rt_node *newnode)
 {
     if (l == NULL) {
         ERROR("RT_LIST IS UNINITIALIZED.\n");
         return -1;
     }
 
+    _rt_node_init(newnode,t);
+
     if (l->head == NULL) {
-        l->head = rt_node_init(t);
-	if (!l->head) { 
-	    return -1;
-	} else {
-	    l->tail = l->head;
-	    t->list = l->head;
-	    return 0;
-	}
+        l->head = newnode;
+	l->tail = l->head;
+	t->list = l->head;
+	return 0;
     }
 
     rt_node *n = l->tail;
-    l->tail = rt_node_init(t);
-    if (!l->tail) { 
-	return -1;
-    }
 
+    l->tail = newnode;
     l->tail->prev = n;
     n->next = l->tail;
     t->list = l->tail;
 
     return 0;
+}
+
+
+static int rt_list_enqueue(rt_list *l, rt_thread *t)
+{
+    rt_node *n = rt_node_init(t);
+    
+    if (!n) {
+	ERROR("Failed to allocate node for rt list enqueue\n");
+	return -1;
+    } else {
+	return _rt_list_enqueue(l,t,n);
+    }
 }
 
 
@@ -1274,6 +1361,8 @@ static void rt_list_map(rt_list *l, void (func)(rt_thread *t, void *priv), void 
 {
     rt_node *n = l->head;
     while (n != NULL) {
+	//DEBUG("scan: node %p for thread %p\n",n, n->thread);
+	//DEBUG("      (%lu)\n", n->thread->thread->tid);
 	func(n->thread,priv);
         n = n->next;
     }
@@ -2639,7 +2728,8 @@ void    nk_sched_kick_cpu(int cpu)
 #endif
 }
 
-extern void nk_thread_switch(nk_thread_t*);
+extern void nk_thread_switch(nk_thread_t *new);
+extern void nk_thread_switch_exit_helper(nk_thread_t *new, rt_status *statusp, rt_status newval);
 
 // This will always release the lock and restore the interrupt flags 
 // before return if the lock is held
@@ -2742,6 +2832,19 @@ extern void nk_thread_switch(nk_thread_t*);
     // Now preemption is enabled, but interrupts are 
     // still off, so we will continue to run to completion
     preempt_reset();
+
+    if (what==EXITING) {
+	// We need to make the exit transition extremely cleanly as we can
+	// race with the reaper - this invokes an assembly snippet that does this
+	// correctly, and also avoids any state save costs for this now dead
+	// thread.   The helper also needs to reset the preemption and
+	// and interrupt nesting level
+	nk_thread_switch_exit_helper(n,&c->sched_state->status,REAPABLE);
+	ERROR("Returned from an exit context switch!\n");
+	panic("Returned from an exit context switch\n");
+	return;
+    }
+    
 
     // at this point, we have interrupts off
     // whatever we switch to will turn them back on
