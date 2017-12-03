@@ -11,11 +11,13 @@
  * http://xtack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
+ * Copyright (c) 2017, Peter A. Dinda <pdinda@northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
  *                     The Hobbes Project <http://xstack.sandia.gov/hobbes>
  * All rights reserved.
  *
- * Author: Kyle C. Hale <kh@u.northwestern.edu>
+ * Authors: Kyle C. Hale <kh@u.northwestern.edu>
+ *          Peter A. Dinda <pdinda@northwestern.edu>
  *
  * This is free software.  You are permitted to use,
  * redistribute, and modify it as specified in the file "LICENSE.txt".
@@ -184,6 +186,7 @@ _nk_thread_init (nk_thread_t * t,
     t->refcount   = is_detached ? 1 : 2; // thread references itself as well
     t->parent     = parent;
     t->bound_cpu  = bound_cpu;
+    t->placement_cpu = placement_cpu;
     t->current_cpu = placement_cpu;
     t->fpu_state_offset = offsetof(struct nk_thread, fpu_state);
 
@@ -194,6 +197,7 @@ _nk_thread_init (nk_thread_t * t,
         list_add_tail(&(t->child_node), &(parent->children));
     }
 
+    // scheduler will handle reanimated thread correctly here
     if (!(t->sched_state = nk_sched_thread_state_init(t,0))) { 
 	THREAD_ERROR("Could not create scheduler state for thread\n");
 	return -EINVAL;
@@ -206,11 +210,14 @@ _nk_thread_init (nk_thread_t * t,
     }
 #endif
 
-    t->waitq = nk_thread_queue_create();
-
+    // skip wait queue allocation for a reanimated thread
+    
     if (!t->waitq) {
-        THREAD_ERROR("Could not create thread's wait queue\n");
-        return -EINVAL;
+	t->waitq = nk_thread_queue_create();
+	if (!t->waitq) {
+	    THREAD_ERROR("Could not create thread's wait queue\n");
+	    return -EINVAL;
+	}
     }
 
     return 0;
@@ -285,6 +292,7 @@ thread_setup_init_stack (nk_thread_t * t, nk_thread_fun_t fun, void * arg)
 }
 
 
+static void nk_thread_brain_wipe(nk_thread_t *t);
 
 
 /****** EXTERNAL THREAD INTERFACE ******/
@@ -322,29 +330,48 @@ nk_thread_create (nk_thread_fun_t fun,
     struct sys_info * sys = per_cpu_get(system);
     nk_thread_t * t = NULL;
     int placement_cpu = bound_cpu<0 ? nk_sched_initial_placement() : bound_cpu;
-    t = malloc_specific(sizeof(nk_thread_t),placement_cpu);
+    nk_stack_size_t required_stack_size = stack_size ? stack_size: PAGE_SIZE;
 
-    if (!t) {
-        THREAD_ERROR("Could not allocate thread struct\n");
-        return -EINVAL;
-    }
+    // First try to get a thread from the scheduler's pools
+    if ((t=nk_sched_reanimate(required_stack_size,
+			      placement_cpu))) {
+	// we have succeeded in reanimating a dead thread, so
+	// now all we need to do is the management that
+	// nk_thread_destory() would otherwise have done
 
-    memset(t, 0, sizeof(nk_thread_t));
+	nk_thread_brain_wipe(t);
 
-    if (stack_size) {
-        t->stack      = (void*)malloc_specific(stack_size,placement_cpu);
-        t->stack_size = stack_size;
-    } else {
-        t->stack      = (void*)malloc_specific(PAGE_SIZE,placement_cpu);
-        t->stack_size =  PAGE_SIZE;
-    }
-
-    if (!t->stack) { 
 	
-	THREAD_ERROR("Failed to allocate a stack\n");
-	free(t);
-	return -EINVAL;
+    } else {
+
+	// failed to reanimate existing dead thread, so we need to
+	// make our own
+    
+	t = malloc_specific(sizeof(nk_thread_t),placement_cpu);
+
+	if (!t) {
+	    THREAD_ERROR("Could not allocate thread struct\n");
+	    return -EINVAL;
+	}
+
+	memset(t, 0, sizeof(nk_thread_t));
+
+	t->stack_size = required_stack_size;
+
+	t->stack = (void*)malloc_specific(required_stack_size,placement_cpu);
+
+	if (!t->stack) {
+
+	    THREAD_ERROR("Failed to allocate a stack\n");
+	    free(t);
+	    return -EINVAL;
+	}
+	
     }
+    
+    // from this point, if we are using a reanimated thread, and
+    // we fail, we can safely free the thread the same as we
+    // would if we were newly allocating it.  
 
     if (_nk_thread_init(t, t->stack, is_detached, bound_cpu, placement_cpu, get_cur_thread()) < 0) {
         THREAD_ERROR("Could not initialize thread\n");
@@ -358,6 +385,7 @@ nk_thread_create (nk_thread_fun_t fun,
     t->output_loc = output;
     t->output = 0;    
     
+    // scheduler will handle reanimated thread correctly
     if (nk_sched_thread_post_create(t)) {
 	THREAD_ERROR("Scheduler does not accept thread creation\n");
 	goto out_err;
@@ -649,8 +677,13 @@ nk_thread_destroy (nk_thread_id_t t)
 
     nk_sched_thread_pre_destroy(thethread);
 
-    /* remove it from any wait queues */
-    nk_dequeue_entry(&(thethread->wait_node));
+    // If we are on any wait list at this point, it is an error
+    if ((thethread->wait_node.node.next != &thethread->wait_node.node) ||
+	(thethread->wait_node.node.prev != &thethread->wait_node.node)) {
+	THREAD_ERROR("Destroying thread %p (tid=%lu name=%s) that is on a wait queue...\n",
+		     thethread, thethread->tid, thethread->name);
+	nk_dequeue_entry(&(thethread->wait_node));
+    }
 
     /* remove its own wait queue 
      * (waiters should already have been notified */
@@ -667,6 +700,57 @@ nk_thread_destroy (nk_thread_id_t t)
     
     preempt_enable();
 }
+
+/*
+ * nk_thread_brain_wipe
+ *
+ * "destroys" a thread without deallocating it so that
+ * it can be reused.  This needs to mirror nk_thread_destory
+ *
+ * Only threads returned from nk_sched_reanimate() should be 
+ * be brain-wiped.   The caller also needs to initialize
+ * the thread as normal, except no allocations
+ *
+ * @t: the thread to brain-wipe
+ *
+ */
+static void nk_thread_brain_wipe(nk_thread_t *t)
+{
+    nk_thread_t * thethread = (nk_thread_t*)t;
+
+    THREAD_DEBUG("Brain-wiping thread (%p, tid=%lu)\n", (void*)thethread, thethread->tid);
+
+    // no pre-destroy is done as nk_sched_reanimate has already
+    // removed it from the relevant scheduler thread lists/queues
+
+    /* remove it from any wait queues */
+    nk_dequeue_entry(&(thethread->wait_node));
+
+    // we do not delete its own wait queue as we will simply
+    // reuse it
+
+    // We do not deinit its scheduler state, since since
+    // the scheduler will reuse the state in
+    // nk_sched_thread_state_init()
+
+
+    // GC handling must happen - only relevant for
+    // Boehm at this point 
+#ifdef NAUT_CONFIG_ENABLE_BDWGC
+    nk_gc_bdwgc_thread_state_deinit(thethread);
+#endif
+
+    // nothing else is freed
+
+    // do only absolutely minimal cleanup so we don't need to zero the whole thing
+    thethread->tid=0;
+    thethread->name[0]=0;
+
+    // vc management and other handles are up to caller, similar to
+    // thread destroy
+
+}
+
 
 
 static int exit_check(void *state)

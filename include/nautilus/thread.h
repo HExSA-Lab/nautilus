@@ -11,11 +11,13 @@
  * http://xtack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
+ * Copyright (c) 2017, Peter A. Dinda <pdinda@northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
  *                     The Hobbes Project <http://xstack.sandia.gov/hobbes>
  * All rights reserved.
  *
- * Author: Kyle C. Hale <kh@u.northwestern.edu>
+ * Authors: Kyle C. Hale <kh@u.northwestern.edu>
+ *          Peter A. Dinda <pdinda@northwestern.edu>
  *
  * This is free software.  You are permitted to use,
  * redistribute, and modify it as specified in the file "LICENSE.txt".
@@ -32,6 +34,9 @@ extern "C" {
 #include <nautilus/spinlock.h>
 #include <nautilus/queue.h>
 #include <nautilus/intrinsics.h>
+
+typedef uint64_t nk_stack_size_t;
+    
 #include <nautilus/scheduler.h>
 
 #define CPU_ANY       -1
@@ -50,7 +55,6 @@ typedef void* nk_thread_id_t;
 // which cannot do error reporting the usual way
 #define NK_BAD_THREAD_ID ((void*)(-1ULL))
 typedef void (*nk_thread_fun_t)(void * input, void ** output);
-typedef uint64_t nk_stack_size_t;
 
 
 // Create thread but do not launch it 
@@ -192,7 +196,7 @@ struct nk_thread {
     nk_thread_status_t status;
 
     int bound_cpu;
-
+    int placement_cpu;
     int current_cpu;
 
     uint8_t is_idle;

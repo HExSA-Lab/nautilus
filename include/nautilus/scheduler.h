@@ -164,6 +164,12 @@ void    nk_sched_exit(spinlock_t *lock_to_release);
 // normally will only execute if we have too many threads active
 void    nk_sched_reap(int unconditional);
 
+// find a dead thread that matches the criteria, if possible
+// the caller can then avoid the cost of allocating a new
+// thread, although it must still initialize it
+struct nk_thread *nk_sched_reanimate(nk_stack_size_t min_stack_size,
+				     int             placement_cpu);
+
 // return ns
 uint64_t nk_sched_get_realtime();
 

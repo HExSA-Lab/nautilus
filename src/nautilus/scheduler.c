@@ -118,7 +118,7 @@
 #define PAD 0
 #define MALLOC_SPECIFIC(x,c) ({ void *p  = malloc_specific((x)+2*PAD,c); if (!p) { panic("Failed to Allocate %d bytes\n",x); } memset(p,0,(x)+2*PAD); p+PAD; })
 #define MALLOC(x) ({ void *p  = malloc((x)+2*PAD); if (!p) { panic("Failed to Allocate %d bytes\n",x); } memset(p,0,(x)+2*PAD); p+PAD; })
-#define FREE(x) do {if (x) { free(x-PAD); x=0;} } while (0)
+#define FREE(x) do {if (x) { free(((void*)x)-PAD); x=0;} } while (0)
 #else // no sanity checks
 #define MALLOC_SPECIFIC(x,c) malloc_specific(x,c)
 #define MALLOC(x) malloc(x)
@@ -127,6 +127,10 @@
 
 #define ZERO(x) memset(x, 0, sizeof(*x))
 //#define ZERO_QUEUE(x) memset(x, 0, sizeof(rt_priority_queue) + MAX_QUEUE * sizeof(rt_thread *))
+
+
+// cause a GPF if this is ever followed as a pointer
+#define SCHEDULER_POISON ((void*)0xdeadbeefb000b000ULL)
 
 //
 // Shared scheduler state
@@ -784,8 +788,6 @@ static void find_thread(rt_thread *r, void *priv)
 struct nk_thread *nk_find_thread_by_tid(uint64_t tid)
 {
     GLOBAL_LOCK_CONF;
-    struct sys_info *sys = per_cpu_get(system);
-    struct apic_dev *apic = sys->cpus[my_cpu_id()]->apic;
     struct thread_query q;
     
     q.tid=tid;
@@ -805,8 +807,6 @@ void nk_sched_reap(int uncond)
     DEBUG("Executing Reap (%s)\n", uncond? "UNCOND": "cond");
     
     GLOBAL_LOCK_CONF;
-    struct sys_info *sys = per_cpu_get(system);
-    struct apic_dev *apic = sys->cpus[my_cpu_id()]->apic;
     uint64_t i;
 
     if (in_interrupt_context()) {
@@ -868,7 +868,82 @@ void nk_sched_reap(int uncond)
     DEBUG("%sconditional reap ends (%lu threads)\n", uncond ? "un" : "", global_sched_state.num_threads);
     
     // done with reaping - another core can now go
-    global_sched_state.reaping = 0;
+    __sync_fetch_and_and(&global_sched_state.reaping,0);
+}
+
+//
+// The current implementation is essentially a specialized reaping pass,
+// looking in reverse order on the logic that recent threads will be similar
+// to the requested thread
+//
+// Eventually, we will move threads to separate per-cpu queues and perhaps
+// do a smarter search for ones with the required constraints
+//
+//
+struct nk_thread *nk_sched_reanimate(nk_stack_size_t min_stack_size,
+				     int             placement_cpu)
+{
+    DEBUG("Reanimation request for a thread of stack minimum size %lu for CPU %d\n",
+	 min_stack_size, placement_cpu);
+    
+    GLOBAL_LOCK_CONF;
+
+    if (in_interrupt_context()) {
+	DEBUG("Reanimation request while in interrupt context ignored\n");
+	return 0;
+    }
+
+    // We are currently overloaded with reaping, so we will wait until
+    // we are the sole "reaper"
+    while (!__sync_bool_compare_and_swap(&global_sched_state.reaping,0,1)) {
+    }
+    DEBUG("Reanimation search begins (%lu threads)\n", global_sched_state.num_threads);
+
+    GLOBAL_LOCK();
+
+    // start search from the oldest thread
+    rt_node *cur = global_sched_state.thread_list->head;
+
+    uint64_t count = 0;
+    
+    while (cur &&
+	   !(cur->thread->status == REAPABLE &&
+	     cur->thread->thread->status==NK_THR_EXITED &&
+	     !cur->thread->thread->refcount &&
+	     cur->thread->thread->stack_size >= min_stack_size &&
+	     (placement_cpu<0 || cur->thread->thread->placement_cpu==placement_cpu))) {
+	
+	//DEBUG("Skipping thread %p (%lu) \"%s\"\n", cur->thread->thread, cur->thread->thread->tid,
+	//      cur->thread->thread->is_idle ? "*idle*" ::q!
+	//      cur->thread->thread->name[0] ? cur->thread->thread->name : "(no name)");
+	cur=cur->next;
+	count++;
+    }
+    
+    
+    rt_thread *rt = 0;
+    
+    
+    if (cur) {
+	rt = rt_list_remove(global_sched_state.thread_list, cur);
+	global_sched_state.num_threads--;
+	DEBUG("Examined %lu threads before finding a matching one\n", count+1); 
+    } else {
+	DEBUG("Examined %lu threads without finding a matching one\n", count);
+    }
+    
+    GLOBAL_UNLOCK();
+
+    // done with "reaping" - another core can now go
+    __sync_fetch_and_and(&global_sched_state.reaping,0);
+    
+    if (rt) {
+	DEBUG("Reanimation successful - returning thread %p (sched state %p name \"%s\")\n", rt->thread, rt, rt->thread->name);
+	return rt->thread;
+    } else {
+	DEBUG("Reanimation attempt failed\n");
+	return 0;
+    }
 }
 
 void nk_sched_thread_state_deinit(struct nk_thread *thread)
@@ -894,7 +969,15 @@ struct nk_thread *nk_sched_get_cur_thread_on_cpu(int cpu)
 struct nk_sched_thread_state *nk_sched_thread_state_init(struct nk_thread *thread,
 							 struct nk_sched_constraints *constraints)
 {
-    struct nk_sched_thread_state *t = (struct nk_sched_thread_state *)MALLOC_SPECIFIC(sizeof(struct nk_sched_thread_state),thread->current_cpu);
+    struct nk_sched_thread_state *t;
+    
+    if (thread->sched_state) {
+	// this is a reanimated thread, so no allocation is done
+	t = (struct nk_sched_thread_state *)thread->sched_state;
+    } else {
+	t = (struct nk_sched_thread_state *)MALLOC_SPECIFIC(sizeof(struct nk_sched_thread_state),thread->current_cpu);
+    }
+    
     struct sys_info *sys = per_cpu_get(system);
     rt_scheduler *sched = sys->cpus[my_cpu_id()]->sched_state;
     struct nk_sched_constraints *c;
@@ -1267,6 +1350,7 @@ static void rt_list_deinit(rt_list *l)
 // node setup without allocation
 static void _rt_node_init(rt_node *node, rt_thread *t)
 {
+    ASSERT(t);
     node->thread = t;
     node->next = NULL;
     node->prev = NULL;
@@ -1284,6 +1368,9 @@ static rt_node* rt_node_init(rt_thread *t)
 
 static void rt_node_deinit(rt_node *n)
 {
+    n->next = SCHEDULER_POISON;
+    n->prev = SCHEDULER_POISON;
+    n->thread = SCHEDULER_POISON;
     FREE(n);
 }
 
@@ -1353,12 +1440,13 @@ static rt_thread* rt_list_dequeue(rt_list *l)
     n->next = NULL;
     n->prev = NULL;
     rt_node_deinit(n);
-    t->list = 0;
+    t->list = SCHEDULER_POISON;
     return t;
 }
 
 static void rt_list_map(rt_list *l, void (func)(rt_thread *t, void *priv), void *priv)  
 {
+    ASSERT(l);
     rt_node *n = l->head;
     while (n != NULL) {
 	//DEBUG("scan: node %p for thread %p\n",n, n->thread);
