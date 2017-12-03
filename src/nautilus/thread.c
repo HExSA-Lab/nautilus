@@ -723,8 +723,13 @@ static void nk_thread_brain_wipe(nk_thread_t *t)
     // no pre-destroy is done as nk_sched_reanimate has already
     // removed it from the relevant scheduler thread lists/queues
 
-    /* remove it from any wait queues */
-    nk_dequeue_entry(&(thethread->wait_node));
+    // If we are on any wait list at this point, it is an error
+    if ((thethread->wait_node.node.next != &thethread->wait_node.node) ||
+	(thethread->wait_node.node.prev != &thethread->wait_node.node)) {
+	THREAD_ERROR("Brain-wiping thread %p (tid=%lu name=%s) that is on a wait queue...\n",
+		     thethread, thethread->tid, thethread->name);
+	nk_dequeue_entry(&(thethread->wait_node));
+    }
 
     // we do not delete its own wait queue as we will simply
     // reuse it
