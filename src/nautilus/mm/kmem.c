@@ -11,11 +11,13 @@
  * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
+ * Copyright (c) 2017, Peter A. Dinda <pdinda@northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
  *                     The Hobbes Project <http://xstack.sandia.gov/hobbes>
  * All rights reserved.
  *
- * Author: Kyle C. Hale <kh@u.northwestern.edu>
+ * Authors: Kyle C. Hale <kh@u.northwestern.edu>
+ *          Peter A. Dinda <pdinda@northwestern.edu>
  *
  * This is free software.  You are permitted to use,
  * redistribute, and modify it as specified in the file "LICENSE.txt".
@@ -74,7 +76,6 @@
 #define BLOAT  1024
 
 
-
 /**
  *  * Total number of bytes in the kernel memory pool.
  *   */
@@ -101,6 +102,9 @@ static struct list_head glob_zone_list;
 struct kmem_block_hdr {
     void *   addr;   /* address of block */
     uint64_t order;  /* order of the block allocated from buddy system */
+                     /* order>=MIN_ORDER => in use, safe to examine */
+                     /* order==0 => unallocated header */
+                     /* order==1 => allocation in progress, unsafe */
     struct buddy_mempool * zone; /* zone to which this block belongs */
     uint64_t flags;  /* flags for this allocated block */
 } __packed;
@@ -178,13 +182,13 @@ static inline struct kmem_block_hdr * block_hash_find_entry(const void *ptr)
   uint64_t start = block_hash_hash(ptr);
   
   for (i=start;i<block_hash_num_entries;i++) { 
-    if (block_hash_entries[i].addr == ptr) { 
+    if (block_hash_entries[i].order>=MIN_ORDER && block_hash_entries[i].addr == ptr) { 
       KMEM_DEBUG("Find entry scanned %lu entries\n", i-start+1);
       return &block_hash_entries[i];
     }
   }
   for (i=0;i<start;i++) { 
-    if (block_hash_entries[i].addr == ptr) { 
+    if (block_hash_entries[i].order>=MIN_ORDER && block_hash_entries[i].addr == ptr) { 
       KMEM_DEBUG("Find entry scanned %lu entries\n", block_hash_num_entries-start + i + 1);
       return &block_hash_entries[i];
     }
@@ -546,8 +550,10 @@ _kmem_malloc (size_t size, int cpu, int zero)
 
         if (hdr) {
 	    hdr->addr = block;
-	    hdr->order = order;
             hdr->zone = zone;
+	    // force a software barrier here, since our next write must come last
+	    __asm__ __volatile__ ("" :::"memory");
+	    hdr->order = order; // allocation complete
             break;
         }
         
@@ -619,6 +625,7 @@ kmem_free (void * addr)
 {
     struct kmem_block_hdr *hdr;
     struct buddy_mempool * zone;
+    uint64_t order;
 
     KMEM_DEBUG("free of address %p from:\n", addr);
     KMEM_DEBUG_BACKTRACE();
@@ -638,7 +645,7 @@ kmem_free (void * addr)
     // Note that if the user is doing a double-free, it is possible
     // that we race on the block hash entry and so could end up invoking
     // the buddy free more than once
-    
+
     hdr = block_hash_find_entry(addr);
 
     if (!hdr) { 
@@ -648,13 +655,26 @@ kmem_free (void * addr)
     }
 
     zone = hdr->zone;
+    order = hdr->order;
 
+    // Sanity check things here
+    // this will in some cases catch a double free that is causing a
+    // race on the header
+    if (!zone || order<MIN_ORDER) {
+	KMEM_ERROR("Likely double free ignored- addr=%p, zone=%p order=%lu, hdr=%p, hdr->addr=%p, hdr->order=%lu\n", addr,zone, order, hdr,hdr->addr,hdr->order);
+	BACKTRACE(KMEM_ERROR,3);
+	// avoid freeing the header a second time
+	// block_hash_free_entry(hdr);
+	return;
+    }
+
+    
     /* Return block to the underlying buddy system */
     uint8_t flags = spin_lock_irq_save(&zone->lock);
-    kmem_bytes_allocated -= (1UL << hdr->order);
-    buddy_free(zone, addr, hdr->order);
+    kmem_bytes_allocated -= (1UL << order);
+    buddy_free(zone, addr, order);
     spin_unlock_irq_restore(&zone->lock, flags);
-    KMEM_DEBUG("free succeeded: addr=0x%lx order=%lu\n",addr,hdr->order);
+    KMEM_DEBUG("free succeeded: addr=0x%lx order=%lu\n",addr,order);
     block_hash_free_entry(hdr);
 
 #if SANITY_CHECK_PER_OP
@@ -747,7 +767,9 @@ static uint64_t _kmem_stats(struct kmem_stats *stats, stat_type_t what)
 	}
 	cur++;
     }
-    stats->total_num_pools=cur;
+    if (what==GET) {
+	stats->total_num_pools=cur;
+    }
     return cur;
 }
 
@@ -822,7 +844,7 @@ int  kmem_find_block(void *any_addr, void **block_addr, uint64_t *block_size, ui
 	void *search_addr = (void*)(zone_base + (any_offset & mask));
 	struct kmem_block_hdr *hdr = block_hash_find_entry(search_addr);
 	// must exist and must be allocated
-	if (hdr && hdr->order) { 
+	if (hdr && hdr->order>=MIN_ORDER) { 
 	    *block_addr = search_addr;
 	    *block_size = 0x1ULL<<hdr->order;
 	    *flags = hdr->flags;
@@ -845,7 +867,7 @@ int  kmem_set_block_flags(void *block_addr, uint64_t flags)
 
 	struct kmem_block_hdr *h =  block_hash_find_entry(block_addr);
 	
-	if (!h) { 
+	if (!h || h->order<MIN_ORDER) { 
 	    return -1;
 	} else {
 	    h->flags = flags;
@@ -862,14 +884,14 @@ int  kmem_mask_all_blocks_flags(uint64_t mask, int or)
     if (!or) { 
 	boot_flags &= mask;
 	for (i=0;i<block_hash_num_entries;i++) { 
-	    if (block_hash_entries[i].order) { 
+	    if (block_hash_entries[i].order>=MIN_ORDER) { 
 		block_hash_entries[i].flags &= mask;
 	    }
 	}
     } else {
 	boot_flags |= mask;
 	for (i=0;i<block_hash_num_entries;i++) { 
-	    if (block_hash_entries[i].order) { 
+	    if (block_hash_entries[i].order>=MIN_ORDER) { 
 		block_hash_entries[i].flags |= mask;
 	    }
 	}
@@ -889,7 +911,7 @@ int  kmem_apply_to_matching_blocks(uint64_t mask, uint64_t flags, int (*func)(vo
     }
 
     for (i=0;i<block_hash_num_entries;i++) { 
-	if (block_hash_entries[i].order) { 
+	if (block_hash_entries[i].order>=MIN_ORDER) { 
 	    if ((block_hash_entries[i].flags & mask) == flags) {
 		if (func(block_hash_entries[i].addr,state)) { 
 		    return -1;

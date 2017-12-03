@@ -11,11 +11,13 @@
  * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
+ * Copyright (c) 2017, Peter A. Dinda <pdinda@northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
  *                     The Hobbes Project <http://xstack.sandia.gov/hobbes>
  * All rights reserved.
  *
- * Author: Kyle C. Hale <kh@u.northwestern.edu>
+ * Authors: Kyle C. Hale <kh@u.northwestern.edu>
+ *          Peter A. Dinda <pdinda@northwestern.edu>
  *
  * This is free software.  You are permitted to use,
  * redistribute, and modify it as specified in the file "LICENSE.txt".
