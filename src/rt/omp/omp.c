@@ -45,6 +45,7 @@ struct omp_thread
 #define OMP_COOKIE 0xf0d0f0d01234abcdULL
     uint64_t cookie;   // this is disgusting...
     int      team;
+    int      max_threads_in_team; // 0 => numprocs
     int      num_threads_in_team;
     int      thread_num_in_team;
     int      level;
@@ -360,7 +361,13 @@ void omp_set_nested(int nested)
 // this again implies a program-level context...
 void omp_set_num_threads(int num_threads)
 {
-    DEBUG("omp_set_num_threads(%d) => IGNORED FOR NOW\n", num_threads);
+    struct nk_thread *t = get_cur_thread();
+
+    struct omp_thread *o = (struct omp_thread *)t->input;
+
+    o->max_threads_in_team = num_threads;
+    
+    DEBUG("omp_set_num_threads(%d)\n", num_threads);
 }
 
 // Sets the runtime scheduling method. The kind argument can have the
@@ -560,7 +567,11 @@ void GOMP_parallel_start(void (*f)(void*), void *d, unsigned numthreads)
     unsigned i;
 
     if (!numthreads) { 
-	numthreads = nk_get_num_cpus();
+	if (p->max_threads_in_team) {
+	    numthreads = p->max_threads_in_team;
+	} else {
+	    numthreads = nk_get_num_cpus();
+	}
     }
 
     // configure myself
@@ -669,13 +680,26 @@ void GOMP_barrier()
     DEBUG("GOMP_barrier (end)\n");
 }
 
+
+static spinlock_t gomp_global_lock=0;
+
+void GOMP_critical_start(void)
+{
+    DEBUG("GOMP_critical_start (start)\n");
+    spin_lock(&gomp_global_lock);
+    DEBUG("GOMP_critical_start (end)\n");
+}
+
+void GOMP_critical_end(void)
+{
+    DEBUG("GOMP_critical_end\n");
+    spin_unlock(&gomp_global_lock);
+}
+
+
 /*
 SYNCBENCH
 
-rc/built-in.o: In function `testcrit._omp_fn.5':
-/home/pdinda/test/nautilus/src/test/ompbench/syncbench.c:185: undefined reference to `GOMP_critical_start'
-/home/pdinda/test/nautilus/src/test/ompbench/syncbench.c:185: undefined reference to `GOMP_critical_end'
-src/built-in.o: In function `testorder._omp_fn.7':
 /home/pdinda/test/nautilus/src/test/ompbench/syncbench.c:212: undefined reference to `GOMP_loop_ordered_static_start'
 /home/pdinda/test/nautilus/src/test/ompbench/syncbench.c:212: undefined reference to `GOMP_ordered_start'
 /home/pdinda/test/nautilus/src/test/ompbench/syncbench.c:212: undefined reference to `GOMP_ordered_end'
@@ -750,8 +774,8 @@ src/built-in.o: In function `testguidedn._omp_fn.3':
 /home/pdinda/test/nautilus/src/test/ompbench/schedbench.c:131: undefined reference to `GOMP_loop_end'
 /home/pdinda/test/nautilus/src/test/ompbench/schedbench.c:135: undefined reference to `GOMP_loop_guided_start'
 make: *** [nautilus.bin] Error 1
-
 */
+
 
 int nk_omp_thread_init()
 {
