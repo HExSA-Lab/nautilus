@@ -230,25 +230,40 @@ void
 srand48 (long int seedval)
 {
     uint64_t tmp = (((uint64_t) seedval) & 0xffffffffull) << 32;
-    nk_rand_seed(tmp | 0x330e);
+    nk_rand_seed(tmp | 0x330eULL);
 }
 
 
-long int
-lrand48 (void)
+// extract this functionality so that we can implemnt erand, nrand, mrand, jrand, lcong later
+static inline uint64_t _pump_rand(uint64_t xi, uint64_t a, uint64_t c)
+{
+    uint64_t m      = 0x1ULL << 48;
+    uint64_t xi_new = (a*xi + c) % m;
+
+    return xi_new;
+}    
+
+// advance the random number generator and return the new
+// x_i value (48 bit value)
+static inline uint64_t pump_rand()
 {
     struct nk_rand_info * rand = per_cpu_get(rand);
-    uint64_t xi     = rand->xi;
-    uint64_t seed   = rand->seed;
-    uint64_t n      = rand->n;
-    uint64_t m      = 2ull << 48;
-    uint64_t a      = 0x5deece66d;
-    uint64_t c      = 0xb;
-    uint64_t xi_new = (a*xi*n + c) % m;
 
+    uint64_t xi_new = _pump_rand(rand->xi, 0x5deece66dULL, 0xbULL);
+    
     nk_rand_set_xi(xi_new);
 
     return xi_new;
+}
+
+   
+long int
+lrand48 (void)
+{
+    uint64_t val = pump_rand();
+
+    // return top 31 bits
+    return (val >> 17) & 0x8fffffffULL;
 }
 
 
@@ -266,26 +281,22 @@ union ieee754dbl {
 double
 drand48(void) 
 {
-    struct nk_rand_info * rand = per_cpu_get(rand);
-    uint8_t flags = spin_lock_irq_save(&rand->lock);
-    uint64_t xi     = rand->xi;
-    uint64_t n      = rand->n;
-    uint64_t m      = 2ull << 48;
-    uint64_t a      = 0x5deece66dull;
-    uint64_t c      = 0xb;
-    uint64_t xi_new = (a*xi + c) % m;
-    uint16_t *xic   = (uint16_t*)&(rand->xi);
+    uint64_t val = pump_rand();
+    
+    // now have 48 bits of randomness, but we need 52 bits for a double
+    // we will copy the 48 bits into the high order bits of the mantissa
+
+    uint16_t *xic   = (uint16_t*)&val;
 
     union ieee754dbl ret;
 
-    nk_rand_set_xi(xi_new);
-
     ret.sign     = 0;
     ret.exponent = 0x3ff;
-    ret.mantissa0 = (xic[2] << 4) | (xic[1] >> 12);
-    ret.mantissa1 = ((xic[1] & 0xfff) << 20) | (xic[0] << 4);
+    // 16 bits from xic[2], 4 bits from xic[1]
+    ret.mantissa0 = (((uint32_t)xic[2]) << 4) | (((uint32_t)xic[1]) >> 12);
+    // 12 bits from xic[1], 16 bits from xic[0], remaining 4 bits are zeros
+    ret.mantissa1 = ((((uint32_t)xic[1]) & 0xfff) << 20) | (xic[0] << 4);
 
-    spin_unlock_irq_restore(&rand->lock, flags);
     return ret.d - 1.0;
 }
 
