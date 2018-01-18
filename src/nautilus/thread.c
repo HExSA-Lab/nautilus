@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
  * Copyright (c) 2017, Peter A. Dinda <pdinda@northwestern.edu>
@@ -191,6 +191,7 @@ _nk_thread_init (nk_thread_t * t,
     t->fpu_state_offset = offsetof(struct nk_thread, fpu_state);
 
     INIT_LIST_HEAD(&(t->children));
+    nk_queue_entry_init(&(t->wait_node));
 
     /* I go on my parent's child list */
     if (parent) {
@@ -678,11 +679,10 @@ nk_thread_destroy (nk_thread_id_t t)
     nk_sched_thread_pre_destroy(thethread);
 
     // If we are on any wait list at this point, it is an error
-    if ((thethread->wait_node.node.next != &thethread->wait_node.node) ||
-	(thethread->wait_node.node.prev != &thethread->wait_node.node)) {
+    if (nk_queue_entry_is_enqueued(&thethread->wait_node)) {
 	THREAD_ERROR("Destroying thread %p (tid=%lu name=%s) that is on a wait queue...\n",
 		     thethread, thethread->tid, thethread->name);
-	nk_dequeue_entry(&(thethread->wait_node));
+	//nk_dequeue_entry(&(thethread->wait_node));
     }
 
     /* remove its own wait queue 
@@ -724,11 +724,10 @@ static void nk_thread_brain_wipe(nk_thread_t *t)
     // removed it from the relevant scheduler thread lists/queues
 
     // If we are on any wait list at this point, it is an error
-    if ((thethread->wait_node.node.next != &thethread->wait_node.node) ||
-	(thethread->wait_node.node.prev != &thethread->wait_node.node)) {
-	THREAD_ERROR("Brain-wiping thread %p (tid=%lu name=%s) that is on a wait queue...\n",
+    if (nk_queue_entry_is_enqueued(&thethread->wait_node)) {
+	THREAD_ERROR("Destroying thread %p (tid=%lu name=%s) that is on a wait queue...\n",
 		     thethread, thethread->tid, thethread->name);
-	nk_dequeue_entry(&(thethread->wait_node));
+	//nk_dequeue_entry(&(thethread->wait_node));
     }
 
     // we do not delete its own wait queue as we will simply

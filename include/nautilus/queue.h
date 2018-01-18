@@ -42,9 +42,13 @@ struct nk_queue_entry {
 typedef struct nk_queue nk_queue_t;
 typedef struct nk_queue_entry nk_queue_entry_t;
 
+static inline void nk_queue_entry_init(nk_queue_entry_t *e) { INIT_LIST_HEAD(&e->node); }
+static inline int nk_queue_entry_is_enqueued(nk_queue_entry_t *e) { return !list_empty(&e->node); }
+    
 nk_queue_t* nk_queue_create(void);
 void nk_queue_destroy(nk_queue_t * q, uint8_t free_entries);
 
+    
 static inline uint8_t 
 nk_queue_empty(nk_queue_t * q) 
 {
