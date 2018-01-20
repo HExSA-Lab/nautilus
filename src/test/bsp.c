@@ -399,6 +399,7 @@ int test_bsp_eval()
 #define PERIOD_MIN   100000    //100 us
 #define PERIOD_MAX   10000000  // 10 ms
 #define PERIOD_STEP  100000    //100us
+// these are in percentages of the period
 #define SLICE_MIN  10        // 10/100
 #define SLICE_MAX  80        // 80/100
 #define SLICE_STEP 10        // 10/100
@@ -411,8 +412,7 @@ int test_bsp_eval()
 	 nump = (nump*2 < nk_get_num_cpus() || nump==nk_get_num_cpus()-1) ? nump*2 : nk_get_num_cpus()-1) {
     //for (nump=nk_get_num_cpus()-1;nump<nk_get_num_cpus();nump++) {
 	constraints.type=APERIODIC;
-	constraints.interrupt_priority_class = 0xf;
-	constraints.interrupt_priority_class = 0xf;
+	constraints.interrupt_priority_class = 0xe;
 	constraints.aperiodic.priority = 2000000000;
 
 	DOIT ;
@@ -421,7 +421,7 @@ int test_bsp_eval()
 	for (period=PERIOD_MIN;period<=PERIOD_MAX;period+=PERIOD_STEP) {
 	    for (slice=SLICE_MIN; slice<=SLICE_MAX; slice+=SLICE_STEP) {
 		constraints.type=PERIODIC;
-		constraints.interrupt_priority_class = 0xf;
+		constraints.interrupt_priority_class = 0xe;
 		constraints.periodic.phase = 0;
 		constraints.periodic.period = period;
 		constraints.periodic.slice = (period * slice)/100;

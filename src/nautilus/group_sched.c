@@ -134,12 +134,16 @@ nk_group_sched_deinit(void) {
 
 // cooperatively change the constraints in a group
 int
-nk_group_sched_change_constraints(nk_thread_group_t *group, struct nk_sched_constraints *constraints) {
-  //get old constraints
+nk_group_sched_change_constraints(nk_thread_group_t *group, struct nk_sched_constraints *constraints)
+{
   struct nk_thread *t = get_cur_thread();
   struct nk_sched_constraints old;
+  
+  //get old constraints in case we need to roll back to them
   nk_sched_thread_get_constraints(t, &old);
 
+  nk_thread_group_election(group);
+  
   if (nk_thread_group_check_leader(group) == 1) {
     spin_lock(&group_change_constraint_lock);
     group_sched_set_state(group, constraints);
@@ -164,7 +168,7 @@ nk_group_sched_change_constraints(nk_thread_group_t *group, struct nk_sched_cons
     DEBUG("Change constraints failed, roll back to old constraints!\n");
     if (nk_sched_thread_change_constraints(&old) != 0) {
       atomic_cmpswap(group_state.roll_back_to_old_fail, 0, 1);
-      DEBUG("Unable to roll back to old constraints!\n");
+      ERROR("Unable to roll back to old constraints!\n");
     }
 
     nk_thread_group_barrier(group);
