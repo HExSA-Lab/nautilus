@@ -1,24 +1,53 @@
-/***********************************************
-	streamcluster_omp.cpp
-	: parallelized code of streamcluster using OpenMP
-	
-	- original code from PARSEC Benchmark Suite
-	- parallelization with OpenMP API has been applied by
-	
-	Sang-Ha (a.k.a Shawn) Lee - sl4ge@virginia.edu
-	University of Virginia
-	Department of Electrical and Computer Engineering
-	Department of Computer Science
+//Copyright (c) 2006-2009 Princeton University
+//All rights reserved.
 
-        - modified for Nautilus testing by pdinda@northwestern.edu
-	
-***********************************************/
+// converted to C and NK by Peter Dinda, 2018
+
+//Redistribution and use in source and binary forms, with or without
+//modification, are permitted provided that the following conditions are met:
+//    * Redistributions of source code must retain the above copyright
+//      notice, this list of conditions and the following disclaimer.
+//    * Redistributions in binary form must reproduce the above copyright
+//      notice, this list of conditions and the following disclaimer in the
+//      documentation and/or other materials provided with the distribution.
+//    * Neither the name of Princeton University nor the
+//      names of its contributors may be used to endorse or promote products
+//      derived from this software without specific prior written permission.
+
+//THIS SOFTWARE IS PROVIDED BY PRINCETON UNIVERSITY ``AS IS'' AND ANY
+//EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+//WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+//DISCLAIMED. IN NO EVENT SHALL PRINCETON UNIVERSITY BE LIABLE FOR ANY
+//DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+//(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+//LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+//ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+//(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+//SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <nautilus/nautilus.h>
 #include <nautilus/scheduler.h>
 #include <nautilus/libccompat.h>
 #include <nautilus/naut_string.h>
-#include <rt/omp/omp.h>
+#include <nautilus/spinlock.h>
+#include <nautilus/condvar.h>
+#include <nautilus/thread.h>
+#include <nautilus/barrier.h>
+#include <nautilus/scheduler.h>
+#include <nautilus/group_sched.h>
+
+
+#define INFO(fmt, args...) INFO_PRINT("scorg: " fmt, ##args)
+#define ERROR(fmt, args...) ERROR_PRINT("scorg: " fmt, ##args)
+
+#if 1
+#define DEBUG(fmt, args...) DEBUG_PRINT("scorg: " fmt, ##args)
+#else
+#define DEBUG(fmt, args...)
+#endif
+
+#define printf(fmt, args...) nk_vc_printf(fmt, ##args);
+#define fprintf(foo,fmt, args...) nk_vc_printf(fmt, ##args);
 
 #ifdef ENABLE_PARSEC_HOOKS
 #include <hooks.h>
@@ -28,9 +57,65 @@
 //using namespace std;
 
 typedef int bool;
+#define pthread_barrier_t nk_counting_barrier_t
 
-#define pthread_barrier_t int
-#define pthread_t int
+
+#define pthread_barrier_init(p,n,c) nk_counting_barrier_init(p,c)
+#define pthread_barrier_wait(p) do { if (!skipbarrier) { DEBUG("barrier start %s:%d\n",__FILE__,__LINE__); nk_counting_barrier(p); DEBUG("barrier end %s:%d\n",__FILE__,__LINE__);} } while (0)
+#define pthread_barrier_destroy(p) // leak away...
+
+#define pthread_mutex_t spinlock_t
+#define PTHREAD_MUTEX_INITIALIZER SPINLOCK_INITIALIZER
+
+#define pthread_mutex_lock(m) spin_lock(m)
+#define pthread_mutex_unlock(m) spin_unlock(m)
+
+// pthread_cond_wait and pthread_cond_broadcast are
+// used only in pspeedy to signal that open has changed
+// this ungates workers.  We will change this so that it
+// spinwaits instead
+
+#define PTHREAD_COND_INITIALIZER 0
+
+#define pthread_cond_t unsigned
+
+// WARNING: THIS IS ALMOST CERTAINLY BROKEN
+static int pthread_cond_wait(volatile pthread_mutex_t *m, volatile pthread_cond_t *c)
+{
+    // atomic drop of mutex and transition to examination of
+    // condition variable, once condvar is signalled, reacquire lock
+    // blocking is done via busy wait
+
+    DEBUG("cond wait start\n");
+    
+    // we hold the lock, grab the condition
+    pthread_cond_t oldcond = *c;
+    if (oldcond) {
+	DEBUG("cond wait out fast\n");
+	return 0;
+    }
+    // release lock
+    spin_unlock(m);
+    // wait on condition
+    PAUSE_WHILE(!*c);
+    DEBUG("cond wait out slow\n");
+    // reacquire
+    spin_lock(m);
+    DEBUG("cond wait lock reacquired\n"); 
+    return 0;
+}
+
+// WARNING: THIS IS ALMOST CERTAINLY BROKEN
+static int pthread_cond_broadcast(volatile pthread_cond_t *c)
+{
+    *c = 1;
+    return 0;
+}
+
+#define pthread_t nk_thread_id_t
+
+#define pthread_create(tp,ap,f,i) nk_thread_start((nk_thread_fun_t)f,i,0,0,TSTACK_DEFAULT,tp,-1)
+#define pthread_join(tp,ap) nk_join(tp,ap)
 
 #define calloc(n,s) ({ void *_p=malloc(n*s); memset(_p,0,n*s); _p; })
 
@@ -38,6 +123,7 @@ typedef int bool;
 #define newa(t,n) calloc(sizeof(t),n)
 #define del(t) free(t)
 #define dela(t) free(t)
+
 
 #define MAXNAMESIZE 1024 // max filename length
 #define SEED 1
@@ -50,9 +136,12 @@ typedef int bool;
 /* higher ITER also scales the running time almost linearly */
 #define ITER 3 // iterate ITER* k log k times; ITER >= 1
 
-//#define PRINTINFO //comment this out to disable output
+
+// PAD: need to enable threading, but we will use the NK threads and barriers
+
+#define PRINTINFO //comment this out to disable output
 #define PROFILE // comment this out to disable instrumentation code
-//#define ENABLE_THREADS  // comment this out to disable threads
+#define ENABLE_THREADS  // comment this out to disable threads
 //#define INSERT_WASTE //uncomment this to insert waste computation into dist function
 
 #define CACHE_LINE 512 // cache line in byte
@@ -76,11 +165,16 @@ typedef struct {
 static bool *switch_membership; //whether to switch membership in pgain
 static bool* is_center; //whether a point is a center
 static int* center_table; //index table of centers
-float* block;
 
 static int nproc; //# of threads
-static int c, d;
-static int ompthreads;
+
+// globals for deciding how to lay out threads, whether to
+// skip the barrier, and the sched constraint to use
+static int startproc=-1;
+static int skipbarrier=0;
+static nk_thread_group_t *group=0;
+static struct nk_sched_constraints *schedconst=0;
+
 
 // instrumentation code
 #ifdef PROFILE
@@ -92,7 +186,6 @@ static double time_shuffle;
 static double time_gain_dist;
 static double time_gain_init;
 #endif 
-
 
 static double gettime() {
     // struct timeval t;
@@ -193,11 +286,11 @@ static float dist(Point p1, Point p2, int dim)
   return(result);
 }
 
-
-
 /* run speedy on the points, return total cost of solution */
 static float pspeedy(Points *points, float z, long *kcenter, int pid, pthread_barrier_t* barrier)
 {
+
+    DEBUG("in pspeedy\n");
 #ifdef PROFILE
   double t1 = gettime();
 #endif
@@ -216,6 +309,11 @@ static float pspeedy(Points *points, float z, long *kcenter, int pid, pthread_ba
   static bool open = false;
   static double* costs; //cost for each thread. 
   static int i;
+
+  volatile static unsigned long round=0;
+
+  unsigned long myround=0;
+  
 
 #ifdef ENABLE_THREADS
   static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -243,9 +341,13 @@ static float pspeedy(Points *points, float z, long *kcenter, int pid, pthread_ba
   if( pid != 0 ) { // we are not the master threads. we wait until a center is opened.
     while(1) {
 #ifdef ENABLE_THREADS
-      pthread_mutex_lock(&mutex);
-      while(!open) pthread_cond_wait(&cond,&mutex);
-      pthread_mutex_unlock(&mutex);
+	//      pthread_mutex_lock(&mutex);
+	//while(!open) pthread_cond_wait(&cond,&mutex);
+	//pthread_mutex_unlock(&mutex);
+	while (myround==round);
+	// advance to next round
+	myround = round;
+	DEBUG("advance to round %lu point %d\n",myround,i);
 #endif
       if( i >= points->num ) break;
       for( int k = k1; k < k2; k++ )
@@ -262,19 +364,25 @@ static float pspeedy(Points *points, float z, long *kcenter, int pid, pthread_ba
       pthread_barrier_wait(barrier);
 #endif
     } 
+    DEBUG("Points finished\n");
   }
   else  { // I am the master thread. I decide whether to open a center and notify others if so. 
     for(i = 1; i < points->num; i++ )  {
-      bool to_open = ((float)lrand48()/(float)INT_MAX)<(points->p[i].cost/z);
+      long l = lrand48();
+      bool to_open = ((float)l/(float)INT_MAX)<(points->p[i].cost/z);
+      //      DEBUG("i=%d l=%ld points->p[i].cost=%lf z=%lf to_open=%d\n",i,l,points->p[i].cost,z,to_open);
+      //DEBUG("l/INTMAX=%lf points->p[i].cost/z=%lf\n", ((float)l/(float)INT_MAX), (points->p[i].cost/z));
       if( to_open )  {
 	(*kcenter)++;
 #ifdef ENABLE_THREADS
-	pthread_mutex_lock(&mutex);
+	//	pthread_mutex_lock(&mutex);
 #endif
 	open = true;
 #ifdef ENABLE_THREADS
-	pthread_mutex_unlock(&mutex);
-	pthread_cond_broadcast(&cond);
+	//pthread_mutex_unlock(&mutex);
+	//pthread_cond_broadcast(&cond);
+	__sync_fetch_and_add(&round,1);
+	DEBUG("signal round %lu, point %d\n",round,i);
 #endif
 	for( int k = k1; k < k2; k++ )  {
 	  float distance = dist(points->p[i],points->p[k],points->dim);
@@ -292,13 +400,17 @@ static float pspeedy(Points *points, float z, long *kcenter, int pid, pthread_ba
 #endif
       }
     }
+    DEBUG("Points finished - master\n");
+    
 #ifdef ENABLE_THREADS
-    pthread_mutex_lock(&mutex);
+    //    pthread_mutex_lock(&mutex);
 #endif
     open = true;
+    __sync_fetch_and_add(&round,1);
+    DEBUG("signal special? round %lu\n",round);
 #ifdef ENABLE_THREADS
-    pthread_mutex_unlock(&mutex);
-    pthread_cond_broadcast(&cond);
+    //pthread_mutex_unlock(&mutex);
+    //pthread_cond_broadcast(&cond);
 #endif
   }
 #ifdef ENABLE_THREADS
@@ -316,6 +428,7 @@ static float pspeedy(Points *points, float z, long *kcenter, int pid, pthread_ba
   // aggregate costs from each thread
   if( pid == 0 )
     {
+	DEBUG("master aggregates\n");
       totalcost=z*(*kcenter);
       for( int i = 0; i < nproc; i++ )
 	{
@@ -342,6 +455,8 @@ static float pspeedy(Points *points, float z, long *kcenter, int pid, pthread_ba
     time_speedy += t2 -t1;
   }
 #endif
+
+  DEBUG("Leaving pspeedy\n");
   return(totalcost);
 }
 
@@ -364,15 +479,14 @@ static float pspeedy(Points *points, float z, long *kcenter, int pid, pthread_ba
 
 static double pgain(long x, Points *points, double z, long int *numcenters, int pid, pthread_barrier_t* barrier)
 {
-  //  printf("pgain pthread %d begin\n",pid);
+  printf("pgain pthread %d begin\n",pid);
 #ifdef ENABLE_THREADS
   pthread_barrier_wait(barrier);
 #endif
 #ifdef PROFILE
   double t0 = gettime();
-#endif	
+#endif
 
-	
   //my block
   long bsize = points->num/nproc;
   long k1 = bsize * pid;
@@ -385,7 +499,7 @@ static double pgain(long x, Points *points, double z, long int *numcenters, int 
   static double *work_mem;
   static double gl_cost_of_opening_x;
   static int gl_number_of_centers_to_close;
-	
+
   //each thread takes a block of working_mem.
   int stride = *numcenters+2;
   //make stride a multiple of CACHE_LINE
@@ -403,6 +517,7 @@ static double pgain(long x, Points *points, double z, long int *numcenters, int 
     gl_cost_of_opening_x = 0;
     gl_number_of_centers_to_close = 0;
   }
+
 #ifdef ENABLE_THREADS
   pthread_barrier_wait(barrier);
 #endif
@@ -411,13 +526,13 @@ static double pgain(long x, Points *points, double z, long int *numcenters, int 
     Each thread has its own copy of the *lower* fields as an array.
     We first build a table to index the positions of the *lower* fields. 
   */
-	
+
   int count = 0;
   for( int i = k1; i < k2; i++ ) {
     if( is_center[i] ) {
       center_table[i] = count++;
-    }		
-  }	
+    }
+  }
   work_mem[pid*stride] = count;
 
 #ifdef ENABLE_THREADS
@@ -437,17 +552,17 @@ static double pgain(long x, Points *points, double z, long int *numcenters, int 
   pthread_barrier_wait(barrier);
 #endif
 
-  for( int i = k1; i < k2; i++ ) {		
+  for( int i = k1; i < k2; i++ ) {
     if( is_center[i] ) {
       center_table[i] += (int)work_mem[pid*stride];
-    }		
-  }	
-	
+    }
+  }
+
   //now we finish building the table. clear the working memory.
   memset(switch_membership + k1, 0, (k2-k1)*sizeof(bool));
   memset(work_mem+pid*stride, 0, stride*sizeof(double));
   if( pid== 0 ) memset(work_mem+nproc*stride,0,stride*sizeof(double));
-	
+
 #ifdef ENABLE_THREADS
   pthread_barrier_wait(barrier);
 #endif
@@ -459,22 +574,21 @@ static double pgain(long x, Points *points, double z, long int *numcenters, int 
   double* lower = &work_mem[pid*stride];
   //global *lower* fields
   double* gl_lower = &work_mem[nproc*stride];
-	
-	// OpenMP parallelization
-//	#pragma omp parallel for 
-	#pragma omp parallel for reduction(+: cost_of_opening_x)
+
   for ( i = k1; i < k2; i++ ) {
     float x_cost = dist(points->p[i], points->p[x], points->dim) 
       * points->p[i].weight;
     float current_cost = points->p[i].cost;
-		
+
     if ( x_cost < current_cost ) {
 
       // point i would save cost just by switching to x
       // (note that i cannot be a median, 
-      // or else dist(p[i], p[x]) would be 0)			
+      // or else dist(p[i], p[x]) would be 0)
+      
       switch_membership[i] = 1;
-      cost_of_opening_x += x_cost - current_cost;			
+      cost_of_opening_x += x_cost - current_cost;
+
     } else {
 
       // cost of assigning i to x is at least current assignment cost of i
@@ -485,32 +599,32 @@ static double pgain(long x, Points *points, double z, long int *numcenters, int 
       // would save z by closing; now we have to subtract from the savings
       // the extra cost of reassigning that median and its members 
       int assign = points->p[i].assign;
-      lower[center_table[assign]] += current_cost - x_cost;			
+      lower[center_table[assign]] += current_cost - x_cost;
     }
   }
 
 #ifdef ENABLE_THREADS
   pthread_barrier_wait(barrier);
-#endif	
+#endif
+
 #ifdef PROFILE
   double t2 = gettime();
   if( pid==0){
     time_gain_dist += t2 - t1;
   }
-#endif	
+#endif
+
   // at this time, we can calculate the cost of opening a center
   // at x; if it is negative, we'll go through with opening it
-	
-	
+
   for ( int i = k1; i < k2; i++ ) {
     if( is_center[i] ) {
       double low = z;
       //aggregate from all threads
       for( int p = 0; p < nproc; p++ ) {
-				low += work_mem[center_table[i]+p*stride];
+	low += work_mem[center_table[i]+p*stride];
       }
       gl_lower[center_table[i]] = low;
-			//printf("%d : %f %f\n", i, low, work_mem[center_table[i]+stride]);
       if ( low > 0 ) {
 	// i is a median, and
 	// if we were to open x (which we still may not) we'd close i
@@ -521,14 +635,10 @@ static double pgain(long x, Points *points, double z, long int *numcenters, int 
       }
     }
   }
-#ifdef ENABLE_THREADS
-  pthread_barrier_wait(barrier);
-#endif
-		
   //use the rest of working memory to store the following
   work_mem[pid*stride + K] = number_of_centers_to_close;
   work_mem[pid*stride + K+1] = cost_of_opening_x;
-	
+
 #ifdef ENABLE_THREADS
   pthread_barrier_wait(barrier);
 #endif
@@ -550,21 +660,19 @@ static double pgain(long x, Points *points, double z, long int *numcenters, int 
 
   if ( gl_cost_of_opening_x < 0 ) {
     //  we'd save money by opening x; we'll do it
-		#pragma omp parallel for
     for ( int i = k1; i < k2; i++ ) {
       bool close_center = gl_lower[center_table[points->p[i].assign]] > 0 ;
       if ( switch_membership[i] || close_center ) {
-				// Either i's median (which may be i itself) is closing,
-				// or i is closer to x than to its current median
-				points->p[i].cost = points->p[i].weight *
-					dist(points->p[i], points->p[x], points->dim);
-				points->p[i].assign = x;
+	// Either i's median (which may be i itself) is closing,
+	// or i is closer to x than to its current median
+	points->p[i].cost = points->p[i].weight *
+	  dist(points->p[i], points->p[x], points->dim);
+	points->p[i].assign = x;
       }
     }
-		
     for( int i = k1; i < k2; i++ ) {
       if( is_center[i] && gl_lower[center_table[i]] > 0 ) {
-				is_center[i] = false;
+	is_center[i] = false;
       }
     }
     if( x >= k1 && x < k2 ) {
@@ -596,7 +704,6 @@ static double pgain(long x, Points *points, double z, long int *numcenters, int 
   if( pid==0 )
   time_gain += t3-t0;
 #endif
-	//printf("cost=%f\n", -gl_cost_of_opening_x);
   return -gl_cost_of_opening_x;
 }
 
@@ -627,6 +734,7 @@ static float pFL(Points *points, int *feasible, int numfeasible,
     change = 0.0;
     numberOfPoints = points->num;
     /* randomize order in which centers are considered */
+    DEBUG("change/cost = %lf > %lf\n",change/cost, 1.0*e);
 
     if( pid == 0 ) {
       intshuffle(feasible, numfeasible);
@@ -635,13 +743,13 @@ static float pFL(Points *points, int *feasible, int numfeasible,
     pthread_barrier_wait(barrier);
 #endif
     for (i=0;i<iter;i++) {
+	DEBUG("i=%d, iter=%d\n", i,iter);
       x = i%numfeasible;
-			//printf("iteration %d started********\n", i);
       change += pgain(feasible[x], points, z, k, pid, barrier);
-			c++;
-			//printf("iteration %d finished @@@@@@\n", i);
     }
 
+    DEBUG("pgain returns, change is now %lf\n", change);
+    
     cost -= change;
 #ifdef PRINTINFO
     if( pid == 0 ) {
@@ -849,7 +957,6 @@ static float pkmedian(Points *points, long kmin, long kmax, long* kfinal,
 #endif
 
   while(1) {
-		d++;
 #ifdef PRINTINFO
     if( pid==0 )
       {
@@ -967,7 +1074,7 @@ static void copycenters(Points *points, Points* centers, long* centerIDs, long o
   free(is_a_median);
 }
 
-typedef struct pkmedian_arg_t_
+typedef struct _pkmedian_arg_t
 {
   Points* points;
   long kmin;
@@ -979,9 +1086,45 @@ typedef struct pkmedian_arg_t_
 
 static void* localSearchSub(void* arg_) {
 
+
+  nk_bind_vc(get_cur_thread(),get_cur_thread()->parent->vc);
+  
   pkmedian_arg_t* arg= (pkmedian_arg_t*)arg_;
+
+  char buf[80];
+
+  sprintf(buf,"scorg-%d",arg->pid);
+
+  nk_thread_name(get_cur_thread(),buf);
+
+  DEBUG("join group\n");
+  
+    if (group) {
+	nk_thread_group_join(group);
+    }
+
+  DEBUG("wait on others to join group\n");
+
+  nk_counting_barrier(arg->barrier); // wait for everyone to join group
+    
+    if (schedconst) {
+	DEBUG("group change constraint\n");
+	// do a group change constraint
+	nk_group_sched_change_constraints(group,schedconst);
+    } else {
+	DEBUG("no group change constraint\n");
+    }
+
+    DEBUG("pkmedian starts\n");
+
+        
   pkmedian(arg->points,arg->kmin,arg->kmax,arg->kfinal,arg->pid,arg->barrier);
 
+  if (group) {
+      DEBUG("group leave\n");
+      nk_thread_group_leave(group);
+  }
+  
   return NULL;
 }
 
@@ -990,11 +1133,18 @@ static void localSearch( Points* points, long kmin, long kmax, long* kfinal ) {
   double t1 = gettime();
 #endif
 
+
+  if (schedconst) {
+      // set up a group for our use
+      group = nk_thread_group_create("foofighters");
+  }
+  
     pthread_barrier_t barrier;
 #ifdef ENABLE_THREADS
+    DEBUG("barrier init for %d procs\n",nproc);
     pthread_barrier_init(&barrier,NULL,nproc);
 #endif
-    pthread_t* threads = newa(pthread_t,nproc);
+    pthread_t* threads = newa(pthread_t, nproc);
     pkmedian_arg_t* arg = newa(pkmedian_arg_t,nproc);
 
 
@@ -1007,7 +1157,9 @@ static void localSearch( Points* points, long kmin, long kmax, long* kfinal ) {
 
       arg[i].barrier = &barrier;
 #ifdef ENABLE_THREADS
-      pthread_create(threads+i,NULL,localSearchSub,(void*)&arg[i]);
+      int targetproc = startproc!=-1 ? startproc+i : -1;
+      nk_thread_start((nk_thread_fun_t)localSearchSub,(void*)&arg[i],0,0,TSTACK_DEFAULT,threads+i,targetproc);
+      // pthread_create(threads+i,NULL,localSearchSub,(void*)&arg[i]);
 #else
       localSearchSub(&arg[0]);
 #endif
@@ -1025,11 +1177,17 @@ static void localSearch( Points* points, long kmin, long kmax, long* kfinal ) {
     pthread_barrier_destroy(&barrier);
 #endif
 
+    if (group) {
+	nk_thread_group_delete(group);
+    }
+
 #ifdef PROFILE
   double t2 = gettime();
   time_local_search += t2-t1;
 #endif
- 
+
+
+  
 }
 
 typedef struct _PStream {
@@ -1058,7 +1216,7 @@ static int PStream_feof(PStream *p) {
 
 static void outcenterIDs( Points* centers, long* centerIDs, char* outfile ) {
   FILE* fp = fopen(outfile, "w");
-  if( fp==NULL ) {
+  if( 0 && fp==NULL ) {
     fprintf(stderr, "error opening %s\n",outfile);
     exit(1);
   }
@@ -1084,7 +1242,7 @@ static void streamCluster( PStream* stream,
 		    long kmin, long kmax, int dim,
 		    long chunksize, long centersize, char* outfile )
 {
-  block = (float*)malloc( chunksize*dim*sizeof(float) );
+  float* block = (float*)malloc( chunksize*dim*sizeof(float) );
   float* centerBlock = (float*)malloc(centersize*dim*sizeof(float) );
   long* centerIDs = (long*)malloc(centersize*dim*sizeof(long));
 
@@ -1097,12 +1255,10 @@ static void streamCluster( PStream* stream,
   points.dim = dim;
   points.num = chunksize;
   points.p = (Point *)malloc(chunksize*sizeof(Point));
-  for( int i = 0; i < chunksize; i++ ) {		
+  for( int i = 0; i < chunksize; i++ ) {
     points.p[i].coord = &block[i*dim];
   }
 
-	
-	
   Points centers;
   centers.dim = dim;
   centers.p = (Point *)malloc(centersize*sizeof(Point));
@@ -1116,7 +1272,7 @@ static void streamCluster( PStream* stream,
   long IDoffset = 0;
   long kfinal;
   while(1) {
-
+      
       size_t numRead  = PStream_read(stream,block, dim, chunksize ); 
     fprintf(stderr,"read %d points\n",numRead);
 
@@ -1174,15 +1330,14 @@ static void streamCluster( PStream* stream,
   outcenterIDs( &centers, centerIDs, outfile);
 }
 
-int test_omp_streamcluster(int numt)
+int test_orig_streamcluster(int numt, int startp, int nobarrier,
+			    struct nk_sched_constraints *constraints)
 {
     char *outfilename = newa(char,MAXNAMESIZE);
     char *infilename = newa(char,MAXNAMESIZE);
   long kmin, kmax, n, chunksize, clustersize;
   int dim;
-	int numthreads;
-	c = 0;
-	d = 0;
+
 #ifdef PARSEC_VERSION
 #define __PARSEC_STRING(x) #x
 #define __PARSEC_XSTRING(x) __PARSEC_STRING(x)
@@ -1207,14 +1362,11 @@ int test_omp_streamcluster(int numt)
   strcpy(infilename, "none");
   strcpy(outfilename, "output.txt");
   nproc = numt;
-
-     nk_omp_thread_init();
+  startproc = startp;
+  skipbarrier = nobarrier;
+  schedconst = constraints;
   
-	
-	ompthreads = nproc;
-	nproc = 1;
-	omp_set_num_threads(ompthreads);
-	
+
   srand48(SEED);
   PStream* stream;
   if( n > 0 ) {
@@ -1237,9 +1389,9 @@ int test_omp_streamcluster(int numt)
   double t2 = gettime();
 
   printf("time = %lf\n",t2-t1);
-
+ 
   del(stream);
-
+#ifdef PROFILE
   printf("time pgain = %lf\n", time_gain);
   printf("time pgain_dist = %lf\n", time_gain_dist);
   printf("time pgain_init = %lf\n", time_gain_init);
@@ -1247,12 +1399,17 @@ int test_omp_streamcluster(int numt)
   printf("time pspeedy = %lf\n", time_speedy);
   printf("time pshuffle = %lf\n", time_shuffle);
   printf("time localSearch = %lf\n", time_local_search);
-	printf("loops=%d\n", d);
+ #endif
+  
 #ifdef ENABLE_PARSEC_HOOKS
   __parsec_bench_end();
 #endif
 
-  nk_omp_thread_deinit();
+  // reset for next run
+  nproc = 0;
+  startproc = -1;
+  skipbarrier = 0;
+  schedconst = 0;
   
   return 0;
 }
