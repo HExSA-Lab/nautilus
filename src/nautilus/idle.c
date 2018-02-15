@@ -25,6 +25,7 @@
 #include <nautilus/cpu.h>
 #include <nautilus/irq.h>
 #include <nautilus/thread.h>
+#include <nautilus/task.h>
 #include <nautilus/scheduler.h>
 
 #ifndef NAUT_CONFIG_DEBUG_SCHED
@@ -52,6 +53,8 @@ idle (void * in, void ** out)
 {
     get_cur_thread()->is_idle = 1;
 
+    struct nk_task *task;
+
     uint64_t last_steal = nk_sched_get_runtime(get_cur_thread());
     uint64_t runtime;
     uint64_t numstolen;
@@ -59,15 +62,38 @@ idle (void * in, void ** out)
     while (1) {
 	if (!irqs_enabled()) { 
 	    panic("Idle running with interrupts off!");
+	    return;
 	}
 
+
+#if NAUT_CONFIG_TASK_IN_IDLE
+	// consume our own tasks until there are none left
+	// we need to assure that if we consume a task, we finish it
+	// hence the preemption disable
+	do {
+#if NAUT_CONFIG_TASK_IN_IDLE_NOPREEMPT
+	    preempt_disable();
+#endif
+	    if ((task = nk_task_try_consume(my_cpu_id(),0,0))) { 
+		DEBUG_PRINT("idle consuming task %p\n",task);
+		void *output = task->func(task->input);
+		nk_task_complete(task, output);
+	    }
+#if NAUT_CONFIG_TASK_IN_IDLE_NOPREEMPT
+	    preempt_enable();
+#endif
+	} while (task);
+#endif
+	
 #if NAUT_CONFIG_WORK_STEALING
 	runtime = nk_sched_get_runtime(get_cur_thread());
-	if ((runtime - last_steal) > (NAUT_CONFIG_WORK_STEALING_INTERVAL_MS*1000000ULL)) { 
+	if ((runtime - last_steal) > (NAUT_CONFIG_WORK_STEALING_INTERVAL_MS*1000000ULL)) {
+	    preempt_disable();
 	    DEBUG_PRINT("CPU %d trying to steal\n",my_cpu_id());
 	    nk_sched_cpu_mug(-1,NAUT_CONFIG_WORK_STEALING_AMOUNT,&numstolen);
 	    DEBUG_PRINT("CPU %d stole %lu threads\n",my_cpu_id(),numstolen);
 	    last_steal = runtime;
+	    preempt_enable();
 	}
 #endif
 	    

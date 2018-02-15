@@ -3,6 +3,7 @@ CXXFLAGS += -DSHARED_LOWLEVEL -DCOMPILE_TIME_MIN_LEVEL=LEVEL_DEBUG  -D__LEGION__
 
 obj-y  = threads.o
 obj-y += groups.o
+obj-y += tasks.o
 obj-y += bsp.o
 obj-y += net_udp_echo.o
 

@@ -298,6 +298,57 @@ config VIRTUAL_CONSOLE_SERIAL_MIRROR_ALL
         attempt to steal every time work stealing is
 	run.
 
+    config TASK_IN_SCHED
+        bool "Handle tasks of known size in scheduler"
+	default true
+	help
+	   When enabled, each cpu's scheduler will execute tasks of
+	   known size when no real-time task would be impeded.  This
+	   lifts such tasks to a priority just below real-time threads.
+	   Note that the eager EDF properties of the scheduler are maintained -
+	   if an RT thread is runnable, it will still run in preference
+	   to in-scheduler task execution, no matter how much slack is available.
+
+    config TASK_THREAD
+        bool "Handle tasks in a special thread"
+        default true;
+	help
+	  When enabled, each cpu has a thread that consumes tasks.
+	  The thread can run at an arbitrary aperiodic priority.
+
+    config TASK_THREAD_PRIORITY
+       depends on TASK_THREAD
+       int "Aperiodic priority for task threads"
+       default 100000000
+       help 
+          Priority for the task threads.  The default here is
+	  the quantum in ns.   By adjusting this, you can adjust
+	  how much priority unsized tasks effectively have in the system.
+
+    config TASK_IN_IDLE
+       bool "Handle tasks within idle loop"
+       default false
+       help
+          When enabled, each cpu's idle loop will execute tasks prior
+	  to attempting work stealing.
+	  
+    config TASK_IN_IDLE_NOPREEMPT
+       depends on TASK_IN_IDLE
+       bool "Execute tasks within idle with preemption disabled"
+       default false
+       help
+          When enabled, the idle loop executes tasks with preemption
+	  disabled,  which can result in priority inversion for
+	  real-time threads.  However, with preemption enabled, the idle loop
+	  may start a task, then get preempted.  The task is then in
+	  limbo until the idle loop is run again, which may be never
+	  given that it has the lowest possible priority in the
+	  system.  The purpose of this option is to choose
+	  which of these behaviors you want if you are executing tasks
+	  in idle loops.
+	  
+       
+	  
     config INTERRUPT_THREAD
        bool "Restrict interrupts to special real-time interrupt thread"
        default false
@@ -528,14 +579,6 @@ menu "AeroKernel Performance Optimizations"
         help
             Disables paranoid condition checking and optimizes thread functions
             for maximum performance.
-
-    config USE_IDLE_THREADS
-        bool "Start idle threads on all cores"
-        default n
-        help
-            Enables idle threads to start in addition to the main boot threads. 
-            Usually not needed.
-
 
 endmenu
 

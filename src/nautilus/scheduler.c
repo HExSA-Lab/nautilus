@@ -38,10 +38,20 @@
 
   On creation, a thread is aperiodic with medium priority.
 
+
+  Tasks (deferred procedure calls/futures/...) are integrated as well.   
+
+   - Tasks of known size can be optionally run by the scheduling pass
+     itself, provided no real-time task is runnable.  
+   - Tasks of known or unknown size can be optionally run by a per-cpu
+     task thread.  
+   - The idle loop also consumes tasks (albeit at lowest priority).
+
 */
 
 #include <nautilus/nautilus.h>
 #include <nautilus/thread.h>
+#include <nautilus/task.h>
 #include <nautilus/timer.h>
 #include <nautilus/scheduler.h>
 #include <nautilus/irq.h>
@@ -60,15 +70,28 @@
 #define PERIOD_LOWER_LIMIT 20000
 #define SLICE_LOWER_LIMIT  10000
 
+// task and idle threads run tasks, and so their stacks
+// need to be sized to be sensible for those tasks
+#define TASK_THREAD_STACK_SIZE (PAGE_SIZE_2MB)
+#define IDLE_THREAD_STACK_SIZE (PAGE_SIZE_2MB)
+
+// interrupt and reaper threads are self-contained here, so
+// their stack limits can be more carefully controlled
+#define INTERRUPT_THREAD_STACK_SIZE (PAGE_SIZE_4KB*4)
+#define REAPER_THREAD_STACK_SIZE (PAGE_SIZE_4KB*4)
+
 // enforce granularity of period and slice / sporadic size
 #define ENFORCE_GRANULARITY 1
 // period/slice/sporadic size can be no smaller than these (in ns)
 // in the future these will be determined at boot time
 #define GRANULARITY 2000
 
+
 #define INSTRUMENT    0
 
 #define SANITY_CHECKS 0
+
+#define STACK_CHECKS  0
 
 #define DUMP_THREAD_RT_STATE 0
 #define DUMP_SCHED_STATE     0
@@ -113,6 +136,15 @@
 #define LOCAL_LOCK_CONF uint8_t _local_flags=0
 #define LOCAL_LOCK(s) _local_flags = spin_lock_irq_save(&((s)->lock))
 #define LOCAL_UNLOCK(s) spin_unlock_irq_restore(&((s)->lock),_local_flags)
+
+#define TASK_LOCK_CONF uint8_t _task_flags=0
+#define TASK_LOCK(t) _task_flags = spin_lock_irq_save(&((t)->lock))
+#define TASK_TRY_LOCK(t) spin_try_lock_irq_save(&((t)->lock),&_task_flags)
+#define TASK_UNLOCK(t) spin_unlock_irq_restore(&((t)->lock),_task_flags)
+//#define TASK_LOCK_CONF 
+//#define TASK_LOCK(t) spin_lock(&((t)->lock))
+//#define TASK_TRY_LOCK(t) spin_try_lock(&((t)->lock))
+//#define TASK_UNLOCK(t) spin_unlock(&((t)->lock))
 
 #if SANITY_CHECKS
 #define PAD 0
@@ -250,6 +282,17 @@ typedef struct tsc_info {
 } tsc_info;
 
 
+typedef struct nk_sched_task_state {
+    spinlock_t  lock;
+    nk_thread_queue_t  *waitq;           // where the task thread blocks ultimately
+    uint64_t           sized_enqueued;   // number of sized tasks enqueued
+    uint64_t           sized_dequeued;   //   and dequeued (locally or remotely)
+    struct list_head   sized_queue;      // tasks with known sizes
+    uint64_t           unsized_enqueued; // number of unsized tasks enqueud
+    uint64_t           unsized_dequeued; //   and dequeued (locally or remotely)
+    struct list_head   unsized_queue;    // tasks with unknown sizes;
+} task_info;
+
 typedef struct nk_sched_percpu_state {
     spinlock_t             lock;
     struct nk_sched_config cfg; 
@@ -267,6 +310,8 @@ typedef struct nk_sched_percpu_state {
     rt_priority_queue aperiodic;   // Aperiodic threads that are runnable
 #endif
 
+    task_info tasks;       // tasks known to this local scheduler
+    
     tsc_info tsc;
 
     uint64_t slack;        // allowed slop for scheduler execution itself
@@ -442,6 +487,7 @@ typedef struct nk_sched_thread_state {
     queue_type q_type;
     
     int      is_intr;      // this is an interrupt thread
+    int      is_task;      // this is a task thread
 
     uint64_t start_time;   // when last started
     uint64_t cur_run_time; // how long it has run without being preempted
@@ -476,6 +522,7 @@ static int        rt_thread_check_deadlines(rt_thread *t, rt_scheduler *schedule
 static void       rt_thread_update_periodic(rt_thread *t, rt_scheduler *scheduler, uint64_t now);
 static void       rt_thread_update_sporadic(rt_thread *t, rt_scheduler *scheduler, uint64_t now);
 static void       rt_thread_update_aperiodic(rt_thread *thread, rt_scheduler *scheduler, uint64_t now);
+
 
 
 // helpers
@@ -609,7 +656,7 @@ void nk_sched_dump_cores(int cpu_arg)
 
 	    s = sys->cpus[cpu]->sched_state;
 	    LOCAL_LOCK(s);
-	    snprintf(buf,256,"%dc %s %unl %luin %luex %luri %lut %s %utp %lup %lur %lua %lum (%s) (%luul %lusp %luap %luaq %luadp) (%luapic)\n",
+	    snprintf(buf,256,"%dc %s %unl %luin %luex %luri %lut %s %utp %lup %lur %lua %lum (%s) (%luul %lusp %luap %luaq %luadp) (%luste %lustd %luute %luutd) (%luapic)\n",
 		     cpu, 
 		     intr_model,
 		     sys->cpus[cpu]->interrupt_nesting_level,
@@ -640,6 +687,8 @@ void nk_sched_dump_cores(int cpu_arg)
 		     s->cfg.util_limit,
 		     s->cfg.sporadic_reservation, s->cfg.aperiodic_reservation, 
 		     s->cfg.aperiodic_quantum, s->cfg.aperiodic_default_priority,
+		     s->tasks.sized_enqueued, s->tasks.sized_dequeued,
+		     s->tasks.unsized_enqueued, s->tasks.unsized_dequeued,
 		     apic->timer_count);
 #if INSTRUMENT
 	    char buf2[256];
@@ -1830,6 +1879,98 @@ static inline void set_interrupt_priority(rt_thread *t)
 #endif
 }
 
+#if defined(STACK_CHECKS) || defined(NAUT_CONFIG_ENABLE_STACK_CHECK)	
+#define stack_check(rt,p)						\
+{									\
+    struct nk_thread *t = rt->thread;					\
+    if ((t->rsp < (uint64_t)(t->stack)) || t->rsp >= (uint64_t)(t->stack+t->stack_size)) { \
+	ERROR("STACK OVERRUN : thread %p (%u, \"%s\") rsp=%p  stack=[%p, %p)\n", \
+	      t, t->tid, t->is_idle ? "*idle*" : !t->name[0] ? "*unnamed*" : t->name, \
+	      t->rsp, t->stack, t->stack+t->stack_size);		\
+	BACKTRACE(ERROR,4); \
+	if (p) {							\
+	   panic("This thread (%p, tid=%u) has run off the end (or beginning) of its stack! (start=%p, rsp=%p, start size=%lx)\n", \
+	      (void*)t,							\
+	      t->tid,							\
+	      t->stack,							\
+	      (void*)t->rsp,						\
+	      t->stack_size);						\
+          return 0;							\
+	}								\
+    }                                                                   \
+}
+#else
+#define stack_check(x,p)
+#endif
+
+
+
+#ifdef NAUT_CONFIG_TASK_IN_SCHED
+
+#define TASK_SLOP  50    // out of 100, percentage of available time to consume with tasks
+#define TASK_MIN   50000 // ns of time needed to even consider running a task
+#define TASK_LIMIT 10    // max number of tasks to scan
+
+// This should be invoked ONLY in need_resched after the time
+static int pump_sized_tasks(rt_scheduler *scheduler, rt_thread *next)
+{
+    if (!next || next->constraints.type!=APERIODIC) {
+	// never delay a real-time task that we are committed to running
+	return 0;
+    }
+
+    if (next->is_task ||  next->is_intr || next->thread->is_idle) {
+	// task and idle threads will operate their own task handling loops
+	// interrupt thread should never be delayed, even if for some reason
+	// it's being run as an aperiodic thread
+	return 0;
+    }
+
+    // we are committing to a "safe" aperiodic, so we can delay it until the next
+    // scheduling event with sized tasks
+    
+    // next time the scheduler will be invoked for any reason, including RT arrivals
+    uint64_t next_time = scheduler->tsc.set_time;
+    uint64_t current_time;
+    uint64_t avail_time;
+    uint64_t count=0;
+    
+    struct nk_task *task;
+
+    while (1) {
+	current_time = cur_time();
+	if (current_time+TASK_MIN > next_time) {
+	    // not enough time left to do anything
+	    return 0;
+	}
+
+	// consider a fraction of the available time
+	avail_time = ((next_time - current_time)*TASK_SLOP)/100;
+
+	// find a sized task, on this cpu, that will fit, but don't search for too long
+	// and do not spin on any locks
+	task = nk_task_try_consume(my_cpu_id(), avail_time, TASK_LIMIT);
+
+	if (task) {
+	    // if we found one, run it
+	    void *output = task->func(task->input);
+	    nk_task_complete(task,output);
+	    count++;
+	    // and then continue to see if we can fit in another one
+	} else {
+	    // we are out of suitable, easy to find tasks
+	    //DEBUG("Handled %lu sized tasks\n",count);
+	    return 0;
+	}
+    }
+	 
+}
+
+#else
+#define pump_sized_tasks(s,n)
+#endif
+
+
 #define DUMP_ENTRY_CONTEXT()				\
     ERROR("ENTRY CONTEXT\n");				\
     ERROR(" have_lock = %d\n",have_lock);               \
@@ -1927,6 +2068,8 @@ struct nk_thread *_sched_need_resched(int have_lock, int force_resched)
     struct nk_thread *c = get_cur_thread();
     rt_thread *rt_c = c->sched_state;
 
+    // optional
+    stack_check(rt_c,1);
 
     if (!have_lock) {
 	LOCAL_LOCK(scheduler);
@@ -2381,6 +2524,9 @@ struct nk_thread *_sched_need_resched(int have_lock, int force_resched)
 	LOCAL_UNLOCK(scheduler);
     }
 
+    // we do not need the scheduler lock to pump tasks since we have interrupts off
+    pump_sized_tasks(scheduler,rt_c);
+
     INST_SCHED_OUT(resched_fast);
 
     NK_GPIO_OUTPUT_MASK(~0x4,GPIO_AND);
@@ -2459,6 +2605,12 @@ struct nk_thread *_sched_need_resched(int have_lock, int force_resched)
 	if (!have_lock) {
 	    LOCAL_UNLOCK(scheduler);
 	}
+
+	stack_check(rt_n,1);
+
+	// we do not need the scheduler lock to pump tasks since we have interrupts off
+	pump_sized_tasks(scheduler,rt_n);
+	
 	INST_SCHED_OUT(resched_slow);
 	NK_GPIO_OUTPUT_MASK(~0x4,GPIO_AND);
 	return rt_n->thread;
@@ -2480,6 +2632,10 @@ struct nk_thread *_sched_need_resched(int have_lock, int force_resched)
 	if (!have_lock) {
 	    LOCAL_UNLOCK(scheduler);
 	}
+	
+	// we do not need the scheduler lock to pump tasks since we have interrupts off
+	pump_sized_tasks(scheduler,rt_c);
+
 	INST_SCHED_OUT(resched_slow_noswitch);
 	NK_GPIO_OUTPUT_MASK(~0x4,GPIO_AND);
 	return 0;
@@ -2763,8 +2919,8 @@ int nk_sched_cpu_mug(int old_cpu, uint64_t maxcount, uint64_t *actualcount)
 
     for (cur=0;cur<SIZE_APERIODIC(os);cur++) {
 	rt_thread *t = PEEK_APERIODIC(os,cur);
-	// do not steal the idle thread, interrupt thread, or any bound thread
-	if (t && !t->thread->is_idle && !t->is_intr && t->thread->bound_cpu<0 ) { 
+	// do not steal the idle thread, interrupt thread, task thread, or any bound thread
+	if (t && !t->thread->is_idle && !t->is_intr && !t->is_task && t->thread->bound_cpu<0 ) { 
 	    DEBUG("Found thread %llu %s\n",t->thread->tid,t->thread->name);
 	    prosp[count++] = t;
 	    if (count>=maxcount) { 
@@ -2783,8 +2939,8 @@ int nk_sched_cpu_mug(int old_cpu, uint64_t maxcount, uint64_t *actualcount)
     *actualcount=0;
 
     for (cur=0;cur<count;cur++) { 
-	DEBUG("Attempting to move thread %llu %s to cpu %d\n",
-	      prosp[cur]->thread->tid, prosp[cur]->thread->name,new_cpu);
+	DEBUG("Attempting to move thread %llu %s from cpu %d to cpu %d\n",
+	     prosp[cur]->thread->tid, prosp[cur]->thread->name,old_cpu,new_cpu);
 	if (nk_sched_thread_move(prosp[cur]->thread,new_cpu,0)) {
 	    DEBUG("Could not steal thread %llu %s\n",prosp[cur]->thread->tid,prosp[cur]->thread->name);
 	} else {
@@ -2894,16 +3050,6 @@ extern void nk_thread_switch_exit_helper(nk_thread_t *new, rt_status *statusp, r
 	goto out_good;
     }
 
-#ifdef NAUT_CONFIG_ENABLE_STACK_CHECK
-    if ((c->rsp <= (uint64_t)(c->stack)) || c->rsp >= (uint64_t)(c->stack+c->stack_size)) {
-	panic("This thread (%p, tid=%u) has run off the end (or beginning) of its stack! (start=%p, rsp=%p, start size=%lx)\n", 
-	      (void*)c,
-	      c->tid,
-	      c->stack,
-	      (void*)c->rsp,
-	      c->stack_size);
-    }
-#endif /* !NAUT_CONFIG_ENABLE_STACK_CHECK */
 
 
     DEBUG("Switching to %llu \"%s\"\n",
@@ -3417,6 +3563,216 @@ static inline uint64_t get_min_per(rt_priority_queue *runnable, rt_priority_queu
     return min_period;
 }
 
+static int task_initial_placement()
+{
+    struct sys_info * sys = per_cpu_get(system);
+    return (int)(get_random() % sys->num_cpus);
+}
+
+
+struct nk_task *nk_task_produce(int cpu, uint64_t size_ns, void *(*f)(void*), void *input, uint64_t flags)
+{
+    TASK_LOCK_CONF;
+    
+    int placement_cpu = cpu>=0 ? cpu : task_initial_placement();
+    uint64_t start = cur_time();
+    
+    struct nk_task *t = MALLOC_SPECIFIC(sizeof(struct nk_task),placement_cpu);
+
+    if (!t) {
+	ERROR("Failed to allocate a task\n");
+	return 0;
+    }
+
+    memset(t,0,sizeof(*t));
+
+    t->stats.size_ns = size_ns;
+    t->stats.enqueue_time_ns = start;
+    
+    t->flags = flags & ~NK_TASK_COMPLETED;
+    t->func = f;
+    t->input = input;
+
+    INIT_LIST_HEAD(&t->queue_node);
+
+    struct sys_info * sys = per_cpu_get(system);
+    task_info *ti = &sys->cpus[placement_cpu]->sched_state->tasks;
+
+    // own the target scheduler's task queue
+    TASK_LOCK(ti);
+    if (t->stats.size_ns) {
+	list_add_tail(&t->queue_node, &ti->sized_queue);
+	ti->sized_enqueued++;
+    } else {
+	list_add_tail(&t->queue_node, &ti->unsized_queue);
+	ti->unsized_enqueued++;
+    }
+    TASK_UNLOCK(ti);
+
+    // kick any waitqueue
+    nk_thread_queue_wake_all(ti->waitq);
+
+    return t;
+}
+
+static int task_cpu_selection()
+{
+    struct sys_info * sys = per_cpu_get(system);
+    return (int)(get_random() % sys->num_cpus);
+}
+
+// dequeue a task, typically used internally
+// dequeuing a task does not execute it.
+static struct nk_task *_nk_task_consume(int cpu, uint64_t size_ns, uint64_t search_limit, int try)
+{
+    TASK_LOCK_CONF;
+    
+    int source_cpu = cpu>=0 ? cpu : task_cpu_selection();
+
+    struct sys_info * sys = per_cpu_get(system);
+    task_info *ti = &sys->cpus[source_cpu]->sched_state->tasks;
+    struct nk_task *t = 0;
+    struct list_head *cur;
+
+    if (try) {
+	if (TASK_TRY_LOCK(ti)) {
+	    // failed, so just leave
+	    return 0;
+	}
+    } else {
+	TASK_LOCK(ti);
+    }
+    
+    if (size_ns) {
+	uint64_t count=0;
+	// search for a task that is smaller than the given size
+	// this could of course be much smarter...
+	list_for_each(cur, &ti->sized_queue) {
+	    struct nk_task *test = list_entry(cur,struct nk_task, queue_node);
+	    if (test->stats.size_ns <= size_ns) {
+		t = test;
+		list_del_init(cur);
+		ti->sized_dequeued++;
+		break;
+	    }
+	    count++;
+	    if (count >= search_limit) {
+		break;
+	    }
+	}
+    } else {
+	// try unsized queue first
+	if (!list_empty(&ti->unsized_queue)) {
+	    cur = ti->unsized_queue.next;
+	    t = list_entry(cur,struct nk_task, queue_node);
+	    list_del_init(cur);
+	    ti->unsized_dequeued++;
+	} else if (!list_empty(&ti->sized_queue)) {
+	    cur = ti->sized_queue.next;
+	    t = list_entry(cur,struct nk_task, queue_node);
+	    list_del_init(cur);
+	    ti->sized_dequeued++;
+	} else {
+	    // we got nuthin
+	}
+    }
+
+    TASK_UNLOCK(ti);
+
+    if (t) {
+	t->stats.dequeue_time_ns = cur_time();
+    }
+	
+    return t;
+}    
+
+
+struct nk_task *nk_task_consume(int cpu, uint64_t size_ns, uint64_t search_limit)
+{
+    return _nk_task_consume(cpu,size_ns,search_limit,0);
+}
+
+struct nk_task *nk_task_try_consume(int cpu, uint64_t size_ns, uint64_t search_limit)
+{
+    return _nk_task_consume(cpu,size_ns,search_limit,1);
+}
+
+// mark a task as completed
+// this will delete the task if it's detached
+int nk_task_complete(struct nk_task *task, void *output)
+{
+    task->output = output;
+    // setting the flag must occur *after* setting the output
+    __sync_fetch_and_or(&task->flags,NK_TASK_COMPLETED);
+    task->stats.complete_time_ns = cur_time();
+    if (task->flags & NK_TASK_DETACHED) {
+	free(task);
+    }
+    return 0;
+}
+
+// wait for a task to complete and optionally get its output
+// detached tasks cannnot be waited on
+// this will delete the task
+static int _nk_task_wait(struct nk_task *task, void **output, struct nk_task_stats *stats, int try)
+{
+    if (task->flags & NK_TASK_DETACHED) {
+	ERROR("Cannot wait on detached task; also probable race...\n");
+	return -1;
+    }
+
+    task->stats.wait_start_ns = cur_time();
+    
+    volatile uint64_t *test = &task->flags;
+
+    if (try) {
+	if (!(*test & NK_TASK_COMPLETED)) {
+	    // not done yet, return immediately
+	    return 1;
+	}
+    } else {
+	// pump tasks here while we are waiting
+	// this assures we can make forward progress
+	while (!(*test & NK_TASK_COMPLETED)) {
+	    // first look to my own queue
+	    struct nk_task *t = nk_task_try_consume(my_cpu_id(),0,0);
+	    if (!t) {
+		// then other queues
+		t = nk_task_try_consume(-1,0,0);
+	    }
+	    if (t) {
+		// found task; run it and complete it
+		output = t->func(t->input);
+		nk_task_complete(t,output);
+	    }
+	}
+    }
+
+    if (output) {
+	*output = task->output;
+    }
+
+    task->stats.wait_end_ns = cur_time();
+
+    if (stats) {
+	*stats = task->stats;
+    }
+
+    free(task);
+
+    return 0;
+}
+
+int nk_task_wait(struct nk_task *task, void **output, struct nk_task_stats *stats)
+{
+    return _nk_task_wait(task,output,stats,0);
+}
+
+int nk_task_try_wait(struct nk_task *task, void **output, struct nk_task_stats *stats)
+{
+    return _nk_task_wait(task,output,stats,1);
+}
+
 
 
 static struct nk_sched_percpu_state *init_local_state(struct nk_sched_config *cfg)
@@ -3439,6 +3795,16 @@ static struct nk_sched_percpu_state *init_local_state(struct nk_sched_config *cf
     }
     
     spinlock_init(&state->lock);
+
+    spinlock_init(&state->tasks.lock);
+    INIT_LIST_HEAD(&state->tasks.sized_queue);
+    INIT_LIST_HEAD(&state->tasks.unsized_queue);
+
+    state->tasks.waitq = nk_thread_queue_create();
+    if (!state->tasks.waitq) {
+	ERROR("Could not allocate task state\n");
+	goto fail_free;
+    }
     
     return state;
 
@@ -3488,12 +3854,83 @@ static int start_interrupt_thread_for_this_cpu()
   nk_thread_id_t tid;
   
   // 2 MB stack since we'll be running interrupt handlers on it
-  if (nk_thread_start(interrupt, 0, 0, 1, PAGE_SIZE, &tid, my_cpu_id())) {
+  if (nk_thread_start(interrupt, 0, 0, 1, INTERRUPT_THREAD_STACK_SIZE, &tid, my_cpu_id())) {
       ERROR("Failed to start interrupt thread\n");
       return -1;
   }
 
-  INFO("Interrupt thread launched on cpu %d as %p\n", my_cpu_id(), tid);
+  DEBUG("Interrupt thread launched on cpu %d as %p\n", my_cpu_id(), tid);
+
+  return 0;
+
+}
+
+#endif
+
+
+#if NAUT_CONFIG_TASK_THREAD
+
+static int await_task(void *p)
+{
+    task_info *ti = (task_info *) p;
+
+    return (ti->sized_enqueued > ti->sized_dequeued) || (ti->unsized_enqueued > ti->unsized_dequeued);
+}
+
+static void task(void *in, void **out)
+{
+    if (nk_thread_name(get_cur_thread(),"(task)")) { 
+	ERROR("Failed to name task thread\n");
+	return;
+    }
+
+    struct nk_sched_constraints c = { .type=APERIODIC,
+				      .interrupt_priority_class=0x0, 
+				      .aperiodic.priority=NAUT_CONFIG_TASK_THREAD_PRIORITY };
+    
+    if (nk_sched_thread_change_constraints(&c)) { 
+	ERROR("Unable to set constraints for task thread\n");
+	panic("Unable to set constraints for task thread\n");
+	return;
+    }
+
+    // promote to task thread
+    get_cur_thread()->sched_state->is_task=1;
+
+    struct nk_task *t;
+    void *output;
+
+    while (1) {
+	// first look to my own queue
+	t = nk_task_try_consume(my_cpu_id(),0,0);
+	if (!t) {
+	    // then other queues
+	    t = nk_task_try_consume(-1,0,0);
+	}
+	if (t) {
+	    // found task; run it and complete it
+	    output = t->func(t->input);
+	    nk_task_complete(t,output);
+	} else {
+	    // no task, let's put ourselves to sleep on our own cpu's task queues
+	    struct sys_info * sys = per_cpu_get(system);
+	    task_info *ti = &sys->cpus[my_cpu_id()]->sched_state->tasks;
+	    nk_thread_queue_sleep_extended(ti->waitq, await_task, ti);
+	    // when we wake up, we will try again
+	}
+    }
+}
+
+static int start_task_thread_for_this_cpu()
+{
+  nk_thread_id_t tid;
+  
+  if (nk_thread_start(task, 0, 0, 1, TASK_THREAD_STACK_SIZE, &tid, my_cpu_id())) {
+      ERROR("Failed to start task thread\n");
+      return -1;
+  }
+
+  DEBUG("Task thread launched on cpu %d as %p\n", my_cpu_id(), tid);
 
   return 0;
 
@@ -3535,15 +3972,15 @@ static int shared_init(struct cpu *my_cpu, struct nk_sched_config *cfg)
 
 
     // need to be sure this is aligned, hence direct use of malloc here
-    my_stack = malloc_specific(PAGE_SIZE,my_cpu_id());
+    my_stack = malloc_specific(IDLE_THREAD_STACK_SIZE,my_cpu_id());
 
     if (!my_stack) {
         ERROR("Couldn't allocate stack\n");
         goto fail_free;
     }
-    memset(my_stack, 0, PAGE_SIZE);
+    memset(my_stack, 0, IDLE_THREAD_STACK_SIZE);
 
-    main->stack_size = PAGE_SIZE;
+    main->stack_size = IDLE_THREAD_STACK_SIZE;
 
     if (_nk_thread_init(main, my_stack, 1, my_cpu->id, my_cpu->id, NULL)) {
 	ERROR("Failed to init thread\n");
@@ -3680,12 +4117,12 @@ static int start_reaper()
 {
   nk_thread_id_t tid;
 
-  if (nk_thread_start(reaper, 0, 0, 1, PAGE_SIZE_4KB, &tid, 0)) {
+  if (nk_thread_start(reaper, 0, 0, 1, REAPER_THREAD_STACK_SIZE, &tid, 0)) {
       ERROR("Failed to start reaper thread\n");
       return -1;
   }
 
-  INFO("Reaper launched on cpu 0 as %p\n",tid);
+  DEBUG("Reaper launched on cpu 0 as %p\n",tid);
   return 0;
 
 }
@@ -3748,17 +4185,20 @@ void nk_sched_start()
     }
 #endif
 
-#ifdef NAUT_CONFIG_USE_IDLE_THREADS
-    // the idle thread
-    DEBUG("Starting idle thread for CPU %d\n",my_cpu->id);
-    nk_thread_start(idle, NULL, NULL, 0, TSTACK_DEFAULT, NULL, my_cpu->id);
-#endif
-
 #ifdef NAUT_CONFIG_INTERRUPT_THREAD
-    INFO("Starting interrupt thread for CPU %d\n",my_cpu->id);
+    DEBUG("Starting interrupt thread for CPU %d\n",my_cpu->id);
     if (start_interrupt_thread_for_this_cpu()) {
 	ERROR("Cannot start interrupt thread for CPU!\n");
 	panic("Cannot start interrupt thread for CPU!\n");
+	return;
+    }
+#endif	
+
+#ifdef NAUT_CONFIG_TASK_THREAD
+    DEBUG("Starting task thread for CPU %d\n",my_cpu->id);
+    if (start_task_thread_for_this_cpu()) {
+	ERROR("Cannot start task thread for CPU!\n");
+	panic("Cannot start task thread for CPU!\n");
 	return;
     }
 #endif	

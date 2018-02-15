@@ -39,6 +39,7 @@
 #include <test/ipi.h>
 #include <test/threads.h>
 #include <test/groups.h>
+#include <test/tasks.h>
 #include <test/net_udp_echo.h>
 
 #ifdef NAUT_CONFIG_PALACIOS
@@ -95,6 +96,8 @@
 
 
 #define MAX_CMD 80
+
+#define SHELL_STACK_SIZE (PAGE_SIZE_2MB) 
 
 struct burner_args {
     struct nk_virtual_console *vc;
@@ -641,6 +644,10 @@ static int handle_test(char *buf)
         return nk_thread_group_test();
     }
 
+    if (!strncasecmp(what,"task",4)) {
+        return test_tasks();
+    }
+
     if (!strncasecmp(what,"stop",4)) { 
 	return test_stop();
     }
@@ -1021,7 +1028,8 @@ int handle_gpio(char *buf)
     return 0;
 }
 #endif    
-	
+
+
 
 static int handle_cmd(char *buf, int n)
 {
@@ -1084,7 +1092,7 @@ static int handle_cmd(char *buf, int n)
     nk_vc_printf("bench\n");
     nk_vc_printf("blktest dev r|w start count\n");
     nk_vc_printf("blktest dev r|w start count\n");
-    nk_vc_printf("test threads|groups|stop|iso|bdwgc|pdsgc|omp|ompbench|ndpc|nesl|\n");
+    nk_vc_printf("test threads|groups|tasks|stop|iso|bdwgc|pdsgc|omp|ompbench|ndpc|nesl|\n");
     nk_vc_printf("     udp_echo nic ip port num| ...\n"); 
     nk_vc_printf("vm name [embedded image]\n");
     nk_vc_printf("run path\n");
@@ -1575,7 +1583,7 @@ nk_thread_id_t nk_launch_shell(char *name, int cpu)
   strncpy(n,name,32);
   n[31]=0;
   
-  if (nk_thread_start(shell, (void*)n, 0, 1, PAGE_SIZE_4KB, &tid, cpu)) { 
+  if (nk_thread_start(shell, (void*)n, 0, 1, SHELL_STACK_SIZE, &tid, cpu)) { 
       free(n);
       return 0;
   } else {
