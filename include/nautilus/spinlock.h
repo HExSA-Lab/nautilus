@@ -69,6 +69,17 @@ spin_lock_irq_save (volatile spinlock_t * lock)
     return flags;
 }
 
+static inline int
+spin_try_lock_irq_save(volatile spinlock_t *lock, uint8_t *flags)
+{
+    *flags = irq_disable_save();
+    if (__sync_lock_test_and_set(lock,1)) {
+	irq_enable_restore(*flags);
+	return -1;
+    } else {
+	return 0;
+    }
+}
 
 void
 spin_lock_nopause (volatile spinlock_t * lock);
