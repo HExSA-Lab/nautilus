@@ -402,11 +402,12 @@ nk_get_num_cpus (void)
 }
 
 static void
-init_xcall (struct nk_xcall * x, void * arg, nk_xcall_func_t fun)
+init_xcall (struct nk_xcall * x, void * arg, nk_xcall_func_t fun, int wait)
 {
     x->data       = arg;
     x->fun        = fun;
     x->xcall_done = 0;
+    x->has_waiter = wait;
 }
 
 
@@ -516,7 +517,7 @@ smp_xcall (cpu_id_t cpu_id,
             xc = &(sys->cpus[cpu_id]->xcall_nowait_info);
         }
 
-        init_xcall(xc, arg, fun);
+        init_xcall(xc, arg, fun, wait);
 
         xcq = sys->cpus[cpu_id]->xcall_q;
         if (!xcq) {

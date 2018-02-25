@@ -313,6 +313,23 @@ wbinvd (void)
 }
 
 
+static inline void clflush(void *ptr)
+{
+    __asm__ __volatile__ ("clflush (%0); " 
+			  : : "r"(ptr) : "memory");
+    
+}
+
+static inline void clflush_unaligned(void *ptr, int size)
+{
+    clflush(ptr);
+    if ((addr_t)ptr % size) { 
+	// ptr is misaligned, so be paranoid since we 
+	// may be spanning a cache line
+	clflush((void*)((addr_t)ptr+size-1));
+    }
+}
+
 /**
  * Flush all non-global entries in the calling CPU's TLB.
  *
