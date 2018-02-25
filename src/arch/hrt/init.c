@@ -302,6 +302,8 @@ default_init (unsigned long mbd,
 
     serial_early_init();
 
+    // no MTRR initialization is done since we assume the VMM has done it if needed
+
     detect_cpu();
 
     /* setup the temporary boot-time allocator */

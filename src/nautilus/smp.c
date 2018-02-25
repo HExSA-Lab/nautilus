@@ -25,6 +25,7 @@
 #include <nautilus/paging.h>
 #include <nautilus/irq.h>
 #include <nautilus/msr.h>
+#include <nautilus/mtrr.h>
 #include <nautilus/gdt.h>
 #include <nautilus/cpu.h>
 #include <nautilus/naut_assert.h>
@@ -295,6 +296,11 @@ smp_ap_setup (struct cpu * core)
 
     // set GS base (for per-cpu state)
     msr_write(MSR_GS_BASE, (uint64_t)core_addr);
+
+    if (nk_mtrr_init_ap()) {
+	ERROR_PRINT("Could not initialize MTRRs for core %u\n",core->id);
+	return -1;
+    }
 
 #ifdef NAUT_CONFIG_ENABLE_REMOTE_DEBUGGING 
     if (nk_gdb_init_ap() != 0) {

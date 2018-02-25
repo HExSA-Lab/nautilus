@@ -29,6 +29,7 @@
 #include <nautilus/mb_utils.h>
 #include <nautilus/cpu.h>
 #include <nautilus/msr.h>
+#include <nautilus/mtrr.h>
 #include <nautilus/cpuid.h>
 #include <nautilus/smp.h>
 #include <nautilus/irq.h>
@@ -259,6 +260,8 @@ init (unsigned long mbd,
 
     // Bring serial device up early so we can have output
     serial_early_init();
+
+    nk_mtrr_init();
 
 #ifdef NAUT_CONFIG_GPIO
     nk_gpio_init();

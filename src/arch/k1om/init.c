@@ -151,6 +151,8 @@ init (unsigned long mbd, unsigned long magic)
     
     setup_idt();
 
+    // no MTRR init is done since the card firmware is trusted to have set it up correctly
+
     nk_int_init(&(naut->sys));
     
     phi_card_is_up();

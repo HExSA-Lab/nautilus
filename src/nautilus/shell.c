@@ -33,6 +33,7 @@
 #include <nautilus/loader.h>
 #include <nautilus/cpuid.h>
 #include <nautilus/msr.h>
+#include <nautilus/mtrr.h>
 #include <nautilus/backtrace.h>
 #include <dev/gpio.h>
 #include <dev/pci.h>
@@ -1075,7 +1076,7 @@ static int handle_cmd(char *buf, int n)
     nk_vc_printf("pci list | pci raw/dev bus slot func | pci dev [bus slot func]\n");
     nk_vc_printf("pci peek|poke bus slot func off [val]\n");
     nk_vc_printf("shell name\n");
-    nk_vc_printf("regs [t]\npeek [bwdq] x | mem x n [s] | poke [bwdq] x y\nin [bwd] addr | out [bwd] addr data\nrdmsr x [n] | wrmsr x y\ncpuid f [n] | cpuidsub f s\n");
+    nk_vc_printf("regs [t]\npeek [bwdq] x | mem x n [s] | mt x | poke [bwdq] x y\nin [bwd] addr | out [bwd] addr data\nrdmsr x [n] | wrmsr x y\ncpuid f [n] | cpuidsub f s |\n mtrrs cpu\n");
     nk_vc_printf("meminfo [detail]\n");
     nk_vc_printf("reap\n");
 #ifdef NAUT_CONFIG_GARBAGE_COLLECTION
@@ -1309,19 +1310,19 @@ static int handle_cmd(char *buf, int n)
       ((bwdq='q', sscanf(buf,"poke %lx %lx", &addr, &data))==2)) {
       switch (bwdq) { 
       case 'b': 
-	  *(uint8_t*)addr = data;
+	  *(uint8_t*)addr = data; clflush_unaligned((void*)addr,1);
 	  nk_vc_printf("Mem[0x%016lx] = 0x%02lx\n",addr,data);
 	  break;
       case 'w': 
-	  *(uint16_t*)addr = data;
+	  *(uint16_t*)addr = data; clflush_unaligned((void*)addr,2);
 	  nk_vc_printf("Mem[0x%016lx] = 0x%04lx\n",addr,data);
 	  break;
       case 'd': 
-	  *(uint32_t*)addr = data;
+	  *(uint32_t*)addr = data; clflush_unaligned((void*)addr,4);
 	  nk_vc_printf("Mem[0x%016lx] = 0x%08lx\n",addr,data);
 	  break;
       case 'q': 
-	  *(uint64_t*)addr = data;
+	  *(uint64_t*)addr = data; clflush_unaligned((void*)addr,8);
 	  nk_vc_printf("Mem[0x%016lx] = 0x%016lx\n",addr,data);
 	  break;
       default:
@@ -1419,6 +1420,24 @@ static int handle_cmd(char *buf, int n)
       return 0;
   }
 
+  if ((sscanf(buf,"mtrrs %d", &cpu)==1) ||
+      (cpu=-1, !strcmp(buf,"mtrrs"))) {
+      nk_mtrr_dump(cpu);
+      return 0;
+  }
+
+  if (sscanf(buf,"mt %lx", &addr)==1) {
+      uint8_t type;
+      char *typestr;
+	  
+      if (nk_mtrr_find_type((void*)addr,&type,&typestr)) {
+	  nk_vc_printf("Cannot find memory type for %p\n",addr);
+      } else {
+	  nk_vc_printf("Mem[0x%016lx] has type 0x%02x %s\n", addr, type, typestr);
+      }
+      return 0;
+  }
+  
   if (sscanf(buf,"burn a %s %llu %u %llu", name, &size_ns, &tpr, &priority)==4) { 
     nk_vc_printf("Starting aperiodic burner %s with tpr %u, size %llu ms.and priority %llu\n",name,size_ns,priority);
     size_ns *= 1000000;
