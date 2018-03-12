@@ -37,6 +37,7 @@
 #include <nautilus/backtrace.h>
 #include <dev/gpio.h>
 #include <dev/pci.h>
+#include <dev/apic.h>
 #include <test/ipi.h>
 #include <test/threads.h>
 #include <test/groups.h>
@@ -1045,6 +1046,7 @@ static int handle_cmd(char *buf, int n)
   uint32_t id, idsub, sub;
   uint32_t msr;
   int cpu;
+  int intr;
   char bwdq;
 
   if (*buf==0) { 
@@ -1076,7 +1078,7 @@ static int handle_cmd(char *buf, int n)
     nk_vc_printf("pci list | pci raw/dev bus slot func | pci dev [bus slot func]\n");
     nk_vc_printf("pci peek|poke bus slot func off [val]\n");
     nk_vc_printf("shell name\n");
-    nk_vc_printf("regs [t]\npeek [bwdq] x | mem x n [s] | mt x | poke [bwdq] x y\nin [bwd] addr | out [bwd] addr data\nrdmsr x [n] | wrmsr x y\ncpuid f [n] | cpuidsub f s |\n mtrrs cpu\n");
+    nk_vc_printf("regs [t]\npeek [bwdq] x | mem x n [s] | mt x | poke [bwdq] x y\nin [bwd] addr | out [bwd] addr data\nrdmsr x [n] | wrmsr x y\ncpuid f [n] | cpuidsub f s | mtrrs [cpu] | int [cpu] v\n");
     nk_vc_printf("meminfo [detail]\n");
     nk_vc_printf("reap\n");
 #ifdef NAUT_CONFIG_GARBAGE_COLLECTION
@@ -1438,6 +1440,19 @@ static int handle_cmd(char *buf, int n)
       return 0;
   }
   
+  if ((sscanf(buf,"int %d %d", &cpu, &intr)==2) ||
+      (cpu=my_cpu_id(), sscanf(buf,"int %d",&intr)==1)) {
+      if (cpu==my_cpu_id()) {
+	  apic_self_ipi(per_cpu_get(apic), intr);
+      } else if (cpu>=0) {
+	  apic_ipi(per_cpu_get(apic),cpu,intr);
+      } else {
+	  apic_bcast_ipi(per_cpu_get(apic),intr);
+	  apic_self_ipi(per_cpu_get(apic), intr);
+      }
+      return 0;
+  }
+
   if (sscanf(buf,"burn a %s %llu %u %llu", name, &size_ns, &tpr, &priority)==4) { 
     nk_vc_printf("Starting aperiodic burner %s with tpr %u, size %llu ms.and priority %llu\n",name,size_ns,priority);
     size_ns *= 1000000;
