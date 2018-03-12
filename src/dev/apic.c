@@ -382,7 +382,7 @@ apic_self_ipi (struct apic_dev * apic, uint_t vector)
 	apic_write(apic, APIC_REG_SELF_IPI, vector);
 	irq_enable_restore(flags);
     } else {
-	panic("Self-IPI path for non X2APIC not implemented\n");
+	apic_ipi(apic,my_cpu_id(),vector);
     }
 }
 
@@ -456,11 +456,10 @@ static int apic_timer_handler(excp_entry_t * excp, excp_vec_t vec, void *state);
 
 
 static void
-apic_timer_setup (struct apic_dev * apic, uint32_t quantum)
+apic_timer_setup (struct apic_dev * apic, uint32_t quantum_ms)
 {
     uint32_t busfreq;
     uint32_t tmp;
-    uint8_t  tmp2;
     cpuid_ret_t ret;
     int x2apic, tscdeadline, arat; 
 
@@ -479,14 +478,14 @@ apic_timer_setup (struct apic_dev * apic, uint32_t quantum)
 
     // Note that no state is used here since APICs are per-CPU
     if (register_int_handler(APIC_TIMER_INT_VEC,
-            apic_timer_handler,
-            NULL) != 0) {
+			     apic_timer_handler,
+			     NULL) != 0) {
         panic("Could not register APIC timer handler\n");
     }
 
     calibrate_apic_timer(apic);
 
-    apic_set_oneshot_timer(apic,apic_realtime_to_ticks(apic,1000000000ULL/NAUT_CONFIG_HZ));
+    apic_set_oneshot_timer(apic,apic_realtime_to_ticks(apic,quantum_ms*1000000ULL));
 }
 
 
@@ -782,11 +781,11 @@ apic_init (struct cpu * core)
 
 #ifdef NAUT_CONFIG_APIC_FORCE_XAPIC_MODE
     APIC_DEBUG("Setting APIC mode to XAPIC (Forced - Maximum mode is %s)\n",
-	apic_modes[maxmode]);
+	       apic_modes[maxmode]);
     set_mode(apic,APIC_XAPIC);
 #else 
     APIC_DEBUG("Setting APIC mode to maximum available mode (%s)\n",
-	apic_modes[maxmode]);
+	       apic_modes[maxmode]);
     set_mode(apic,maxmode);
 #endif
    
@@ -857,7 +856,7 @@ apic_init (struct cpu * core)
 
     /* only BSP takes NMI interrupts */
     apic_write(apic, APIC_REG_LVT1, 
-            APIC_DEL_MODE_NMI | (core->is_bsp ? 0 : APIC_LVT_DISABLED));
+	       APIC_DEL_MODE_NMI | (core->is_bsp ? 0 : APIC_LVT_DISABLED));
 
     apic_write(apic, APIC_REG_LVTERR, APIC_DEL_MODE_FIXED | APIC_ERROR_INT_VEC); // allow error interrupts
 
@@ -867,6 +866,7 @@ apic_init (struct cpu * core)
     apic_global_enable();
 
     // assign interrupt handlers
+    // all cores share the same IDT/etc, so only the BSP needs to do this
     if (core->is_bsp) {
 
 	// Note that no state is used here since APICs are per-CPU
@@ -1012,6 +1012,220 @@ uint64_t apic_cycles_to_realtime(struct apic_dev *apic, uint64_t cycles)
 #define TEST_TIME_SEC_RECIP 100
 #define MAX_TRIES 100
 
+
+// Currently modes 0 and 1 are supported.   Try mode 0 first
+static int calibrate_apic_timer_using_pit(struct apic_dev *apic, int mode)
+{
+    uint64_t start, end;
+    uint16_t pit_count;
+    uint32_t tries = 0;
+
+try_once:
+
+    // First determine the APIC's bus frequency by calibrating it
+    // against a known clock (the PIT).   We do not know the base
+    // rate of this APIC, but we do know the base rate of all PITs.
+    // The PIT counts at about 1193180 Hz (~1.2 MHz)
+    //
+
+    pit_count = (1193180 / TEST_TIME_SEC_RECIP);
+
+    if (mode==1) { 
+	// In the way we are using the PIT, it will count one more than
+	// the target count, hence the "- 1" in the following:
+	pit_count--;
+    }
+    
+
+    // Use APIC timer in one shot mode with the divider we will use 
+    // in normal execution.  We will count down from a large number
+    // and do not expect interrupts because it should not hit zero.
+    // timer is masked because we don't want an interrupt to occur at all
+    // On KNL, masking also seems to have the side effect of reseting the count
+
+    apic_write(apic, APIC_REG_LVTT, APIC_TIMER_ONESHOT | APIC_DEL_MODE_FIXED | APIC_TIMER_INT_VEC | APIC_TIMER_MASK);
+    apic_write(apic, APIC_REG_TMDCR, APIC_TIMER_DIVCODE);
+
+
+    //
+    // The following logic is based on the Intersil 8254 datasheet,
+    // combined with the well-known logic for how the 8254 is used in
+    // legacy support on PC-compatible platforms.
+    //
+    // The 8254 PIT appears in legacy land at ports 
+    // The 8254 PIT has 3 counters wired on a PC as follows:
+    //
+    //    0: IRQ 0 => not used in Nautilus
+    //    1: DMA refresh => not used in any modern hardware
+    //    2: Speaker/Output => we use this, as is common
+    //        
+    // Counter 2 is gated by an output of the keyboard controller, and
+    // its output is controlled via the same path.  Its output is
+    // made available on an input of the keyboard controller.
+    // These are visible at port 0x61 in legacy land.
+    //
+    // At this point, all interrupts are off and masked on the CPU.
+    // Also, the 8254 is in reset state, which means it is undefined,
+    // but also that it will not raise any output from any counter.
+    //
+    // An 8254 counter is trivial. First you write a mode for counting
+    // on the counter to the 8254's command register (0x43).
+    // Next you write a count to the port corresonding to the counter
+    // (0x40-0x42) with the LSB first, then the MSB.  A gate input
+    // determines if the counter runs.  The gates are controlled via
+    // port 0x61.  In some modes, if the gate is high, the write of the MSB
+    // will start the counter.   In others, you need to use the the gate
+    // as an edge trigger to start it.
+    //
+    //
+    // In mode 0 we will use the PIT (8254)'s counter 2 in mode 0 "Interrupt on
+    // Terminal Count" and keep the gate high.  In this one-shot mode,
+    // the LSB write to the initial count register will start the
+    // counter.  The output will transition low before the LSB write,
+    // and then high after the count is done.
+    //
+    // In mode 1 we will use the PIT (8254)'s counter 2 in mode 1 "Hardware
+    // Retriggerable One-shot" and give the gate a positive edge.   In this
+    // one-shot mode, it is the gate edge that causes it to start counting
+    // The output will transition low after the gate edge and then high
+    // after the count is done. 
+    //
+    //
+
+    uint8_t gate, detect, ctrl;
+
+    // 
+    // configure PIT channel 2 for terminal count in binary
+    //
+    // 10 11 000 0 (mode 0) or 10 11 001 0 (mode 1)
+
+    ctrl = PIT_CHAN(PIT_CHAN_SEL_2) | PIT_ACC_MODE(PIT_ACC_MODE_BOTH);
+
+    if (mode==0) {
+	ctrl |= PIT_MODE(PIT_MODE_TERMINAL_COUNT) ;
+    } else {
+	ctrl |= PIT_MODE(PIT_MODE_ONESHOT);
+    }
+
+    outb(ctrl,PIT_CMD_REG);
+
+    // PIT  channel 2 is wired to the keyboard controller, which
+    // allows to read when the PIT count hits zero.  Normally this path
+    // is used to buzz the internal speaker (really!).
+    // Port 0x61 bit 0 gates channel 2 counter
+    //         mode 0: high to run
+    //         mode 1: positive edge to run
+    // Port 0x61 bit 1 gates channel 2 output to physical speaker (=1 to run speaker)
+    // Port 0x61 bit 5 is channel 2 counter output (regardless of speaker being driven)
+
+    // Now enable it - we want gate on, speaker off
+    
+    gate = inb(KB_CTRL_PORT_B);
+
+    gate &= 0xfc; // channel 2 speaker output disabled
+
+    if (mode==0) { 
+	gate |= 0x1;  // channel 2 gate enabled, write of count will start counter
+    } else {
+	// gate disabled, write of gate will start counter
+    }
+
+    outb(gate,KB_CTRL_PORT_B);
+
+    // PIT channel 2 counter is now waiting for a count to start/restart
+    // we do this LSB then MSB
+
+    outb(pit_count & 0xff, PIT_CHAN2_DATA); // LSB
+
+    io_delay();
+
+    outb((uint8_t)(pit_count >> 8), PIT_CHAN2_DATA); // MSB
+
+    if (mode==0) { 
+	// The PIT counter is now running
+    } else {
+	// pulse
+	ctrl = inb(KB_CTRL_PORT_B);
+	ctrl &= 0xfe;
+	outb(ctrl, KB_CTRL_PORT_B);   // force gate low if it's not alread
+	ctrl |= 0x1;                
+	outb(ctrl, KB_CTRL_PORT_B); // force gate high to give positive edge
+	// the PIT counter is now running
+    }
+
+    /// reset apic timer to our count down value 
+    apic_write(apic, APIC_REG_TMICT, 0xffffffff);
+
+
+    // we need to be sure we are not racing with a 1->0 transition on the
+    // output line.  Therefore we will wait for at least one clock interval at
+    // 1.19.. Mhz which is 838 ns.   a port 0x80 read will take 1 us, so
+    // we introduce at least 2 us here to be safe
+    io_delay();
+    io_delay();
+    
+    int count =0;
+    start = rdtsc();
+    // we are now waiting for the PIT to finish
+    // We are much faster than the PIT, so this loop should spin at least once
+    while (1) {
+	detect = inb(KB_CTRL_PORT_B);
+	if ((detect & 0x20)) {
+	    break;
+	}
+	count++;
+    }
+    end = rdtsc();
+
+    if (count==0) {
+	// this is a weird machine that does not get this mode right...
+	APIC_PRINT("PIT scan count of zero encountered, failing calibration for mode %d\n",mode);
+	return -1;
+    }
+
+    //APIC_DEBUG("After %d iterations, PIT has finished\n", count);
+
+    // a known amount of real-time has now finished
+
+    // Now we have 1/TEST_TIME_SEC_RECIP seconds of real time in APIC timer ticks
+    uint32_t apic_timer_ticks = 0xffffffff - apic_read(apic,APIC_REG_TMCCT) + 1;
+
+    APIC_DEBUG("One test period (1/%u sec) took %u APIC ticks, pit_count=%u, and %lu cycles\n",
+	       TEST_TIME_SEC_RECIP,apic_timer_ticks,(unsigned) pit_count, end-start);
+    
+    // occasionally, real hardware can provide surprise
+    // results here, probably due to an SMI.
+    if (tries < MAX_TRIES && (end-start < 1000000 || apic_timer_ticks<100)) { 
+	APIC_DEBUG("Test Period is impossible - trying again\n");
+	tries++;
+	goto try_once;
+    }
+
+    apic->bus_freq_hz = APIC_TIMER_DIV * apic_timer_ticks * TEST_TIME_SEC_RECIP;
+  
+    APIC_DEBUG("Detected APIC 0x%x bus frequency as %lu Hz\n", apic->id, apic->bus_freq_hz);
+
+    // picoseconds are used to try to keep precision for ns and cycle -> tick conversions
+    apic->ps_per_tick = (1000000000000ULL / apic->bus_freq_hz) * APIC_TIMER_DIV;
+
+    APIC_DEBUG("Detected APIC 0x%x real time per tick as %lu ps\n", apic->id, apic->ps_per_tick);
+
+    // us are used here to also keep precision for cycle->ns and ns->cycles conversions
+    apic->cycles_per_us = ((end - start) * TEST_TIME_SEC_RECIP)/1000000ULL;
+
+    APIC_DEBUG("Detected APIC 0x%x cycles per us as %lu (core at %lu Hz)\n",apic->id,apic->cycles_per_us,apic->cycles_per_us*1000000); 
+    
+    if (!apic->bus_freq_hz || !apic->ps_per_tick || !apic->cycles_per_us) { 
+	APIC_ERROR("Detected time calibration numbers cannot be zero....\n");
+	return -1;
+    }
+
+    APIC_DEBUG("Succeeded in calibration with mode %d - spun for %d iterations\n", mode,count);
+    
+    return 0;
+
+}
+
 static void calibrate_apic_timer(struct apic_dev *apic) 
 {
 
@@ -1033,109 +1247,22 @@ static void calibrate_apic_timer(struct apic_dev *apic)
 
 #endif
 
-    uint64_t start, end;
-    uint16_t pit_count;
-    uint8_t tmp2;
-	uint32_t tries = 0;
+    int mode;
 
- try_once:
-    // First determine the APIC's bus frequency by calibrating it
-    // against a known clock (the PIT).   We do not know the base
-    // rate of this APIC, but we do know the base rate of all PITs.
-    // The PIT counts at about 1193180 Hz (~1.2 MHz)
+    // We use PIT calibration, trying mode 0 first, which should work correctly
+    // on all machines and on emulation (Phi, Qemu).
+    if (mode=0, calibrate_apic_timer_using_pit(apic,mode)) {
+	// if we fail, we will try mode 1, which hopefully will work correctly on
+	// most real hardware
+	APIC_DEBUG("Failed calibration using PIT mode 0, retrying with mode 1\n");
+	if (mode=1, calibrate_apic_timer_using_pit(apic,mode)) {
+	    APIC_ERROR("Failed calibration PIT modes 0 and 1.... Time has no meaning here...\n");
+	    panic("Failed calibration PIT modes 0 and 1.... Time has no meaning here...\n");
+	    return;
+	}
+    }
 
-    pit_count = 1193180 / TEST_TIME_SEC_RECIP;
     
-
-    // Use APIC in one shot mode with the divider we will use 
-    // in normal execution.  We will count down from a large number
-    // and do not expect interrupts because it should not hit zero.
-    // timer is masked because we don't want an interrupt to occur at all
-    // On KNL, masking also seems to have the side effect of reseting the count
-    apic_write(apic, APIC_REG_LVTT, APIC_TIMER_ONESHOT | APIC_DEL_MODE_FIXED | APIC_TIMER_INT_VEC | APIC_TIMER_MASK);
-    apic_write(apic, APIC_REG_TMDCR, APIC_TIMER_DIVCODE);
-
-    // Now configure the PIT to count down the test period
-
-    /* set PIT channel 2 to "out" mode */
-    outb((inb(KB_CTRL_PORT_B) & 0xfd) | 0x1, 
-          KB_CTRL_PORT_B);
-
-    /* configure the PIT channel 2 for one-shot */  // 0x02 | 0x80 | 0x30 = > 10110010
-    outb(PIT_MODE(PIT_MODE_ONESHOT) |
-         PIT_CHAN(PIT_CHAN_SEL_2)   |
-         PIT_ACC_MODE(PIT_ACC_MODE_BOTH),
-         PIT_CMD_REG);
-
-    /* LSB */ 
-    outb(pit_count & 0xff,
-	 PIT_CHAN2_DATA);
-
-    // delay
-    inb(KB_CTRL_DATA_OUT);
-
-    /* MSB  */
-    outb((uint8_t)(pit_count>>8),
-	 PIT_CHAN2_DATA);
-
-    /* clear and reset bit 0 of kbd ctrl port to reload
-     * current cnt on chan 2 with the new value */
-    tmp2 = inb(KB_CTRL_PORT_B) & 0xfe;
-    outb(tmp2, KB_CTRL_PORT_B);
-    outb(tmp2 | 1, KB_CTRL_PORT_B);
-
-    // The PIT is now running, so we need to make the APIC start
-
-    /* reset timer to our count down value */
-    apic_write(apic, APIC_REG_TMICT, 0xffffffff);
-
-/* TODO: need to calibrate timers with TSC on the Phi */
-
-    start = rdtsc();
-    // we are now waiting for the PIT to finish
-    while (!(inb(KB_CTRL_PORT_B) & 0x20)) {
-	// intentionally empty
-    }
-    end = rdtsc();
-
-    // a known amount of real-time
-    // has now finished
-
-    // Now we have 1/TEST_TIME_SEC_RECIP seconds of real time in APIC timer ticks
-    uint32_t apic_timer_ticks = 0xffffffff - apic_read(apic,APIC_REG_TMCCT) + 1;
-
-    APIC_DEBUG("One test period (1/%u sec) took %u APIC ticks, pit_count=%u, and %lu cycles\n",
-	       TEST_TIME_SEC_RECIP,apic_timer_ticks,(unsigned) pit_count, end-start);
-
-    // occasionally, real hardware can provide surprise
-    // results here, probably due to an SMI.   Additionally,
-    // QEMU provides loony results and it is worth repeating
-    // until we at least get something that's internally consistent
-    if (tries < MAX_TRIES && (end-start < 1000000 || apic_timer_ticks<100)) { 
-	APIC_DEBUG("Test Period is impossible - trying again\n");
-	tries++;
-	goto try_once;
-    }
-
-    apic->bus_freq_hz = APIC_TIMER_DIV * apic_timer_ticks * TEST_TIME_SEC_RECIP;
-
-    APIC_DEBUG("Detected APIC 0x%x bus frequency as %lu Hz\n", apic->id, apic->bus_freq_hz);
-
-    // picoseconds are used to try to keep precision for ns and cycle -> tick conversions
-    apic->ps_per_tick = (1000000000000ULL / apic->bus_freq_hz) * APIC_TIMER_DIV;
-
-    APIC_DEBUG("Detected APIC 0x%x real time per tick as %lu ps\n", apic->id, apic->ps_per_tick);
-
-    // us are used here to also keep precision for cycle->ns and ns->cycles conversions
-    apic->cycles_per_us = ((end - start) * TEST_TIME_SEC_RECIP)/1000000ULL;
-
-    APIC_DEBUG("Detected APIC 0x%x cycles per us as %lu (core at %lu Hz)\n",apic->id,apic->cycles_per_us,apic->cycles_per_us*1000000); 
-    
-    if (!apic->bus_freq_hz || !apic->ps_per_tick || !apic->cycles_per_us) { 
-	APIC_DEBUG("Detected numbers cannot be zero.... trying again\n");
-	goto try_once;
-    }
-
     /////////////////////////////////////////////////////////////////
     // Now we will determine the calibration of the TSC to APIC time
     ////////////////////////////////////////////////////////////////
@@ -1146,6 +1273,7 @@ static void calibrate_apic_timer(struct apic_dev *apic)
     uint64_t scale_sum = 0;
     uint64_t scale_min = -1;
     uint64_t scale;
+    uint64_t start, end;
 
     int i = 0;
 
@@ -1180,7 +1308,8 @@ static void calibrate_apic_timer(struct apic_dev *apic)
 
     apic->cycles_per_tick = scale_sum/num_trials;
 
-    APIC_DEBUG("Detected APIC 0x%x CPU cycles per tick as %lu cycles (min was %lu)\n", apic->id, apic->cycles_per_tick,scale_min);
+    APIC_PRINT("Detected APIC 0x%x at %lu Hz and cycles per us as %lu (core at %lu Hz) calibration mode=%d\n",apic->id,apic->bus_freq_hz,apic->cycles_per_us,apic->cycles_per_us*1000000,mode); 
+    APIC_PRINT("Detected APIC 0x%x CPU cycles per tick as %lu cycles (min was %lu)\n", apic->id, apic->cycles_per_tick,scale_min);
 
 }
 

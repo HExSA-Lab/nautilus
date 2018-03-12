@@ -58,7 +58,8 @@ int i8254_init(struct naut_info * naut);
 
 #define PIT_ACC_MODE(x) ((x) << 4)
 
-#define PIT_MODE_ONESHOT  0x1 
+#define PIT_MODE_TERMINAL_COUNT  0x0
+#define PIT_MODE_ONESHOT  0x1
 #define PIT_MODE_RATEGEN  0x2
 #define PIT_MODE_SQUARE   0x3
 #define PIT_MODE_SWSTROBE 0x4
