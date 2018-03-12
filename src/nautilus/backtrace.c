@@ -87,6 +87,7 @@ nk_print_regs (struct nk_regs * r)
     ulong_t cr2 = 0ul;
     ulong_t cr3 = 0ul;
     ulong_t cr4 = 0ul;
+    ulong_t cr8 = 0ul;
     ulong_t fs  = 0ul;
     ulong_t gs  = 0ul;
     ulong_t sgs = 0ul;
@@ -95,6 +96,7 @@ nk_print_regs (struct nk_regs * r)
     uint_t  cs;
     uint_t  ds;
     uint_t  es;
+    ulong_t efer;
 
     printk("Current Thread=0x%x (%p) \"%s\"\n", 
             get_cur_thread() ? get_cur_thread()->tid : -1,
@@ -121,11 +123,13 @@ nk_print_regs (struct nk_regs * r)
     gs  = msr_read(MSR_GS_BASE);
     fs  = msr_read(MSR_FS_BASE);
     gsi = msr_read(MSR_KERNEL_GS_BASE);
+    efer = msr_read(IA32_MSR_EFER);
 
     asm volatile("movq %%cr0, %0": "=r" (cr0));
     asm volatile("movq %%cr2, %0": "=r" (cr2));
     asm volatile("movq %%cr3, %0": "=r" (cr3));
     asm volatile("movq %%cr4, %0": "=r" (cr4));
+    asm volatile("movq %%cr8, %0": "=r" (cr8));
 
     printk("FS: %016lx(%04x) GS: %016lx(%04x) knlGS: %016lx\n", 
             fs, fsi, gs, gsi, sgs);
@@ -133,6 +137,7 @@ nk_print_regs (struct nk_regs * r)
             cs, ds, es, cr0);
     printk("CR2: %016lx CR3: %016lx CR4: %016lx\n", 
             cr2, cr3, cr4);
+    printk("CR8: %016lx EFER: %016lx\n", cr8, efer);
 
     printk("[-----------------------------------------------]\n");
 }

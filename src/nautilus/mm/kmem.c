@@ -442,6 +442,9 @@ nk_kmem_init (void)
         list_for_each_entry(reg, local_regions, mem_ent) {
             KMEM_DEBUG("    [Domain=%u, %p-%p]\n", reg->mem->domain_id, reg->mem->base_addr, reg->mem->base_addr + reg->mem->len);
 	    total_mem += reg->mem->len;
+	    if ((reg->mem->base_addr + reg->mem->len) >= sys->mem.phys_mem_avail) {
+		sys->mem.phys_mem_avail = reg->mem->base_addr + reg->mem->len;
+	    }
         }
     }
 
