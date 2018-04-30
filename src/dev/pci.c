@@ -206,6 +206,95 @@ pci_copy_cfg_space(struct pci_dev *dev, struct pci_bus *bus)
   }
 }
 
+
+void *pci_msi_x_get_bar_start(struct pci_dev *dev, uint8_t bar_num)
+{
+  uint32_t bar = pci_dev_cfg_readl(dev, 0x10 + bar_num*4);
+
+  PCI_DEBUG("bar %d: 0x%0x\n",bar_num, bar);
+
+  if (bar & 0x0) {
+    PCI_DEBUG("Cannot be an I/O bar...\n");
+    return 0;
+  }
+
+  uint8_t mem_bar_type = (bar & 0x6) >> 1;
+
+  // 32 bit memory only at the moment
+  if (mem_bar_type != 0) {
+    PCI_DEBUG("Cannot handle memory bar type 0x%x\n", mem_bar_type);
+    return 0;
+  }
+
+  return (void*) (uint64_t) (bar & 0xfffffff0);
+}
+
+
+#define CEIL_DIV(x,y) (((x)/(y)) + !!((x)%(y)))
+
+//
+// CTRL word format:  enable function_mask 3 bits reserved, 11 bits of table size
+//
+// enable          - self explanatory (can only have one of INTX, MSI, MSI-X)
+// function mask   - global mask, if 0, vector mask bits are used
+// reserved
+// table size      - N-1
+
+
+static void pci_msi_x_detect(struct pci_dev *d)
+{
+  uint8_t co = pci_dev_get_capability(d,0x11);
+
+  if (!co) {
+    PCI_DEBUG("device does not have MSI-X capability\n");
+    return;
+  }
+
+  PCI_DEBUG("device has MSI-X capability\n");
+
+  d->msix.co = co;
+
+  uint16_t ctrl = pci_dev_cfg_readw(d,co+2);
+
+  d->msix.size = (ctrl & 0x7ff) + 1;  // N-1 encoded
+
+  PCI_DEBUG("initial msi-x ctrl reg is %x\n",ctrl);
+
+  uint32_t table = pci_dev_cfg_readl(d,co+4);
+  uint8_t  table_bar_num = table & 0x7;
+  uint32_t table_off = table & (~0x7); // quad word aligned
+  uint32_t pba = pci_dev_cfg_readl(d,co+8);
+  uint8_t  pba_bar_num = pba & 0x7;
+  uint32_t pba_off = pba & (~0x7); // quad word aligned
+
+  PCI_DEBUG("table_bar_num=%u pba_bar_num=%u\n",table_bar_num,pba_bar_num);
+  PCI_DEBUG("table_off=0x%x pba_off=0x%x\n",table_off,pba_off);
+
+  if (table_bar_num>5 || pba_bar_num>5) {
+    PCI_ERROR("Insane bar number (table_bar=%u, pba_bar=%u)\n", table_bar_num, pba_bar_num);
+    return;
+  }
+  
+  void *table_start = pci_msi_x_get_bar_start(d,table_bar_num);
+  void *pba_start = pci_msi_x_get_bar_start(d,pba_bar_num);
+
+  PCI_DEBUG("table_start=%p pba_start=%p\n",table_start,pba_start);
+
+  if (!table_start || !pba_start) {
+    PCI_ERROR("relevant bars have invalid starting address (table_start=%p, pba_start=%p)\n", table_start,pba_start);
+    return;
+  }
+
+  d->msix.table = table_start + table_off;  
+  d->msix.pending = pba_start + pba_off;  
+
+  PCI_DEBUG("table of size %u located at %p\n", d->msix.size, d->msix.table);
+  PCI_DEBUG("pending of size %u located at %p\n", CEIL_DIV(d->msix.size,8), d->msix.pending);
+
+  d->msix.type = PCI_MSI_X;
+  
+}
+
 // this must run after copying the config space
 // and adding the device to a bus
 static void pci_msi_detect(struct pci_dev *d)
@@ -276,6 +365,8 @@ pci_dev_create (struct pci_bus * bus, uint32_t num, uint8_t func )
     pci_add_dev_to_bus(dev, bus);
 
     pci_msi_detect(dev);
+
+    pci_msi_x_detect(dev);
 
     return dev;
 }
@@ -574,14 +665,14 @@ static int dump_dev_base(struct pci_dev *d, void *s)
   cmd=pci_dev_cfg_readw(d,4);
   status=pci_dev_cfg_readw(d,6);
 
-  nk_vc_printf("%x:%x.%x : %04x:%04x %04xc %04xs ",
+  nk_vc_printf("%x:%x.%x : %04x:%04x %04xc %04xs",
 	       d->bus->num, d->num, d->fun, d->cfg.vendor_id, d->cfg.device_id, cmd, status);
 
   if ((d->cfg.hdr_type&~0x80) ==0 ) { 
     if (d->msi.co) { 
       struct pci_msi_info *m = &d->msi;
       
-      nk_vc_printf("MSI(%s,%s,nn=%d,bv=%d,nv=%d,tc=%d)\n",
+      nk_vc_printf(" MSI(%s,%s,nn=%d,bv=%d,nv=%d,tc=%d)",
 		   m->enabled ? "on" : "off",
 		   m->type == PCI_MSI_32 ? "MSI32" :
 		   m->type == PCI_MSI_32_PER_VEC ? "MSI32wP" :
@@ -591,13 +682,19 @@ static int dump_dev_base(struct pci_dev *d, void *s)
 		   m->base_vec,
 		   m->num_vecs,
 		   m->target_cpu);
-    } else {
-      if (!d->cfg.dev_cfg.intr_pin) {
-	nk_vc_printf("noint\n");
-      } else {
-	nk_vc_printf("legacy(l=%d,p=%d)\n", d->cfg.dev_cfg.intr_line, d->cfg.dev_cfg.intr_pin);
-      }
     } 
+    if (d->msix.co) {
+      struct pci_msi_x_info *m = &d->msix;
+      nk_vc_printf(" MSIX(%s,nt=%d)",
+		   m->enabled ? "on" : "off",
+		   m->size);
+    }
+    if (!d->cfg.dev_cfg.intr_pin) {
+      nk_vc_printf(" nolegacy");
+    } else {
+      nk_vc_printf(" legacy(l=%d,p=%d)", d->cfg.dev_cfg.intr_line, d->cfg.dev_cfg.intr_pin);
+    }
+    nk_vc_printf("\n");
   } else {
     nk_vc_printf("not simple device\n");
   }
@@ -1176,4 +1273,205 @@ int pci_dev_is_pending_msi(struct pci_dev *dev, int vec)
 }
 
 
+
+#define WRITEL(p,v) __asm__ __volatile__ ("movl %0, (%1)" : : "r"(v), "r"(p) : "memory")
+#define READL(p,v) __asm__ __volatile__ ("movl (%1), %0" : "=r"(v) :"r"(p) : "memory")
+#define WRITEQ(p,v) __asm__ __volatile__ ("movq %0, (%1)" : : "r"(v), "r"(p) : "memory")
+#define READQ(p,v) __asm__ __volatile__ ("movq (%1), %0" : "=r"(v) :"r"(p) : "memory")
+
+int pci_dev_set_msi_x_entry(struct pci_dev *dev, int num, int vec, int target_cpu)
+{
+  struct pci_msi_x_info *m = &dev->msix;
+  pci_msi_x_table_entry_t *t = m->table + num;
+
+  if (dev->msix.type!=PCI_MSI_X) {
+    return -1;
+  }
+
+  if (num<0 || num >= m->size) {
+    return -1;
+  }
+
+  uint32_t mar_low;
+  uint32_t mdr;
+  uint32_t ctrl;
+
+  PCI_DEBUG("msix enable - num = %d vec = %d target = %d\n", num, vec, target_cpu);
+
+  mar_low  = 0xfee00000;
+  mar_low |= (target_cpu & 0xff) << 12;
+  // we use RH=0 because we don't want lowest priority
+  // we use DM=0 because we want physical delivery
+
+  mdr = (vec & 0xff);
+  // We use DM=0 to get fixed delivery
+  // We use LEV=0 because we don't care and are using edge
+  // We use TM=0 to get edge
+
+  // now we write the entry
+  WRITEL(&t->msg_addr_lo, mar_low);
+  WRITEL(&t->msg_addr_hi,0);
+  WRITEL(&t->msg_data,mdr);
+  WRITEL(&t->vector_control,1); // masked
+
+  PCI_DEBUG("entry %d written with mar=0x%x, mdr=0x%x (masked)\n",vec,mar_low,mdr);
+
+  return 0;
+}
+
+
+static int pci_dev_mask_unmask_msi_x_all(struct pci_dev *dev, int val)
+{
+  struct pci_msi_x_info *m = &dev->msix;
+  uint16_t ctrl; 
+
+  if (dev->msix.type!=PCI_MSI_X) {
+    return -1;
+  }
+
+  ctrl = pci_dev_cfg_readw(dev,m->co+2);
+
+  if (val) {
+    ctrl |= 1<<14;
+  } else {
+    ctrl &= ~(1<<14);
+  }
+
+  pci_dev_cfg_writew(dev,m->co+2,ctrl);
+  
+  PCI_DEBUG("function %smasked\n", val ? "" : "un");
+
+  return 0;
+}
+
+static int pci_dev_mask_unmask_msi_x_entry(struct pci_dev *dev, int num, int val)
+{
+  struct pci_msi_x_info *m = &dev->msix;
+  pci_msi_x_table_entry_t *t = m->table + num;
+  uint32_t old;
+
+  if (dev->msix.type!=PCI_MSI_X) {
+    return -1;
+  }
+
+  if (num<0 || num >= m->size) {
+    return -1;
+  }
+
+
+  READL(&t->vector_control,old);
+  if (val) {
+    old |= 1;
+  } else {
+    old &= ~1;
+  }
+  WRITEL(&t->vector_control,old);
+
+  PCI_DEBUG("entry %d %s\n", val ? "unmasked" : "masked");
+
+  return 0;
+}
+  
+  
+int pci_dev_mask_msi_x_entry(struct pci_dev *dev, int num)
+{
+  return pci_dev_mask_unmask_msi_x_entry(dev,num,1);
+}
+
+int pci_dev_unmask_msi_x_entry(struct pci_dev *dev, int num)
+{
+  return pci_dev_mask_unmask_msi_x_entry(dev,num,0);
+}
+
+int pci_dev_mask_msi_x_all(struct pci_dev *dev)
+{
+  return pci_dev_mask_unmask_msi_x_all(dev,1);
+}
+
+int pci_dev_unmask_msi_x_all(struct pci_dev *dev)
+{
+  return pci_dev_mask_unmask_msi_x_all(dev,0);
+}
+
+
+int pci_dev_enable_msi_x(struct pci_dev *dev)
+{
+  struct pci_msi_x_info *m = &dev->msix;
+  uint16_t cmd;
+  uint16_t ctrl; 
+
+  if (dev->msix.type!=PCI_MSI_X) {
+    return -1;
+  }
+
+  // we need to disable the interrupt pin first
+  
+  cmd = pci_dev_cfg_readw(dev,0x4);
+  cmd |= 0x400;
+  pci_dev_cfg_writew(dev,0x4,cmd);
+
+  PCI_DEBUG("legacy interrupt disabled (cmd=%x)\n",cmd);
+
+  ctrl = pci_dev_cfg_readw(dev,m->co+2);
+
+  ctrl |= 1<<15;
+
+  pci_dev_cfg_writew(dev,m->co+2,ctrl);
+
+  m->enabled = 1;
+  
+  PCI_DEBUG("MSI-X enabled\n");
+
+  return 0;
+
+}  
+
+int pci_dev_disable_msi_x(struct pci_dev *dev)
+{
+  struct pci_msi_x_info *m = &dev->msix;
+  uint16_t ctrl; 
+
+  if (dev->msix.type!=PCI_MSI_X) {
+    return -1;
+  }
+
+  ctrl = pci_dev_cfg_readw(dev,m->co+2);
+
+  ctrl &= ~(1<<15);
+
+  pci_dev_cfg_writew(dev,m->co+2,ctrl);
+
+  m->enabled=0;
+
+  PCI_DEBUG("MSI-X disabled\n");
+
+  // note that legacy or MSI are NOT enabled automatically
+
+  return 0;
+}
+
+int pci_dev_is_pending_msi_x(struct pci_dev *dev, int num)
+{
+  struct pci_msi_x_info *m = &dev->msix;
+  uint64_t entry, bit, val;
+
+  if (dev->msix.type!=PCI_MSI_X) {
+    return -1;
+  }
+
+  if (num<0 || num >= m->size) {
+    return -1;
+  }
+
+  entry = num/64;
+  bit = num%64;
+  
+  READQ(m->pending+entry,val);
+
+  val = (val>>bit) & 0x1;
+
+  PCI_DEBUG("entry %d %s\n", num, val ? "pending" : "not pending");
+
+  return val;
+}
 

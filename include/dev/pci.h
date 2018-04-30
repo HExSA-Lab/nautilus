@@ -165,7 +165,8 @@ struct pci_cfg_space {
 } __packed;
 
 
-typedef enum {PCI_MSI_NONE=0, PCI_MSI_32, PCI_MSI_64, PCI_MSI_32_PER_VEC, PCI_MSI_64_PER_VEC} pci_msi_type_t;
+typedef enum {PCI_MSI_NONE=0, PCI_MSI_32, PCI_MSI_64, PCI_MSI_32_PER_VEC, PCI_MSI_64_PER_VEC } pci_msi_type_t;
+
 
 struct pci_msi_info {
   int              enabled;
@@ -180,7 +181,32 @@ struct pci_msi_info {
   int       base_vec; // interrupt will occur on [vec,vec+num_vecs_used)
   int       num_vecs; 
   int       target_cpu;
+
 };
+
+
+typedef enum {PCI_MSI_X_NONE=0, PCI_MSI_X} pci_msi_x_type_t;
+
+typedef struct pci_msi_x_table_entry {
+  uint32_t  msg_addr_lo;
+  uint32_t  msg_addr_hi;
+  uint32_t  msg_data;
+  uint32_t  vector_control;
+} __packed pci_msi_x_table_entry_t;
+
+
+struct pci_msi_x_info {
+  int              enabled;
+  pci_msi_x_type_t type;
+  uint8_t          co;  // offset of capability in the config space
+
+  // these come from a query of the device at boot
+  uint32_t                  size; 
+  pci_msi_x_table_entry_t  *table;    // points to MSI-X table on device
+  uint64_t                 *pending;  // points to pending bits array on device   
+  
+};  
+
 
 struct pci_dev {
     uint32_t num;
@@ -188,7 +214,8 @@ struct pci_dev {
     struct pci_bus * bus;
     struct list_head dev_node;
     struct pci_cfg_space cfg;   // only a snapshot at boot!
-    struct pci_msi_info  msi;   
+    struct pci_msi_info    msi;   
+    struct pci_msi_x_info  msix;   
 };
 
 
@@ -283,6 +310,75 @@ int pci_dev_is_pending_msi(struct pci_dev *dev, int vec);
      }
   }
   // now we should be seeing interrupts
+*/
+
+
+// target cpu must currently be a single, physical cpu
+// entry is initially in the masked state
+int pci_dev_set_msi_x_entry(struct pci_dev *dev, int num, int vec, int target_cpu);
+
+int pci_dev_mask_msi_x_entry(struct pci_dev *dev, int num);
+int pci_dev_unmask_msi_x_entry(struct pci_dev *dev, int num);
+
+int pci_dev_mask_msi_x_all(struct pci_dev *dev);
+int pci_dev_unmask_msi_x_all(struct pci_dev *dev);
+
+int pci_dev_enable_msi_x(struct pci_dev *dev);
+int pci_dev_disable_msi_x(struct pci_dev *dev);
+
+int pci_dev_is_pending_msi_x(struct pci_dev *dev, int num);
+
+/*
+  There is currently no specific support for registering MSI-X interrupt handlers,
+  You want to follow roughly these steps:
+
+  struct pci_dev *d = ... find the device... - it must have MSI-X...
+
+  int num_vecs = d->msix.size;
+
+  // now fill out the device's MSI-X table
+  for (i=0;i<num_vecs;i++) { 
+     // find a free vector
+     // note that prioritization here is your problem
+     if (idt_find_and_reserve_range(1,0,&vec) {
+       // fail - cannot find a vector entry...
+     }
+     // register your handler for that vector
+     if (register_int_handler(vec, handler, state)) { 
+         // failed.... 
+     }
+     // set the table entry to point to your handler
+     if (pci_dev_set_msi_x_entry(d,i,vec,cpu)) { 
+         // failed to set entry...
+     }
+     // and unmask it (device is still masked)
+     if (pci_dev_unmask_msi_x_entry(d,i)) { 
+         // failed to unamask entry...
+     }
+  }
+
+  // now enable the device to use MSI-X
+
+  if (pci_dev_enable_msi_x(d) {
+     // failed to enable...
+  }
+
+  // device is now using MSI-X, but all functions are masked
+
+  if (pci_dev_unmask_msi_x_all(d)) { 
+     // failed to unmask
+  }
+
+  // we should now be getting interrupts
+
+  // We can mask/unmask the whole device or individual entries at this point
+
+  // We can see if a particular entry is pending 
+  // using pci_dev_is_pending_msi_x()
+
+  // Note that there is only one "kind" of MSI-X
+  // You need to know what the MSI-X table entries mean for your device
+
 */
  
 
