@@ -17,6 +17,7 @@ obj-y += \
 	ticketlock.o \
 	rwlock.o \
 	condvar.o \
+	semaphore.o \
 	hashtable.o \
 	rbtree.o \
 	random.o \
