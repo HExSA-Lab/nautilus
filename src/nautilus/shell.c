@@ -955,6 +955,22 @@ int handle_pci(char *buf)
       return 0;
   }
 
+  if (sscanf(buf,"pci cfg %x %x %x", &bus, &slot, &func)) {
+      int i,j;
+      uint8_t data[256];
+      for (i=0;i<256;i+=4) {
+	  *(uint32_t*)(&data[i]) = pci_cfg_readl(bus,slot,func,i);
+      }
+      for (i=0;i<256;i+=16) {
+	  nk_vc_printf("PCI[%x:%x.%x].cfg[%02x] = ",bus,slot,func,i);
+	  for (j=i;j<(i+16);j++) {
+	      nk_vc_printf(" %02x",data[j]);
+	  }
+	  nk_vc_printf("\n");
+      }
+      return 0;
+  }
+
   nk_vc_printf("unknown pci command\n");
 
   return -1;
@@ -1204,7 +1220,7 @@ static int handle_cmd(char *buf, int n)
 #endif
     nk_vc_printf("ioapic <list|dump> | ioapic num <pin|all> <mask|unmask>\n");
     nk_vc_printf("pci list | pci raw/dev bus slot func | pci dev [bus slot func]\n");
-    nk_vc_printf("pci peek|poke bus slot func off [val]\n");
+    nk_vc_printf("pci peek|poke bus slot func off [val] | pci cfg bus slot func\n");
     nk_vc_printf("shell name\n");
     nk_vc_printf("regs [t]\npeek [bwdq] x | mem x n [s] | mt x | poke [bwdq] x y\nin [bwd] addr | out [bwd] addr data\nrdmsr x [n] | wrmsr x y\ncpuid f [n] | cpuidsub f s | mtrrs [cpu] | int [cpu] v\n");
     nk_vc_printf("meminfo [detail]\n");
