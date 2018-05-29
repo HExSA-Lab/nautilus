@@ -31,6 +31,12 @@ struct nk_block_dev_characteristics {
     uint64_t num_blocks;
 };
 
+
+typedef enum {
+    NK_BLOCK_DEV_STATUS_SUCCESS=0,
+    NK_BLOCK_DEV_STATUS_ERROR
+} nk_block_dev_status_t;
+
 struct nk_block_dev_int {
     // this must be first so it derives cleanly
     // from nk_dev_int
@@ -40,8 +46,8 @@ struct nk_block_dev_int {
     // an interface either succeeds (returns zero) or fails (returns -1) 
     // in any case, it returns immediately
     int (*get_characteristics)(void *state, struct nk_block_dev_characteristics *c);
-    int (*read_blocks)(void *state, uint64_t blocknum, uint64_t count, uint8_t *dest, void (*callback)(void *), void *context);
-    int (*write_blocks)(void *state, uint64_t blocknum, uint64_t count, uint8_t *src, void (*callback)(void *), void *context);
+    int (*read_blocks)(void *state, uint64_t blocknum, uint64_t count, uint8_t *dest, void (*callback)(nk_block_dev_status_t status, void *context), void *context);
+    int (*write_blocks)(void *state, uint64_t blocknum, uint64_t count, uint8_t *src, void (*callback)(nk_block_dev_status_t status, void *context), void *context);
 };
 
 
@@ -66,7 +72,7 @@ int nk_block_dev_read(struct nk_block_dev *dev,
 		      uint64_t count, 
 		      void   *dest, 
 		      nk_dev_request_type_t type,
-		      void (*callback)(void *), 
+		      void (*callback)(nk_block_dev_status_t status, void *state), 
 		      void *state);
 
 int nk_block_dev_write(struct nk_block_dev *dev, 
@@ -74,7 +80,7 @@ int nk_block_dev_write(struct nk_block_dev *dev,
 		       uint64_t count, 
 		       void   *src,  
 		       nk_dev_request_type_t type,
-		       void (*callback)(void *), 
+		       void (*callback)(nk_block_dev_status_t status, void *state), 
 		       void *state);
 
 

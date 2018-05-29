@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2017, Peter Dinda
  * Copyright (c) 2017, The V3VEE Project  <http://www.v3vee.org> 
@@ -355,7 +355,7 @@ static int ata_lba48_read_write(struct ata_blkdev_state *s,
 	
 
 
-static int read_blocks(void *state, uint64_t blocknum, uint64_t count, uint8_t *dest,void (*callback)(void *), void *context)
+static int read_blocks(void *state, uint64_t blocknum, uint64_t count, uint8_t *dest,void (*callback)(nk_block_dev_status_t, void *), void *context)
 {
     STATE_LOCK_CONF;
     struct ata_blkdev_state *s = (struct ata_blkdev_state *)state;
@@ -371,15 +371,14 @@ static int read_blocks(void *state, uint64_t blocknum, uint64_t count, uint8_t *
     } else {
 	int rc = ata_lba48_read_write(s,blocknum, count, dest, 0);
 	STATE_UNLOCK(s);
-	nk_dev_signal((struct nk_dev*)(s->blkdev));
 	if (callback) {
-	    callback(context);
+	    callback(NK_BLOCK_DEV_STATUS_SUCCESS,context);
 	}
 	return rc;
     }
 }
 
-static int write_blocks(void *state, uint64_t blocknum, uint64_t count, uint8_t *src,void (*callback)(void *), void *context)
+static int write_blocks(void *state, uint64_t blocknum, uint64_t count, uint8_t *src,void (*callback)(nk_block_dev_status_t, void *), void *context)
 {
     STATE_LOCK_CONF;
     struct ata_blkdev_state *s = (struct ata_blkdev_state *)state;
@@ -395,9 +394,8 @@ static int write_blocks(void *state, uint64_t blocknum, uint64_t count, uint8_t 
     } else {
 	int rc = ata_lba48_read_write(s,blocknum, count, src, 1);
 	STATE_UNLOCK(s);
-	nk_dev_signal((struct nk_dev*)(s->blkdev));
 	if (callback) {
-	    callback(context);
+	    callback(NK_BLOCK_DEV_STATUS_SUCCESS,context);
 	}
 	return rc;
     }

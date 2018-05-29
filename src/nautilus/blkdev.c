@@ -90,18 +90,36 @@ int nk_block_dev_get_characteristics(struct nk_block_dev *dev, struct nk_block_d
     return di->get_characteristics(d->state,c);
 }
 
-void generic_callback(void *context)
+struct op {
+    int                 completed;
+    nk_block_dev_status_t status;
+    struct nk_block_dev   *dev;
+};
+
+
+static void generic_write_callback(nk_block_dev_status_t status, void *context)
 {
-    *(volatile uint64_t *)context = 1;
+    struct op *o = (struct op*) context;
+    DEBUG("generic write callback (status = 0x%lx) for %p\n",status,context);
+    o->status = status;
+    o->completed = 1;
+    nk_dev_signal((struct nk_dev *)o->dev);
 }
 
+static void generic_read_callback(nk_block_dev_status_t status, void *context)
+{
+    struct op *o = (struct op*) context;
+    DEBUG("generic read callback (status = 0x%lx) for %p\n", status, context);
+    o->status = status;
+    o->completed = 1;
+    nk_dev_signal((struct nk_dev *)o->dev);
+}
 
 static int generic_cond_check(void* state)
 {
-    uint64_t *o = (uint64_t*) state;
-    return *o;
+    struct op *o = (struct op*) state;
+    return o->completed;
 }
-
 
 
 int nk_block_dev_read(struct nk_block_dev *dev, 
@@ -109,7 +127,7 @@ int nk_block_dev_read(struct nk_block_dev *dev,
 		      uint64_t count, 
 		      void *dest, 
 		      nk_dev_request_type_t type,
-		      void (*callback)(void *state),
+		      void (*callback)(nk_block_dev_status_t status, void *state),
 		      void *state)
 {
     struct nk_dev *d = (struct nk_dev *)(&(dev->dev));
@@ -130,7 +148,11 @@ int nk_block_dev_read(struct nk_block_dev *dev,
 	    DEBUG("readblocks is not possible\n");
 	    return -1;
 	} else {
-	    volatile uint64_t completion = 0;
+	    volatile struct op o;
+
+	    o.completed = 0;
+	    o.status = 0;
+	    o.dev = dev;
 	    
 	    if (type==NK_DEV_REQ_NONBLOCKING) {
 		if (di->read_blocks(d->state,blocknum,count,dest,0,0)) {
@@ -141,13 +163,13 @@ int nk_block_dev_read(struct nk_block_dev *dev,
 		    return 0;
 		}
 	    } else {
-		if (di->read_blocks(d->state,blocknum,count,dest,generic_callback,(void*)&completion)) {
+		if (di->read_blocks(d->state,blocknum,count,dest,generic_read_callback,(void*)&o)) {
 		    ERROR("failed to start up readblocks\n");
 		    return -1;
 		} else {
 		    DEBUG("readblocks started, waiting for completion\n");
-		    while (!completion) { 
-			nk_dev_wait((struct nk_dev *)d,generic_cond_check,(void*)&completion);
+		    while (!o.completed) { 
+			nk_dev_wait((struct nk_dev *)d,generic_cond_check,(void*)&o);
 		    }
 		    return 0;
 		}
@@ -166,7 +188,7 @@ int nk_block_dev_write(struct nk_block_dev *dev,
 		       uint64_t count, 
 		       void     *src,  
 		       nk_dev_request_type_t type,
-		       void (*callback)(void *state),
+		       void (*callback)(nk_block_dev_status_t status, void *state),
 		       void *state)
 {
     struct nk_dev *d = (struct nk_dev *)(&(dev->dev));
@@ -187,8 +209,12 @@ int nk_block_dev_write(struct nk_block_dev *dev,
 	    DEBUG("writeblocks is not possible\n");
 	    return -1;
 	} else {
-	    volatile uint64_t completion = 0;
-	    
+	    volatile struct op o;
+
+	    o.completed = 0;
+	    o.status = 0;
+	    o.dev = dev;
+    
 	    if (type==NK_DEV_REQ_NONBLOCKING) {
 		if (di->write_blocks(d->state,blocknum,count,src,0,0)) {
 		    ERROR("failed to start up writeblocks\n");
@@ -198,13 +224,13 @@ int nk_block_dev_write(struct nk_block_dev *dev,
 		    return 0;
 		}
 	    } else {
-		if (di->write_blocks(d->state,blocknum,count,src,generic_callback,(void*)&completion)) {
+		if (di->write_blocks(d->state,blocknum,count,src,generic_read_callback,(void*)&o)) {
 		    ERROR("failed to start up writeblocks\n");
 		    return -1;
  		} else {
 		    DEBUG("writeblocks started, waiting for completion\n");
-		    while (!completion) { 
-			nk_dev_wait((struct nk_dev *)d, generic_cond_check, (void*)&completion);
+		    while (!o.completed) { 
+			nk_dev_wait((struct nk_dev *)d, generic_cond_check, (void*)&o);
 		    }
 		    return 0;
 		}

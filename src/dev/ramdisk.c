@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2016, Peter Dinda <pdinda@northwestern.edu>
  * Copyright (c) 2016, The V3VEE Project  <http://www.v3vee.org> 
@@ -61,7 +61,7 @@ static int get_characteristics(void *state, struct nk_block_dev_characteristics 
     return 0;
 }
 
-static int read_blocks(void *state, uint64_t blocknum, uint64_t count, uint8_t *dest,void (*callback)(void *), void *context)
+static int read_blocks(void *state, uint64_t blocknum, uint64_t count, uint8_t *dest,void (*callback)(nk_block_dev_status_t, void *), void *context)
 {
     STATE_LOCK_CONF;
     struct ramdisk_state *s = (struct ramdisk_state *)state;
@@ -78,15 +78,14 @@ static int read_blocks(void *state, uint64_t blocknum, uint64_t count, uint8_t *
 	memcpy(dest,s->data+blocknum*s->block_size,s->block_size*count);
 	STATE_UNLOCK(s);
 	//nk_dump_mem(dest,s->block_size*count);
-	nk_dev_signal((struct nk_dev *)s->blkdev);
 	if (callback) {
-	    callback(context);
+	    callback(NK_BLOCK_DEV_STATUS_SUCCESS,context);
 	}
 	return 0;
     }
 }
 
-static int write_blocks(void *state, uint64_t blocknum, uint64_t count, uint8_t *src,void (*callback)(void *), void *context)
+static int write_blocks(void *state, uint64_t blocknum, uint64_t count, uint8_t *src,void (*callback)(nk_block_dev_status_t, void *), void *context)
 {
     STATE_LOCK_CONF;
     struct ramdisk_state *s = (struct ramdisk_state *)state;
@@ -102,9 +101,8 @@ static int write_blocks(void *state, uint64_t blocknum, uint64_t count, uint8_t 
     } else {
 	memcpy(s->data+blocknum*s->block_size,src,s->block_size*count);
 	STATE_UNLOCK(s);
-	nk_dev_signal((struct nk_dev *)(s->blkdev));
 	if (callback) { 
-	    callback(context);
+	    callback(NK_BLOCK_DEV_STATUS_SUCCESS,context);
 	}
 	return 0;
     }
