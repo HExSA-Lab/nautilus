@@ -46,10 +46,11 @@ struct nk_net_dev_int {
     // from nk_dev_int
     struct nk_dev_int dev_int;
     
-    // blockdev-specific interface - set to zero if not available
+    // netdev-specific interface - set to zero if not available
     // an interface either succeeds (returns zero) or fails (returns -1)
     int (*get_characteristics)(void *state, struct nk_net_dev_characteristics *c);
-    // non-blocking always.  -1 on error, otherwise return 0
+    // send/receive are non-blocking always.  -1 on error, otherwise return 0
+    // callback can be null
     int (*post_receive)(void *state, uint8_t *dest, uint64_t len, void (*callback)(nk_net_dev_status_t status, void *context), void *context);
     int (*post_send)(void *state, uint8_t *src, uint64_t len, void (*callback)(nk_net_dev_status_t status, void *context), void *context);
 };

@@ -1,0 +1,32 @@
+menu "Networking"
+
+config NET_ETHERNET
+	bool "Low-level Ethernet Support"
+	default n
+	help
+		Adds low-level Ethernet support
+
+config DEBUG_NET_ETHERNET_PACKET
+	bool "Debug packets"
+	default n
+	depends on DEBUG_PRINTS && NET_ETHERNET
+        help
+                Turn on debug prints for packet pools
+
+config DEBUG_NET_ETHERNET_AGENT
+	bool "Debug agents"
+	default n
+	depends on DEBUG_PRINTS && NET_ETHERNET
+        help
+                Turn on debug prints for Ethernet agents
+
+config DEBUG_NET_ETHERNET_ARP
+	bool "Debug ARP"
+	default n
+	depends on DEBUG_PRINTS && NET_ETHERNET
+        help
+                Turn on debug prints for ARP
+		
+		
+
+endmenu

@@ -97,6 +97,12 @@
 #endif
 
 
+#ifdef NAUT_CONFIG_NET_ETHERNET
+#include <net/ethernet/ethernet_agent.h>
+#include <net/ethernet/ethernet_arp.h>
+#endif
+
+
 #define MAX_CMD 80
 
 #define SHELL_STACK_SIZE (PAGE_SIZE_2MB) 
@@ -1031,6 +1037,128 @@ int handle_gpio(char *buf)
 }
 #endif    
 
+static int handle_net(char *buf)
+{
+#ifdef NAUT_CONFIG_NET_ETHERNET
+    char agentname[100], intname[100];
+    uint32_t type;
+
+    
+    if (sscanf(buf,"net agent create %s %s",agentname, intname)==2) {
+	nk_vc_printf("Attempt to create ethernet agent %s for device %s\n",agentname, intname);
+	struct nk_net_dev *netdev = nk_net_dev_find(intname);
+	struct nk_net_ethernet_agent *agent;
+      
+	if (!netdev) {
+	    nk_vc_printf("Cannot find device %s\n",intname);
+	    return 0;
+	}
+
+	agent = nk_net_ethernet_agent_create(netdev, agentname, 64, 64);
+
+	if (!agent) {
+	    nk_vc_printf("Cannot create agent %s\n",agentname);
+	    return 0;
+	}
+
+	nk_vc_printf("agent created\n");
+	return 0;
+    }
+      
+
+    if (sscanf(buf,"net agent add %s %x",agentname, &type)==2) {
+	nk_vc_printf("Attempt to create interface for agent %s type %us\n", agentname,type);
+	struct nk_net_ethernet_agent *agent = nk_net_ethernet_agent_find(agentname);
+	struct nk_net_dev *netdev;
+	if (!agent) {
+	    nk_vc_printf("Cannot find agent %s\n", agentname);
+	    return 0;
+	}
+	netdev = nk_net_ethernet_agent_register_type(agent,type);
+	if (!netdev) {
+	    nk_vc_printf("Failed to register for type\n");
+	    return 0;
+	}
+	nk_vc_printf("New netdev is named: %s\n", netdev->dev.name);
+	return 0;
+    }
+  
+    if (sscanf(buf,"net agent s%s %s",buf,agentname)==2) {
+	struct nk_net_ethernet_agent *agent = nk_net_ethernet_agent_find(agentname);
+	if (!agent) {
+	    nk_vc_printf("Cannot find agent %s\n", agentname);
+	    return 0;
+	}
+	if (buf[0]=='t' && buf[1]=='o') {
+	    if (nk_net_ethernet_agent_stop(agent)) {
+		nk_vc_printf("Failed to to stop agent %s\n", agentname);
+	    } else {
+		nk_vc_printf("Stopped agent %s\n", agentname);
+	    }
+	} else if (buf[0]=='t' && buf[1]=='a') {
+	    if (nk_net_ethernet_agent_start(agent)) {
+		nk_vc_printf("Failed to to start agent %s\n", agentname);
+	    } else {
+		nk_vc_printf("Started agent %s\n", agentname);
+	    }
+	} else {
+	    nk_vc_printf("Unknown agent command\n");
+	}
+	return 0;
+    }
+	  
+
+    uint32_t ip[4];
+  
+    if (sscanf(buf,"net arp create %s %u.%u.%u.%u",agentname,&ip[0],&ip[1],&ip[2],&ip[3])==5) {
+	ipv4_addr_t ipv4 = ip[0]<<24 | ip[1]<<16 | ip[2]<<8 | ip[3];
+	struct nk_net_ethernet_agent *agent = nk_net_ethernet_agent_find(agentname);
+	if (!agent) {
+	    nk_vc_printf("Cannot find agent %s\n", agentname);
+	    return 0;
+	}
+	struct nk_net_dev *netdev = nk_net_ethernet_agent_get_underlying_device(agent);
+	struct nk_net_dev_characteristics c;
+	struct nk_net_ethernet_arper *arper = nk_net_ethernet_arper_create(agent);
+	if (!arper) {
+	    nk_vc_printf("Failed to create arper\n");
+	    return 0;
+	}
+
+	nk_net_dev_get_characteristics(netdev,&c);
+      
+	if (nk_net_ethernet_arper_add(arper,ipv4,c.mac)) {
+	    nk_vc_printf("Failed to add ip->mac mapping\n");
+	    return 0;
+	}
+	nk_vc_printf("Added ip->mac mapping\n");
+	return 0;
+    }      
+
+    if (sscanf(buf,"net arp ask %u.%u.%u.%u",&ip[0],&ip[1],&ip[2],&ip[3])==4) {
+	ipv4_addr_t ipv4 = ip[0]<<24 | ip[1]<<16 | ip[2]<<8 | ip[3];
+	ethernet_mac_addr_t mac;
+	int rc = nk_net_ethernet_arp_lookup(0,ipv4,mac);
+	if (rc<0) {
+	    nk_vc_printf("Lookup failed\n");
+	} else if (rc==0) {
+	    nk_vc_printf("Lookup of %u.%u.%u.%u is %02x:%02x:%02x:%02x:%02x:%02x\n",
+			 ip[0],ip[1],ip[2],ip[3], mac[0],mac[1],mac[2],mac[3],mac[4],mac[5]);
+	} else {
+	    nk_vc_printf("Lookup is in progress\n");
+	}
+	return 0;
+    }
+
+
+    nk_vc_printf("Unknown request\n");
+    return 0;
+    
+#else
+    nk_vc_printf("No network functionality is configured\n");
+    return 0;
+#endif
+}
 
 
 static int handle_cmd(char *buf, int n)
@@ -1080,7 +1208,7 @@ static int handle_cmd(char *buf, int n)
     nk_vc_printf("shell name\n");
     nk_vc_printf("regs [t]\npeek [bwdq] x | mem x n [s] | mt x | poke [bwdq] x y\nin [bwd] addr | out [bwd] addr data\nrdmsr x [n] | wrmsr x y\ncpuid f [n] | cpuidsub f s | mtrrs [cpu] | int [cpu] v\n");
     nk_vc_printf("meminfo [detail]\n");
-    nk_vc_printf("reap\n");
+    nk_vc_printf("reap | net ...\n");
 #ifdef NAUT_CONFIG_GARBAGE_COLLECTION
     nk_vc_printf("collect | leaks\n");
 #endif
@@ -1116,6 +1244,11 @@ static int handle_cmd(char *buf, int n)
       return 0;
   }
 #endif
+
+  if (!strncasecmp(buf,"net",3)) {
+      handle_net(buf);
+      return 0;
+  }
 
   if (!strncasecmp(buf,"vcs",3)) {
     nk_switch_to_vc_list();

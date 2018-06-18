@@ -930,6 +930,8 @@ source "src/dev/Kconfig"
 
 source "src/fs/Kconfig"
 
+source "src/net/Kconfig"
+
 menu "Lua support"
 
 	config LOAD_LUA

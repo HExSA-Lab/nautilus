@@ -60,6 +60,11 @@
 #include <nautilus/gdb-stub.h>
 #endif
 
+#ifdef NAUT_CONFIG_NET_ETHERNET
+#include <net/ethernet/ethernet_packet.h>
+#include <net/ethernet/ethernet_agent.h>
+#include <net/ethernet/ethernet_arp.h>
+#endif
 
 #include <dev/apic.h>
 #include <dev/pci.h>
@@ -426,6 +431,12 @@ init (unsigned long mbd,
     e1000e_pci_init(naut);
 #endif
 
+#ifdef NAUT_CONFIG_NET_ETHERNET
+    nk_net_ethernet_packet_init();
+    nk_net_ethernet_agent_init();
+    nk_net_ethernet_arp_init();
+#endif
+    
     nk_fs_init();
 
 #ifdef NAUT_CONFIG_EXT2_FILESYSTEM_DRIVER
