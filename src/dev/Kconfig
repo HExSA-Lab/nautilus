@@ -1,4 +1,4 @@
-menu "Device options"
+menu "Devices"
 
 menu "Serial Options"
 
@@ -160,6 +160,20 @@ config DEBUG_VIRTIO_PCI
     default n
     help
       Turn on debug prints for the Virtio PCI interface
+
+config VIRTIO_NET
+    bool "Virtio Net"
+    depends on VIRTIO_PCI
+    default n
+    help
+      Adds the Virtio Network Driver
+
+config DEBUG_VIRTIO_NET
+    bool "Debug Virtio Net"
+    depends on DEBUG_PRINTS && VIRTIO_NET
+    default n
+    help
+      Turn on debug prints for the Virtio Network Driver
 
 config E1000_PCI
     bool "E1000 PCI NIC Driver"

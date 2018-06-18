@@ -29,6 +29,10 @@
 #include <dev/pci.h>
 #include <dev/virtio_pci.h>
 
+#ifdef NAUT_CONFIG_VIRTIO_NET
+#include <dev/virtio_net.h>
+#endif
+
 #ifndef NAUT_CONFIG_DEBUG_VIRTIO_PCI
 #undef DEBUG_PRINT
 #define DEBUG_PRINT(fmt, args...)
@@ -509,6 +513,11 @@ static int bringup_device(struct virtio_pci_dev *dev)
 	}
     }
     switch (dev->type) {
+#ifdef NAUT_CONFIG_VIRTIO_NET
+    case VIRTIO_PCI_NET:
+	return virtio_net_init(dev);
+	break;
+#endif
     default:
         INFO("Skipping unsupported device type\n");
         return 0;

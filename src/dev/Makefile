@@ -12,6 +12,7 @@ endif
 obj-$(NAUT_CONFIG_HPET) += hpet.o
 
 obj-$(NAUT_CONFIG_VIRTIO_PCI) += virtio_pci.o
+obj-$(NAUT_CONFIG_VIRTIO_NET) += virtio_net.o
 
 obj-$(NAUT_CONFIG_E1000_PCI) += e1000_pci.o
 
