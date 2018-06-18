@@ -27,6 +27,25 @@ config DEBUG_NET_ETHERNET_ARP
         help
                 Turn on debug prints for ARP
 		
-		
+config NET_COLLECTIVE
+	bool "Collective communication"
+	default n
+	help
+		Adds collective communication support
+
+config NET_COLLECTIVE_ETHERNET
+	bool "Collective communication for low-level Ethernet"
+	default n
+	depends on NET_COLLECTIVE && NET_ETHERNET
+	help
+		Adds collective communication support for Ethernet	
+
+config DEBUG_NET_COLLECTIVE_ETHERNET
+	bool "Debug collective communication on low-level Ethernet"
+	default n
+	depends on NET_COLLECTIVE_ETHERNET
+        help
+                Turn on debug prints for low-level collective communication on Ethernet
+	
 
 endmenu

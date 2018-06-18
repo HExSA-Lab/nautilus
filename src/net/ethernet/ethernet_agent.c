@@ -392,8 +392,11 @@ static void send_callback(nk_net_dev_status_t status,
     } else { // PACKET
 	if (o->callback_packet) {
 	    o->callback_packet(status, p, o->context);
+	    // sender is responsible for releasing the packet
+	} else {
+	    // we are responsible for releasing the packet
+	    nk_net_ethernet_release_packet(p);
 	}
-	// sender is responsible for releasing the packet
     }
 }
 

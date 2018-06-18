@@ -66,6 +66,10 @@
 #include <net/ethernet/ethernet_arp.h>
 #endif
 
+#ifdef NAUT_CONFIG_NET_COLLECTIVE_ETHERNET
+#include <net/collective/ethernet/ethernet_collective.h>
+#endif
+
 #include <dev/apic.h>
 #include <dev/pci.h>
 #include <dev/hpet.h>
@@ -435,6 +439,10 @@ init (unsigned long mbd,
     nk_net_ethernet_packet_init();
     nk_net_ethernet_agent_init();
     nk_net_ethernet_arp_init();
+#endif
+
+#ifdef NAUT_CONFIG_NET_COLLECTIVE_ETHERNET
+    nk_net_ethernet_collective_init();
 #endif
     
     nk_fs_init();

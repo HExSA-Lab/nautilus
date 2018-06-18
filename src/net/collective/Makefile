@@ -1,0 +1,1 @@
+obj-$(NAUT_CONFIG_NET_COLLECTIVE_ETHERNET) += ethernet/
