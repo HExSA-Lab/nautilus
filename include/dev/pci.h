@@ -328,6 +328,8 @@ int pci_dev_disable_msi_x(struct pci_dev *dev);
 
 int pci_dev_is_pending_msi_x(struct pci_dev *dev, int num);
 
+void pci_dev_dump_msi_x(struct pci_dev *dev);
+
 /*
   There is currently no specific support for registering MSI-X interrupt handlers,
   You want to follow roughly these steps:

@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
  * Copyright (c) 2017, Peter Dinda <pdinda@northwestern.edu>
@@ -254,7 +254,7 @@ static void pci_msi_x_detect(struct pci_dev *d)
 
   d->msix.co = co;
 
-  uint16_t ctrl = pci_dev_cfg_readw(d,co+2);
+  uint16_t ctrl = pci_dev_cfg_readl(d,co) >> 16;
 
   d->msix.size = (ctrl & 0x7ff) + 1;  // N-1 encoded
 
@@ -1285,16 +1285,17 @@ int pci_dev_set_msi_x_entry(struct pci_dev *dev, int num, int vec, int target_cp
   pci_msi_x_table_entry_t *t = m->table + num;
 
   if (dev->msix.type!=PCI_MSI_X) {
+    PCI_DEBUG("MSI-X not available\n");
     return -1;
   }
 
   if (num<0 || num >= m->size) {
+    PCI_DEBUG("entry %d is out of range\n",num);
     return -1;
   }
 
   uint32_t mar_low;
   uint32_t mdr;
-  uint32_t ctrl;
 
   PCI_DEBUG("msix enable - num = %d vec = %d target = %d\n", num, vec, target_cpu);
 
@@ -1314,7 +1315,8 @@ int pci_dev_set_msi_x_entry(struct pci_dev *dev, int num, int vec, int target_cp
   WRITEL(&t->msg_data,mdr);
   WRITEL(&t->vector_control,1); // masked
 
-  PCI_DEBUG("entry %d written with mar=0x%x, mdr=0x%x (masked)\n",vec,mar_low,mdr);
+  PCI_DEBUG("entry %d at %p written as mar=%08x:%08x mdr=%08x vc=%x\n",
+	    num, t, 0, mar_low, mdr, 1);
 
   return 0;
 }
@@ -1323,23 +1325,26 @@ int pci_dev_set_msi_x_entry(struct pci_dev *dev, int num, int vec, int target_cp
 static int pci_dev_mask_unmask_msi_x_all(struct pci_dev *dev, int val)
 {
   struct pci_msi_x_info *m = &dev->msix;
-  uint16_t ctrl; 
+  uint32_t ctrl; 
 
   if (dev->msix.type!=PCI_MSI_X) {
     return -1;
   }
 
-  ctrl = pci_dev_cfg_readw(dev,m->co+2);
+
+  // yes, ctrl is 16 bits, but the transaction must be
+  // 32 bits...
+  ctrl = pci_dev_cfg_readl(dev,m->co);
 
   if (val) {
-    ctrl |= 1<<14;
+    ctrl |= 1<<30;
   } else {
-    ctrl &= ~(1<<14);
+    ctrl &= ~(1<<30);
   }
 
-  pci_dev_cfg_writew(dev,m->co+2,ctrl);
+  pci_dev_cfg_writel(dev,m->co,ctrl);
   
-  PCI_DEBUG("function %smasked\n", val ? "" : "un");
+  PCI_DEBUG("function %smasked ctrl=%x\n", val ? "" : "un",ctrl);
 
   return 0;
 }
@@ -1351,10 +1356,12 @@ static int pci_dev_mask_unmask_msi_x_entry(struct pci_dev *dev, int num, int val
   uint32_t old;
 
   if (dev->msix.type!=PCI_MSI_X) {
+    PCI_DEBUG("device does not support MSI X\n");
     return -1;
   }
 
   if (num<0 || num >= m->size) {
+    PCI_DEBUG("num=%d is out of range\n",num);
     return -1;
   }
 
@@ -1367,7 +1374,7 @@ static int pci_dev_mask_unmask_msi_x_entry(struct pci_dev *dev, int num, int val
   }
   WRITEL(&t->vector_control,old);
 
-  PCI_DEBUG("entry %d %s\n", val ? "unmasked" : "masked");
+  PCI_DEBUG("entry %d %x %s\n", num, old, val ? "masked" : "unmasked");
 
   return 0;
 }
@@ -1398,29 +1405,30 @@ int pci_dev_enable_msi_x(struct pci_dev *dev)
 {
   struct pci_msi_x_info *m = &dev->msix;
   uint16_t cmd;
-  uint16_t ctrl; 
+  uint32_t ctrl; 
 
   if (dev->msix.type!=PCI_MSI_X) {
+    PCI_DEBUG("device does not have MSI-X\n");
     return -1;
   }
 
   // we need to disable the interrupt pin first
   
   cmd = pci_dev_cfg_readw(dev,0x4);
-  cmd |= 0x400;
+  cmd |= 0x417;  // disable intr, set mem, io, busmaster, write+invalidate
   pci_dev_cfg_writew(dev,0x4,cmd);
-
   PCI_DEBUG("legacy interrupt disabled (cmd=%x)\n",cmd);
 
-  ctrl = pci_dev_cfg_readw(dev,m->co+2);
+  // needs to be manipulated with dwords...
+  ctrl = pci_dev_cfg_readl(dev,m->co);
 
-  ctrl |= 1<<15;
+  ctrl |= 3<<30;
 
-  pci_dev_cfg_writew(dev,m->co+2,ctrl);
+  pci_dev_cfg_writel(dev,m->co,ctrl);
 
   m->enabled = 1;
-  
-  PCI_DEBUG("MSI-X enabled\n");
+
+  PCI_DEBUG("MSI-X enabled and masked\n");
 
   return 0;
 
@@ -1429,17 +1437,17 @@ int pci_dev_enable_msi_x(struct pci_dev *dev)
 int pci_dev_disable_msi_x(struct pci_dev *dev)
 {
   struct pci_msi_x_info *m = &dev->msix;
-  uint16_t ctrl; 
+  uint32_t ctrl; 
 
   if (dev->msix.type!=PCI_MSI_X) {
     return -1;
   }
 
-  ctrl = pci_dev_cfg_readw(dev,m->co+2);
+  ctrl = pci_dev_cfg_readl(dev,m->co);
 
-  ctrl &= ~(1<<15);
+  ctrl &= ~(1<<31);
 
-  pci_dev_cfg_writew(dev,m->co+2,ctrl);
+  pci_dev_cfg_writel(dev,m->co,ctrl);
 
   m->enabled=0;
 
@@ -1456,22 +1464,61 @@ int pci_dev_is_pending_msi_x(struct pci_dev *dev, int num)
   uint64_t entry, bit, val;
 
   if (dev->msix.type!=PCI_MSI_X) {
+    PCI_DEBUG("Not an MSI-X device\n");
     return -1;
   }
 
   if (num<0 || num >= m->size) {
+    PCI_DEBUG("entry %d is out of range\n",num);
     return -1;
   }
 
   entry = num/64;
   bit = num%64;
-  
+
   READQ(m->pending+entry,val);
 
   val = (val>>bit) & 0x1;
 
   PCI_DEBUG("entry %d %s\n", num, val ? "pending" : "not pending");
-
+  
   return val;
 }
 
+void pci_dev_dump_msi_x(struct pci_dev *dev)
+{
+  struct pci_msi_x_info *m = &dev->msix;
+  uint32_t temp;
+  uint32_t i;
+
+  nk_vc_printf("MSI-X state\n");
+  
+  temp = pci_dev_cfg_readl(dev,m->co) >> 16;
+  nk_vc_printf(" ctrl  = 0x%0x\n", temp);
+
+  temp = pci_dev_cfg_readl(dev,m->co+4);
+  nk_vc_printf(" tobir = 0x%0x (decoded to %p)\n", temp,m->table);
+
+  temp = pci_dev_cfg_readl(dev,m->co+8);
+  nk_vc_printf(" pbbir = 0x%0x (decoded to %p)\n", temp,m->pending);
+
+  nk_vc_printf(" Interrupt Table\n");
+  for (i=0;i<m->size;i++) {
+      uint32_t *t = (uint32_t*)(m->table + i);
+      uint32_t entry[4];
+      READL(t,entry[0]);
+      READL(t+1,entry[1]);
+      READL(t+2,entry[2]);
+      READL(t+3,entry[3]);
+      nk_vc_printf(" %d %08x %08x %08x %08x\n", i, entry[0], entry[1], entry[2], entry[3]);
+  }
+
+  nk_vc_printf(" Pending Table\n");
+  for (i=0;i<m->size;i+=64) {
+      uint64_t *t = m->pending + i/64;
+      uint64_t bm;
+      READQ(t,bm);
+      nk_vc_printf(" %d %016lx\n", i/64, bm);
+  }
+  
+}
