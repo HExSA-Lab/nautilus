@@ -41,6 +41,7 @@
 #define ERROR(fmt, args...) ERROR_PRINT("virtio_net: " fmt, ##args)
 
 #define FBIT_ISSET(features, bit) ((features) & (0x01 << (bit)))
+#define FBIT_SETIF(features_out, features_in, bit) if (FBIT_ISSET(features_in,bit)) { features_out |= (0x01 << (bit)) ; }
 #define DEBUG_FBIT(features, bit) if (FBIT_ISSET(features, bit)) {\
                                       DEBUG("feature bit set: %s\n", #bit);\
                                   }
@@ -206,7 +207,7 @@ static int post(void *state, uint8_t *buf, uint64_t len, void (*callback)(nk_net
     uint16_t packet_idx;
     if (virtio_pci_desc_alloc(d->virtio_dev, qidx, &packet_idx)) {
         ERROR("descriptor alloc failed\n");
-        virtio_pci_desc_free(d->virtio_dev, qidx, header_idx,0);
+        virtio_pci_desc_free(d->virtio_dev, qidx, header_idx);
         return -1;
     }
     DEBUG("allocated descriptor %d\n", packet_idx);
@@ -214,8 +215,8 @@ static int post(void *state, uint8_t *buf, uint64_t len, void (*callback)(nk_net
     // create buffer for header
     uint8_t *header = malloc(sizeof(struct virtio_net_hdr));
     if (!header) {
-        virtio_pci_desc_free(d->virtio_dev, qidx, header_idx,0);
-        virtio_pci_desc_free(d->virtio_dev, qidx, packet_idx,0);
+        virtio_pci_desc_free(d->virtio_dev, qidx, header_idx);
+        virtio_pci_desc_free(d->virtio_dev, qidx, packet_idx);
         ERROR("couldn't allocate buffer for virtio-net header\n");
         return -1;
     }
@@ -319,7 +320,7 @@ static int process_used_ring(struct virtio_net_dev *d, int qidx)
         DEBUG("body = %d\n", head->next);
         DEBUG("len = %d\n", len);
 #ifdef NAUT_CONFIG_DEBUG_VIRTIO_NET
-        nk_dump_mem((uint8_t *) body->addr, len - sizeof(struct virtio_net_hdr));
+        //nk_dump_mem((uint8_t *) body->addr, len - sizeof(struct virtio_net_hdr));
 #endif
         // free the header buffer (this is the only buffer we allocated)
         free(header);
@@ -331,8 +332,8 @@ static int process_used_ring(struct virtio_net_dev *d, int qidx)
         memset(&d->callbacks[qidx][desc_idx], 0, sizeof(struct callback_info));
 
         // free the descriptor chain
-        if (virtio_pci_desc_free(d->virtio_dev, qidx, desc_idx, 1)) {
-            ERROR("error freeing descriptor\n");
+        if (virtio_pci_desc_chain_free(d->virtio_dev, qidx, desc_idx)) {
+            ERROR("error freeing descriptors\n");
             return -1;
         }
 
@@ -388,6 +389,7 @@ static int handler(excp_entry_t *exp, excp_vec_t vec, void *priv_data)
 void teardown(struct virtio_pci_dev *dev)
 {
     // reset device?
+    // actually do frees..
     virtio_pci_virtqueue_deinit(dev);
 }
 
@@ -423,9 +425,10 @@ static int select_features(uint32_t features)
 
     // choose accepted features
     uint32_t accepted = 0;
-    if (FBIT_ISSET(features, VIRTIO_NET_F_MAC)) {
-        accepted |= (0x01 << VIRTIO_NET_F_MAC);
-    }
+
+    FBIT_SETIF(accepted,features,VIRTIO_NET_F_MAC);
+
+    DEBUG("features accepted: 0x%0x\n", accepted);
 
     return accepted;
 }
@@ -589,6 +592,7 @@ int virtio_net_init(struct virtio_pci_dev *dev)
     d->callbacks[VIRTIO_NET_SENDQ_IDX] = malloc(send_callbacks_size);
     if (!d->callbacks[VIRTIO_NET_SENDQ_IDX]) {
         ERROR("can't allocate send callbacks\n");
+	virtio_pci_virtqueue_deinit(dev);
         free(d);
         return -1;
     }
@@ -596,6 +600,7 @@ int virtio_net_init(struct virtio_pci_dev *dev)
     d->callbacks[VIRTIO_NET_RECVQ_IDX] = malloc(recv_callbacks_size);
     if (!d->callbacks[VIRTIO_NET_RECVQ_IDX]) {
         ERROR("can't allocate recv callbacks\n");
+	virtio_pci_virtqueue_deinit(dev);
         free(d->callbacks[VIRTIO_NET_SENDQ_IDX]);
         free(d);
         return -1;
@@ -623,6 +628,9 @@ int virtio_net_init(struct virtio_pci_dev *dev)
         return -1;
     }
 
+    // We assume that interrupt allocations will not fail...
+    // if we do fail, the rest of this code will leak
+
     struct pci_dev *p = dev->pci_dev;
     uint16_t num_vec = p->msix.size;
     ulong_t vec;
@@ -640,7 +648,9 @@ int virtio_net_init(struct virtio_pci_dev *dev)
         if (dev->num_virtqs != num_vec) {
             ERROR("weird mismatch: numqueues=%u msixsize=%u\n",
                 dev->num_virtqs, p->msix.size);
-            return -1;
+            //continue for now...
+	    //return -1;
+	    
         }
 
         // now fill out the device's MSI-X table
@@ -678,7 +688,7 @@ int virtio_net_init(struct virtio_pci_dev *dev)
 	
     } else {
 	
-        DEBUG("setting up interrupts via legacy path at 0xe4\n");
+        DEBUG("setting up interrupts via legacy path at 0x%x\n",HACKED_LEGACY_VECTOR);
 	INFO("THIS HACKED LEGACY INTERRUPT SETUP IS PROBABLY NOT WHAT YOU WANT\n");
 
         if (register_int_handler(HACKED_LEGACY_VECTOR, handler, d)) {
