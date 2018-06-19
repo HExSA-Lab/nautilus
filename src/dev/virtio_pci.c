@@ -33,6 +33,10 @@
 #include <dev/virtio_net.h>
 #endif
 
+#ifdef NAUT_CONFIG_VIRTIO_BLK
+#include <dev/virtio_blk.h>
+#endif
+
 #ifndef NAUT_CONFIG_DEBUG_VIRTIO_PCI
 #undef DEBUG_PRINT
 #define DEBUG_PRINT(fmt, args...)
@@ -387,6 +391,7 @@ int virtio_pci_virtqueue_deinit(struct virtio_pci_dev *dev)
     return 0;
 }
 
+
 int virtio_pci_ack_device(struct virtio_pci_dev *dev)
 {
     virtio_pci_write_regb(dev,DEVICE_STATUS,0x0); // driver resets device
@@ -418,7 +423,6 @@ int virtio_pci_start_device(struct virtio_pci_dev *dev)
     return 0;
 }
 
-// Allocates a single descriptor
 int virtio_pci_desc_chain_alloc(struct virtio_pci_dev *dev, uint16_t qidx, uint16_t *desc_idx, uint16_t count)
 {
     STATE_LOCK_CONF;
@@ -562,6 +566,11 @@ static int bringup_device(struct virtio_pci_dev *dev)
 #ifdef NAUT_CONFIG_VIRTIO_NET
     case VIRTIO_PCI_NET:
 	return virtio_net_init(dev);
+	break;
+#endif
+#ifdef NAUT_CONFIG_VIRTIO_BLK
+    case VIRTIO_PCI_BLOCK:
+	return virtio_blk_init(dev);
 	break;
 #endif
     default:
