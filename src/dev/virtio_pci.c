@@ -419,42 +419,77 @@ int virtio_pci_start_device(struct virtio_pci_dev *dev)
 }
 
 // Allocates a single descriptor
-int virtio_pci_desc_alloc(struct virtio_pci_dev *dev, uint16_t qidx, uint16_t *desc_idx)
+int virtio_pci_desc_chain_alloc(struct virtio_pci_dev *dev, uint16_t qidx, uint16_t *desc_idx, uint16_t count)
 {
     STATE_LOCK_CONF;
     struct virtio_pci_virtq *virtq = &dev->virtq[qidx];
+    uint16_t i;
 
-    DEBUG("alloc for virtq %d\n", qidx);
+    //DEBUG("chain alloc (%u) for virtq %d\n", count, qidx);
 
     STATE_LOCK(virtq);
 
-    if (virtq->nfree == 0) {
+    if (virtq->nfree < count) {
         STATE_UNLOCK(virtq);
         return -1;
     }
 
-    uint16_t desc_head = virtq->head;
-    uint16_t desc_next = virtq->vq.desc[desc_head].next;
-
-    if (desc_head >= virtq->vq.qsz) {
-	STATE_UNLOCK(virtq);
-	ERROR("Erroneous allocation (%u)...\n",desc_head);
-	return -1;
-    }
+    uint16_t prev = 0;
     
-    *desc_idx = desc_head;
+    for (i=0;i<count;i++) { 
+	uint16_t desc_head = virtq->head;
+	uint16_t desc_next = virtq->vq.desc[desc_head].next;
 
-    virtq->vq.desc[desc_head].next = desc_head;
-    virtq->head = desc_next;
-    virtq->nfree--;
+	if (desc_head >= virtq->vq.qsz) {
+	    int j;
+	    STATE_UNLOCK(virtq);
+	    ERROR("Erroneous allocation (%u)...\n",desc_head);
+	    for (j=0;j<i;j++) {
+		virtio_pci_desc_free(dev,qidx,desc_idx[j]);
+	    }
+	    return -1;
+	}
+	
+	struct virtq_desc *desc = &virtq->vq.desc[desc_head];
+
+	// setup new descriptor
+	desc->flags = 0;
+	desc->next = desc_head; // may be overwritten later in a chain;
+
+	// update free list
+	virtq->head = desc_next;
+	virtq->nfree--;
+
+	if (i>0) {
+	    // stitch into chain
+	    // a single allocation will not be stitched
+	    struct virtq_desc *prev_desc = &virtq->vq.desc[prev];
+	    prev_desc->flags = VIRTQ_DESC_F_NEXT;
+	    prev_desc->next = desc_head;
+	}
+	    
+	desc_idx[i] = desc_head;
+	prev = desc_head;
+
+	//DEBUG("Allocated chain entry %u for virtq %d is descriptor %u\n",i,qidx,desc_head);
+    }
 
     STATE_UNLOCK(virtq);
 
+   
     return 0;
 }
 
-int virtio_pci_desc_free(struct virtio_pci_dev *dev, uint16_t qidx, uint16_t desc_idx, int chain)
+// Allocates a single descriptor
+int virtio_pci_desc_alloc(struct virtio_pci_dev *dev, uint16_t qidx, uint16_t *desc_idx)
 {
+    return virtio_pci_desc_chain_alloc(dev,qidx,desc_idx,1);
+}
+
+static int virtio_pci_desc_free_internal(struct virtio_pci_dev *dev, uint16_t qidx, uint16_t desc_idx, int chain)
+{
+    uint16_t i=0;
+    
     STATE_LOCK_CONF;
 
     struct virtio_pci_virtq *virtq = &dev->virtq[qidx];
@@ -468,8 +503,8 @@ int virtio_pci_desc_free(struct virtio_pci_dev *dev, uint16_t qidx, uint16_t des
 	return -1;
     }
 
-    while (1) {
-        DEBUG("free %d for virtq %d\n", desc_idx, qidx);
+    for (i=0;;i++) {
+	//DEBUG("Free chain entry %u for virtq %d is descriptor %u\n", i, qidx, desc_idx);
 
         struct virtq_desc *desc = &virtq->vq.desc[desc_idx];
 
@@ -491,8 +526,7 @@ int virtio_pci_desc_free(struct virtio_pci_dev *dev, uint16_t qidx, uint16_t des
 
         if (chain && (flags & VIRTQ_DESC_F_NEXT)) {
             desc_idx = next;
-        }
-        else {
+        } else {
             break;
         }
     }
@@ -502,6 +536,18 @@ int virtio_pci_desc_free(struct virtio_pci_dev *dev, uint16_t qidx, uint16_t des
     return 0;
 }
 
+
+int virtio_pci_desc_free(struct virtio_pci_dev *dev, uint16_t qidx, uint16_t desc_idx)
+{
+    return virtio_pci_desc_free_internal(dev,qidx,desc_idx,0);
+}
+
+int virtio_pci_desc_chain_free(struct virtio_pci_dev *dev, uint16_t qidx, uint16_t desc_idx)
+{
+    return virtio_pci_desc_free_internal(dev,qidx,desc_idx,1);
+}
+
+					 
 static int bringup_device(struct virtio_pci_dev *dev)
 {
     DEBUG("Bringing up device %u:%u.%u\n",dev->pci_dev->bus->num,dev->pci_dev->num,dev->pci_dev->fun);

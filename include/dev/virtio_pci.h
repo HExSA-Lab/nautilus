@@ -143,8 +143,13 @@ int virtio_pci_start_device(struct virtio_pci_dev *dev);
 
 // allocate a single descriptor
 int virtio_pci_desc_alloc(struct virtio_pci_dev *dev, uint16_t qidx, uint16_t *desc_idx);
-// free a single descriptor or a chain of descriptor starting with the given descriptor
-int virtio_pci_desc_free(struct virtio_pci_dev *dev, uint16_t qidx, uint16_t desc_idx, int chain);
+// allocate a chain of descriptors and chain them together
+// here desc_idx is an array of size count
+int virtio_pci_desc_chain_alloc(struct virtio_pci_dev *dev, uint16_t qidx, uint16_t *desc_idx, uint16_t count);
+// free a single descriptor 
+int virtio_pci_desc_free(struct virtio_pci_dev *dev, uint16_t qidx, uint16_t desc_idx);
+// free a chain descriptor starting with the given descriptor
+int virtio_pci_desc_chain_free(struct virtio_pci_dev *dev, uint16_t qidx, uint16_t desc_idx);
 
 static inline uint32_t virtio_pci_read_regl(struct virtio_pci_dev *dev, uint32_t offset)
 {
