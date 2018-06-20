@@ -56,6 +56,13 @@
 #include <nautilus/isocore.h>
 #endif
 
+#ifdef NAUT_CONFIG_CACHEPART
+#include <nautilus/cachepart.h>
+#ifdef NAUT_CONFIG_TEST_CACHEPART
+#include <test/cachepart.h>
+#endif
+#endif
+
 #ifdef NAUT_CONFIG_ENABLE_BDWGC
 #include <gc/bdwgc/bdwgc.h>
 #endif
@@ -680,7 +687,25 @@ static int handle_test(char *buf)
 	return nk_gc_pdsgc_test();
     }
 #endif
-    
+
+#ifdef NAUT_CONFIG_TEST_CACHEPART
+    uint64_t size, iteration;
+    int percent, flag, num_threads, shared;
+
+    if (sscanf(buf, "test cachepart %lu %lu %d %d %d", &size, &iteration, &percent, &num_threads, &shared) == 5) {
+      nk_vc_printf("Testing cache partitioning with multiple threads\n");
+      test_cat_multi_threads(size, iteration, percent, num_threads, shared);
+      return 0;
+    }
+
+    if (sscanf(buf, "test cachepart %lu %lu %d", &size, &iteration, &percent) == 3) {
+      nk_vc_printf("Testing cache partitioning with a single thread\n");
+      test_cat_single_thread(size, iteration, percent);
+      return 0;
+    }
+
+#endif
+
     char nic[80];
     char ip[80];
     uint32_t port, num;
@@ -1225,6 +1250,9 @@ static int handle_cmd(char *buf, int n)
     nk_vc_printf("regs [t]\npeek [bwdq] x | mem x n [s] | mt x | poke [bwdq] x y\nin [bwd] addr | out [bwd] addr data\nrdmsr x [n] | wrmsr x y\ncpuid f [n] | cpuidsub f s | mtrrs [cpu] | int [cpu] v\n");
     nk_vc_printf("meminfo [detail]\n");
     nk_vc_printf("reap | net ...\n");
+#ifdef NAUT_CONFIG_CACHEPART
+    nk_vc_printf("cachepart\n");
+#endif
 #ifdef NAUT_CONFIG_GARBAGE_COLLECTION
     nk_vc_printf("collect | leaks\n");
 #endif
@@ -1240,7 +1268,7 @@ static int handle_cmd(char *buf, int n)
     nk_vc_printf("blktest dev r|w start count\n");
     nk_vc_printf("blktest dev r|w start count\n");
     nk_vc_printf("test threads|groups|tasks|stop|iso|bdwgc|pdsgc|omp|ompbench|ndpc|nesl|\n");
-    nk_vc_printf("     udp_echo nic ip port num| ...\n"); 
+    nk_vc_printf("     udp_echo nic ip port num|cachepart ... | ...\n"); 
     nk_vc_printf("vm name [embedded image]\n");
     nk_vc_printf("run path\n");
     return 0;
@@ -1301,6 +1329,14 @@ static int handle_cmd(char *buf, int n)
     return 0;
   }
 
+
+#ifdef NAUT_CONFIG_CACHEPART
+  if (!strncasecmp(buf,"cachepart",9)) {
+      nk_cache_part_dump();
+      return 0;
+  }
+#endif
+  
   if (!strncasecmp(buf,"ipitest",7)) {
 	handle_ipitest(buf);
 	return 0;

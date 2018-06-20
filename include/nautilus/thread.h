@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
  * Copyright (c) 2017, Peter A. Dinda <pdinda@northwestern.edu>
@@ -34,6 +34,9 @@ extern "C" {
 #include <nautilus/spinlock.h>
 #include <nautilus/queue.h>
 #include <nautilus/intrinsics.h>
+
+// Always included so we get the necessary type
+#include <nautilus/cachepart.h>
 
 typedef uint64_t nk_stack_size_t;
     
@@ -171,9 +174,11 @@ typedef enum {
 typedef struct nk_queue nk_thread_queue_t;
 
 struct nk_thread {
-    uint64_t rsp;              /* +0  SHOULD NOT CHANGE POSITION */
-    void * stack;              /* +8  SHOULD NOT CHANGE POSITION */
-    uint16_t fpu_state_offset; /* +16 SHOULD NOT CHANGE POSITION */
+    uint64_t rsp;                /* +0  SHOULD NOT CHANGE POSITION */
+    void * stack;                /* +8  SHOULD NOT CHANGE POSITION */
+    uint16_t fpu_state_offset;   /* +16 SHOULD NOT CHANGE POSITION */
+    nk_cache_part_thread_state_t /* +18 SHOULD NOT CHANGE POSITION */
+             cache_part_state;   /* Always included to reserve this "slot" for asm code */
 
     nk_stack_size_t stack_size;
     unsigned long tid;

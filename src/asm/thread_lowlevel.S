@@ -107,6 +107,40 @@ ENTRY(nk_thread_switch_intr_entry)
 ENTRY(nk_thread_switch_on_exit)
 
     movq %rdi, %rax     /* load up pointer to the next thread */
+
+#ifdef NAUT_CONFIG_CACHEPART
+
+    push %rbx          /* RBX will be used to test for CAT */
+    movq _nk_cache_part_has_cat, %rbx /* Fetch has_cat from cachepart.c */
+    test %rbx, %rbx    /* Set Z flag */
+    jz skip_cat        /* if (!has_cat) context switch like normal */
+    
+    /* Load CAT partition into the right MSR */
+
+    push %rax          /* stash regs we will be using */
+    push %rcx
+    push %rdx
+
+    movzwq 18(%rax), %rdx /* Fetch CAT partition from thread */
+    xorq %rax, %rax    /* Zero out RAX */
+
+    movq $0xc8f, %rcx /* Write CAT MSR (IA32_PQR_ASSOC) number into RCX for use by wrmsr*/
+    wrmsr             /* Set the COS into the MSR */
+
+    /* We have now successfully switched to the new CAT partition */
+
+    pop %rdx          /* Restore the regs we used */
+    pop %rcx
+    pop %rax
+
+    /* Fall back to normal switch operation if !has_cat */
+skip_cat:
+    pop %rbx            /* Restore register used to test for CAT */
+
+continue_context_switch:
+
+#endif
+	
     movq %rax, %gs:0x0  /* make it the new current thread */
     movq (%rax), %rsp   /* load its stack pointer */
 

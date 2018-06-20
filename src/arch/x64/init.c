@@ -127,6 +127,11 @@
 #include <gc/pdsgc/pdsgc.h>
 #endif
 
+#ifdef NAUT_CONFIG_CACHEPART
+#include <nautilus/cachepart.h>
+#endif
+
+
 #ifdef NAUT_CONFIG_OMP_RT
 #include <rt/omp/omp.h>
 #endif
@@ -357,6 +362,15 @@ init (unsigned long mbd,
 
     nk_sched_init(&sched_cfg);
 
+#ifdef NAUT_CONFIG_CACHEPART
+#ifdef NAUT_CONFIG_CACHEPART_INTERRUPT
+    nk_cache_part_init(NAUT_CONFIG_CACHEPART_THREAD_DEFAULT_PERCENT,
+		       NAUT_CONFIG_CACHEPART_INTERRUPT_PERCENT);
+#else
+    nk_cache_part_init(NAUT_CONFIG_CACHEPART_THREAD_DEFAULT_PERCENT,0);
+#endif
+#endif    
+
     nk_thread_group_init();
     nk_group_sched_init();
 
@@ -402,7 +416,11 @@ init (unsigned long mbd,
     vga_init();
     serial_init();
 
-	nk_sched_start();
+    nk_sched_start();
+
+#ifdef NAUT_CONFIG_CACHEPART
+    nk_cache_part_start();
+#endif
 
     sti();
 

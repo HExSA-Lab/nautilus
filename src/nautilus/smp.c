@@ -43,6 +43,10 @@
 #include <nautilus/gdb-stub.h>
 #endif
 
+#ifdef NAUT_CONFIG_CACHEPART
+#include <nautilus/cachepart.h>
+#endif
+
 
 #ifndef NAUT_CONFIG_DEBUG_SMP
 #undef DEBUG_PRINT
@@ -323,6 +327,13 @@ smp_ap_setup (struct cpu * core)
         return -1;
     }
 
+#ifdef NAUT_CONFIG_CACHEPART
+    if (nk_cache_part_init_ap() != 0) {
+        ERROR_PRINT("Could not setup cache partitioning for core %u\n", core->id);
+        return -1;
+    }
+#endif
+
     return 0;
 }
 
@@ -349,6 +360,12 @@ smp_ap_finish (struct cpu * core)
 #endif
 
     nk_sched_start();
+
+#ifdef NAUT_CONFIG_CACHEPART
+    if (nk_cache_part_start_ap() != 0) {
+        ERROR_PRINT("Could not start cache partitioning for core %u\n", core->id);
+    }
+#endif
 
     SMP_DEBUG("Core %u ready - enabling interrupts\n", core->id);
 

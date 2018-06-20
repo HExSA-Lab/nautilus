@@ -59,4 +59,5 @@ obj-$(NAUT_CONFIG_ISOCORE) += isocore.o
 
 obj-$(NAUT_CONFIG_ENABLE_REMOTE_DEBUGGING) += gdb-stub.o
 
+obj-$(NAUT_CONFIG_CACHEPART) +=	cachepart.o
 

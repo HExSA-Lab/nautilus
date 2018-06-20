@@ -464,6 +464,50 @@ config DEBUG_ISOCORE
       Adds debugging output for isolated core execution
       The low-level code does not have debugging output
 
+config CACHEPART
+   bool "Enable cache partitioning"
+   default n
+   depends on X86_64_HOST
+   help
+      Allows cache partitioning
+
+config CACHEPART_THREAD_DEFAULT_PERCENT
+   int "Percentage of cache to reserve for default use by threads"
+   range 5 100
+   default 20
+   depends on CACHEPART
+   help
+      This portion of the cache will be used by threads that make no special requests
+
+config CACHEPART_INTERRUPT
+   bool "Enable interrupt partition"
+   default n
+   depends on CACHEPART
+   help
+      Create special partition for interrupts (otherwise they
+      use the default thread partition)
+
+config CACHEPART_INTERRUPT_PERCENT
+   int "Percentage of cache to reserve for use by interrupt handlers"
+   range 5 100
+   default 10
+   depends on CACHEPART_INTERRUPT
+   help
+      This portion of the cache that will be used by interrupt handlers
+
+config DEBUG_CACHEPART
+   bool "Debug cache partitioning"
+   default n
+   depends on CACHEPART
+   help
+      Adds debugging output for cache partitioning
+
+config TEST_CACHEPART
+   bool "Add cache partitioning tests"
+   default n
+   depends on CACHEPART
+   help
+      Adds the tests for for cache partitioning
 
 menu "Garbage Collection Options"
 
