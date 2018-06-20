@@ -25,6 +25,12 @@
 
 #define GPIO_OUTPUT 1
 
+#ifdef NAUT_CONFIG_CACHEPART_INTERRUPT
+#define INTERRUPT_PARTITION 0x1
+#else
+#define INTERRUPT_PARTITION 0x0
+#endif
+	
 .code64
 .macro make_excp_handler v
     .if (ERR_CODE_EXCP_MASK >> \v) & 1
@@ -68,6 +74,35 @@ END(early_irq_handlers)
 GLOBAL(early_irq_common)
 
     SAVE_GPRS()
+
+#ifdef NAUT_CONFIG_CACHEPART
+    // note that we have already saved all GPRs
+    // we will also use callee-save registers to maintain state
+    // %rbx => have_cat, %r12 =>  previous partition %r13 => extra msr 
+	 
+    movq _nk_cache_part_has_cat, %rbx // check if we have cat
+    test %rbx, %rbx                   
+    jz skip_cat_entry                 // skip if we do not
+
+    // save the current partition
+    movq $0xc8f, %rcx    // IA32_PQR_ASSOC
+    rdmsr
+    // these zero extend r12 and r13	
+    movl %edx, %r12d     // this is the partition we are switching away from
+    movl %eax, %r13d     // this is the extra msr stuff we will also restore
+	
+
+    // and switch to the interrupt partition 
+    movq $INTERRUPT_PARTITION, %rdx
+    // eax will be the same as before
+    wrmsr
+
+    // we are now running with the new partition
+    // and have previous state stashed away	 
+
+skip_cat_entry:
+
+#endif
 
 #if GPIO_OUTPUT && defined(NAUT_CONFIG_GPIO)
     movq $0x10, %rdi   // bit 4
@@ -126,7 +161,8 @@ GLOBAL(early_irq_common)
     testq %rax, %rax
     jz thr_return
     movq %rax, %rdi
-    jmp nk_thread_switch_intr_entry 
+     // on a context switch, this will handle cache partition changes for the new thread	
+    jmp nk_thread_switch_intr_entry    
 
 thr_return:
 #if GPIO_OUTPUT && defined(NAUT_CONFIG_GPIO)
@@ -134,6 +170,26 @@ thr_return:
     notq %rdi          // clear
     movq $0x1, %rsi    // and it low
     callq nk_gpio_output_mask
+#endif
+
+#ifdef NAUT_CONFIG_CACHEPART
+    // we still expect to have the following in the callee-save registers
+    // %rbx => have_cat, %r12 =>  previous partition %r13 => extra msr 
+	 
+    test %rbx, %rbx                   
+    jz skip_cat_exit                 // skip if we do not have cat
+
+    // restore the old partition
+    movq $0xc8f, %rcx    // IA32_PQR_ASSOC
+    movq %r12, %rdx
+    movq %r13, %rax
+
+    wrmsr
+
+    // we are now running with the old partition
+
+skip_cat_exit:
+
 #endif
 
     RESTORE_GPRS()
