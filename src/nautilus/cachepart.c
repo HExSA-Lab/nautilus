@@ -811,6 +811,9 @@ static int do_group(nk_thread_group_t *group, group_op_t op, nk_cache_part_t par
 	rc = -1;
     } 
 
+    // One final barrier before the leader lets the next request in
+    nk_thread_group_barrier(group);
+    
     if (leader) {
 	spin_unlock(&group_state_lock);
     }
