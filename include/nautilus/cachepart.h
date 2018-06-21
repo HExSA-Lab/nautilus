@@ -33,6 +33,8 @@ typedef uint16_t  nk_cache_part_thread_state_t;
 
 #ifdef NAUT_CONFIG_CACHEPART
 
+#include <nautilus/group.h>
+
 // a cache partition as seen externally, so it can be passed from thread
 // to thread opaquely
 typedef uint16_t nk_cache_part_t;
@@ -72,6 +74,14 @@ int nk_cache_part_select(nk_cache_part_t part);
 // Release the cache partition that was either acquired or selected
 // refcounts down the partition, frees at zero
 int nk_cache_part_release(nk_cache_part_t part);
+
+
+// thread group versions of the above
+// nonzero return value means someone failed, and everyone
+// has been reverted to the thread default
+int nk_cache_part_group_acquire(nk_thread_group_t *group, uint32_t percent);
+int nk_cache_part_group_select(nk_thread_group_t *group, nk_cache_part_t part);
+int nk_cache_part_group_release(nk_thread_group_t *group, nk_cache_part_t part);
 
 //Free the cache and corresponding resources
 int nk_cache_part_deinit();

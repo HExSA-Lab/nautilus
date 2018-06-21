@@ -114,6 +114,9 @@ static int cat_started = 0;
 // globally visible for use in the thread low-level code
 int _nk_cache_part_has_cat = 0;
 
+// used for group cache changes
+static spinlock_t    group_state_lock;
+
 
 #define GLOBAL_LOCK_CONF uint8_t _global_flags=0
 #define GLOBAL_LOCK() _global_flags = spin_lock_irq_save(&cachetable.lock)
@@ -175,6 +178,8 @@ int nk_cache_part_init(uint32_t thread_default_percent, uint32_t interrupt_perce
     memset(&cachetable, 0, sizeof(cachetable));
 
     spinlock_init(&cachetable.lock);
+
+    spinlock_init(&group_state_lock);
     
     if (!is_intel()) {
         DEBUG("Only works for intel processor\n");
@@ -707,4 +712,124 @@ void nk_cache_part_dump()
     }
 
     GLOBAL_UNLOCK();
+}
+
+// only one group at a time can change its caching constraints
+
+typedef enum { ACQUIRE, SELECT, RELEASE } group_op_t;
+
+typedef struct group_state {
+    nk_cache_part_t part;
+    int             fail_count;
+} group_state_t;
+
+volatile static group_state_t group_state;
+
+static int do_group(nk_thread_group_t *group, group_op_t op, nk_cache_part_t part, uint32_t percent)
+{
+    int leader=0;
+    int rc = 0;
+    
+    nk_thread_group_election(group);
+
+    leader = nk_thread_group_check_leader(group)==1;
+
+    if (leader) {
+	// one at a time
+	spin_lock(&group_state_lock);
+
+	group_state.part = part;
+	group_state.fail_count = 0;
+
+	if (op == ACQUIRE) {
+	    // actually do the acquire
+	    if (nk_cache_part_acquire(percent)) {
+		DEBUG("Leader failed to acquire\n");
+		group_state.fail_count++;
+		rc = -1;
+	    } else {
+		DEBUG("Leader has acquired partition\n");
+		group_state.part = nk_cache_part_get_current();
+	    }
+	}
+    }
+
+    nk_thread_group_barrier(group);
+
+    if (!leader && op == ACQUIRE) {
+	if (group_state.fail_count) {
+	    // probably leader failed
+	    DEBUG("Failing to acquire as leader or follower has failed\n");
+	    rc = -1;
+	    // nothing to do...
+	} else {
+	    if (nk_cache_part_select(group_state.part)) {
+		DEBUG("Follower failed to acquire\n");
+		group_state.fail_count++;
+		rc = -1;
+	    } else {
+		DEBUG("Follower has acquired partition\n");
+	    }
+	}
+    } else if (op == SELECT) {
+	if (nk_cache_part_select(part)) {
+	    DEBUG("leader or follower has failed to select\n");
+	    group_state.fail_count++;
+	    rc = -1;
+	} else {
+	    DEBUG("leader or follower has selected\n");
+	}
+    } else if (op == RELEASE) {
+	if (nk_cache_part_release(part)) {
+	    DEBUG("leader or follower has failed to release\n");
+	    group_state.fail_count++;
+	    rc = -1;
+	} else {
+	    DEBUG("leader or follower has released\n");
+	}
+    }
+
+    // now wait for everyone and see if we've failed
+    nk_thread_group_barrier(group);
+
+    if (group_state.fail_count) {
+	DEBUG("Failure somewhere... reverting\n");
+	// we failed somewhere, so revert back, if possible
+	if ((op == ACQUIRE || op == SELECT) && !rc) {
+	    // rollback if I succeeded but someone else failed
+	    DEBUG("releasing\n");
+	    nk_cache_part_release(group_state.part);
+	} else if (op == RELEASE) {
+	    // nothing to do...
+	    // anyone who actually failed to release will leak
+	    ERROR("Huh - failure on group release\n");
+	}
+
+	// everyone bombs back to the default
+	nk_cache_part_select(NK_CACHE_PART_THREAD_DEFAULT);
+
+	rc = -1;
+    } 
+
+    if (leader) {
+	spin_unlock(&group_state_lock);
+    }
+	
+    return rc;
+    
+}
+
+int nk_cache_part_group_acquire(nk_thread_group_t *group, uint32_t percent)
+{
+    return do_group(group,ACQUIRE,0,percent);
+}
+
+int nk_cache_part_group_select(nk_thread_group_t *group, nk_cache_part_t part)
+{
+    return do_group(group,SELECT,part,0);
+}
+
+int nk_cache_part_group_release(nk_thread_group_t *group, nk_cache_part_t part)
+{
+    return do_group(group,RELEASE,part,0);
 }
