@@ -115,12 +115,42 @@ cpuid: level=6, mmx=1, level=6, x86_64=1, 1g_pages=1
 megs: 2048
 ```
 
+# Rapid Development
+
+If you'd like to get started quickly with development, a good way is to use 
+[Vagrant](https://www.vagrantup.com/). We've provided a `Vagrantfile` in
+the top-level Nautilus directory for provisioning a Vagrant VM which has
+pretty much everything you need to develop and run Nautilus. This setup
+currently only works for VMWare Fusion/Desktop (which requires the paid Vagrant
+VMWare provider). We hope to get this working for VirtualBox, and perhaps AWS
+soon. If you already have Vagrant installed, to get started you can do the
+following from the top-level Nautilus directory:
+
+```
+$> vagrant up
+```
+
+This will run for several minutes and provision a VM with all the required
+packages. It will automatically clone the latest version of Nautilus and build
+it. To connect to the VM, you can ssh into it, and immediately start running
+Nautilus. There is a demo put in the VM's nautilus directory which will boot
+Nautilus in QEMU with a virtual console on a serial port and the QEMU monitor in
+another tmux pane:
+
+```
+$> vagrant ssh
+[vagrant@localhost] cd nautilus
+[vagrant@localhost] . ./demo
+```
+
 # Resources
 
 You can find publications related to Nautilus and HRTs/HVMs at 
 http://halek.co
 
-Our lab:
+Our labs:
+
+hexsa.halek.co
 www.presciencelab.org
 
 
@@ -136,5 +166,6 @@ managed and operated by Sandia Corporation, a wholly owned subsidiary of
 Lockheed Martin Corporation, for the U.S. Department of Energy’s National
 Nuclear Security Administration under contract DE-AC04-94AL85000.
 
-Kyle C. Hale (c) 2015
+Kyle C. Hale (c) 2018
+Illinois Institute of Technology
 Northwestern University
