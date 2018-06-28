@@ -48,8 +48,8 @@ significant than in, e.g. a Linux guest.
 Nautilus works with the following hardware:
 
 - x86_64 machines (AMD and Intel)
-- Intel Xeon Phi (see http://philix.halek.co for instructions)
-- as a Hybrid Virtual Machine (HVM) in the Palacios VMM (see http://v3vee.org/palacios)
+- Intel Xeon Phi, both KNC and KNL (see http://philix.halek.co for instructions)
+- As a Hybrid Virtual Machine (HVM) in the Palacios VMM (see http://v3vee.org/palacios)
 
 # Building
 
@@ -64,6 +64,13 @@ is something wrong with your GRUB2 toolchain (namely, `grub-mkrescue`). Make sur
 knows where its libraries are, especially if you've installed the
 latest GRUB from source. Use `grub-mkrescue -d`. We've run into issues with naming of
 the GRUB2 binaries, in which case a workaround with symlinks was sufficient.
+
+On newer systems, Grub 2 renamed the binaries, so you might want to symlink to
+them, e.g. as follows:
+
+```
+$> ln -s /usr/bin/grub2-mkrescue /usr/bin/grub-mkrescue
+```
 
 
 # Running and Debugging under QEMU
@@ -95,6 +102,17 @@ initialized will be redirected to COM1. To use this, find the SERIAL_REDIRECT
 entry and enable it in `make menuconfig`. You can now run like this:
 
 `$> qemu-system-x86_64 -cdrom nautilus.iso -m 2G -serial stdio`
+
+Sometimes it is useful to interact with the Nautilus root shell via serial port,
+e.g. when you're running under QEMU on a system that does not have a windowing
+system. You'll want to first put a character device on the serial port by
+rebuilding Nautilus after selecting the *Place a virtual console interface on a character device* option.
+Then, after Nautilus boots (making sure you enabled the `-serial stdio` option
+in QEMU) you'll see a virtual console at your terminal. You can get to the root
+shell by getting to the terminal list with `\``3`. You can then select the root
+shell, and you will be able to run shell commands and see output. If you want to
+see more kernel output, you can use serial redirection and serial mirroring in
+your config.
 
 # Running and Debugging under BOCHS
 
@@ -150,8 +168,8 @@ http://halek.co
 
 Our labs:
 
-hexsa.halek.co
-www.presciencelab.org
+[HExSA Lab](http://hexsa.halek.co) at IIT \
+[Prescience Lab](http://www.presciencelab.org) at Northwestern
 
 
 # Acknowledgements
@@ -166,6 +184,6 @@ managed and operated by Sandia Corporation, a wholly owned subsidiary of
 Lockheed Martin Corporation, for the U.S. Department of Energy’s National
 Nuclear Security Administration under contract DE-AC04-94AL85000.
 
-Kyle C. Hale (c) 2018
-Illinois Institute of Technology
-Northwestern University
+Kyle C. Hale (c) 2018 \
+Illinois Institute of Technology \
+Northwestern University 
