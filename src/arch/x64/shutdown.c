@@ -187,3 +187,29 @@ out_noacpi:
     }
 
 }
+
+/* 
+ * NOTE: this requires that QEMU was passed the flag
+ * -device isa-debug-exit 
+ */
+static inline void
+qemu_isa_debug_exit (void)
+{
+    outb(0x31, 0x501);
+}
+
+
+void
+qemu_shutdown (void)
+{
+    const char * s = "Shutdown";
+    const char * ptr;
+
+    for (ptr = s; *ptr != '\0'; ptr++) {
+        outb(*ptr, 0x8900);
+    }
+
+    /* if that doesn't work, we can try the isa-debug
+     * port that newer QEMU versions support */
+    qemu_isa_debug_exit();
+}

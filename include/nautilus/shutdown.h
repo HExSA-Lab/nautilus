@@ -27,6 +27,7 @@
 void reboot(void);
 void acpi_shutdown(void);
 void shutdown(void);
+void qemu_shutdown(void);
 
 
 
