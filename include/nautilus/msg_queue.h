@@ -47,6 +47,10 @@ void                 nk_msg_queue_attach(struct nk_msg_queue *queue);
 
 void                 nk_msg_queue_release(struct nk_msg_queue *queue);
 
+//
+int   nk_msg_queue_full(struct nk_msg_queue *queue);
+int   nk_msg_queue_empty(struct nk_msg_queue *queue);
+
 // blocks
 void  nk_msg_queue_push(struct nk_msg_queue *queue, void *msg);
 void  nk_msg_queue_pull(struct nk_msg_queue *queue, void **msg);

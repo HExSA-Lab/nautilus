@@ -100,6 +100,12 @@ config NET_LWIP_APP_SOCKET_EXAMPLES
 	help
 		Adds some additional socket examples
 
+config NET_LWIP_APP_LWIP_IPVCD
+	bool "Virtual Console Daemon"
+	default n
+	depends on NET_LWIP
+	help
+		Adds the ability to telnet to a virtual console in NK
 endmenu
 
 

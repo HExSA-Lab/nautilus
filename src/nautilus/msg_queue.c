@@ -233,6 +233,18 @@ void nk_msg_queue_release(struct nk_msg_queue *q)
     }
 }
 
+int nk_msg_queue_full(struct nk_msg_queue *q)
+{
+    return  q->cur_count==q->queue_size;
+}    
+
+int nk_msg_queue_empty(struct nk_msg_queue *q)
+{
+    return  q->cur_count==0;
+}    
+    
+    
+
 #define SLOT(q,n) ((q)->msgs[(((q)->n)) % ((q)->queue_size)])
 
 // with lock held

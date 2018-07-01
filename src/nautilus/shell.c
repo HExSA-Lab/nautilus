@@ -1312,6 +1312,15 @@ static int handle_net(char *buf)
 	return 0;
     }
 #endif
+
+#ifdef NAUT_CONFIG_NET_LWIP_APP_LWIP_IPVCD
+    if (!strcasecmp(buf,"net lwip ipvcd")) {
+	void ipvcd_init();
+	nk_vc_printf("Starting Virtual Console Daemon (port 23)\n");
+	ipvcd_init();
+	return 0;
+    }
+#endif
     
 #endif
     
