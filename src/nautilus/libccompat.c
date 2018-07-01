@@ -213,7 +213,9 @@ rand (void) {
 
     nk_get_rand_bytes((uint8_t*)&r, 4);
 
-    return RAND_MAX / r;
+    r = r<0 ? -r : r;
+
+    return r % RAND_MAX;
 }
 
 void 
