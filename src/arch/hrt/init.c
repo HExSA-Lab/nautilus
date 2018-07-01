@@ -37,6 +37,8 @@
 #include <nautilus/group.h>
 #include <nautilus/group_sched.h>
 #include <nautilus/timer.h>
+#include <nautilus/semaphore.h>
+#include <nautilus/msg_queue.h>
 #include <nautilus/idle.h>
 #include <nautilus/percpu.h>
 #include <nautilus/errno.h>
@@ -234,6 +236,9 @@ hrt_bsp_init (unsigned long mbd,
 
     nk_rand_init(naut->sys.cpus[0]);
 
+    nk_semaphore_init();
+
+    nk_msg_queue_init();
 
     /* we now switch away from the boot-time stack in low memory */
     struct cpu * me = naut->sys.cpus[my_cpu_id()];

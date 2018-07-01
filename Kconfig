@@ -1,7 +1,7 @@
 mainmenu "Nautilus AeroKernel Configuration"
 
 
-menu "Platform/Arch Options"
+menu "Platform"
 
     choice
         prompt "Target Selection"
@@ -115,7 +115,7 @@ menu "Platform/Arch Options"
         
 endmenu
 
-menu "Nautilus AeroKernel Build Config"
+menu "Build"
 
     config USE_NAUT_BUILTINS
         bool "Use GCC Built-in Utility Functions"
@@ -141,7 +141,13 @@ menu "Nautilus AeroKernel Build Config"
 endmenu
 
 
-menu "Interface Options"
+menu "Configuration"
+
+config MAX_THREADS
+    int "Maximum number of threads in system"
+    default 1024
+    help
+      Maximum number of threads in system (or any core) at once
 
 config THREAD_EXIT_KEYCODE
     int "Thread Exit Keycode"
@@ -149,16 +155,6 @@ config THREAD_EXIT_KEYCODE
     default "196"
     help
         uses a special thread exit keycode
-
-endmenu
-
-menu "Nautilus AeroKernel Configuration"
-
-config MAX_THREADS
-    int "Maximum number of threads in system"
-    default 1024
-    help
-      Maximum number of threads in system (or any core) at once
 
 config USE_TICKETLOCKS
     bool "Use Ticket/Bakery locks instead of default spin"
@@ -589,7 +585,7 @@ menu "Garbage Collection Options"
 
 endmenu
 
-menu "AeroKernel Performance Optimizations"
+menu "Optimizations"
 
     config FPU_SAVE
       bool "Save FPU state on all context switches"
@@ -813,6 +809,20 @@ menu Debugging
       help
         Turn on debug prints for timer subsystem
 
+    config DEBUG_SEMAPHORES
+      bool "Debug Semaphores"
+      depends on DEBUG_PRINTS
+      default n
+      help
+        Turn on debug prints for semaphores
+
+    config DEBUG_MSG_QUEUES
+      bool "Debug Message Queues"
+      depends on DEBUG_PRINTS
+      default n
+      help
+        Turn on debug prints for message queues
+
     config DEBUG_SYNCH
       bool "Debug Synchronization"
       depends on DEBUG_PRINTS
@@ -882,8 +892,7 @@ config DEBUG_LOADER
 endmenu
 
 
-
-menu "Parallel Runtimes"
+menu "Runtimes"
 
         config LEGION_RT
           bool "Legion RT"
@@ -976,7 +985,7 @@ source "src/fs/Kconfig"
 
 source "src/net/Kconfig"
 
-menu "Lua support"
+menu "Languages"
 
 	config LOAD_LUA
 		bool "Enable Lua support in Nautilus"
@@ -990,6 +999,6 @@ menu "Lua support"
 		depends on LOAD_LUA
 		help
 		  Nautilus functionas are made available to Lua externally
-endmenu
 
+endmenu
 

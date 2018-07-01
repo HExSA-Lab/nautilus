@@ -35,6 +35,8 @@
 #include <nautilus/group.h>
 #include <nautilus/group_sched.h>
 #include <nautilus/timer.h>
+#include <nautilus/semaphore.h>
+#include <nautilus/msg_queue.h>
 #include <nautilus/idle.h>
 #include <nautilus/percpu.h>
 #include <nautilus/errno.h>
@@ -184,6 +186,10 @@ init (unsigned long mbd, unsigned long magic)
 
     nk_rand_init(naut->sys.cpus[naut->sys.bsp_id]);
 
+    nk_semaphore_init();
+
+    nk_msg_queue_init();
+    
     nk_sched_init(&sched_cfg);
 
     nk_thread_group_init();

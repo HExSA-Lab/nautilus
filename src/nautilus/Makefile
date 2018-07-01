@@ -18,6 +18,7 @@ obj-y += \
 	rwlock.o \
 	condvar.o \
 	semaphore.o \
+	msg_queue.o \
 	hashtable.o \
 	rbtree.o \
 	random.o \
