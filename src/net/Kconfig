@@ -46,6 +46,63 @@ config DEBUG_NET_COLLECTIVE_ETHERNET
 	depends on NET_COLLECTIVE_ETHERNET
         help
                 Turn on debug prints for low-level collective communication on Ethernet
+
+config NET_LWIP
+	bool "LWIP network stack"
+	default n
+	depends on NET_ETHERNET
+	help
+		Adds LWIP network protocol stack
+
+
+config DEBUG_NET_LWIP
+	bool "Debug LWIP"
+	default n
+	depends on NET_LWIP
+	help
+		Turn on debug output from LWIP
+
+menu "LWIP Apps"
+depends on NET_LWIP
+
+config NET_LWIP_APP_ECHO
+	bool "ECHO Daemon"
+	default n
+	depends on NET_LWIP
+	help
+		Adds TCP ECHO Server (port 7)
+		
+config NET_LWIP_APP_HTTPD
+	bool "HTTP Daemon"
+	default n
+	depends on NET_LWIP
+	help
+		Adds an HTTP dameon (port 80)
+		
+config NET_LWIP_APP_LWIP_SHELL
+	bool "LWIP Shell Daemon"
+	default n
+	depends on NET_LWIP
+	help
+		Adds the LWIP shell (partially functional on port 23)
+		
+config NET_LWIP_APP_SOCKET_ECHO
+	bool "Echo Daemon (socket version)"
+	default n
+	depends on NET_LWIP
+	help
+		Adds TCP ECHO server (port 7) written using socket interface
+
+config NET_LWIP_APP_SOCKET_EXAMPLES
+	bool "Socket Examples"
+	default n
+	depends on NET_LWIP
+	help
+		Adds some additional socket examples
+
+endmenu
+
+
 	
 
 endmenu

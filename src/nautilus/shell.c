@@ -29,6 +29,8 @@
 #include <nautilus/blkdev.h>
 #include <nautilus/netdev.h>
 #include <nautilus/chardev.h>
+#include <nautilus/semaphore.h>
+#include <nautilus/msg_queue.h>
 #include <nautilus/fs.h>
 #include <nautilus/loader.h>
 #include <nautilus/cpuid.h>
@@ -107,6 +109,10 @@
 #ifdef NAUT_CONFIG_NET_ETHERNET
 #include <net/ethernet/ethernet_agent.h>
 #include <net/ethernet/ethernet_arp.h>
+#endif
+
+#ifdef NAUT_CONFIG_NET_LWIP
+#include <net/lwip/lwip.h>
 #endif
 
 
@@ -1080,11 +1086,15 @@ int handle_gpio(char *buf)
 
 static int handle_net(char *buf)
 {
-#ifdef NAUT_CONFIG_NET_ETHERNET
     char agentname[100], intname[100];
     uint32_t type;
+    uint32_t ip[4];
+    uint32_t gw[4];
+    uint32_t netmask[4];
+    uint32_t dns[4];
+    int defaults=0;
 
-    
+#ifdef NAUT_CONFIG_NET_ETHERNET
     if (sscanf(buf,"net agent create %s %s",agentname, intname)==2) {
 	nk_vc_printf("Attempt to create ethernet agent %s for device %s\n",agentname, intname);
 	struct nk_net_dev *netdev = nk_net_dev_find(intname);
@@ -1149,7 +1159,6 @@ static int handle_net(char *buf)
     }
 	  
 
-    uint32_t ip[4];
   
     if (sscanf(buf,"net arp create %s %u.%u.%u.%u",agentname,&ip[0],&ip[1],&ip[2],&ip[3])==5) {
 	ipv4_addr_t ipv4 = ip[0]<<24 | ip[1]<<16 | ip[2]<<8 | ip[3];
@@ -1191,14 +1200,123 @@ static int handle_net(char *buf)
 	return 0;
     }
 
-
-    nk_vc_printf("Unknown request\n");
-    return 0;
-    
-#else
-    nk_vc_printf("No network functionality is configured\n");
-    return 0;
 #endif
+
+#ifdef NAUT_CONFIG_NET_LWIP
+    if (sscanf(buf,"net lwip start %s", intname)==1 && !strncasecmp(intname,"defaults",8)) {
+	
+	struct nk_net_lwip_config conf = { .dns_ip = 0x08080808 } ;
+
+	if (nk_net_lwip_start(&conf)) {
+	    nk_vc_printf("Failed to start lwip\n");
+	    return 0;
+	}
+
+	struct nk_net_lwip_interface inter = { .name = "virtio-net0",
+					       .ipaddr = 0x0a0a0a0a,
+					       .netmask = 0xffffff00,
+					       .gateway = 0x0a0a0a01 };
+	
+
+	if (nk_net_lwip_add_interface(&inter)) {
+	    nk_vc_printf("Failed to add interface\n");
+	    return 0;
+	}
+
+	nk_vc_printf("LWIP started with defaults and default interface added\n");
+	return 0;
+    }
+
+    if (sscanf(buf,"net lwip start %u.%u.%u.%u", &dns[0], &dns[1], &dns[2], &dns[3])==4) {
+	
+	struct nk_net_lwip_config conf = { .dns_ip = dns[0]<<24 | dns[1]<<16 | dns[2]<<8 | dns[3] } ;
+
+	if (nk_net_lwip_start(&conf)) {
+	    nk_vc_printf("Failed to start lwip\n");
+	    return 0;
+	}
+
+	nk_vc_printf("LWIP started\n");
+	return 0;
+	
+    }
+
+	
+    if (sscanf(buf,"net lwip add %s %u.%u.%u.%u %u.%u.%u.%u %u.%u.%u.%u\n",
+	       &intname,
+	       &ip[0], &ip[1], &ip[2], &ip[3],
+	       &netmask[0], &netmask[1], &netmask[2], &netmask[3],
+	       &gw[0], &gw[1], &gw[2], &gw[3])==13) {
+
+	struct nk_net_lwip_interface inter;
+
+	strncpy(inter.name,intname,DEV_NAME_LEN); inter.name[DEV_NAME_LEN-1]=0;
+	inter.ipaddr = ip[0]<<24 | ip[1]<<16 | ip[2]<<8 | ip[3];
+	inter.netmask = netmask[0]<<24 | netmask[1]<<16 | netmask[2]<<8 | netmask[3];
+	inter.gateway = gw[0]<<24 | gw[1]<<16 | gw[2]<<8 | gw[3];
+	
+	
+	if (nk_net_lwip_add_interface(&inter)) {
+	    nk_vc_printf("Failed to add interface\n");
+	    return 0;
+	}
+
+	nk_vc_printf("added interface %s ip=%u.%u.%u.%u netmask=%u.%u.%u.%u gw=%u.%u.%u.%u\n",
+		     intname,ip[0],ip[1],ip[2],ip[3],netmask[0],netmask[1],netmask[2],netmask[3],
+		     gw[0],gw[1],gw[2],gw[3]);
+	
+	return 0;
+    }
+
+#ifdef NAUT_CONFIG_NET_LWIP_APP_ECHO
+    if (!strcasecmp(buf,"net lwip echo")) {
+	void echo_init();
+	nk_vc_printf("Starting echo server (port 7)\n");
+	echo_init();
+	return 0;
+    }
+#endif
+
+#ifdef NAUT_CONFIG_NET_LWIP_APP_HTTPD
+    if (!strcasecmp(buf,"net lwip httpd")) {
+	void httpd_init();
+	nk_vc_printf("Starting httpd (port 80)\n");
+	httpd_init();
+	return 0;
+    }
+#endif
+
+#ifdef NAUT_CONFIG_NET_LWIP_APP_LWIP_SHELL
+    if (!strcasecmp(buf,"net lwip shell")) {
+	void shell_init();
+	nk_vc_printf("Starting shell server (port 23)\n");
+	shell_init();
+	return 0;
+    }
+#endif
+
+#ifdef NAUT_CONFIG_NET_LWIP_APP_LWIP_SOCKET_ECHO
+    if (!strcasecmp(buf,"net lwip socket_echo")) {
+	void socket_echo_init();
+	nk_vc_printf("Starting socket_echo (port 7)\n");
+	socket_echo_init();
+	return 0;
+    }
+#endif
+
+#ifdef NAUT_CONFIG_NET_LWIP_APP_SOCKET_EXAMPLES
+    if (!strcasecmp(buf,"net lwip socket_examples")) {
+	void socket_examples_init();
+	nk_vc_printf("Starting socket_examples (outgoing)\n");
+	socket_examples_init();
+	return 0;
+    }
+#endif
+    
+#endif
+    
+    nk_vc_printf("No relevant network functionality is configured or bad command\n");
+    return 0;
 }
 
 
@@ -1236,7 +1354,7 @@ static int handle_cmd(char *buf, int n)
  
   if (!strncasecmp(buf,"help",4)) { 
     nk_vc_printf("help\nexit\nvcs\ncores [n]\ntime [n]\nthreads [n]\n");
-    nk_vc_printf("devs | fses | ofs | cat [path]\n");
+    nk_vc_printf("devs | sems | mqs | fses | ofs | cat [path]\n");
 #ifdef NAUT_CONFIG_PROFILE
     nk_vc_printf("instrument start|end/stop|clear|query\n");
 #endif
@@ -1301,6 +1419,17 @@ static int handle_cmd(char *buf, int n)
 
   if (!strncasecmp(buf,"devs",4)) {
     nk_dev_dump_devices();
+    return 0;
+
+  }
+  
+  if (!strncasecmp(buf,"sems",4)) {
+    nk_semaphore_dump_semaphores();
+    return 0;
+  }
+
+  if (!strncasecmp(buf,"mqs",3)) {
+    nk_msg_queue_dump_queues();
     return 0;
   }
 
