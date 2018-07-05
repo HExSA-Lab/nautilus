@@ -114,6 +114,34 @@ shell, and you will be able to run shell commands and see output. If you want to
 see more kernel output, you can use serial redirection and serial mirroring in
 your config.
 
+If you'd like to use Nautilus networking with QEMU, you should use a TUN/TAP
+interface. First, you can run the following on your host machine:
+
+```
+$> sudo tunctl -d tap0
+$> sudo tunctl -t tap0
+$> sudo ifconfig tap0 up 10.10.10.2 netmask 255.255.255.0
+```
+
+Then you can use the tap interface with QEMU as follows. This particular
+invocation attaches both a virtual e1000 fast ethernet card and a virtio
+network interface:
+
+```
+sudo qemu-system-x86_64 -smp 2 \ 
+                        -m 2048 \
+                        -vga std \
+                        -serial stdio \
+                        -cdrom nautilus.iso \
+                        -netdev tap,ifname=tap0,script=no,id=net0 \
+                            -device virtio-net,netdev=net0 \
+                        -netdev user,id=net1 \
+                            -device e1000,netdev=net1 \
+                        -drive if=none,id=hd0,format=raw,file=nautilus.iso \
+                            -device virtio-blk,drive=hd0
+```
+
+
 # Running and Debugging under BOCHS
 
 While we recommend using QEMU, sometimes it is nice to use the native debugging 
@@ -184,6 +212,8 @@ managed and operated by Sandia Corporation, a wholly owned subsidiary of
 Lockheed Martin Corporation, for the U.S. Department of Energy’s National
 Nuclear Security Administration under contract DE-AC04-94AL85000.
 
-Kyle C. Hale (c) 2018 \
-Illinois Institute of Technology \
+Kyle C. Hale (c) 2018 
+
+Illinois Institute of Technology 
+
 Northwestern University 
