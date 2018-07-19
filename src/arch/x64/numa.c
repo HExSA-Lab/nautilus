@@ -159,16 +159,30 @@ acpi_table_parse_srat(enum acpi_srat_entry_id id,
 }
 
 
+static inline int
+domain_exists (struct sys_info * sys, unsigned id)
+{
+    return sys->locality_info.domains[id] != NULL;
+}
+
+static inline struct numa_domain *
+get_domain (struct sys_info * sys, unsigned id)
+{
+    return sys->locality_info.domains[id];
+}
+
+
+
+
 static int 
 acpi_parse_processor_affinity(struct acpi_subtable_header * header,
-                  const unsigned long end)
+                              const unsigned long end)
 {
     struct acpi_srat_cpu_affinity *processor_affinity
         = container_of(header, struct acpi_srat_cpu_affinity, header);
 
     struct sys_info * sys = &(nk_get_nautilus_info()->sys);
-    unsigned i;
-    uint32_t domain_id;
+    uint32_t i, domain_id;
 
     if (!processor_affinity)
         return -EINVAL;
@@ -178,15 +192,22 @@ acpi_parse_processor_affinity(struct acpi_subtable_header * header,
 		return 0;
     }
 
+    domain_id = processor_affinity->proximity_domain_lo | 
+                (((*(uint32_t*)(&(processor_affinity->proximity_domain_hi))) & 0xffffff) << 8);
+
     acpi_table_print_srat_entry(header);
 
+    /* add this domain if we haven't seen it yet */
+    if (!domain_exists(sys, domain_id)) {
+        if (nk_numa_domain_create(sys, domain_id) == NULL) {
+            NUMA_ERROR("Could not add NUMA domain for processor affinity\n");
+            return -1;
+        }
+    }
 
     for (i = 0; i < sys->num_cpus; i++) {
         if (sys->cpus[i]->lapic_id == processor_affinity->apic_id) {
-            domain_id = processor_affinity->proximity_domain_lo | 
-                (((*(uint32_t*)(&(processor_affinity->proximity_domain_hi))) & 0xffffff) << 8);
-
-            sys->cpus[i]->domain = sys->locality_info.domains[domain_id];
+            sys->cpus[i]->domain = get_domain(sys, domain_id);
             break;
         }
     }
@@ -227,7 +248,6 @@ acpi_parse_memory_affinity(struct acpi_subtable_header * header,
 		NUMA_DEBUG("Whacky length zero memory region...\n");
     }
 
-
     acpi_table_print_srat_entry(header);
 
     mem = mm_boot_alloc(sizeof(struct mem_region));
@@ -249,36 +269,26 @@ acpi_parse_memory_affinity(struct acpi_subtable_header * header,
     NUMA_DEBUG("Memory region: domain 0x%lx, base %p, len 0x%lx, enabled=%d hot_plug=%d nv=%d\n", mem->domain_id, mem->base_addr, mem->len, mem->enabled, mem->hot_pluggable, mem->nonvolatile);
 
     /* we've detected a new NUMA domain */
-    if (sys->locality_info.domains[mem->domain_id] == NULL) {
+    if (!domain_exists(sys, mem->domain_id)) {
 
-	NUMA_DEBUG("Region is in new domain\n");
+        NUMA_DEBUG("Region is in new domain (%u)\n", mem->domain_id);
 
-        domain = (struct numa_domain *)mm_boot_alloc(sizeof(struct numa_domain));
+        domain = nk_numa_domain_create(sys, mem->domain_id);
+
         if (!domain) {
-            ERROR_PRINT("Could not allocate NUMA domain\n");
+            ERROR_PRINT("Could not create NUMA domain (id=%u)\n", mem->domain_id);
             return -1;
         }
-        memset(domain, 0, sizeof(struct numa_domain));
-        domain->id = mem->domain_id;
-        INIT_LIST_HEAD(&(domain->regions));
-        INIT_LIST_HEAD(&(domain->adj_list));
-
-	if (mem->domain_id != (sys->locality_info.num_domains+1)) { 
-	    NUMA_DEBUG("Memory regions are not in expected domain order, but that should be OK\n");
-	}
-
-        sys->locality_info.domains[domain->id] = domain;
-        sys->locality_info.num_domains++;
         
     } else {
-	NUMA_DEBUG("Region is in existing domain\n");
-        domain = sys->locality_info.domains[mem->domain_id];
+        NUMA_DEBUG("Region is in existing domain\n");
+        domain = get_domain(sys, mem->domain_id);
     }
 
     domain->num_regions++;
     domain->addr_space_size += mem->len;
 
-    NUMA_DEBUG("Domain now has 0x%lx regions and size 0x%lx\n", domain->num_regions, domain->addr_space_size);
+    NUMA_DEBUG("Domain %u now has 0x%lx regions and size 0x%lx\n", domain->id, domain->num_regions, domain->addr_space_size);
 
     if (list_empty(&domain->regions)) {
         list_add(&mem->entry, &domain->regions);
@@ -286,14 +296,13 @@ acpi_parse_memory_affinity(struct acpi_subtable_header * header,
     } else {
         list_for_each_entry(ent, &domain->regions, entry) {
             if (mem->base_addr < ent->base_addr) {
-		NUMA_DEBUG("Added region prior to region with base address 0x%lx\n",ent->base_addr);
+                NUMA_DEBUG("Added region prior to region with base address 0x%lx\n",ent->base_addr);
                 list_add_tail(&mem->entry, &ent->entry);
                 return 0;
             }
         }
         list_add_tail(&mem->entry, &domain->regions);
     }
-
 
     return 0;
 }
@@ -323,7 +332,7 @@ acpi_parse_slit(struct acpi_table_header *table, void * arg)
     NUMA_DEBUG("  Entries:\n");
     NUMA_DEBUG("   ");
     for (i = 0; i < slit->locality_count; i++) {
-        printk("%02u ");
+        printk("%02u ", i);
     }
     printk("\n");
 
@@ -365,7 +374,7 @@ arch_numa_init (struct sys_info * sys)
 
     /* SLIT: System Locality Information Table */
     if (acpi_table_parse(ACPI_SIG_SLIT, acpi_parse_slit, &(sys->locality_info))) { 
-	NUMA_DEBUG("Unable to parse SLIT\n");
+        NUMA_DEBUG("Unable to parse SLIT\n");
     }
 
     /* SRAT: Static Resource Affinity Table */
@@ -374,28 +383,29 @@ arch_numa_init (struct sys_info * sys)
         NUMA_DEBUG("Parsing SRAT_MEMORY_AFFINITY table...\n");
 
         if (acpi_table_parse_srat(ACPI_SRAT_MEMORY_AFFINITY,
-				  acpi_parse_memory_affinity, NAUT_CONFIG_MAX_CPUS * 2)) {
-	    NUMA_DEBUG("Unable to parse memory affinity\n");
-	}
+                    acpi_parse_memory_affinity, NAUT_CONFIG_MAX_CPUS * 2) < 0) {
+            NUMA_ERROR("Unable to parse memory affinity\n");
+        }
 
         NUMA_DEBUG("DONE.\n");
 
         NUMA_DEBUG("Parsing SRAT_TYPE_X2APIC_CPU_AFFINITY table...\n");
 
         if (acpi_table_parse_srat(ACPI_SRAT_TYPE_X2APIC_CPU_AFFINITY,
-				  acpi_parse_x2apic_affinity, NAUT_CONFIG_MAX_CPUS))	    {
-	    NUMA_DEBUG("Unable to parse x2apic\n");
-	}
+                    acpi_parse_x2apic_affinity, NAUT_CONFIG_MAX_CPUS) < 0)	    {
+            NUMA_ERROR("Unable to parse x2apic table\n");
+        }
 
         NUMA_DEBUG("DONE.\n");
 
         NUMA_DEBUG("Parsing SRAT_PROCESSOR_AFFINITY table...\n");
 
         if (acpi_table_parse_srat(ACPI_SRAT_PROCESSOR_AFFINITY,
-				  acpi_parse_processor_affinity,
-				  NAUT_CONFIG_MAX_CPUS)) { 
-	    NUMA_DEBUG("Unable to parse processor affinity\n");
-	}
+                    acpi_parse_processor_affinity,
+                    NAUT_CONFIG_MAX_CPUS) < 0) { 
+            NUMA_ERROR("Unable to parse processor affinity\n");
+        }
+
         NUMA_DEBUG("DONE.\n");
 
     }
