@@ -244,7 +244,13 @@ multiboot_parse (ulong_t mbd, ulong_t magic)
 				struct multiboot_tag_new_acpi * nacpi = (struct multiboot_tag_new_acpi*)tag;
 				DEBUG_PRINT("New ACPI: rsdp=%p\n", nacpi->rsdp);
 				break;
-											  }
+							  }
+            case MULTIBOOT_TAG_TYPE_IMAGE_BASE: {
+                struct multiboot_tag_image_load_base * imb = (struct multiboot_tag_image_load_base *)tag;
+                DEBUG_PRINT("Image load base: 0x%x\n", imb->addr);
+                break;
+
+            }
 #ifdef NAUT_CONFIG_HVM_HRT
             case MULTIBOOT_TAG_TYPE_HRT: {
                 struct multiboot_tag_hrt * hrt = (struct multiboot_tag_hrt*)tag;

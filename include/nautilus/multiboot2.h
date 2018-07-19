@@ -58,6 +58,11 @@
 #define MULTIBOOT_TAG_TYPE_ACPI_OLD          14
 #define MULTIBOOT_TAG_TYPE_ACPI_NEW          15
 #define MULTIBOOT_TAG_TYPE_NETWORK           16
+#define MULTIBOOT_TAG_TYPE_EFI_MEM_MAP       17
+#define MULTIBOOT_TAG_TYPE_EFI_BOOT_SERV     18
+#define MULTIBOOT_TAG_TYPE_EFI_32B_HANDLE    19
+#define MULTIBOOT_TAG_TYPE_EFI_64B_HANDLE    20
+#define MULTIBOOT_TAG_TYPE_IMAGE_BASE        21
 
 #define MULTIBOOT_TAG_TYPE_HRT 0xf00df00d
 
@@ -361,6 +366,42 @@ struct multiboot_tag_network
   multiboot_uint32_t type;
   multiboot_uint32_t size;
   multiboot_uint8_t dhcpack[0];
+};
+
+struct multiboot_tag_efi_mem_map
+{
+  multiboot_uint32_t type;
+  multiboot_uint32_t size;
+  multiboot_uint32_t desc_size;
+  multiboot_uint32_t desc_version;
+  multiboot_uint8_t efi_mem_map[0];
+};
+
+struct multiboot_tag_efi_boot_serv
+{
+  multiboot_uint32_t type;
+  multiboot_uint32_t size;
+};
+
+struct multiboot_tag_efi_32b_image
+{
+  multiboot_uint32_t type;
+  multiboot_uint32_t size;
+  multiboot_uint32_t ptr;
+};
+
+struct multiboot_tag_efi_64b_image
+{
+  multiboot_uint32_t type;
+  multiboot_uint32_t size;
+  multiboot_uint64_t ptr;
+};
+
+struct multiboot_tag_image_load_base
+{
+  multiboot_uint32_t type;
+  multiboot_uint32_t size;
+  multiboot_uint32_t addr;
 };
 
 struct multiboot_tag_hrt
