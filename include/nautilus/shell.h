@@ -27,6 +27,8 @@
 
 #include <nautilus/thread.h>
 
-nk_thread_id_t nk_launch_shell(char *name, int cpu);
+#define NK_SHELL_SCRIPT_ONLY 0x1
+
+nk_thread_id_t nk_launch_shell(char *name, int cpu, char **script, uint32_t flags);
 
 #endif

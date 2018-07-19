@@ -31,6 +31,7 @@
 #include <nautilus/chardev.h>
 #include <nautilus/semaphore.h>
 #include <nautilus/msg_queue.h>
+#include <nautilus/timer.h>
 #include <nautilus/fs.h>
 #include <nautilus/loader.h>
 #include <nautilus/cpuid.h>
@@ -1370,6 +1371,7 @@ static int handle_cmd(char *buf, int n)
 #ifdef NAUT_CONFIG_GPIO
     nk_vc_printf("gpio in/out/sweep [val]\n");
 #endif
+    nk_vc_printf("delay us | sleep us\n");
     nk_vc_printf("ioapic <list|dump> | ioapic num <pin|all> <mask|unmask>\n");
     nk_vc_printf("pci list | pci raw/dev bus slot func | pci dev [bus slot func]\n");
     nk_vc_printf("pci peek|poke bus slot func off [val] | pci cfg bus slot func\n");
@@ -1386,6 +1388,7 @@ static int handle_cmd(char *buf, int n)
 #ifdef NAUT_CONFIG_ENABLE_REMOTE_DEBUGGING
     nk_vc_printf("break\n");
 #endif
+    
     nk_vc_printf("burn a name size_ms tpr priority\n");
     nk_vc_printf("burn s name size_ms tpr phase size deadline priority\n");
     nk_vc_printf("burn p name size_ms tpr phase period slice\n");
@@ -1502,7 +1505,7 @@ static int handle_cmd(char *buf, int n)
   }
 
   if (sscanf(buf,"shell %s", name)==1) { 
-    nk_launch_shell(name,-1);
+    nk_launch_shell(name,-1,0,0); // simple interactive shell
     return 0;
   }
 
@@ -1532,6 +1535,20 @@ static int handle_cmd(char *buf, int n)
   }
 #endif
 
+  uint64_t time_us;
+  
+  if (sscanf(buf,"delay %lu",&time_us)==1) {
+    nk_vc_printf("Delaying for %lu us\n", time_us);
+    nk_delay(time_us*1000UL);
+    return 0;
+  }
+
+  if (sscanf(buf,"sleep %lu",&time_us)==1) {
+    nk_vc_printf("Sleeping for %lu us\n", time_us);
+    nk_sleep(time_us*1000UL);
+    return 0;
+  }
+  
   if (sscanf(buf,"regs %lu",&tid)==1) { 
       nk_thread_t *t = nk_find_thread_by_tid(tid);
       if (!t) {
@@ -1866,9 +1883,16 @@ static int handle_cmd(char *buf, int n)
   return 0;
 }
 
+struct shell_op {
+  char name[32];
+  char **script;
+  uint32_t flags;
+};
+
 static void shell(void *in, void **out)
 {
-  struct nk_virtual_console *vc = nk_create_vc((char*)in,COOKED, 0x9f, 0, 0);
+  struct shell_op *op = (struct shell_op *)in;
+  struct nk_virtual_console *vc = nk_create_vc(op->name,COOKED, 0x9f, 0, 0);
   char buf[MAX_CMD];
   char lastbuf[MAX_CMD];
   int first=1;
@@ -1878,7 +1902,7 @@ static void shell(void *in, void **out)
     return;
   }
 
-  if (nk_thread_name(get_cur_thread(),(char*)in)) {   
+  if (nk_thread_name(get_cur_thread(),op->name)) {   
     ERROR_PRINT("Cannot name shell's thread\n");
     return;
   }
@@ -1896,7 +1920,18 @@ static void shell(void *in, void **out)
 
   nk_vc_clear(OUTPUT);
   nk_vc_setattr(OUTPUT);
-   
+
+  if (op->script) {
+    int i;
+    for (i=0; *op->script[i]; i++) {
+      nk_vc_printf("***exec: %s\n",op->script[i]);
+      handle_cmd(op->script[i],MAX_CMD);
+    }
+    if (op->flags & NK_SHELL_SCRIPT_ONLY) {
+      goto out;
+    }
+  }
+  
   while (1) {  
     nk_vc_setattr(PROMPT);
     nk_vc_printf("%s> ", (char*)in);
@@ -1921,6 +1956,8 @@ static void shell(void *in, void **out)
   }
 
   nk_vc_printf("Exiting shell %s\n", (char*)in);
+
+ out:
   free(in);
   nk_release_vc(get_cur_thread());
 
@@ -1928,20 +1965,24 @@ static void shell(void *in, void **out)
   
 }
 
-nk_thread_id_t nk_launch_shell(char *name, int cpu)
+nk_thread_id_t nk_launch_shell(char *name, int cpu, char **script, uint32_t flags)
 {
   nk_thread_id_t tid;
-  char *n = malloc(32);
+  struct shell_op *op = (struct shell_op *)malloc(sizeof(struct shell_op));
 
-  if (!n) {
+  if (!op) {
     return 0;
   }
 
-  strncpy(n,name,32);
-  n[31]=0;
+  memset(op,0,sizeof(*op));
   
-  if (nk_thread_start(shell, (void*)n, 0, 1, SHELL_STACK_SIZE, &tid, cpu)) { 
-      free(n);
+  strncpy(op->name,name,32);
+  op->name[31]=0;
+  op->script = script;
+  op->flags = flags;
+  
+  if (nk_thread_start(shell, (void*)op, 0, 1, SHELL_STACK_SIZE, &tid, cpu)) { 
+      free(op);
       return 0;
   } else {
       INFO_PRINT("Shell %s launched on cpu %d as %p\n",name,cpu,tid);

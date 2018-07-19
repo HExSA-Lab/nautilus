@@ -1213,7 +1213,7 @@ static void new_shell()
     char name[80];
     sprintf(name,"shell-%d",num_shells);
     num_shells++;
-    nk_launch_shell(name,0);
+    nk_launch_shell(name,0,0,0); // interactive shell
 }
 
 
