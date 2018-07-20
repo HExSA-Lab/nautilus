@@ -16,6 +16,9 @@ obj-$(NAUT_CONFIG_NESL_RT_TESTS) += nesl/
 obj-$(NAUT_CONFIG_X86_64_HOST) += ipi.o
 obj-$(NAUT_CONFIG_X86_64_HOST) += benchmark.o
 
+obj-$(NAUT_CONFIG_GEM5) += ipi.o
+obj-$(NAUT_CONFIG_GEM5) += benchmark.o
+
 obj-$(NAUT_CONFIG_LEGION_RT) += test_legion.o \
 								circuit.o \
 								circuit_cpu.o \

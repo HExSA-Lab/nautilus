@@ -1,0 +1,94 @@
+ENTRY(nautilus_entry)
+
+SECTIONS
+{
+    . = 0x100000;
+
+    .text ALIGN(0x1000) : 
+    {
+        _loadStart = .; 
+        *(.boot)
+        . = ALIGN(4096);
+        pml4 = .;
+        . += 0x1000;
+        pdpt = .;
+        . += 0x1000;
+        pd = .;
+        . += 0x1000; 
+        boot_stack_start = .;
+        . += 0x200000;  /* we start out with a 2M stack */
+        boot_stack_end = .;
+        *(.text*)
+        *(.gnu.linkonce.t*)
+    }
+
+    .init ALIGN(0x1000) : AT(ALIGN(ADDR(.text) + SIZEOF(.text), 0x1000))
+    {
+        *(.init)
+        *(.gnu.linkonce.init)
+    }
+
+    .fini ALIGN(0x1000) : AT(ALIGN(ADDR(.init) + SIZEOF(.init), 0x1000))
+    {
+        *(.fini)
+        *(.gnu.linkonce.fini)
+    }
+
+    .init_array ALIGN(0x1000) : AT(ALIGN(ADDR(.fini) + SIZEOF(.fini),0x1000))
+    {
+        _init_array_start = .;
+        *(.init_array*)
+        _init_array_end = .;
+        *(.gnu.linkonce.init_array*)
+
+    }
+
+
+    .gcc_except_table ALIGN(0x1000) : AT(ALIGN(ADDR(.init_array) + SIZEOF(.init_array),0x1000))
+    {
+        *(.gcc_except_table*)
+        *(.gnu.linkonce.gcc_except*)
+    }
+
+    _data_start = . ;    
+
+    .data ALIGN(0x1000) : AT(ALIGN(ADDR(.gcc_except_table) + SIZEOF(.gcc_except_table),0x1000))
+    {
+        *(.data*)
+        *(.gnu.linkonce.d*)
+    }
+    
+    .rodata ALIGN(0x1000) : AT(ALIGN(ADDR(.data) + SIZEOF(.data), 0x1000))
+    {
+        *(.rodata*)
+        *(.gnu.linkonce.r*)
+    }
+    
+
+    .got ALIGN(0x1000) : AT(ALIGN(ADDR(.rodata)+SIZEOF(.rodata), 0x1000))
+    {
+        *(.got*)
+        *(.gnu.linkconce.got*)
+    }
+
+
+    _loadEnd = .; 
+    
+    .bss ALIGN(0x1000) : AT(ALIGN(ADDR(.got)+SIZEOF(.got),0x1000))
+    {
+        *(COMMON)
+        *(.bss*)
+        *(.gnu.linkonce.b*)
+    }
+    
+    _bssEnd = .; 
+
+    _data_end = .;
+    
+    /DISCARD/ :
+    {
+        *(.comment)
+        *(.eh_frame)
+    }
+}
+

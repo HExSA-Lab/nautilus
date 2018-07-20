@@ -301,12 +301,17 @@ static uint8_t serial_read_reg(struct serial_state *s, uint8_t offset)
 // return 0  => success
 // return 1  => does not exist
 static int serial_setup(struct serial_state *s)
-{     
+{
+#ifndef NAUT_CONFIG_GEM5
+    // this is broken in GEM5's emulation, actually causing it to crash...
+    // We force serial0 and nothing else
+  
     // check for existence by changing the scratchpad reg
     serial_write_reg(s,SCR,0xde);
     if (serial_read_reg(s,SCR) != 0xde) { 
 	return 1;
     }
+#endif
 
     // line control register
     // set DLAB so we can write divisor
@@ -1112,6 +1117,8 @@ void serial_init()
 #if !NAUT_CONFIG_SERIAL_DEBUGGER || NAUT_CONFIG_SERIAL_DEBUGGER_PORT!=1
     serial_init_one("serial0",COM1_ADDR,COM1_3_IRQ,0,&legacy[0]);
 #endif
+#ifndef NAUT_CONFIG_GEM5
+    // detection of serial ports broken on gem5 - we allow only serial0 to exist
 #if !NAUT_CONFIG_SERIAL_DEBUGGER || NAUT_CONFIG_SERIAL_DEBUGGER_PORT!=2
     serial_init_one("serial1",COM2_ADDR,COM2_4_IRQ,0,&legacy[1]);
 #endif
@@ -1121,7 +1128,8 @@ void serial_init()
 #if !NAUT_CONFIG_SERIAL_DEBUGGER || NAUT_CONFIG_SERIAL_DEBUGGER_PORT!=4
     serial_init_one("serial3",COM4_ADDR,COM2_4_IRQ,0,&legacy[3]);
 #endif
-
+#endif
+    
 #ifdef NAUT_CONFIG_SERIAL_REDIRECT
 #if NAUT_CONFIG_SERIAL_REDIRECT_PORT == 1 
     early_dev = &legacy[0];

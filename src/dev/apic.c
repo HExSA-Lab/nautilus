@@ -701,12 +701,20 @@ apic_dump (struct apic_dev * apic)
 		apic_read(apic, APIC_REG_TPR)
 	);
 	APIC_DEBUG("      PPR (Processor Priority Reg):   0x%08x\n",
-		apic_read(apic, APIC_REG_PPR)
+#ifndef NAUT_CONFIG_GEM5    // unimplemented in GEM5 - WTF?
+		   apic_read(apic, APIC_REG_PPR)
+#else
+		   0
+#endif
 	);
 	if (mode!=APIC_X2APIC) { 
 	    // reserved in X2APIC
 	    APIC_DEBUG("      APR (Arbitration Priority Reg): 0x%08x\n",
+#ifndef NAUT_CONFIG_GEM5    // unimplemented in GEM5 - WTF?
 		       apic_read(apic, APIC_REG_APR)
+#else
+		       0
+#endif
 		       );
 	}
 
@@ -1020,6 +1028,7 @@ static int calibrate_apic_timer_using_pit(struct apic_dev *apic, int mode)
     uint16_t pit_count;
     uint32_t tries = 0;
 
+
 try_once:
 
     // First determine the APIC's bus frequency by calibrating it
@@ -1201,8 +1210,12 @@ try_once:
 	goto try_once;
     }
 
+#ifdef NAUT_CONFIG_GEM5_FORCE_APIC_TIMER_CALIBRATION
+    apic->bus_freq_hz = NAUT_CONFIG_GEM5_APIC_BUS_FREQ_HZ;
+#else
     apic->bus_freq_hz = APIC_TIMER_DIV * apic_timer_ticks * TEST_TIME_SEC_RECIP;
-  
+#endif
+    
     APIC_DEBUG("Detected APIC 0x%x bus frequency as %lu Hz\n", apic->id, apic->bus_freq_hz);
 
     // picoseconds are used to try to keep precision for ns and cycle -> tick conversions
@@ -1210,8 +1223,12 @@ try_once:
 
     APIC_DEBUG("Detected APIC 0x%x real time per tick as %lu ps\n", apic->id, apic->ps_per_tick);
 
+#ifdef NAUT_CONFIG_GEM5_FORCE_APIC_TIMER_CALIBRATION
+    apic->cycles_per_us = NAUT_CONFIG_GEM5_APIC_CYCLES_PER_US;
+#else
     // us are used here to also keep precision for cycle->ns and ns->cycles conversions
     apic->cycles_per_us = ((end - start) * TEST_TIME_SEC_RECIP)/1000000ULL;
+#endif
 
     APIC_DEBUG("Detected APIC 0x%x cycles per us as %lu (core at %lu Hz)\n",apic->id,apic->cycles_per_us,apic->cycles_per_us*1000000); 
     
@@ -1267,7 +1284,16 @@ static void calibrate_apic_timer(struct apic_dev *apic)
     // Now we will determine the calibration of the TSC to APIC time
     ////////////////////////////////////////////////////////////////
 
-    const uint64_t num_trials = 50;
+// Gem5 is ungodly slow and will not show variation
+#ifdef NAUT_CONFIG_GEM5
+#define NUM_TRIALS 1
+#define LOOP_ITERS 1000
+#else
+#define NUM_TRIALS 50
+#define LOOP_ITERS 1000000
+#endif
+
+    const uint64_t num_trials = NUM_TRIALS;
     uint64_t tsc_diff;
     uint64_t apic_diff;
     uint64_t scale_sum = 0;
@@ -1288,16 +1314,17 @@ static void calibrate_apic_timer(struct apic_dev *apic)
 	apic_write(apic, APIC_REG_TMICT, 0xffffffff);
 	start = rdtsc();
 
+	
 	// now time a random amount of cycle burning
 	// with both the tsc and the apic timer
-	nk_simple_timing_loop(1000000);
+	nk_simple_timing_loop(LOOP_ITERS);
 
 	// now collect time using both
 	end = rdtsc();
 	tsc_diff = (end - start);
 
 	apic_diff = (0xffffffff - apic_read(apic, APIC_REG_TMCCT) + 1);
-	
+
 	scale = tsc_diff / apic_diff;
 	scale_sum += scale;
 

@@ -8,14 +8,45 @@ menu "Platform"
         default X86_64_HOST
 
         config X86_64_HOST
-            bool "x86_64 Host"
+            bool "x86_64 Host (including Intel Xeon Phi KNL)"
 
         config XEON_PHI
-            bool "Intel Xeon Phi Accelerator"
+            bool "Intel Xeon Phi Accelerator (KNC)"
     
         config HVM_HRT
-            bool "Hybrid Runtime AeroKernel (HRT)"
+            bool "Hybrid Runtime AeroKernel (HRT for HVM/Multiverse)"
 
+        config GEM5
+            bool "GEM5-compatible x86_64 kernel"
+
+        config GEM5_FORCE_APIC_TIMER_CALIBRATION
+	    depends on GEM5
+	    bool "Force APIC timer calibration"
+	    help
+	       Skip detection of APIC bus frequency, and CPU cycles
+	       per tick and simply set them to desired values.  Note
+	       that Gem5 gets timers right, but given how slow it is,
+	       it can feel ridiculous in real-time, especially
+	       when used interactively.
+
+	       DO NOT SET THIS IF YOU WANT ACCURATE SIMULATED TIME
+
+        config GEM5_APIC_BUS_FREQ_HZ
+	    depends on GEM5_FORCE_APIC_TIMER_CALIBRATION
+	    default 10000
+	    int "APIC bus frequency (HZ)"
+            help
+	       Desired APIC bus frequency
+	       The smaller this number is, the more frequent timer interrupts will be.
+	       If it is too small, you'll be in an interrupt storm.
+
+       config GEM5_APIC_CYCLES_PER_US
+	    depends on GEM5_FORCE_APIC_TIMER_CALIBRATION
+	    default 10
+	    int "CPU cycles per microsecond"
+            help
+	       The smaller this number is, the more frequent timer interrupts will be.
+	       If it is too small, you'll be in an interrupt storm.
     endchoice
 
     config MAX_CPUS

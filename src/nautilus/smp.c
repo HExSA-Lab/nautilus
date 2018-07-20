@@ -94,9 +94,12 @@ init_ap_area (struct ap_init_area * ap_area,
     ap_area->gdt[4]      = 0x0000ffff;
     ap_area->gdt[5]      = 0x00cf9200;
 
+    // bases and limits for GDT and GDT64 are computed in the copy
+    // that is placed in AP_INFO_AREA, hence not here
+
     /* long mode temporary GDT */
-    ap_area->gdt64[1]    = 0x00a09a0000000000;
-    ap_area->gdt64[2]    = 0x00a0920000000000;
+    ap_area->gdt64[1]    = 0x00af9a000000ffff;
+    ap_area->gdt64[2]    = 0x00af92000000ffff;
 
     /* pointer to BSP's PML4 */
     ap_area->cr3         = read_cr3();

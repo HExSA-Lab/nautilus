@@ -337,12 +337,14 @@ ioapic_init (struct sys_info * sys)
 	}
     }
 
+#ifndef NAUT_CONFIG_GEM5    // unsupported in Gem5, causes Gem5 to crash
     /* Enter Symmetric I/O mode */
     if (sys->pic_mode_enabled) {
         IOAPIC_PRINT("Disabling PIC mode\n");
         imcr_begin_sym_io();
     }
-
+#endif
+    
     return 0;
 }
 
