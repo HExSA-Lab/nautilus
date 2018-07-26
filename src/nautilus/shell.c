@@ -38,6 +38,7 @@
 #include <nautilus/msr.h>
 #include <nautilus/mtrr.h>
 #include <nautilus/backtrace.h>
+#include <nautilus/pmc.h>
 #include <dev/gpio.h>
 #include <dev/pci.h>
 #include <dev/apic.h>
@@ -680,6 +681,12 @@ static int handle_test(char *buf)
 	return 0;
     }
 #endif
+
+    int pmc_id;
+    if (sscanf(buf, "test pmc %d", &pmc_id) == 1) {
+        test_pmc(pmc_id);
+        return 0;
+    }
 
 #ifdef NAUT_CONFIG_TEST_BDWGC
     if (!strncasecmp(what,"bdwgc",5)) { 
@@ -1398,7 +1405,7 @@ static int handle_cmd(char *buf, int n)
     nk_vc_printf("blktest dev r|w start count\n");
     nk_vc_printf("blktest dev r|w start count\n");
     nk_vc_printf("test threads|groups|tasks|stop|iso|bdwgc|pdsgc|omp|ompbench|ndpc|nesl|\n");
-    nk_vc_printf("     udp_echo nic ip port num|cachepart ... | ...\n"); 
+    nk_vc_printf("     udp_echo nic ip port num|cachepart ... |pmc ... | ...\n"); 
     nk_vc_printf("vm name [embedded image]\n");
     nk_vc_printf("run path\n");
     return 0;

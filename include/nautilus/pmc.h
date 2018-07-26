@@ -8,14 +8,14 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
- * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
- * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
+ * Copyright (c) 2018, Kyle C. Hale <khale@cs.iit.edu>
+ * Copyright (c) 2018, The V3VEE Project  <http://www.v3vee.org> 
  *                     The Hobbes Project <http://xstack.sandia.gov/hobbes>
  * All rights reserved.
  *
- * Author: Kyle C. Hale <kh@u.northwestern.edu>
+ * Author: Kyle C. Hale <khale@cs.iit.edu>
  *
  * This is free software.  You are permitted to use,
  * redistribute, and modify it as specified in the file "LICENSE.txt".
@@ -25,11 +25,6 @@
 
 #include <nautilus/naut_types.h>
 
-
-#define NUM_PERF_SLOTS AMD_PERF_SLOTS
-
-#define PMC_SLOT_FREE 0
-#define PMC_SLOT_USED 1
 
 #define AMD_PERF_SLOTS    6
 #define AMD_PERF_CTL0_MSR 0xc0010200
@@ -46,63 +41,122 @@
 #define AMD_PERF_CTR4_MSR 0xc0010209
 #define AMD_PERF_CTR5_MSR 0xc001020b
 
-#define PERF_CTL_MSR_N(n) (AMD_PERF_CTL0_MSR + 2*(n))
-#define PERF_CTR_MSR_N(n) (AMD_PERF_CTR0_MSR + 2*(n))
+#define AMD_PERF_CTL_MSR_N(n) (AMD_PERF_CTL0_MSR + 2*(n))
+#define AMD_PERF_CTR_MSR_N(n) (AMD_PERF_CTR0_MSR + 2*(n))
+
+
+#define IA32_PMC_BASE         0x0c1
+#define IA32_PERFEVTSEL_BASE  0x186
+#define INTEL_PERF_CTL_MSR_N(n) (IA32_PERFEVTSEL_BASE + (n))
+#define INTEL_PERF_CTR_MSR_N(n) (IA32_PMC_BASE + (n))
 
 
 /* EVENTS */
 
-#define AMD_PMC_DCACHE_MISS  0x41 // PERF_CTL[5:0]
-#define AMD_PMC_ICACHE_MISS  0x81 // PERF_CTL[2:0]
-#define AMD_PMC_L2_MISS      0x7e // PERF_CTL[2:0]
-#define AMD_PMC_TLB_MISS     0x46 // PERF_CTL[2:0]
+/* Intel */
+#define INTEL_UNHALTED_CORE_CYCLES 0x00
+#define INTEL_INSTR_RETIRED        0x01
+#define INTEL_UNHALTED_REF_CYCLES  0x02
+#define INTEL_LLC_REF              0x03
+#define INTEL_LLC_MISS             0x04
+#define INTEL_BRANCH_RETIRED       0x05
+#define INTEL_BRANCH_MISS_RETIRED  0x06
 
-/* Counts the number of SMIs received. */
-#define AMD_PMC_SMI_CNT      0x2b // PERF_CTL[5:0]
+#define INTEL_NUM_ARCH_EVENTS 7
 
-
-/* The number of cycles the instruction fetcher is stalled for the core. This
- * may be for a variety of reasons such as branch predictor updates,
- * unconditional branch bubbles, far jumps and cache misses, instruction
- * fetching for the other core while instruction fetch for this core is
- * stalled, among others. May be overlapped by instruction dispatch stalls or
- * instruction execution, such that these stalls don't necessarily impact
- * performance. */
-#define AMD_PMC_IFETCH_STALL 0x87 // PERF_CTL[2:0]
-
-/* The number of branch instructions retired, of any type, that were not
- * correctly predicted.  This includes those for which prediction is not
- * attempted (far control transfers, exceptions and interrupts).
- */
-#define AMD_PMC_BRANCH_MISS  0xC3 // PERF_CTL[5:0]
-
-/* the number of instruction cache lines invalidated. a non-smc event is cmc
- * (cross modify- ing code), either from the other core of the compute unit or
- * another compute compute unit. */
-#define AMD_PMC_ICACHE_INV   0x8C // PERF_CTL[2:0]
+/* Broadwell-specific */
+#define INTEL_DTLB_LOAD_MISS_WALK  0x07
 
 
-typedef struct event_prop {
+/* AMD */
+#define AMD_DATA_CACHE_MISS      0x00
+#define AMD_INSTR_CACHE_MISS     0x01
+#define AMD_L2_CACHE_MISS        0x02
+#define AMD_UNIFIED_TLB_MISS     0x03
+#define AMD_SMI_INT              0x04
+#define AMD_INSTR_FETCH_STALLS   0x05
+#define AMD_BRANCH_MISS_RETIRED  0x06
+#define AMD_INSTR_CACHE_INVALS   0x07
+
+
+#define AMD_EXT_CNT_FLAG 0x1
+#define AMD_NB_CNT_FLAG  0x2
+#define AMD_L3_CNT_FLAG  0x4
+
+
+typedef struct amd_event_attr {
     const char * name;
+    uint8_t id;
+    uint8_t umask;
     uint8_t slot_mask;
-} event_prop_t;
+} amd_event_attr_t;
+
+typedef struct intel_event_attr {
+    const char * name;
+    uint8_t id;
+    uint8_t umask;
+    uint8_t bit_pos;
+} intel_event_attr_t;
+
+
+typedef struct event_platform_attrs {
+
+    union {
+        struct intel_event_attr * intel_attrs;
+        struct amd_event_attr * amd_attrs;
+    };
+
+} event_platform_attrs_t;
 
 typedef struct pmc_event {
     uint8_t assigned_idx;
     uint8_t enabled;
-    uint8_t id;
-    event_prop_t * prop;
+    uint8_t bound;
+
+    uint32_t sw_id;
+
+    uint64_t val;
+
+    const char * name;
+    event_platform_attrs_t attrs;
 } perf_event_t;
 
 
+typedef enum {
+    PMC_SLOT_FREE = 0,
+    PMC_SLOT_USED = 1,
+} slot_status_t;
+
 
 typedef struct perf_slot {
-    uint8_t status;
+    slot_status_t status;
     perf_event_t * event;
 } perf_slot_t;
 
 
-typedef struct pmc_ctl {
+typedef struct pmc_ctl_intel {
+    
+    union {
+        uint64_t val;
+        struct {
+            uint8_t event_select;
+            uint8_t unit_mask;
+            uint8_t usr : 1;
+            uint8_t os : 1;
+            uint8_t e : 1;
+            uint8_t pc : 1;
+            uint8_t intr : 1;
+            uint8_t any : 1;
+            uint8_t en : 1;
+            uint8_t inv : 1;
+            uint8_t cmask;
+            uint32_t rsvd1;
+        } __attribute__((packed));
+    } __attribute__((packed));
+} __attribute__((packed)) pmc_ctl_intel_t;
+
+
+typedef struct pmc_ctl_amd {
 
     union {
         uint64_t val;
@@ -124,23 +178,64 @@ typedef struct pmc_ctl {
             uint32_t rsvd3        : 22;
         } __attribute__((packed));
     } __attribute__((packed));
-} __attribute__((packed)) pmc_ctl_t;
+} __attribute__((packed)) pmc_ctl_amd_t;
 
 
-perf_event_t * assign_perf_event(uint8_t event_id, uint8_t unit_mask);
-void release_perf_event(perf_event_t * event);
+struct pmc_ops {
+    uint64_t (*read_ctr)(uint8_t idx);
+    void     (*write_ctr)(uint8_t idx, uint64_t val);
+    void     (*enable_ctr)(perf_event_t * event);
+    void     (*disable_ctr)(perf_event_t * event);
+    int      (*bind_ctr)(perf_event_t * event, int slot);
+    void     (*unbind_ctr)(int slot);
+    int      (*init)(struct pmc_info * pmc);
+    void     (*event_init)(perf_event_t * event);
 
-void enable_perf_event(perf_event_t * event);
-void enable_all_events(void);
-void disable_perf_event(perf_event_t * event);
-void disable_all_events(void);
-void reset_all_counters(void);
+    int      (*version)();
+    int      (*msr_cnt)();
+    int      (*msr_width)();
 
-uint64_t read_event_count(perf_event_t * event);
+};
 
-int pmc_init(void);
-void perf_report(void);
+typedef struct pmc_info {
 
+    int valid;
+
+    int hw_num_slots;
+    int sw_num_slots;
+    perf_slot_t * slots;
+
+    uint8_t version_id;
+    uint8_t msr_cnt;
+    uint8_t msr_width;
+
+    struct pmc_ops * ops;
+
+    union {
+        uint32_t intel_fl;
+        uint32_t amd_fl;
+    };
+
+} pmc_info_t;
+
+
+/* EXTERNAL INTERFACE */
+
+int      nk_pmc_init(struct naut_info * naut);
+
+perf_event_t * nk_pmc_create(uint32_t event_id);
+void           nk_pmc_destroy(perf_event_t * event);
+
+void     nk_pmc_start(perf_event_t * event);
+void     nk_pmc_stop(perf_event_t * event);
+
+uint64_t nk_pmc_read(perf_event_t * event);
+void     nk_pmc_write(perf_event_t * event, uint64_t val);
+
+void     nk_pmc_report(void);
+
+
+void test_pmc(int pmc_id);
 
 
 #endif /* !__PMC_H__! */

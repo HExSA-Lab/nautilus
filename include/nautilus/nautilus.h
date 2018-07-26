@@ -174,6 +174,7 @@ struct nk_int_info {
 
 struct hpet_dev;
 struct nk_locality_info;
+struct pmc_info;
 struct sys_info {
 
     struct cpu * cpus[NAUT_CONFIG_MAX_CPUS];
@@ -201,6 +202,8 @@ struct sys_info {
     struct nk_int_info int_info;
 
     struct nk_locality_info locality_info;
+
+    struct pmc_info * pmc_info;
 };
 
 struct naut_info {

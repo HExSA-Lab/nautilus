@@ -57,6 +57,7 @@
 #include <nautilus/fs.h>
 #include <nautilus/loader.h>
 #include <nautilus/shell.h>
+#include <nautilus/pmc.h>
 
 #ifdef NAUT_CONFIG_ENABLE_REMOTE_DEBUGGING 
 #include <nautilus/gdb-stub.h>
@@ -484,6 +485,8 @@ init (unsigned long mbd,
 #endif
 
     nk_loader_init();
+
+    nk_pmc_init(naut);
 
     launch_vmm_environment();
 
