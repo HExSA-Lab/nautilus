@@ -354,7 +354,7 @@ fpu_init_common (struct naut_info * naut)
  *
  */
 void
-fpu_init (struct naut_info * naut)
+fpu_init (struct naut_info * naut, int is_ap)
 {
     FPU_DEBUG("Probing for Floating Point/SIMD extensions...\n");
 
@@ -369,14 +369,18 @@ fpu_init (struct naut_info * naut)
         return;
     }
 
-    if (register_int_handler(XM_EXCP, xm_handler, NULL) != 0) {
-        ERROR_PRINT("Could not register excp handler for XM\n");
-        return;
-    }
+    if (is_ap == 0) {
 
-    if (register_int_handler(MF_EXCP, mf_handler, NULL) != 0) {
-        ERROR_PRINT("Could not register excp handler for MF\n");
-        return;
+        if (register_int_handler(XM_EXCP, xm_handler, NULL) != 0) {
+            ERROR_PRINT("Could not register excp handler for XM\n");
+            return;
+        }
+
+        if (register_int_handler(MF_EXCP, mf_handler, NULL) != 0) {
+            ERROR_PRINT("Could not register excp handler for MF\n");
+            return;
+        }
+
     }
 
 }

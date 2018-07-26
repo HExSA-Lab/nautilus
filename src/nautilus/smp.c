@@ -35,6 +35,7 @@
 #include <nautilus/atomic.h>
 #include <nautilus/numa.h>
 #include <nautilus/mm.h>
+#include <nautilus/fpu.h>
 #include <nautilus/percpu.h>
 #include <dev/ioapic.h>
 #include <dev/apic.h>
@@ -315,6 +316,8 @@ smp_ap_setup (struct cpu * core)
 	return -1;
     }
 #endif
+
+    fpu_init(nk_get_nautilus_info(), FPU_AP_INIT);
     
     apic_init(core);
 
@@ -341,14 +344,11 @@ smp_ap_setup (struct cpu * core)
 }
 
 
-extern void fpu_init(void);
 extern void nk_rand_init(struct cpu*);
 
 static void
 smp_ap_finish (struct cpu * core)
 {
-    fpu_init();
-
     nk_rand_init(core);
 
     nk_cpu_topo_discover(core);

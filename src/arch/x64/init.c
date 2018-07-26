@@ -310,6 +310,8 @@ init (unsigned long mbd,
 
     nk_acpi_init();
 
+    fpu_init(naut, FPU_BSP_INIT);
+
     /* enumerate CPUs and initialize them */
     smp_early_init(naut);
 
@@ -354,7 +356,6 @@ init (unsigned long mbd,
 
     apic_init(naut->sys.cpus[0]);
 
-    fpu_init(naut);
 
     nk_rand_init(naut->sys.cpus[0]);
 

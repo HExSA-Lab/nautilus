@@ -27,6 +27,9 @@
 extern "C" {
 #endif
 
+#define FPU_BSP_INIT 0
+#define FPU_AP_INIT  1
+
 #define MXCSR_IE 1
 #define MXCSR_DE 2
 #define MXCSR_ZE (1<<2)
@@ -45,7 +48,7 @@ extern "C" {
 
 struct naut_info;
 
-void fpu_init(struct naut_info *);
+void fpu_init(struct naut_info *, int is_ap);
 
 #ifdef __cplusplus
 }
