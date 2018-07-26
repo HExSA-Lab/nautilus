@@ -313,6 +313,11 @@ nk_pmc_report (void)
     pmc_info_t * pmc = nk_get_nautilus_info()->sys.pmc_info;
     perf_event_t * event = NULL;
 
+    if (!pmc) {
+        PMC_WARN("Cannot create report, PMC subsystem disabled\n");
+        return;
+    }
+
     PMC_INFO("++++++++ Perf Monitor Event Report ++++++++\n");
 
     for (i = 0; i < pmc->sw_num_slots; i++) {
@@ -347,6 +352,14 @@ intel_flags_init (pmc_info_t * pmc)
     cpuid(0xa, &ret);
 	pmc->intel_fl = ret.b;
 
+    if (intel_get_pmc_version() <  1) {
+        pmc->valid = 0;
+        PMC_WARN("Insufficient Intel PMC version to support perf counter subsystem\n");
+        return;
+    } else {
+        pmc->valid = 1;
+    }
+
 	PMC_DEBUG("Intel Arch PMC Events Supported:\n");
 
 	for (i = 0; i < INTEL_NUM_ARCH_EVENTS; i++) {
@@ -367,6 +380,10 @@ amd_flags_init (pmc_info_t * pmc)
     if (amd_has_ext_counters()) {
         pmc->amd_fl |= AMD_EXT_CNT_FLAG;
         PMC_DEBUG("  AMD Extended PMC counter regs available\n");
+        pmc->valid = 1;
+    } else {
+        PMC_WARN("Insufficient AMD PMC support for perf counter subsystem\n");
+        return;
     }
 
     if (amd_has_nb_counters()) {
@@ -676,8 +693,6 @@ platform_pmc_init (pmc_info_t * pmc)
 		return 0;
     }
 
-	pmc->valid = 1;
-
 	return pmc->ops->init(pmc);
 }
 
@@ -772,6 +787,11 @@ nk_pmc_create (uint32_t event_id)
     pmc_info_t * pmc = nk_get_nautilus_info()->sys.pmc_info;
     perf_event_t * event = NULL;
 
+    if (!pmc->valid) {
+        PMC_WARN("Cannot create perf counter, PMC system disabled\n");
+        return NULL;
+    }
+
     PMC_DEBUG("Creating event for SW event id 0x%02x\n", event_id);
 
     event = malloc(sizeof(perf_event_t));
@@ -827,7 +847,14 @@ nk_pmc_init (struct naut_info * naut)
     }
     memset(pmc, 0, sizeof(pmc_info_t));
 
+    naut->sys.pmc_info = pmc;
+
     platform_pmc_init(pmc);
+
+    if (!pmc->valid) {
+        PMC_WARN("Disabling PMC subsystem\n");
+        return 0;
+    }
 
     pmc->version_id = pmc->ops->version();
     pmc->msr_cnt    = pmc->ops->msr_cnt();
@@ -851,7 +878,6 @@ nk_pmc_init (struct naut_info * naut)
 	}
 	memset(pmc->slots, 0, sizeof(perf_slot_t)*pmc->sw_num_slots);
 
-    naut->sys.pmc_info = pmc;
 
     return 0;
 }
