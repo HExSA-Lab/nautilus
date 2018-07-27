@@ -305,7 +305,7 @@ buddy_alloc (struct buddy_mempool *mp, ulong_t order)
             continue;
         }
 
-        block = list_entry(list->next, struct block, link);
+        block = list_first_entry(list, struct block, link);
         list_del_init(&block->link);
         mark_allocated(mp, block);
 
