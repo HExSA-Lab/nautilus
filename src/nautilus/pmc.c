@@ -27,6 +27,7 @@
 #include <nautilus/pmc.h>
 #include <nautilus/mm.h>
 
+
 /*
  * PMC Subsystem
  * =============
@@ -135,7 +136,7 @@ static inline uint32_t
 intel_get_pmc_leaf (void)
 {
     cpuid_ret_t ret;
-    cpuid(0xa, &ret);
+    cpuid(IA32_PMC_LEAF, &ret);
     return ret.a;
 }
 
@@ -144,7 +145,7 @@ static inline uint32_t
 amd_get_pmc_leaf (void)
 {
     cpuid_ret_t ret;
-    cpuid(0x80000001, &ret);
+    cpuid(AMD_PMC_LEAF, &ret);
     return ret.c;
 }
 
@@ -173,7 +174,11 @@ amd_has_l3_counters (void)
 static int
 intel_get_pmc_version (void)
 {
-    return intel_get_pmc_leaf() & 0xff;
+    if (cpuid_leaf_max() >= IA32_PMC_LEAF) {
+        return intel_get_pmc_leaf() & 0xff;
+    } 
+
+    return 0;
 }
 
 
@@ -349,14 +354,14 @@ intel_flags_init (pmc_info_t * pmc)
 {
 	cpuid_ret_t ret;
 	int i;
-    cpuid(0xa, &ret);
-	pmc->intel_fl = ret.b;
 
     if (intel_get_pmc_version() <  1) {
         pmc->valid = 0;
         PMC_WARN("Insufficient Intel PMC version to support perf counter subsystem\n");
         return;
     } else {
+        cpuid(IA32_PMC_BASE, &ret);
+        pmc->intel_fl = ret.b;
         pmc->valid = 1;
     }
 
@@ -377,7 +382,7 @@ static void
 amd_flags_init (pmc_info_t * pmc)
 {
     // TODO: extended register caps here
-    if (amd_has_ext_counters()) {
+    if (cpuid_leaf_max() >= AMD_PMC_LEAF && amd_has_ext_counters()) {
         pmc->amd_fl |= AMD_EXT_CNT_FLAG;
         PMC_DEBUG("  AMD Extended PMC counter regs available\n");
         pmc->valid = 1;
@@ -877,7 +882,6 @@ nk_pmc_init (struct naut_info * naut)
 		return -1;
 	}
 	memset(pmc->slots, 0, sizeof(perf_slot_t)*pmc->sw_num_slots);
-
 
     return 0;
 }

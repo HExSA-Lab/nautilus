@@ -26,6 +26,7 @@
 #include <nautilus/naut_types.h>
 
 
+#define AMD_PMC_LEAF      0x80000001
 #define AMD_PERF_SLOTS    6
 #define AMD_PERF_CTL0_MSR 0xc0010200
 #define AMD_PERF_CTL1_MSR 0xc0010202
@@ -44,6 +45,7 @@
 #define AMD_PERF_CTL_MSR_N(n) (AMD_PERF_CTL0_MSR + 2*(n))
 #define AMD_PERF_CTR_MSR_N(n) (AMD_PERF_CTR0_MSR + 2*(n))
 
+#define IA32_PMC_LEAF 0xa
 
 #define IA32_PMC_BASE         0x0c1
 #define IA32_PERFEVTSEL_BASE  0x186
