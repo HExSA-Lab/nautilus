@@ -251,6 +251,15 @@ multiboot_parse (ulong_t mbd, ulong_t magic)
                 break;
 
             }
+            case MULTIBOOT_TAG_TYPE_MODULE: {
+                struct multiboot_tag_module * mod = (struct multiboot_tag_module*)tag;
+                DEBUG_PRINT("Found module: \n");
+                DEBUG_PRINT("  type:     0x%08x\n", mod->type);
+                DEBUG_PRINT("  size:     0x%08x\n", mod->size);
+                DEBUG_PRINT("  mod_start 0x%08x\n", mod->mod_start);
+                DEBUG_PRINT("  mod_end   0x%08x\n", mod->mod_end);
+                break;
+            }
 #ifdef NAUT_CONFIG_HVM_HRT
             case MULTIBOOT_TAG_TYPE_HRT: {
                 struct multiboot_tag_hrt * hrt = (struct multiboot_tag_hrt*)tag;
