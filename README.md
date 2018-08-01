@@ -75,6 +75,10 @@ $> ln -s /usr/bin/grub2-mkrescue /usr/bin/grub-mkrescue
 
 # Running and Debugging under QEMU
 
+Here's an example:
+
+[![asciicast](https://asciinema.org/a/xT76jwP0Qe9H7w3nKAk7gkTmv.png =400x)](https://asciinema.org/a/xT76jwP0Qe9H7w3nKAk7gkTmv)
+
 Recommended:
 
 `$> qemu-system-x86_64 -cdrom nautilus.iso -m 2048`
@@ -250,7 +254,7 @@ Project, which is funded by the 2013 Exascale Operating and Runtime Systems
 Program under the Office of Advanced Scientific Computing Research in the DOE
 Office of Science. Sandia National Laboratories is a multi-program laboratory
 managed and operated by Sandia Corporation, a wholly owned subsidiary of
-Lockheed Martin Corporation, for the U.S. Department of Energyâ€™s National
+Lockheed Martin Corporation, for the U.S. Department of Energy’s National
 Nuclear Security Administration under contract DE-AC04-94AL85000.
 
 Kyle C. Hale (c) 2018 
