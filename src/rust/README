@@ -1,0 +1,135 @@
+How to use Rust code in NK, plus an example.
+
+STRUCTURE
+---------
+
+Rust code lives under src/rust.   What's immediately under that
+tree is glue code, with an example Rust module (src/rust/example).  
+
+
+SETUP
+-----
+
+DO NOT INSTALL "RELEASE" VERSIONS OF RUST.
+
+YOU NEED TO INSTALL A PER-USER COPY OF THE NIGHTLY BUILD TO HAVE THE
+RIGHT FEATURES.
+
+Yes, this fantastic evidence of stability of this tool for kernel
+development...
+
+Install rustup (http://rustup.rs), currently via:
+
+$ curl https://sh.rustup.rs -sSf | sh
+
+This will install tools in ~/.cargo/bin, which you will want to
+put on your path.
+
+$ source ~/.cargo/env
+
+You will want a file in the top level Rust module's directory called
+"rust-toolchain" whose contents should be "nightly"
+
+Also install the cargo xbuild so it can cross-compile Rust-dependent
+libraries for us:
+
+$ cargo install cargo-xbuild
+
+And we need the rust sources for it to work on:
+
+$ rustup component add rust-src
+
+
+
+CREATE A NEW RUST MODULE
+------------------------
+
+The basic idea here is that we will build a static library in Rust
+and then link that with NK.     Do this under src/rust.
+
+First create a new rust library:
+
+$ cargo new module_name --lib
+
+Now add the module subdir to src/rust/Makefile as described there.
+
+$ cd module_name
+
+Make sure that it will be built with the nightly toolchain:
+
+$ cat > rust-toolchain
+nightly
+^D
+
+Link the relevant target spec from our configs, for example:
+
+$ ln -s ../configs/x86_64-nautilus-core-kernel.json .
+
+The core-kernel config is for core kernel features.  The main thing
+here is that it does not use any floating point (including SSE for
+integer math), and that it does not use red-zone.  The run-time and
+app configs are for run-times and application code that will use
+floating point.
+
+Modify Cargo.toml in line with our examples:
+
+=> make the crate type staticlib
+=> disable unwinding
+
+modify src/lib.rs in line with our examples
+
+=> add features for panic handler, start, etc [this required NIGHTLY]
+=> provide panic handler, invoking nk_panic() if you would like
+=> assert no_std (stdlib?)
+=> possibly assert no_builtins (although it still does some...)
+
+Any functon you want to export has to look like:
+
+#[no_mangle]
+pub extern "C" fn functionaname(...) -> ... { ... }
+
+Copy glue.c and Makefile from the example module:
+
+$ cp ../example/glue.c ../example/Makefile .
+
+The glue code here (and in the top-level rust directory) force
+the damned linkage to work as you would expect despite Rust's
+static library model.
+
+Modify Makefile to reflect your module name and directory locations
+(this is currently gruesomely hacked in the KBuild process, which
+assumes that all commands run from the root of the project tree).
+
+Modify glue.c to reflect your exported symbols.  Push every exported
+function, variable, or pointer through nk_rust_link_fakery.  The types
+do not matter.  The function will never be called.  We just do not
+want the linker to lose anything, and we cannot use --whole-archive
+here because Rust itself exports unmangled conflicting symbols like
+memmove that will break the build at the parent directory. 
+
+
+CALLING INTO THE RUST MODULE
+----------------------------
+
+The only thing tested at this point is invoking a trivial Rust
+function from C. The "test rust" command from the shell will do this.
+The relevant code from shell.c shows how to do it.   In particular:
+declare the function's C prototype and call it.
+
+We do not yet know how to do:
+
+1. Nontrivial functions
+2. Rust->C callbacks
+3. Access to C structures/pointers from Rust (Swig?)
+4. Threads ?!
+5. All other things
+
+
+BUILDING
+--------
+
+Enable Rust support in make menuconfig -> Build -> Enable Rust support
+
+Build NK as usual.   Run "test rust" to see if the example works.
+
+

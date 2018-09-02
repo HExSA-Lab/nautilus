@@ -1,0 +1,16 @@
+[package]
+name = "example"  # this is for core-kernel
+version = "0.0.0"
+authors = ["Peter Dinda <pdinda@northwestern.edu>"]
+
+[lib]
+crate-type = ["staticlib"]
+
+
+[profile.dev]
+panic = "abort"    # no stack unwind on rust panic
+
+[profile.release]
+panic = "abort"    # no stuck unwind on rust panic
+
+[dependencies]

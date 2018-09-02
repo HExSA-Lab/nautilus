@@ -677,6 +677,16 @@ static int handle_test(char *buf)
 	return test_stop();
     }
 
+#ifdef NAUT_CONFIG_RUST_SUPPORT
+    if (!strncasecmp(what,"rust",4)) {
+	int nk_rust_example(int,int);
+	nk_vc_printf("Testing rust\n");
+	int sum = nk_rust_example(1,1);
+	nk_vc_printf("Rust indicates that 1+1=%d\n",sum);
+	return 0;
+    }
+#endif
+
 #ifdef NAUT_CONFIG_ISOCORE
     if (!strncasecmp(what,"iso",3)) { 
 	test_iso();

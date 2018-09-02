@@ -13,3 +13,4 @@ obj-y += \
 obj-$(NAUT_CONFIG_CXX_SUPPORT) += cxx/
 obj-$(NAUT_CONFIG_LEGION_RT) += legion_runtime/
 obj-$(NAUT_CONFIG_LOAD_LUA) += lua_src/
+obj-$(NAUT_CONFIG_RUST_SUPPORT) += rust/
