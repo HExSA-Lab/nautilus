@@ -163,6 +163,12 @@ menu "Build"
         Compiles the Nautilus kernel with C++ support. Necessary for,
         e.g. C++ HRT integration
 
+    config RUST_SUPPORT
+      bool "Enable Rust support"
+      default n
+      help
+        Adds support for Rust code, and builds the Rust example and Shell command
+
     config TOOLCHAIN_ROOT
       string "Toolchain Root"
       help 
