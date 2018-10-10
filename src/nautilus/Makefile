@@ -50,7 +50,8 @@ obj-y += \
         dtoa.o \
 	module.o \
 	linker.o \
-	prog.o
+	prog.o \
+	getopt.o 
 
 obj-$(NAUT_CONFIG_PROFILE) += instrument.o
 obj-$(NAUT_CONFIG_XEON_PHI) += sfi.o
