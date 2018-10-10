@@ -24,6 +24,7 @@
 #include <nautilus/nautilus.h>
 #include <nautilus/multiboot2.h>
 #include <nautilus/mb_utils.h>
+#include <nautilus/naut_string.h>
 #include <nautilus/prog.h>
 #include <nautilus/linker.h>
 
@@ -31,6 +32,58 @@
 #undef DEBUG_PRINT
 #define DEBUG_PRINT(fmt, args...)
 #endif
+
+#define MAX_ARGV_LEN 1024
+#define MAX_ARG_LEN 64
+
+static void
+init_argv (struct nk_prog_info * pr, struct multiboot_mod * mod)
+{
+    char ** argv = NULL;
+    char * tmp   = NULL;
+    char tmp_cmdline[MAX_ARGV_LEN];
+    unsigned len = strnlen(mod->cmdline, MAX_ARGV_LEN);
+    int argc     = 0;
+    int i = 0;
+
+    memcpy(tmp_cmdline, mod->cmdline, len + 1);
+
+    tmp = strtok(tmp_cmdline, " ");
+
+    while (tmp) {
+        argc++;
+        tmp = strtok(NULL, " ");
+    }
+
+    argv = malloc(sizeof(char*)*(argc+1));
+    if (!argv) {
+        ERROR_PRINT("Could not allocate argv array\n");
+        return;
+    }
+    memset(argv, 0, sizeof(char*)*(argc+1));
+
+    memcpy(tmp_cmdline, mod->cmdline, len + 1);
+
+    tmp = strtok(tmp_cmdline, " ");
+
+    while (tmp) {
+        int arglen = strnlen(tmp, MAX_ARG_LEN) + 1;
+        char * arg = malloc(arglen);
+        if (!arg) {
+            ERROR_PRINT("Could not allocate arg %d\n", i);
+        }
+
+        memset(arg, 0, arglen);
+        memcpy(arg, tmp, arglen);
+
+        argv[i++] = arg;
+
+        tmp = strtok(NULL, " ");
+    }
+
+    pr->name = argv[0];
+}
+
 
 int
 nk_prog_init (struct naut_info * naut) 
@@ -50,8 +103,9 @@ nk_prog_init (struct naut_info * naut)
     list_for_each(tmp, &naut->sys.mb_info->mod_list) {
         mod = list_entry(tmp, struct multiboot_mod, elm);
         if (mod->type == MOD_PROGRAM) {
-            prog->mod = mod;
+            prog->mod        = mod;
             prog->entry_addr = (void*) mod->start + *((uint64_t*) (mod->start + 0x18));
+            init_argv(prog, mod);
             DEBUG_PRINT("Program entry addr: %p\n", (void*)prog->entry_addr);
         }
     }
@@ -71,7 +125,7 @@ have_valid_prog (struct naut_info * naut)
 int
 nk_prog_run (struct naut_info * naut)
 {
-    void (*func)(void);
+    void (*func)(int argc, char ** argv);
 
     if (!have_valid_prog(naut)) {
         nk_vc_printf("No valid program found\n");
@@ -85,9 +139,9 @@ nk_prog_run (struct naut_info * naut)
 
     func = naut->sys.prog_info->entry_addr;
 
-    DEBUG_PRINT("Running program at entry address: %p\n", (void*)func);
+    DEBUG_PRINT("Running program (%s) at entry address: %p\n", naut->sys.prog_info->name, (void*)func);
 
-    func();
+    func(naut->sys.prog_info->argc, naut->sys.prog_info->argv);
 
     return 0;
 }

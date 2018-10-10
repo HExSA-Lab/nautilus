@@ -195,6 +195,8 @@ char *dtoa_r(double x, int mode, int ndigits, int *decpt, int *sign, char **rve,
 int  dtoa_printf_helper(double x, char pf_mode, int ndigits, int prec, char *buf, size_t blen);
 double strtod(const char *s, char **se);
 
+char * strtok(char *s, const char *delim);
+
 #ifdef __cplusplus
 }
 #endif

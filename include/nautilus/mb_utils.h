@@ -46,6 +46,7 @@ struct multiboot_mod {
     addr_t start;
     addr_t end;
     mod_type_t type;
+    char * cmdline;
     struct list_head elm;
 };
 

@@ -30,6 +30,8 @@ struct nk_prog_info {
     char * name;
     struct multiboot_mod * mod;
     void * entry_addr;
+    int argc;
+    char ** argv;
 };
 
 int handle_prog_cmd (char * buf);

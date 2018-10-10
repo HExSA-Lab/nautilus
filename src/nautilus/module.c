@@ -54,8 +54,9 @@ nk_register_mod (struct multiboot_info * mb_info, struct multiboot_tag_module * 
 
     memset(mod, 0, sizeof(struct multiboot_mod));
 
-    mod->start = m->mod_start;
-    mod->end   = m->mod_end;
+    mod->start   = m->mod_start;
+    mod->end     = m->mod_end;
+    mod->cmdline = m->cmdline;
 
     cursor = (uint32_t*)mod->start;
 
