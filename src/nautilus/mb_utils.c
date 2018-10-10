@@ -27,7 +27,6 @@
 #include <nautilus/naut_types.h>
 #include <nautilus/paging.h>
 #include <nautilus/mm.h>
-#include <nautilus/cmd_parser.h>
 #include <nautilus/elf.h>
 #include <nautilus/module.h>
 
@@ -273,7 +272,7 @@ multiboot_parse (ulong_t mbd, ulong_t magic)
                 struct multiboot_tag_string* cmd = (struct multiboot_tag_string*)tag;
                 mb_info->boot_cmd_line = mm_boot_alloc(cmd->size);
                 strncpy(mb_info->boot_cmd_line, cmd->string, cmd->size);
-                DEBUG_PRINT("Cmd line: %s\n", mb_info->boot_cmd_line);
+                DEBUG_PRINT("Kernel Cmd line: %s\n", mb_info->boot_cmd_line);
                 break;
                                              }
 
@@ -305,6 +304,7 @@ multiboot_parse (ulong_t mbd, ulong_t magic)
                 DEBUG_PRINT("  size:     0x%08x\n", mod->size);
                 DEBUG_PRINT("  mod_start 0x%08x\n", mod->mod_start);
                 DEBUG_PRINT("  mod_end   0x%08x\n", mod->mod_end);
+                DEBUG_PRINT("  args:     %s\n",     mod->cmdline);
                 if (nk_register_mod(mb_info, mod) != 0) {
                     ERROR_PRINT("Could not register multiboot module\n");
                     return NULL;
