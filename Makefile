@@ -7,6 +7,7 @@ NAME=Nautilus
 
 ISO_NAME:=nautilus.iso
 BIN_NAME:=nautilus.bin
+SYM_NAME:=nautilus.syms
 
 
 
@@ -692,7 +693,10 @@ endif
 $(BIN_NAME): $(nautilus)
 	$(call if_changed_rule,nautilus__)
 
-nautilus: $(BIN_NAME)
+$(SYM_NAME): $(BIN_NAME)
+	@scripts/gen_sym_file.sh $(BIN_NAME) tmp.sym
+
+nautilus: $(BIN_NAME) $(SYM_NAME)
 
 # New function to run a Python script which generates Lua test code,
 # addition of a separate flag (LUA_BUILD_FLAG) which is set to indicate
@@ -712,7 +716,7 @@ isoimage: nautilus
 ifdef NAUT_CONFIG_LUA_TEST
 	$(call lua__)
 endif
-	cp $(BIN_NAME) iso/boot
+	cp $(BIN_NAME) $(SYM_NAME) iso/boot
 	$(GRUBMKRESCUE) -o $(ISO_NAME) iso
 
 nautilus.asm: $(BIN_NAME)
@@ -797,7 +801,7 @@ depend dep:
 
 # Directories & files removed with 'make clean'
 CLEAN_DIRS  += $(MODVERDIR)
-CLEAN_FILES +=	 nautilus.asm $(ISO_NAME) $(BIN_NAME) \
+CLEAN_FILES +=	 nautilus.asm $(SYM_NAME) $(ISO_NAME) $(BIN_NAME) \
                  .tmp_version .tmp_nautilus*
 
 # Directories & files removed with 'make mrproper'

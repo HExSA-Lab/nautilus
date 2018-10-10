@@ -39,6 +39,8 @@
 #include <nautilus/mtrr.h>
 #include <nautilus/backtrace.h>
 #include <nautilus/pmc.h>
+#include <nautilus/linker.h>
+#include <nautilus/prog.h>
 #include <dev/gpio.h>
 #include <dev/pci.h>
 #include <dev/apic.h>
@@ -1385,6 +1387,7 @@ static int handle_cmd(char *buf, int n)
     nk_vc_printf("shell name\n");
     nk_vc_printf("regs [t]\npeek [bwdq] x | mem x n [s] | mt x | poke [bwdq] x y\nin [bwd] addr | out [bwd] addr data\nrdmsr x [n] | wrmsr x y\ncpuid f [n] | cpuidsub f s | mtrrs [cpu] | int [cpu] v\n");
     nk_vc_printf("meminfo [detail]\n");
+    nk_vc_printf("prog run | prog info\n");
     nk_vc_printf("reap | net ...\n");
 #ifdef NAUT_CONFIG_CACHEPART
     nk_vc_printf("cachepart\n");
@@ -1885,6 +1888,11 @@ static int handle_cmd(char *buf, int n)
 		return 0;
 	}
 #endif
+
+  if (!strncasecmp(buf,"prog",4)) {
+      handle_prog_cmd(buf);
+      return 0;
+  }
 
   nk_vc_printf("Don't understand \"%s\"\n",buf);
   return 0;

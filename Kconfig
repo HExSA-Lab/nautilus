@@ -920,6 +920,13 @@ config DEBUG_LOADER
         help
                 Turn on debug prints for the loader
 
+config DEBUG_LINKER
+        bool "Debug linker"
+        depends on DEBUG_PRINTS
+        default n
+        help
+                Turn on debug prints for the dynamic linker
+
 config DEBUG_PMC
         bool "Debug performance counters"
         depends on DEBUG_PRINTS

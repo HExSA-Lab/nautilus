@@ -168,9 +168,9 @@ mm_dump_page_map (void)
 int 
 mm_boot_init (ulong_t mbd)
 {
-    addr_t kern_start = (addr_t)&_loadStart;
-    addr_t kern_end   = (addr_t)&_bssEnd;
-    addr_t pm_start   = round_up(kern_end, PAGE_SIZE);
+    addr_t kern_start     = (addr_t)&_loadStart;
+    addr_t kern_end       = multiboot_get_modules_end(mbd);
+    addr_t pm_start       = round_up(kern_end, PAGE_SIZE);
     boot_mem_info_t * mem = &bootmem;
     ulong_t npages;
     ulong_t pm_len;

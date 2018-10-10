@@ -8,14 +8,15 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
- * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
+ * Copyright (c) 2015, Kyle C. Hale <khale@cs.iit.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
  *                     The Hobbes Project <http://xstack.sandia.gov/hobbes>
  * All rights reserved.
  *
- * Author: Kyle C. Hale <kh@u.northwestern.edu>
+ * Authors: Kyle C. Hale <khale@cs.iit.edu>
+ *          Conghao Liu <cliu115@hawk.iit.edu>
  *
  * This is free software.  You are permitted to use,
  * redistribute, and modify it as specified in the file "LICENSE.txt".
@@ -26,7 +27,11 @@
 #include <nautilus/naut_types.h>
 #include <nautilus/paging.h>
 #include <nautilus/mm.h>
+#include <nautilus/cmd_parser.h>
+#include <nautilus/elf.h>
+#include <nautilus/module.h>
 
+extern addr_t _bssEnd;
 
 uint_t 
 multiboot_get_size (ulong_t mbd)
@@ -108,6 +113,46 @@ multiboot_get_sys_ram (ulong_t mbd)
     return sum;
 }
 
+
+/* 
+ * We cannot place the page map directly after the loaded kernel if the
+ * bootloader has placed modules in that memory region. Unfortunately, GRUB
+ * doesn't appear to include this when it's marking memory regions as reserved.
+ * To figure out where we should layout the page map, we thus need to manually
+ * scan the module adderesses and make sure we don't use the memory that they
+ * occupy.
+ *
+ */
+addr_t
+multiboot_get_modules_end (ulong_t mbd)
+{
+    struct multiboot_tag * tag;
+    addr_t addr = (addr_t)&_bssEnd;
+
+    if (mbd & 7) {
+        panic("ERROR: Unaligned multiboot info struct\n");
+    }
+
+    tag = (struct multiboot_tag*)(mbd+8);
+
+    while (tag->type != MULTIBOOT_TAG_TYPE_END) {
+
+        tag = (struct multiboot_tag*)((multiboot_uint8_t*)tag + ((tag->size+7)&~7));
+
+        if (tag->type == MULTIBOOT_TAG_TYPE_MODULE) {
+
+            struct multiboot_tag_module * mod = (struct multiboot_tag_module*)tag;
+            if (mod->mod_end > addr) {
+                addr = mod->mod_end;
+                DEBUG_PRINT("Increasing kern end to %p\n", (void*)addr);
+            }
+        }
+    }
+
+    return addr;
+}
+
+
 extern void* mm_boot_alloc(size_t);
 
 
@@ -171,6 +216,8 @@ multiboot_parse (ulong_t mbd, ulong_t magic)
         return NULL;
     }
     memset(mb_info, 0, sizeof(struct multiboot_info));
+
+    INIT_LIST_HEAD(&mb_info->mod_list);
 
     if (magic != MULTIBOOT2_BOOTLOADER_MAGIC) {
         panic("ERROR: Not loaded by multiboot compliant bootloader\n");
@@ -258,6 +305,10 @@ multiboot_parse (ulong_t mbd, ulong_t magic)
                 DEBUG_PRINT("  size:     0x%08x\n", mod->size);
                 DEBUG_PRINT("  mod_start 0x%08x\n", mod->mod_start);
                 DEBUG_PRINT("  mod_end   0x%08x\n", mod->mod_end);
+                if (nk_register_mod(mb_info, mod) != 0) {
+                    ERROR_PRINT("Could not register multiboot module\n");
+                    return NULL;
+                }
                 break;
             }
 #ifdef NAUT_CONFIG_HVM_HRT

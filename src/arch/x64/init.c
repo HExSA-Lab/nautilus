@@ -56,8 +56,10 @@
 #include <nautilus/netdev.h>
 #include <nautilus/fs.h>
 #include <nautilus/loader.h>
+#include <nautilus/linker.h>
 #include <nautilus/shell.h>
 #include <nautilus/pmc.h>
+#include <nautilus/prog.h>
 
 #ifdef NAUT_CONFIG_ENABLE_REMOTE_DEBUGGING 
 #include <nautilus/gdb-stub.h>
@@ -484,6 +486,9 @@ init (unsigned long mbd,
     nk_fs_fat32_attach("ramdisk0","rootfs", 1);
 #endif
 #endif
+
+    nk_linker_init(naut);
+    nk_prog_init(naut);
 
     nk_loader_init();
 
