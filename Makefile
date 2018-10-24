@@ -187,8 +187,9 @@ CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
 	  else if [ -x /bin/bash ]; then echo /bin/bash; \
 	  else echo sh; fi ; fi)
 
-HOSTCC  	= gcc
-HOSTCXX  	= g++
+HOSTCC      := gcc
+HOSTCXX     := g++
+
 HOSTCFLAGS	= -Wall -Wstrict-prototypes  -fomit-frame-pointer \
 			-Wno-unused -Wno-format-security -U_FORTIFY_SOURCE
 HOSTCXXFLAGS	= -O
@@ -277,10 +278,7 @@ include  $(srctree)/scripts/Kbuild.include
 
 # Make variables (CC, etc...)
 
-AS		= $(CROSS_COMPILE)as
-LD		= $(CROSS_COMPILE)ld
-CC		= $(CROSS_COMPILE)gcc
-CXX             = $(CROSS_COMPILE)g++
+
 AR		= $(CROSS_COMPILE)ar
 NM		= $(CROSS_COMPILE)nm
 STRIP		= $(CROSS_COMPILE)strip
@@ -309,15 +307,35 @@ NAUT_INCLUDE      := -D__NAUTILUS__ -Iinclude \
 
 CPPFLAGS        := $(NAUT_INCLUDE) -D__NAUTILUS__
 
-COMMON_FLAGS :=            -O2 \
-			   -fno-omit-frame-pointer \
+
+ifneq ($(USE_CLANG)a, a)
+  AS		= $(CROSS_COMPILE)llvm-as
+  LD		= $(CROSS_COMPILE)ld
+  CC		= $(CROSS_COMPILE)clang
+  CXX             = $(CROSS_COMPILE)clang++
+else
+  AS		= $(CROSS_COMPILE)as
+  LD		= $(CROSS_COMPILE)ld
+  CC		= $(CROSS_COMPILE)gcc
+  CXX             = $(CROSS_COMPILE)g++
+endif
+
+
+COMMON_FLAGS :=-fno-omit-frame-pointer \
 			   -ffreestanding \
 			   -fno-stack-protector \
 			   -fno-strict-aliasing \
                            -fno-strict-overflow \
-                           -fno-delete-null-pointer-checks \
 			   -mno-red-zone \
-			   -mcmodel=large
+			   -mcmodel=large 
+
+
+ifeq ($(USE_CLANG)a, a)
+COMMON_FLAGS += -O2 \
+				-fno-delete-null-pointer-checks
+else 
+COMMON_FLAGS += -O1
+endif
 
 #
 # Add these for more recent compilers to avoid having
@@ -337,42 +355,35 @@ COMMON_FLAGS :=            -O2 \
 CXXFLAGS := $(COMMON_FLAGS) \
 			-fno-exceptions \
 			-fno-rtti 
-			#-mno-3dnow
-			#-mno-sse \
-			#-mno-sse2 \
-			#-mno-sse3 \
-			#-mno-mmx \
 
-#CFLAGS 		:=  -fno-stack-protector -Wall -Werror  -mno-red-zone -fno-common 
 CFLAGS:=   $(COMMON_FLAGS) \
 		   -Wall \
 		   -Wno-unused-function \
 		   -Wno-unused-variable \
-		   -Wno-frame-address \
 		   -fno-common \
-		   -std=gnu99 \
-		    $(call cc-option, -Wno-unused-but-set-variable,) \
-	           -Wstrict-overflow=5
-		   #-mno-3dnow \
-		   #-Werror \
-		   #-Wmissing-prototypes \
-		   #-Wstrict-prototypes \
+		   -Wstrict-overflow=5 
 
-#
 #                   -Wextra \
 #                   -Wpedantic \
 #
 
-# NOTE: We MUST have max-page-size set to this here. Otherwise things
-# go off the rails for the Grub multiboot setup because the linker
-# does strange things...
-LDFLAGS         := -z max-page-size=0x1000
-
+# if we're using Clang, we can't use these
+ifeq ($(USE_CLANG)a, a)
+CFLAGS += -std=gnu99 \
+		  -Wno-frame-address \
+		  $(call cc-option, -Wno-unused-but-set-variable,) 
+endif
 
 ifeq ($(call cc-option-yn, -fgnu89-inline),y)
 CFLAGS		+= -fgnu89-inline
 endif
 
+
+
+# NOTE: We MUST have max-page-size set to this here. Otherwise things
+# go off the rails for the Grub multiboot setup because the linker
+# does strange things...
+LDFLAGS         := -z max-page-size=0x1000
 AFLAGS		:= 
 
 # Read KERNELRELEASE from .kernelrelease (if it exists)
@@ -519,6 +530,8 @@ else
 # Dummy target needed, because used as prerequisite
 include/autoconf.h: ;
 endif
+
+
 
 ifdef NAUT_CONFIG_XEON_PHI
 AS		= $(CROSS_COMPILE)k1om-mpss-linux-as
