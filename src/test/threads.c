@@ -273,12 +273,12 @@ int test_threads()
     nk_vc_printf("Fork-join test of %lu passes with %lu threads each: %s\n", 
 		 NUM_PASSES,NUM_THREADS, fork_join ? "FAIL" : "PASS");
 
-    recursive_create_join = test_recursive_create_join(0,0);
+    recursive_create_join = test_recursive_create_join();
 
     nk_vc_printf("Recursive create-join test of %lu passes with depth %lu (%lu threads): %s\n", 
 		 NUM_PASSES,DEPTH, 1ULL<<(DEPTH+1),recursive_create_join ? "FAIL" : "PASS");
 
-    recursive_fork_join = test_recursive_fork_join(0,0);
+    recursive_fork_join = test_recursive_fork_join();
 
     nk_vc_printf("Recursive fork-join test of %lu passes with depth %lu (%lu threads): %s\n", 
 		 NUM_PASSES,DEPTH, 1ULL<<(DEPTH+1),recursive_fork_join ? "FAIL" : "PASS");

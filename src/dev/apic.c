@@ -104,7 +104,7 @@ static apic_mode_t get_mode()
 static int set_mode(struct apic_dev *apic, apic_mode_t mode)
 {
     uint64_t val;
-    apic_mode_t cur = get_mode(apic);
+    apic_mode_t cur = get_mode();
 
     if (mode==cur) { 
 	apic->mode = mode;

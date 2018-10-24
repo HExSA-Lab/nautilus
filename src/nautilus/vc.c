@@ -1254,7 +1254,7 @@ static void list(void *in, void **out)
       i++;
     }
 
-    int c = nk_vc_getchar(1);
+    int c = nk_vc_getchar();
     
     if (c=='+') {
 	new_shell();

@@ -178,7 +178,7 @@ int test_tasks()
     nk_vc_printf("Create-wait test of %lu passes with %lu tasks each: %s\n", 
 		 NUM_PASSES,NUM_TASKS, create_wait ? "FAIL" : "PASS");
 
-    recursive_create_wait = test_recursive_create_wait(NUM_PASSES,NUM_TASKS);
+    recursive_create_wait = test_recursive_create_wait();
 
     nk_vc_printf("Recursive create-wait test of %lu passes with %lu tasks each: %s\n", 
 		 NUM_PASSES,NUM_TASKS, recursive_create_wait ? "FAIL" : "PASS");
