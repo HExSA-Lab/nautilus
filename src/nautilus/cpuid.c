@@ -74,7 +74,7 @@ cpuid_get_step (void)
 }
 
 
-uint8_t
+uint32_t
 cpuid_leaf_max (void)
 {
     cpuid_ret_t ret;
