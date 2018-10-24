@@ -1,11 +1,12 @@
-Nautilus is developed as part of the Hobbes Project and the V3VEE Project
-with funding from the United States National Science Foundation and
-the Department of Energy.
+Nautilus is developed as part of the Interweaving Project, the Hobbes Project,
+and the V3VEE Project, with funding from the United States National Science
+Foundation and the Department of Energy.
 
 Copyright (c) 2015, Kyle Hale <kh@u.northwestern.edu>
 Copyright (c) 2015, Peter Dinda <pdinda@northwestern.edu>
 Copyright (c) 2015, The V3VEE Project <http://www.v3vee.org>
 Copyright (c) 2015, The Hobbes Project <http://xstack.sandia.gov>
+Copyright (c) 2018, The Interweaving Project <http://interweaving.org>
 
 All rights reserved.
 
