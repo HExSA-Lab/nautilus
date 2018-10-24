@@ -151,6 +151,7 @@ enum acpi_interrupt_id {
 enum acpi_srat_entry_id {
 	ACPI_SRAT_PROCESSOR_AFFINITY = 0,
 	ACPI_SRAT_MEMORY_AFFINITY,
+    ACPI_SRAT_X2APIC_CPU_AFFINITY,
 	ACPI_SRAT_ENTRY_COUNT
 };
 

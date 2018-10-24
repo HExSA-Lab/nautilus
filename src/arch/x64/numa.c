@@ -391,7 +391,7 @@ arch_numa_init (struct sys_info * sys)
 
         NUMA_DEBUG("Parsing SRAT_TYPE_X2APIC_CPU_AFFINITY table...\n");
 
-        if (acpi_table_parse_srat(ACPI_SRAT_TYPE_X2APIC_CPU_AFFINITY,
+        if (acpi_table_parse_srat(ACPI_SRAT_X2APIC_CPU_AFFINITY,
                     acpi_parse_x2apic_affinity, NAUT_CONFIG_MAX_CPUS) < 0)	    {
             NUMA_ERROR("Unable to parse x2apic table\n");
         }
