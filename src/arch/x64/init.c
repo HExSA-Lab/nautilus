@@ -269,6 +269,7 @@ init (unsigned long mbd,
 
     memset(naut, 0, sizeof(struct naut_info));
 
+
     vga_early_init();
 
     spinlock_init(&printk_lock);
@@ -276,6 +277,8 @@ init (unsigned long mbd,
     setup_idt();
 
     nk_int_init(&(naut->sys));
+
+    fpu_init(naut, FPU_BSP_INIT);
 
     // Bring serial device up early so we can have output
     serial_early_init();
@@ -311,8 +314,6 @@ init (unsigned long mbd,
     }
 
     nk_acpi_init();
-
-    fpu_init(naut, FPU_BSP_INIT);
 
     /* enumerate CPUs and initialize them */
     smp_early_init(naut);
