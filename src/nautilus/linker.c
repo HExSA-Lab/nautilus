@@ -55,6 +55,7 @@
  */
 static int
 resolve_symbol (struct nk_link_info * linfo, 
+                struct nk_prog_info * pinfo,
                 char * name,
                 uint64_t * addr,
                 const uint64_t value)
@@ -90,7 +91,7 @@ resolve_symbol (struct nk_link_info * linfo,
 
     } else {
         DEBUG("Resolving symbol in program binary (%s: %p)\n", name, (void*)value);
-        *addr = value;
+        *addr = value + pinfo->mod->start;
     }
 
     return 0;
@@ -161,7 +162,7 @@ nk_link_prog (struct nk_link_info * linfo, struct nk_prog_info * prog)
         addr  = filebuf + relaidx[i].r_offset;
         value = symidx[relaidx[i].r_info >> 32].st_value;
 
-        resolve_symbol(linfo, name, addr, value);
+        resolve_symbol(linfo, prog, name, addr, value);
     }
 
     // resolve PLT
@@ -175,7 +176,7 @@ nk_link_prog (struct nk_link_info * linfo, struct nk_prog_info * prog)
         addr  = filebuf + relaidx[i].r_offset;
         value = symidx[relaidx[i].r_info >> 32].st_value;
 
-        resolve_symbol(linfo, name, addr, value);
+        resolve_symbol(linfo, prog, name, addr, value);
     }
 
     return 0;
