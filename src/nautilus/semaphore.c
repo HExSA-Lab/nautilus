@@ -53,7 +53,9 @@ static struct list_head sem_list;
 
 #define SEMAPHORE_LOCK_CONF uint8_t _semaphore_lock_flags
 #define SEMAPHORE_LOCK(s) _semaphore_lock_flags = spin_lock_irq_save(&(s)->lock)
-#define SEMAPHORE_UNLOCK(s) spin_unlock_irq_restore(&(s)->lock, _semaphore_lock_flags);
+#define SEMAPHORE_TRY_LOCK(s) spin_try_lock_irq_save(&(s)->lock,&_semaphore_lock_flags)
+#define SEMAPHORE_UNLOCK(s) spin_unlock_irq_restore(&(s)->lock, _semaphore_lock_flags)
+#define SEMAPHORE_UNIRQ(s) irq_enable_restore(_semaphore_lock_flags)
 
 struct nk_semaphore {
     spinlock_t         lock;
@@ -175,6 +177,29 @@ void nk_semaphore_release(struct nk_semaphore *s)
     }
 }
 
+int nk_semaphore_try_up(struct nk_semaphore *s)
+{
+    SEMAPHORE_LOCK_CONF;
+
+    DEBUG("try up start %s\n",s->name);
+    
+    int oldcount;
+    if (SEMAPHORE_TRY_LOCK(s)) {
+	return -1;
+    }
+    oldcount = s->count;
+    s->count++;
+    SEMAPHORE_UNLOCK(s);
+    if (oldcount<0) {
+	// we just woke someone up
+	DEBUG("try up wake %s\n",s->name);
+	nk_thread_queue_wake_one(s->wait_queue);
+    }
+    DEBUG("up done %s\n",s->name);
+    return 0;
+}
+
+
 void nk_semaphore_up(struct nk_semaphore *s)
 {
     SEMAPHORE_LOCK_CONF;
@@ -201,7 +226,9 @@ int nk_semaphore_try_down(struct nk_semaphore *s)
     //DEBUG("try down %s\n",s->name);
     
     int have=0;
-    SEMAPHORE_LOCK(s);
+    if (SEMAPHORE_TRY_LOCK(s)) {
+	return -1;
+    }
     if (s->count>0) {
 	s->count--;
 	have = 1;
@@ -241,11 +268,12 @@ void nk_semaphore_down(struct nk_semaphore *s)
 	nk_enqueue_entry(s->wait_queue,&t->wait_node);
 
 	// and go to sleep - this will also release the lock
-	// and reenable preemption and interrupts
+	// and reenable preemption
 	nk_sched_sleep(&s->lock);
 
 	// We are now back, which means we must be good to go
-	// since we could only be awaked by an up
+	// except for interrupts
+	SEMAPHORE_UNIRQ(s);
 
 	DEBUG("down end %s - waited\n", s->name);
 

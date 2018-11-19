@@ -25,7 +25,7 @@
 
 
 // Semaphores are intended for threads
-// Interrupts should only use up and try_down
+// Interrupts should only use try_up and try_down
 // And you probably do not want to use semaphores at all
 // in interrupt context unless you know what you are doing
 
@@ -47,8 +47,11 @@ void                 nk_semaphore_release(struct nk_semaphore *s);
 
 void nk_semaphore_up(struct nk_semaphore *s);
 void nk_semaphore_down(struct nk_semaphore *s);
+
 // 0 return indicates success
+int  nk_semaphore_try_up(struct nk_semaphore *s);
 int  nk_semaphore_try_down(struct nk_semaphore *s);
+
 // 0 return indicates have semaphore, nonzero => timeout
 int nk_semaphore_down_timeout(struct nk_semaphore *s, uint64_t timeout_ns);
 

@@ -925,8 +925,9 @@ void nk_thread_queue_sleep_extended(nk_thread_queue_t *wq, int (*cond_check)(voi
 	// until we (in particular nk_sched_sleep()) decide otherwise
 	preempt_disable(); 
 
-	// keep interrupts off since we now allow an interrupt handler
-	// to do a wake
+	// We now keep interrupts off across the context switch
+	// since we now allow an interrupt handler to do a wake
+	// and we do not want to race with it here.
 	
 	THREAD_DEBUG("Thread %lu (%s) is having the scheduler put itself to sleep on queue %p\n", t->tid, t->name, (void*)wq);
 
@@ -934,13 +935,17 @@ void nk_thread_queue_sleep_extended(nk_thread_queue_t *wq, int (*cond_check)(voi
 	// and just after it completes its scheduling pass, 
 	// it will release the wait queue lock for us
 	// it will also reenable preemption on its context switch out
-	// and it will reenable interrupts
+	// and it will reset interrupts according to the thread it
+	// is switching to
 	nk_sched_sleep(&wq->lock);
+
+	// When we return, wq->lock is released, and our interrupt state is the same
+	// as we left it, which means we now need to restore state
+	// note that for the duration we were switched out, other threads may have
+	// had interrupts on.
+	irq_enable_restore(flags);
 	
 	THREAD_DEBUG("Thread %lu (%s) has slow wakeup on queue %p\n", t->tid, t->name, (void*)wq);
-
-	// note no spin_unlock here since nk_sched_sleep will have 
-	// done it for us
 
 	return;
     }

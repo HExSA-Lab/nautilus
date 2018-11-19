@@ -72,7 +72,9 @@ static spinlock_t state_lock;
 
 #define QUEUE_LOCK_CONF uint8_t _queue_lock_flags
 #define QUEUE_LOCK(q) _queue_lock_flags = spin_lock_irq_save(&(q)->lock)
+#define QUEUE_TRY_LOCK(q) spin_try_lock_irq_save(&(q)->lock,&_queue_lock_flags)
 #define QUEUE_UNLOCK(q) spin_unlock_irq_restore(&(q)->lock, _queue_lock_flags);
+#define QUEUE_UNIRQ(q) irq_enable_restore(_queue_lock_flags);
 
 static struct list_head queue_list;
 
@@ -286,7 +288,9 @@ int  nk_msg_queue_try_push(struct nk_msg_queue *q, void *m)
 
     //DEBUG("try push %s\n",q->name);
 
-    QUEUE_LOCK(q);
+    if (QUEUE_TRY_LOCK(q)) {
+	return -1;
+    }
     rc = _nk_msg_queue_try_push(q,m);
     QUEUE_UNLOCK(q);
     if (!rc) {
@@ -305,7 +309,9 @@ int  nk_msg_queue_try_pull(struct nk_msg_queue *q, void **m)
 
     //DEBUG("try pull %s\n",q->name);
 
-    QUEUE_LOCK(q);
+    if (QUEUE_TRY_LOCK(q)) {
+	return -1;
+    }
     rc = _nk_msg_queue_try_pull(q,m);
     QUEUE_UNLOCK(q);
     if (!rc) {
@@ -346,9 +352,12 @@ void nk_msg_queue_push(struct nk_msg_queue *q, void *m)
 	nk_enqueue_entry(q->push_wait_queue,&t->wait_node);
 
 	// and go to sleep - this will also release the lock
-	// and reenable preemption and interrupts
+	// and reenable preemption
 	nk_sched_sleep(&q->lock);
 
+	// We need to restore interrupts
+	QUEUE_UNIRQ(q);
+	
 	DEBUG("push retry %s\n", q->name);
 	// now we are awake, so try again
 	goto retry;
@@ -385,9 +394,11 @@ void nk_msg_queue_pull(struct nk_msg_queue *q, void **m)
 	nk_enqueue_entry(q->pull_wait_queue,&t->wait_node);
 
 	// and go to sleep - this will also release the lock
-	// and reenable preemption and interrupts
+	// and reenable preemption
 	nk_sched_sleep(&q->lock);
 
+	QUEUE_UNIRQ(q)
+	
 	DEBUG("pull retry %s\n", q->name);
 	
 	// now we are awake, so try again
