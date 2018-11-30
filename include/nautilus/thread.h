@@ -32,7 +32,6 @@ extern "C" {
 #ifndef __ASSEMBLER__
 
 #include <nautilus/spinlock.h>
-#include <nautilus/queue.h>
 #include <nautilus/intrinsics.h>
 
 // Always included so we get the necessary type
@@ -171,7 +170,7 @@ typedef enum {
 } nk_thread_status_t;
 
 
-typedef struct nk_queue nk_thread_queue_t;
+typedef struct nk_wait_queue nk_wait_queue_t;
 
 struct nk_thread {
     uint64_t rsp;                /* +0  SHOULD NOT CHANGE POSITION */
@@ -185,7 +184,6 @@ struct nk_thread {
 
     int lock;
 
-    nk_queue_entry_t runq_node; // formerly q_node
     nk_queue_entry_t thr_list_node;
 
     /* parent/child relationship */
@@ -194,8 +192,9 @@ struct nk_thread {
     struct list_head child_node;
     unsigned long refcount;
 
-    nk_thread_queue_t * waitq;
-    nk_queue_entry_t wait_node;
+    nk_wait_queue_t * waitq;             // wait queue for threads waiting on this thread
+    
+    int               num_wait;          // how many wait queues this thread is currently on
 
     /* thread state */
     nk_thread_status_t status;
@@ -239,17 +238,6 @@ _nk_thread_init (nk_thread_t * t,
 		 int placement_cpu, // must be >=0 - where thread will go initially
 		 nk_thread_t * parent);
 
-
-/* thread queues */
-
-nk_thread_queue_t * nk_thread_queue_create (void);
-void nk_thread_queue_destroy(nk_thread_queue_t * q);
-
-void nk_thread_queue_sleep(nk_thread_queue_t * q);
-//  cond_check is condition (if any) to check atomically with enqueueing
-void nk_thread_queue_sleep_extended(nk_thread_queue_t * q, int (*cond_check)(void *state), void *state);
-void nk_thread_queue_wake_one(nk_thread_queue_t * q);
-void nk_thread_queue_wake_all(nk_thread_queue_t * q);
 
 struct nk_tls {
     unsigned seq_num;

@@ -52,7 +52,7 @@ struct nk_cpu_coords;
 struct nk_queue;
 struct nk_thread;
 
-//typedef struct nk_queue nk_thread_queue_t;
+//typedef struct nk_wait_queue nk_wait_queue_t;
 //typedef struct nk_thread nk_thread_t;
 typedef void (*nk_xcall_func_t)(void * arg);
 typedef uint32_t cpu_id_t;

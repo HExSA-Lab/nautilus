@@ -172,7 +172,7 @@ extern int pthread_mutex_lock();
 extern unsigned int acpi_find_root_pointer(long unsigned int *);
 extern void nk_condvar_test();
 extern long unsigned int simple_strtoul(const char *, char * *, unsigned int);
-extern int nk_thread_queue_sleep(struct nk_queue *);
+extern int nk_wait_queue_sleep(struct nk_queue *);
 extern struct nk_queue_entry * nk_dequeue_entry_atomic(struct nk_queue *, struct nk_queue_entry *);
 extern struct nk_queue_entry * nk_dequeue_first_atomic(struct nk_queue *);
 typedef long unsigned int addr_t;
@@ -387,7 +387,7 @@ extern void nk_print_regs(struct nk_regs *);
 extern int nk_condvar_init(struct nk_condvar *);
 extern int pci_init(struct naut_info *);
 extern int __stack_chk_fail();
-extern int nk_thread_queue_wake_one(struct nk_queue *);
+extern int nk_wait_queue_wake_one(struct nk_queue *);
 typedef long unsigned int ulong_t;
 extern long unsigned int multiboot_get_sys_ram(ulong_t);
 extern void nk_acpi_init();
@@ -706,14 +706,14 @@ extern int null_excp_handler(struct excp_entry_state *, excp_vec_t, addr_t);
 typedef long unsigned int excp_vec_t;
 typedef long unsigned int addr_t;
 extern int nk_pf_handler(struct excp_entry_state *, excp_vec_t, addr_t);
-extern struct nk_queue * nk_thread_queue_create();
+extern struct nk_queue * nk_wait_queue_create(char *name);
 extern int nk_block_dev_deinit();
 extern int nk_sched_init_ap(struct nk_sched_config *);
 extern double modf(double, double *);
 extern int nk_block_dev_unregister(struct nk_block_dev *);
 extern void serial_print(const char *, ...);
 extern unsigned int acpi_tb_resize_root_table_list();
-extern int nk_thread_queue_wake_all(struct nk_queue *);
+extern int nk_wait_queue_wake_all(struct nk_queue *);
 extern struct tm * gmtime(const long int *);
 typedef unsigned int uint32_t;
 extern unsigned int acpi_tb_verify_checksum(struct acpi_table_header *, uint32_t);
@@ -865,9 +865,9 @@ static int naut_simple_strtoul(lua_State *L){
 	lua_pushnumber(L, temp_return);
 	return 1; 
 }
-static int naut_nk_thread_queue_sleep(lua_State *L){
+static int naut_nk_wait_queue_sleep(lua_State *L){
 	struct nk_queue * q = luaL_checkunsigned(L,1);
-	lua_Number temp_return =nk_thread_queue_sleep(q);
+	lua_Number temp_return =nk_wait_queue_sleep(q);
 	lua_pushnumber(L, temp_return);
 	return 1; 
 }
@@ -1836,9 +1836,9 @@ static int naut___stack_chk_fail(lua_State *L){
 	lua_pushnumber(L, temp_return);
 	return 1; 
 }
-static int naut_nk_thread_queue_wake_one(lua_State *L){
+static int naut_nk_wait_queue_wake_one(lua_State *L){
 	struct nk_queue * q = luaL_checkunsigned(L,1);
-	lua_Number temp_return =nk_thread_queue_wake_one(q);
+	lua_Number temp_return =nk_wait_queue_wake_one(q);
 	lua_pushnumber(L, temp_return);
 	return 1; 
 }
@@ -3317,8 +3317,8 @@ static int naut_nk_pf_handler(lua_State *L){
 	lua_pushnumber(L, temp_return);
 	return 1; 
 }
-static int naut_nk_thread_queue_create(lua_State *L){
-	lua_Number temp_return =*(lua_Number *)nk_thread_queue_create();
+static int naut_nk_wait_queue_create(lua_State *L){
+	lua_Number temp_return =*(lua_Number *)nk_wait_queue_create(0);
 	lua_pushnumber(L, temp_return);
 	return 1; 
 }
@@ -3356,9 +3356,9 @@ static int naut_acpi_tb_resize_root_table_list(lua_State *L){
 	lua_pushnumber(L, temp_return);
 	return 1; 
 }
-static int naut_nk_thread_queue_wake_all(lua_State *L){
+static int naut_nk_wait_queue_wake_all(lua_State *L){
 	struct nk_queue * q = luaL_checkunsigned(L,1);
-	lua_Number temp_return =nk_thread_queue_wake_all(q);
+	lua_Number temp_return =nk_wait_queue_wake_all(q);
 	lua_pushnumber(L, temp_return);
 	return 1; 
 }
@@ -3797,7 +3797,7 @@ static const luaL_Reg nautlib[] = {
 {"acpi_find_root_pointer", naut_acpi_find_root_pointer} ,
 {"nk_condvar_test", naut_nk_condvar_test} ,
 {"simple_strtoul", naut_simple_strtoul} ,
-{"nk_thread_queue_sleep", naut_nk_thread_queue_sleep} ,
+{"nk_wait_queue_sleep", naut_nk_wait_queue_sleep} ,
 {"nk_dequeue_entry_atomic", naut_nk_dequeue_entry_atomic} ,
 {"nk_dequeue_first_atomic", naut_nk_dequeue_first_atomic} ,
 {"mm_boot_free_vmem", naut_mm_boot_free_vmem} ,
@@ -3964,7 +3964,7 @@ static const luaL_Reg nautlib[] = {
 {"nk_condvar_init", naut_nk_condvar_init} ,
 {"pci_init", naut_pci_init} ,
 {"__stack_chk_fail", naut___stack_chk_fail} ,
-{"nk_thread_queue_wake_one", naut_nk_thread_queue_wake_one} ,
+{"nk_wait_queue_wake_one", naut_nk_wait_queue_wake_one} ,
 {"multiboot_get_sys_ram", naut_multiboot_get_sys_ram} ,
 {"nk_acpi_init", naut_nk_acpi_init} ,
 {"reboot", naut_reboot} ,
@@ -4219,14 +4219,14 @@ static const luaL_Reg nautlib[] = {
 {"exit", naut_exit} ,
 {"null_excp_handler", naut_null_excp_handler} ,
 {"nk_pf_handler", naut_nk_pf_handler} ,
-{"nk_thread_queue_create", naut_nk_thread_queue_create} ,
+{"nk_wait_queue_create", naut_nk_wait_queue_create} ,
 {"nk_block_dev_deinit", naut_nk_block_dev_deinit} ,
 {"nk_sched_init_ap", naut_nk_sched_init_ap} ,
 {"modf", naut_modf} ,
 {"nk_block_dev_unregister", naut_nk_block_dev_unregister} ,
 {"serial_print", naut_serial_print} ,
 {"acpi_tb_resize_root_table_list", naut_acpi_tb_resize_root_table_list} ,
-{"nk_thread_queue_wake_all", naut_nk_thread_queue_wake_all} ,
+{"nk_wait_queue_wake_all", naut_nk_wait_queue_wake_all} ,
 {"gmtime", naut_gmtime} ,
 {"acpi_tb_verify_checksum", naut_acpi_tb_verify_checksum} ,
 {"setup_idt", naut_setup_idt} ,

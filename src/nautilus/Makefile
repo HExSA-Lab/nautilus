@@ -25,6 +25,7 @@ obj-y += \
 	smp.o \
 	idle.o \
 	thread.o \
+	waitqueue.o \
 	group.o \
         timer.o \
         scheduler.o \

@@ -37,14 +37,18 @@
 #define DEBUG_PRINT(fmt, args...)
 #endif
 
+static uint64_t count=0;
+
 int
 nk_condvar_init (nk_condvar_t * c)
 {
+    char buf[NK_WAIT_QUEUE_NAME_LEN];
     DEBUG_PRINT("Condvar init\n");
 
     memset(c, 0, sizeof(nk_condvar_t));
 
-    c->wait_queue = nk_thread_queue_create();
+    snprintf(buf,NK_WAIT_QUEUE_NAME_LEN,"condvar%lu-wait",__sync_fetch_and_add(&count,1));
+    c->wait_queue = nk_wait_queue_create(buf);
     if (!c->wait_queue) {
         ERROR_PRINT("Could not create wait queue for cond var\n");
         return -EINVAL;
@@ -67,7 +71,7 @@ nk_condvar_destroy (nk_condvar_t * c)
         return -EINVAL;
     }
 
-    nk_thread_queue_destroy(c->wait_queue);
+    nk_wait_queue_destroy(c->wait_queue);
     NK_UNLOCK(&c->lock);
     memset(c, 0, sizeof(nk_condvar_t));
     return 0;
@@ -97,7 +101,7 @@ nk_condvar_wait (nk_condvar_t * c, NK_LOCK_T * l)
     do {
 
         NK_UNLOCK(&c->lock);
-        nk_thread_queue_sleep(c->wait_queue);
+        nk_wait_queue_sleep(c->wait_queue);
         NK_LOCK(&c->lock);
 
         if (bc != *(volatile unsigned*)&(c->bcast_seq)) {
@@ -139,7 +143,7 @@ nk_condvar_signal (nk_condvar_t * c)
 
         DEBUG_PRINT("Condvar signaling on (%p)\n", (void*)c);
 
-        nk_thread_queue_wake_one(c->wait_queue);
+        nk_wait_queue_wake_one(c->wait_queue);
 
     }
 
@@ -166,7 +170,7 @@ nk_condvar_bcast (nk_condvar_t * c)
         NK_UNLOCK(&c->lock);
 
         DEBUG_PRINT("Condvar broadcasting on (%p) (core=%u)\n", (void*)c, my_cpu_id());
-        nk_thread_queue_wake_all(c->wait_queue);
+        nk_wait_queue_wake_all(c->wait_queue);
         return 0;
 
     }

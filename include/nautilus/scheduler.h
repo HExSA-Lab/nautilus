@@ -149,7 +149,10 @@ void   nk_sched_kick_cpu(int cpu);
 // (e.g., wait queues) and the scheduling process
 // nk_sched_sleep will also renable preemption on the core before switching to
 // the new thread
+// nk_sched_sleep_extended expands this to allow for a general callback
+// that will be invoked once the scheduling pass is complete. 
 void    nk_sched_sleep(spinlock_t *lock_to_release);
+void    nk_sched_sleep_extended(void (*release_callback)(void *), void *release_state);
 #define nk_sched_awaken(thread,cpu) nk_sched_make_runnable(thread,cpu,0)
 
 // Have the thread yield to another, if appropriate

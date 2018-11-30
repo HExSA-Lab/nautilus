@@ -27,6 +27,7 @@
 #include <nautilus/percpu.h>
 #include <nautilus/mm.h>
 #include <nautilus/timer.h>
+#include <nautilus/waitqueue.h>
 #include <nautilus/scheduler.h>
 #include <nautilus/spinlock.h>
 
@@ -48,11 +49,12 @@ static spinlock_t state_lock;
 
 static struct list_head timer_list;
 
+static uint64_t count=0;
 
 struct nk_timer {
     uint64_t          flags;    
     uint64_t          time_ns;  // time relative to CPU reset
-    nk_thread_queue_t *waitq;   // used for non-spin waits
+    nk_wait_queue_t   *waitq;   // used for non-spin waits
     uint32_t          cpu;      // cpu to use for callback
     void              (*callback)(void *priv);
     void              *priv;
@@ -61,8 +63,11 @@ struct nk_timer {
 };
 
 
+
 struct nk_timer *nk_alloc_timer()
 {
+    char buf[NK_WAIT_QUEUE_NAME_LEN];
+    
     struct nk_timer *t = malloc(sizeof(struct nk_timer));
     
     if (!t) { 
@@ -72,7 +77,8 @@ struct nk_timer *nk_alloc_timer()
     
     memset(t,0,sizeof(struct nk_timer));
 
-    t->waitq = nk_thread_queue_create();
+    snprintf(buf,NK_WAIT_QUEUE_NAME_LEN,"timer%lu\n",__sync_fetch_and_add(&count,1));
+    t->waitq = nk_wait_queue_create(buf);
 
     if (!t->waitq) { 
 	ERROR("Timer allocation of thread queue failed\n");
@@ -86,7 +92,7 @@ struct nk_timer *nk_alloc_timer()
 void nk_free_timer(struct nk_timer *t)
 {
     nk_cancel_timer(t); // remove from list at least
-    nk_thread_queue_destroy(t->waitq);
+    nk_wait_queue_destroy(t->waitq);
     free(t);
 }
 
@@ -153,7 +159,7 @@ int nk_wait_timer(struct nk_timer *t)
     while (!__sync_fetch_and_add(&t->signaled,0)) {
 	if (!(t->flags & TIMER_SPIN)) { 
 	    DEBUG("Going to sleep on thread queue\n");
-	    nk_thread_queue_sleep_extended(t->waitq, check, t);
+	    nk_wait_queue_sleep_extended(t->waitq, check, t);
 	} else {
 	    asm volatile ("pause");
 	}
@@ -217,7 +223,7 @@ uint64_t nk_timer_handler (void)
 	    if (!(cur->flags & TIMER_SPIN)) { 
 		// wake waiters
 		DEBUG("Waking threads\n");
-		nk_thread_queue_wake_all(cur->waitq);
+		nk_wait_queue_wake_all(cur->waitq);
 	    }
 	    if (cur->flags & TIMER_CALLBACK) { 
 		// launch callback, but do not wait for it

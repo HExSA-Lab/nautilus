@@ -28,7 +28,7 @@
 
 #include <nautilus/nautilus.h>
 #include <nautilus/thread.h>
-#include <nautilus/queue.h>
+#include <nautilus/waitqueue.h>
 #include <nautilus/list.h>
 #include <dev/ps2.h>
 #include <nautilus/vc.h>
@@ -124,7 +124,7 @@ struct nk_virtual_console {
   void *ops_priv;
   uint32_t num_threads;
   struct list_head vc_node;
-  nk_thread_queue_t *waiting_threads;
+  nk_wait_queue_t *waiting_threads;
 };
 
 
@@ -173,6 +173,7 @@ struct nk_virtual_console *nk_create_vc (char *name,
 {
   STATE_LOCK_CONF;
   int i;
+  char buf[NK_WAIT_QUEUE_NAME_LEN];
 
   struct nk_virtual_console *new_vc = malloc(sizeof(struct nk_virtual_console));
 
@@ -191,7 +192,8 @@ struct nk_virtual_console *nk_create_vc (char *name,
   new_vc->head = 0;
   new_vc->tail = 0;
   new_vc->num_threads = 0;
-  new_vc->waiting_threads = nk_thread_queue_create();
+  snprintf(buf,NK_WAIT_QUEUE_NAME_LEN,"vc-%s-wait",name);
+  new_vc->waiting_threads = nk_wait_queue_create(buf);
 
   // clear to new attr
   for (i = 0; i < VGA_HEIGHT*VGA_WIDTH; i++) {
@@ -226,7 +228,7 @@ static int _switch_to_vc(struct nk_virtual_console *vc)
 static int _destroy_vc(struct nk_virtual_console *vc) 
 {
 
-  if (vc->num_threads || !nk_queue_empty_atomic(vc->waiting_threads)) { 
+  if (vc->num_threads || !nk_wait_queue_empty(vc->waiting_threads)) { 
     ERROR("Cannot destroy virtual console that has threads\n");
     return -1;
   }
@@ -236,7 +238,7 @@ static int _destroy_vc(struct nk_virtual_console *vc)
   }
 
   list_del(&vc->vc_node);
-  nk_thread_queue_destroy(vc->waiting_threads);
+  nk_wait_queue_destroy(vc->waiting_threads);
   free(vc);
   return 0;
 }
@@ -910,7 +912,7 @@ int nk_enqueue_scancode(struct nk_virtual_console *vc, nk_scancode_t scan)
     vc->keyboard_queue.s_queue[vc->tail] = scan;
     vc->tail = next_index_on_queue(vc->type, vc->tail);
     QUEUE_UNLOCK(vc);
-    nk_thread_queue_wake_all(vc->waiting_threads);
+    nk_wait_queue_wake_all(vc->waiting_threads);
     return 0;
   }
 }
@@ -929,7 +931,7 @@ int nk_enqueue_keycode(struct nk_virtual_console *vc, nk_keycode_t key)
     vc->keyboard_queue.k_queue[vc->tail] = key;
     vc->tail = next_index_on_queue(vc->type, vc->tail);
     QUEUE_UNLOCK(vc);
-    nk_thread_queue_wake_all(vc->waiting_threads);
+    nk_wait_queue_wake_all(vc->waiting_threads);
     return 0;
   }
 }
@@ -990,7 +992,7 @@ void nk_vc_wait()
     vc = default_vc;
   }
 
-  nk_thread_queue_sleep_extended(vc->waiting_threads, check, vc);
+  nk_wait_queue_sleep_extended(vc->waiting_threads, check, vc);
 }
 
 

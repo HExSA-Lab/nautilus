@@ -51,6 +51,7 @@
 
 #include <nautilus/nautilus.h>
 #include <nautilus/thread.h>
+#include <nautilus/waitqueue.h>
 #include <nautilus/task.h>
 #include <nautilus/timer.h>
 #include <nautilus/scheduler.h>
@@ -284,7 +285,7 @@ typedef struct tsc_info {
 
 typedef struct nk_sched_task_state {
     spinlock_t  lock;
-    nk_thread_queue_t  *waitq;           // where the task thread blocks ultimately
+    nk_wait_queue_t   *waitq;            // where the task thread blocks ultimately
     uint64_t           sized_enqueued;   // number of sized tasks enqueued
     uint64_t           sized_dequeued;   //   and dequeued (locally or remotely)
     struct list_head   sized_queue;      // tasks with known sizes
@@ -533,7 +534,7 @@ static void           set_timer(rt_scheduler *scheduler,
 				rt_thread *thread, 
 				uint64_t now);
 
-static void           handle_special_switch(rt_status what, int have_lock, uint8_t flags, spinlock_t *lock_to_release);
+static void           handle_special_switch(rt_status what, int have_lock, uint8_t flags, void (*release_callback)(void*), void *release_state);
 
 static inline uint64_t get_min_per(rt_priority_queue *runnable, rt_priority_queue *queue, rt_thread *thread);
 static inline uint64_t get_avg_per(rt_priority_queue *runnable, rt_priority_queue *pending, rt_thread *thread);
@@ -1365,7 +1366,7 @@ int nk_sched_make_runnable(struct nk_thread *thread, int cpu, int admit)
 
 void nk_sched_exit(spinlock_t *lock_to_release)
 {
-    handle_special_switch(EXITING,0,0,lock_to_release);
+    handle_special_switch(EXITING,0,0,lock_to_release ? (void (*)(void*))spin_unlock : 0 ,(void*)lock_to_release);
     // we should not come back!
     panic("Returned to finished thread!\n");
 }
@@ -2682,7 +2683,7 @@ int nk_sched_thread_change_constraints(struct nk_sched_constraints *constraints)
 	}
 	// we are now on the aperiodic run queue
 	// so we need to get running again with our new constraints
-	handle_special_switch(CHANGING,1,_local_flags,0);
+	handle_special_switch(CHANGING,1,_local_flags,0,0);
 	// we've now released the lock, so reacquire
 	LOCAL_LOCK(scheduler);
     }
@@ -2709,7 +2710,7 @@ int nk_sched_thread_change_constraints(struct nk_sched_constraints *constraints)
 	// we are now aperioidic
 	// since we are again on the run queue
 	// we need to kick ourselves off the cp
-	handle_special_switch(CHANGING,1,_local_flags,0);
+	handle_special_switch(CHANGING,1,_local_flags,0,0);
 	// when we come back, we note that we have failed
 	// we also have no lock
 	goto out_bad_no_unlock;
@@ -2721,7 +2722,7 @@ int nk_sched_thread_change_constraints(struct nk_sched_constraints *constraints)
 	DUMP_RT_PENDING(scheduler,"pending before handle special switch");
 	DUMP_APERIODIC(scheduler,"aperiodic before handle special switch");
 
-	handle_special_switch(CHANGING,1,_local_flags,0);
+	handle_special_switch(CHANGING,1,_local_flags,0,0);
 
 	// we now have released lock and interrupts are back to prior
 
@@ -2975,13 +2976,21 @@ void    nk_sched_kick_cpu(int cpu)
 extern void nk_thread_switch(nk_thread_t *new);
 extern void nk_thread_switch_exit_helper(nk_thread_t *new, rt_status *statusp, rt_status newval);
 
-// This will always release the lock and restore the interrupt flags 
-// before return if the lock is held
-// prior to any thread switch, the lock is released
-// interrupt state restoration operates just as any other switch
-// have_lock implies we have the lock and we have disabled interrupts, 
-// with flags being the restore interrupt value
- static void handle_special_switch(rt_status what, int have_lock, uint8_t flags, spinlock_t *lock_to_release)
+// support a special state transition ("what") by doing a pass of the
+// local scheduler
+//   - have_lock implies we have the local scheduler lock
+//     and we have disabled interrupts
+//   - if have_lock is true, flags is the interrupt state that will be restored
+//   - if release_callback exists, then it will be invoked just prior to
+//     thread switch
+// handle_special_switch will in all cases before return:
+//   - release the local scheduler lock and restore the interrupt flags, either to
+//     the state held at entry, or to the have_lock/flags parameters
+// On a context switch:
+//   - local scheduler lock is released
+//   - interrupts are off in the thread we are switch from, and will be restored
+//     to the state of the thread we are switching to
+static void handle_special_switch(rt_status what, int have_lock, uint8_t flags, void (*release_callback)(void*), void *release_state)
 {
     int did_preempt_disable = 0;
     int no_switch=0;
@@ -3022,9 +3031,9 @@ extern void nk_thread_switch_exit_helper(nk_thread_t *new, rt_status *statusp, r
     n = _sched_need_resched(have_lock,1);
 
     // at this point, the scheduler has been updated and so we can
-    // release the user's lock / flags
-    if (lock_to_release) { 
-	spin_unlock(lock_to_release);
+    // invoke the release callback
+    if (release_callback) {
+	release_callback(release_state);
     }
 
     if (!n) {
@@ -3113,26 +3122,32 @@ extern void nk_thread_switch_exit_helper(nk_thread_t *new, rt_status *statusp, r
  * a thread yields only if it wants to remain runnable
  *
  */
-void 
-nk_sched_yield(spinlock_t *lock_to_release)
+void nk_sched_yield(spinlock_t *lock_to_release)
 {
-    handle_special_switch(YIELDING,0,0,lock_to_release);
+    handle_special_switch(YIELDING,0,0,lock_to_release ? (void (*)(void *))spin_unlock : 0, (void*)lock_to_release);
 }
 
 
 /*
- * sleep
+ * sleep_extended
  *
  * unconditionally schedule some other thread
  * a thread sleeps only if it wants to stop being runnable
- * the thread can pass in a lock to release once
+ * the thread can pass in callback that will be invoked once
  * the scheduling pass is complete
  */
-void 
-nk_sched_sleep(spinlock_t *lock_to_release)
+void nk_sched_sleep_extended(void (*release_callback)(void *), void *release_state)
 {
-    handle_special_switch(SLEEPING,0,0,lock_to_release);
+    handle_special_switch(SLEEPING,0,0,release_callback,release_state);
 }
+
+// Basic sleep
+void nk_sched_sleep(spinlock_t *lock_to_release)
+{
+    nk_sched_sleep_extended(lock_to_release ? (void (*)(void*))spin_unlock : 0, (void*)lock_to_release);
+}
+
+
 
 static int rt_thread_check_deadlines(rt_thread *t, rt_scheduler *s, uint64_t now)
 {
@@ -3610,7 +3625,7 @@ struct nk_task *nk_task_produce(int cpu, uint64_t size_ns, void *(*f)(void*), vo
     TASK_UNLOCK(ti);
 
     // kick any waitqueue
-    nk_thread_queue_wake_all(ti->waitq);
+    nk_wait_queue_wake_all(ti->waitq);
 
     return t;
 }
@@ -3778,7 +3793,8 @@ int nk_task_try_wait(struct nk_task *task, void **output, struct nk_task_stats *
 static struct nk_sched_percpu_state *init_local_state(struct nk_sched_config *cfg)
 {
     struct nk_sched_percpu_state *state = (struct nk_sched_percpu_state*)MALLOC_SPECIFIC(sizeof(struct nk_sched_percpu_state),my_cpu_id());
-
+    char buf[NK_WAIT_QUEUE_NAME_LEN];
+    
     if (!state) {
         ERROR("Could not allocate rt state\n");
 	goto fail_free;
@@ -3800,7 +3816,8 @@ static struct nk_sched_percpu_state *init_local_state(struct nk_sched_config *cf
     INIT_LIST_HEAD(&state->tasks.sized_queue);
     INIT_LIST_HEAD(&state->tasks.unsized_queue);
 
-    state->tasks.waitq = nk_thread_queue_create();
+    snprintf(buf,NK_WAIT_QUEUE_NAME_LEN,"sched%d-task-wait",my_cpu_id());
+    state->tasks.waitq = nk_wait_queue_create(buf);
     if (!state->tasks.waitq) {
 	ERROR("Could not allocate task state\n");
 	goto fail_free;
@@ -3915,7 +3932,7 @@ static void task(void *in, void **out)
 	    // no task, let's put ourselves to sleep on our own cpu's task queues
 	    struct sys_info * sys = per_cpu_get(system);
 	    task_info *ti = &sys->cpus[my_cpu_id()]->sched_state->tasks;
-	    nk_thread_queue_sleep_extended(ti->waitq, await_task, ti);
+	    nk_wait_queue_sleep_extended(ti->waitq, await_task, ti);
 	    // when we wake up, we will try again
 	}
     }

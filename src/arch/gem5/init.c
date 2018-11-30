@@ -34,6 +34,7 @@
 #include <nautilus/smp.h>
 #include <nautilus/irq.h>
 #include <nautilus/thread.h>
+#include <nautilus/waitqueue.h>
 #include <nautilus/group.h>
 #include <nautilus/group_sched.h>
 #include <nautilus/timer.h>
@@ -375,6 +376,8 @@ init (unsigned long mbd,
     sysinfo_init(&(naut->sys));
 
     ioapic_init(&(naut->sys));
+
+    nk_wait_queue_init();
 
     nk_timer_init();
 
