@@ -25,6 +25,7 @@
 #include <nautilus/spinlock.h>
 #include <nautilus/dev.h>
 #include <nautilus/thread.h>
+#include <nautilus/waitqueue.h>
 
 #ifndef NAUT_CONFIG_DEBUG_DEV
 #undef DEBUG_PRINT
@@ -68,7 +69,8 @@ struct nk_dev *nk_dev_register(char *name, nk_dev_type_t type, uint64_t flags, s
 {
     STATE_LOCK_CONF;
     struct nk_dev *d = malloc(sizeof(*d));
-
+    char buf[NK_WAIT_QUEUE_NAME_LEN];
+    
     if (!d) {
 	ERROR("Failed to allocate device\n");
 	return 0;
@@ -76,7 +78,8 @@ struct nk_dev *nk_dev_register(char *name, nk_dev_type_t type, uint64_t flags, s
     
     memset(d,0,sizeof(*d));
 
-    d->waiting_threads = nk_thread_queue_create();
+    snprintf(buf,NK_WAIT_QUEUE_NAME_LEN,"%s-wait", name);
+    d->waiting_threads = nk_wait_queue_create(buf);
     
     if (!d->waiting_threads) { 
 	ERROR("Failed to allocate wait queue\n");
@@ -107,8 +110,8 @@ int            nk_dev_unregister(struct nk_dev *d)
     list_del(&d->dev_list_node);
     STATE_UNLOCK();
 
-    nk_thread_queue_wake_all(d->waiting_threads);
-    nk_thread_queue_destroy(d->waiting_threads);
+    nk_wait_queue_wake_all(d->waiting_threads);
+    nk_wait_queue_destroy(d->waiting_threads);
     INFO("Unregistered device %s\n",d->name);
     free(d);
     return 0;
@@ -143,13 +146,14 @@ void nk_dev_wait(struct nk_dev *d,
     } else {
 	// We are in a thread context and we will
 	// put ourselves to sleep
-	nk_thread_queue_sleep_extended(d->waiting_threads, cond_check, state);
+	nk_wait_queue_sleep_extended(d->waiting_threads, cond_check, state);
     }
 }
 
 void nk_dev_signal(struct nk_dev *d)
 {
-    nk_thread_queue_wake_all(d->waiting_threads);
+    //    ERROR_PRINT("dev signal d->waiting_threads->lock=%d\n",d->waiting_threads->lock);
+    nk_wait_queue_wake_all(d->waiting_threads);
 }
 
 void nk_dev_dump_devices()

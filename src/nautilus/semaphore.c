@@ -23,6 +23,7 @@
 
 #include <nautilus/nautilus.h>
 #include <nautilus/thread.h>
+#include <nautilus/waitqueue.h>
 #include <nautilus/scheduler.h>
 #include <nautilus/semaphore.h>
 
@@ -67,7 +68,7 @@ struct nk_semaphore {
     // count==0 =>  next down will wait
     // count <0 => -count waiters exist, next down will wait
     int                count;
-    nk_thread_queue_t *wait_queue;
+    nk_wait_queue_t    *wait_queue;
 };
 
 struct nk_semaphore *nk_semaphore_create(char *name,
@@ -78,7 +79,7 @@ struct nk_semaphore *nk_semaphore_create(char *name,
     STATE_LOCK_CONF;
     
     char buf[32];
-
+    
     if (!name) {
 	snprintf(buf,NK_SEMAPHORE_NAME_LEN, "semaphore%lu", __sync_fetch_and_add(&count,1));
 	name = buf;
@@ -98,7 +99,8 @@ struct nk_semaphore *nk_semaphore_create(char *name,
     s->refcount = 1;
     s->count = init_count;
     strncpy(s->name,name,NK_SEMAPHORE_NAME_LEN), s->name[NK_SEMAPHORE_NAME_LEN-1]=0;
-    s->wait_queue = nk_thread_queue_create();
+    snprintf(buf,NK_WAIT_QUEUE_NAME_LEN,"%s-wait",s->name);
+    s->wait_queue = nk_wait_queue_create(buf);
 
     if (!s->wait_queue) {
 	free(s);
@@ -169,8 +171,8 @@ void nk_semaphore_release(struct nk_semaphore *s)
 	list_del_init(&s->node);
 	STATE_UNLOCK();
     
-	nk_thread_queue_wake_all(s->wait_queue);
-	nk_thread_queue_destroy(s->wait_queue);
+	nk_wait_queue_wake_all(s->wait_queue);
+	nk_wait_queue_destroy(s->wait_queue);
 	SEMAPHORE_UNLOCK(s);
 	free(s);
 	DEBUG("release semaphore with name %s - complex release\n",s->name);
@@ -193,7 +195,7 @@ int nk_semaphore_try_up(struct nk_semaphore *s)
     if (oldcount<0) {
 	// we just woke someone up
 	DEBUG("try up wake %s\n",s->name);
-	nk_thread_queue_wake_one(s->wait_queue);
+	nk_wait_queue_wake_one(s->wait_queue);
     }
     DEBUG("up done %s\n",s->name);
     return 0;
@@ -214,7 +216,7 @@ void nk_semaphore_up(struct nk_semaphore *s)
     if (oldcount<0) {
 	// we just woke someone up
 	DEBUG("up wake %s\n",s->name);
-	nk_thread_queue_wake_one(s->wait_queue);
+	nk_wait_queue_wake_one(s->wait_queue);
     }
     DEBUG("up done %s\n",s->name);
 }
@@ -265,7 +267,7 @@ void nk_semaphore_down(struct nk_semaphore *s)
 
 	// onto the semaphore's wait queue we go
 	t->status = NK_THR_WAITING;
-	nk_enqueue_entry(s->wait_queue,&t->wait_node);
+	nk_wait_queue_enqueue(s->wait_queue,t);
 
 	// and go to sleep - this will also release the lock
 	// and reenable preemption

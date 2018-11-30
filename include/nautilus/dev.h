@@ -46,7 +46,7 @@ struct nk_dev_int {
     int (*close)(void *state);
 };
 
-typedef struct nk_queue nk_thread_queue_t;
+typedef struct nk_wait_queue nk_wait_queue_t;
 
 // this is the class for devices.  It should be the first
 // member of any specific type of device
@@ -60,7 +60,7 @@ struct nk_dev {
     
     struct nk_dev_int *interface;
     
-    nk_thread_queue_t *waiting_threads;
+    nk_wait_queue_t *waiting_threads;
 };
 
 // Not all request types apply to all device types

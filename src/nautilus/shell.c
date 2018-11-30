@@ -32,6 +32,7 @@
 #include <nautilus/semaphore.h>
 #include <nautilus/msg_queue.h>
 #include <nautilus/timer.h>
+#include <nautilus/waitqueue.h>
 #include <nautilus/fs.h>
 #include <nautilus/loader.h>
 #include <nautilus/cpuid.h>
@@ -1383,7 +1384,7 @@ static int handle_cmd(char *buf, int n)
  
   if (!strncasecmp(buf,"help",4)) { 
     nk_vc_printf("help\nexit\nvcs\ncores [n]\ntime [n]\nthreads [n]\n");
-    nk_vc_printf("devs | sems | mqs | fses | ofs | cat [path]\n");
+    nk_vc_printf("devs | sems | wqs | mqs | fses | ofs | cat [path]\n");
 #ifdef NAUT_CONFIG_PROFILE
     nk_vc_printf("instrument start|end/stop|clear|query\n");
 #endif
@@ -1462,6 +1463,11 @@ static int handle_cmd(char *buf, int n)
 
   if (!strncasecmp(buf,"mqs",3)) {
     nk_msg_queue_dump_queues();
+    return 0;
+  }
+
+  if (!strncasecmp(buf,"wqs",3)) {
+    nk_wait_queue_dump_queues();
     return 0;
   }
 

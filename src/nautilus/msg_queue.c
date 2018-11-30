@@ -23,6 +23,7 @@
 
 #include <nautilus/nautilus.h>
 #include <nautilus/thread.h>
+#include <nautilus/waitqueue.h>
 #include <nautilus/scheduler.h>
 #include <nautilus/msg_queue.h>
 #include <nautilus/list.h>
@@ -43,8 +44,8 @@ struct nk_msg_queue {
     uint64_t           refcount;
     char               name[NK_MSG_QUEUE_NAME_LEN];
 
-    nk_thread_queue_t *push_wait_queue;
-    nk_thread_queue_t *pull_wait_queue;
+    nk_wait_queue_t    *push_wait_queue;
+    nk_wait_queue_t    *pull_wait_queue;
 
     uint64_t           queue_size;
     uint64_t           cur_count;
@@ -106,7 +107,8 @@ struct nk_msg_queue *nk_msg_queue_create(char *name,
     STATE_LOCK_CONF;
     uint64_t mynum = __sync_fetch_and_add(&count,1);
     char buf[NK_MSG_QUEUE_NAME_LEN];
-
+    char mbuf[NK_WAIT_QUEUE_NAME_LEN];
+    
     if (!name) {
 	snprintf(buf,NK_MSG_QUEUE_NAME_LEN,"msg_queue%lu",mynum);
 	name = buf;
@@ -126,15 +128,17 @@ struct nk_msg_queue *nk_msg_queue_create(char *name,
     spinlock_init(&q->lock);
     INIT_LIST_HEAD(&q->node);
     q->refcount = 1;
-    q->push_wait_queue = nk_thread_queue_create();
+    snprintf(mbuf,NK_MSG_QUEUE_NAME_LEN,"%s-push-wait",name);
+    q->push_wait_queue = nk_wait_queue_create(mbuf);
     if (!q->push_wait_queue) {
 	free(q);
 	ERROR("Failed to allocate push wait queue\n");
 	return 0;
     }
-    q->pull_wait_queue = nk_thread_queue_create();
+    snprintf(mbuf,NK_MSG_QUEUE_NAME_LEN,"%s-pull-wait",name);
+    q->pull_wait_queue = nk_wait_queue_create(mbuf);
     if (!q->pull_wait_queue) {
-	nk_thread_queue_destroy(q->push_wait_queue);
+	nk_wait_queue_destroy(q->push_wait_queue);
 	free(q);
 	ERROR("Failed to allocate pull wait queue\n");
 	return 0;
@@ -225,10 +229,10 @@ void nk_msg_queue_release(struct nk_msg_queue *q)
 	list_del_init(&q->node);
 	STATE_UNLOCK();
 
-	nk_thread_queue_wake_all(q->push_wait_queue);
-	nk_thread_queue_destroy(q->push_wait_queue);
-	nk_thread_queue_wake_all(q->pull_wait_queue);
-	nk_thread_queue_destroy(q->pull_wait_queue);
+	nk_wait_queue_wake_all(q->push_wait_queue);
+	nk_wait_queue_destroy(q->push_wait_queue);
+	nk_wait_queue_wake_all(q->pull_wait_queue);
+	nk_wait_queue_destroy(q->pull_wait_queue);
 	QUEUE_UNLOCK(q);
 	free(q);
 	DEBUG("release queue with name %s - complex release\n",q->name);
@@ -295,7 +299,7 @@ int  nk_msg_queue_try_push(struct nk_msg_queue *q, void *m)
     QUEUE_UNLOCK(q);
     if (!rc) {
 	//DEBUG("try push %s succeeded\n",q->name);
-	nk_thread_queue_wake_one(q->pull_wait_queue);
+	nk_wait_queue_wake_one(q->pull_wait_queue);
     } else {
 	//DEBUG("try push %s failed\n",q->name);
     }
@@ -316,7 +320,7 @@ int  nk_msg_queue_try_pull(struct nk_msg_queue *q, void **m)
     QUEUE_UNLOCK(q);
     if (!rc) {
 	//DEBUG("try pull %s succeeded\n",q->name);
-	nk_thread_queue_wake_one(q->push_wait_queue);
+	nk_wait_queue_wake_one(q->push_wait_queue);
     } else {
 	//DEBUG("try pull %s failed\n",q->name);
     }
@@ -336,7 +340,7 @@ void nk_msg_queue_push(struct nk_msg_queue *q, void *m)
 	// success is immediate
 	QUEUE_UNLOCK(q);
 	// we may need to wake up someone trying to pull
-	nk_thread_queue_wake_one(q->pull_wait_queue);
+	nk_wait_queue_wake_one(q->pull_wait_queue);
  	DEBUG("push end %s\n",q->name);
 	return;
     } else {
@@ -349,7 +353,7 @@ void nk_msg_queue_push(struct nk_msg_queue *q, void *m)
 
 	// onto the msg_queue's wait queue we go
 	t->status = NK_THR_WAITING;
-	nk_enqueue_entry(q->push_wait_queue,&t->wait_node);
+	nk_wait_queue_enqueue(q->push_wait_queue,t);
 
 	// and go to sleep - this will also release the lock
 	// and reenable preemption
@@ -377,7 +381,7 @@ void nk_msg_queue_pull(struct nk_msg_queue *q, void **m)
 	// success is immediate
 	QUEUE_UNLOCK(q);
 	// we may need to wake up someone trying to push
-	nk_thread_queue_wake_one(q->push_wait_queue);
+	nk_wait_queue_wake_one(q->push_wait_queue);
 	DEBUG("pull end %s\n",q->name);
 	return;
     } else {
@@ -391,7 +395,7 @@ void nk_msg_queue_pull(struct nk_msg_queue *q, void **m)
 
 	// onto the msg_queue's wait queue we go
 	t->status = NK_THR_WAITING;
-	nk_enqueue_entry(q->pull_wait_queue,&t->wait_node);
+	nk_wait_queue_enqueue(q->pull_wait_queue,t);
 
 	// and go to sleep - this will also release the lock
 	// and reenable preemption

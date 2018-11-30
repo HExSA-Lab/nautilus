@@ -29,6 +29,7 @@
 #include <nautilus/idle.h>
 #include <nautilus/paging.h>
 #include <nautilus/thread.h>
+#include <nautilus/waitqueue.h>
 #include <nautilus/percpu.h>
 #include <nautilus/atomic.h>
 #include <nautilus/queue.h>
@@ -63,34 +64,6 @@ static struct nk_tls tls_keys[TLS_MAX_KEYS];
 
 /****** SEE BELOW FOR EXTERNAL THREAD INTERFACE ********/
 
-
-nk_thread_queue_t*
-nk_thread_queue_create (void) 
-{
-    nk_thread_queue_t * q = NULL;
-
-    q = nk_queue_create();
-
-    if (!q) {
-        THREAD_ERROR("Could not allocate thread queue\n");
-        return NULL;
-    }
-    return q;
-}
-
-
-
-
-/* NOTE: this does not delete the threads in the queue, just
- * their entries in the queue
- */
-void 
-nk_thread_queue_destroy (nk_thread_queue_t * q)
-{
-    // free any remaining entries
-    THREAD_DEBUG("Destroying thread queue\n");
-    nk_queue_destroy(q, 1);
-}
 
 
 /*
@@ -191,7 +164,6 @@ _nk_thread_init (nk_thread_t * t,
     t->fpu_state_offset = offsetof(struct nk_thread, fpu_state);
 
     INIT_LIST_HEAD(&(t->children));
-    nk_queue_entry_init(&(t->wait_node));
 
     /* I go on my parent's child list */
     if (parent) {
@@ -214,12 +186,15 @@ _nk_thread_init (nk_thread_t * t,
     // skip wait queue allocation for a reanimated thread
     
     if (!t->waitq) {
-	t->waitq = nk_thread_queue_create();
+	t->waitq = nk_wait_queue_create(0);
 	if (!t->waitq) {
 	    THREAD_ERROR("Could not create thread's wait queue\n");
 	    return -EINVAL;
 	}
     }
+
+    // update the wait queue name given the current thread id
+    snprintf(t->waitq->name,NK_WAIT_QUEUE_NAME_LEN,"thread-%lu-wait",t->tid);
 
     return 0;
 }
@@ -402,7 +377,7 @@ nk_thread_create (nk_thread_fun_t fun,
 
 out_err:
     if (t->waitq) { 
-	nk_thread_queue_destroy(t->waitq);
+	nk_wait_queue_destroy(t->waitq);
     }
     if (t->sched_state) { 
 	nk_sched_thread_state_deinit(t);
@@ -510,6 +485,8 @@ int nk_thread_name(nk_thread_id_t tid, char *name)
   nk_thread_t * t = (nk_thread_t*)tid;
   strncpy(t->name,name,MAX_THREAD_NAME);
   t->name[MAX_THREAD_NAME-1] = 0;
+  // update wait queue based on name
+  snprintf(t->waitq->name,NK_WAIT_QUEUE_NAME_LEN,"thread-%s-wait",t->name);
   return 0;
 }
 
@@ -524,7 +501,7 @@ void
 nk_wake_waiters (void)
 {
     nk_thread_t * me  = get_cur_thread();
-    nk_thread_queue_wake_all(me->waitq);
+    nk_wait_queue_wake_all(me->waitq);
 }
 
 void nk_yield()
@@ -536,52 +513,6 @@ void nk_yield()
     nk_sched_yield(&me->lock);
 }
 
-
-// defined early to allow inlining - this is used in multiple places
-static void _thread_queue_wake_all (nk_thread_queue_t * q, int have_lock)
-{
-    nk_queue_entry_t * elm = NULL;
-    nk_thread_t * t = NULL;
-    uint8_t flags=0;
-
-    if (in_interrupt_context()) {
-	THREAD_DEBUG("[Interrupt Context] Thread %lu (%s) is waking all waiters on thread queue (q=%p)\n", get_cur_thread()->tid, get_cur_thread()->name, (void*)q);
-    } else {
-	THREAD_DEBUG("[Thread Context] Thread %lu (%s) is waking all waiters on thread queue (q=%p)\n", get_cur_thread()->tid, get_cur_thread()->name, (void*)q);
-    }
-
-    ASSERT(q);
-
-    if (!have_lock) { 
-	flags = spin_lock_irq_save(&q->lock);
-    }
-
-    THREAD_DEBUG("Wakeup: have lock\n");
-
-    while ((elm = nk_dequeue_first(q))) {
-        t = container_of(elm, nk_thread_t, wait_node);
-
-	THREAD_DEBUG("Waking %lu (%s), status %lu\n", t->tid,t->name,t->status);
-
-        ASSERT(t);
-	ASSERT(t->status == NK_THR_WAITING);
-
-	if (nk_sched_awaken(t, t->current_cpu)) { 
-	    THREAD_ERROR("Failed to awaken thread\n");
-	    goto out;
-	}
-
-	nk_sched_kick_cpu(t->current_cpu);
-	THREAD_DEBUG("Waking all waiters on thread queue (q=%p) woke thread %lu (%s)\n", (void*)q,t->tid,t->name);
-
-    }
-
- out:
-    THREAD_DEBUG("Wakeup complete - releasing lock\n");
-    if (!have_lock) {
-	spin_unlock_irq_restore(&q->lock, flags);
-    }
-}
 
 
 /*
@@ -599,7 +530,7 @@ static void _thread_queue_wake_all (nk_thread_queue_t * q, int have_lock)
 void nk_thread_exit (void * retval) 
 {
     nk_thread_t * me = get_cur_thread();
-    nk_thread_queue_t * wq = me->waitq;
+    nk_wait_queue_t * wq = me->waitq;
     uint8_t flags;
 
     THREAD_DEBUG("Thread %p (tid=%u (%s)) exiting, joining with children\n", me, me->tid, me->name);
@@ -643,7 +574,7 @@ void nk_thread_exit (void * retval)
     THREAD_DEBUG("State update complete\n");
 
     /* wake up everyone who is waiting on me */
-    _thread_queue_wake_all(wq, 1);
+    nk_wait_queue_wake_all_extended(wq,1);
 
     THREAD_DEBUG("Waiting wakeup complete\n");
 
@@ -678,16 +609,15 @@ nk_thread_destroy (nk_thread_id_t t)
 
     nk_sched_thread_pre_destroy(thethread);
 
-    // If we are on any wait list at this point, it is an error
-    if (nk_queue_entry_is_enqueued(&thethread->wait_node)) {
-	THREAD_ERROR("Destroying thread %p (tid=%lu name=%s) that is on a wait queue...\n",
-		     thethread, thethread->tid, thethread->name);
-	//nk_dequeue_entry(&(thethread->wait_node));
+    // If we are on any wait queue at this point, it is an error
+    if (thethread->num_wait) {
+	THREAD_ERROR("Destroying thread %p (tid=%lu name=%s) that is on %d wait queues...\n",
+		     thethread, thethread->tid, thethread->name, thethread->num_wait);
     }
 
     /* remove its own wait queue 
      * (waiters should already have been notified */
-    nk_thread_queue_destroy(thethread->waitq);
+    nk_wait_queue_destroy(thethread->waitq);
 
     nk_sched_thread_state_deinit(thethread);
 
@@ -724,9 +654,9 @@ static void nk_thread_brain_wipe(nk_thread_t *t)
     // removed it from the relevant scheduler thread lists/queues
 
     // If we are on any wait list at this point, it is an error
-    if (nk_queue_entry_is_enqueued(&thethread->wait_node)) {
-	THREAD_ERROR("Destroying thread %p (tid=%lu name=%s) that is on a wait queue...\n",
-		     thethread, thethread->tid, thethread->name);
+    if (thethread->num_wait) {
+	THREAD_ERROR("Destroying thread %p (tid=%lu name=%s) that is on %d wait queues...\n",
+		     thethread, thethread->tid, thethread->name, thethread->num_wait);
 	//nk_dequeue_entry(&(thethread->wait_node));
     }
 
@@ -787,7 +717,7 @@ nk_join (nk_thread_id_t t, void ** retval)
 
     ASSERT(thethread->parent == get_cur_thread());
 
-    nk_thread_queue_sleep_extended(thethread->waitq, exit_check, thethread);
+    nk_wait_queue_sleep_extended(thethread->waitq, exit_check, thethread);
 
     THREAD_DEBUG("Join commenced for thread %lu \"%s\"\n", thethread->tid, thethread->name);
 
@@ -874,155 +804,6 @@ nk_set_thread_output (void * result)
 }
 
 
-/*
- * nk_thread_queue_sleep_extended
- *
- * Goes to sleep on the given queue, checking a condition as it does so
- *
- * @q: the thread queue to sleep on
- * @cond_check - condition to check (return nonzero if true) atomically with queuing
- * @state - state for cond_check
- *  
- */
-void nk_thread_queue_sleep_extended(nk_thread_queue_t *wq, int (*cond_check)(void *state), void *state)
-{
-    nk_thread_t * t = get_cur_thread();
-    uint8_t flags;
-
-    THREAD_DEBUG("Thread %lu (%s) going to sleep on queue %p\n", t->tid, t->name, (void*)wq);
-
-    // grab control over the the wait queue
-    flags = spin_lock_irq_save(&wq->lock);
-
-    // at this point, any waker is either about to start on the
-    // queue or has just finished  It's possible that
-    // we have raced with with it and it has just finished
-    // we therefore need to double check the condition now
-
-    if (cond_check && cond_check(state)) { 
-	// The condition we are waiting on has been achieved
-	// already.  The waker is either done waking up
-	// threads or has not yet started.  In either case
-	// we do not want to queue ourselves
-	spin_unlock_irq_restore(&wq->lock, flags);
-	THREAD_DEBUG("Thread %lu (%s) has fast wakeup on queue %p - condition already met\n", t->tid, t->name, (void*)wq);
-	return;
-    } else {
-	// the condition still is not signalled 
-	// or the condition is not important, therefore
-	// while still holding the lock, put ourselves on the 
-	// wait queue
-
-	THREAD_DEBUG("Thread %lu (%s) is queueing itself on queue %p\n", t->tid, t->name, (void*)wq);
-	
-	t->status = NK_THR_WAITING;
-	nk_enqueue_entry(wq, &(t->wait_node));
-
-	// force arch and compiler to do above writes
-	__asm__ __volatile__ ("mfence" : : : "memory"); 
-
-	// disallow the scheduler from context switching this core
-	// until we (in particular nk_sched_sleep()) decide otherwise
-	preempt_disable(); 
-
-	// We now keep interrupts off across the context switch
-	// since we now allow an interrupt handler to do a wake
-	// and we do not want to race with it here.
-	
-	THREAD_DEBUG("Thread %lu (%s) is having the scheduler put itself to sleep on queue %p\n", t->tid, t->name, (void*)wq);
-
-	// We now get the scheduler to do a context switch
-	// and just after it completes its scheduling pass, 
-	// it will release the wait queue lock for us
-	// it will also reenable preemption on its context switch out
-	// and it will reset interrupts according to the thread it
-	// is switching to
-	nk_sched_sleep(&wq->lock);
-
-	// When we return, wq->lock is released, and our interrupt state is the same
-	// as we left it, which means we now need to restore state
-	// note that for the duration we were switched out, other threads may have
-	// had interrupts on.
-	irq_enable_restore(flags);
-	
-	THREAD_DEBUG("Thread %lu (%s) has slow wakeup on queue %p\n", t->tid, t->name, (void*)wq);
-
-	return;
-    }
-}
-
-void nk_thread_queue_sleep(nk_thread_queue_t *wq)
-{
-    return nk_thread_queue_sleep_extended(wq,0,0);
-}
-
-
-/* 
- * nk_thread_queue_wake_one
- *
- * wake one thread waiting on this queue
- *
- * @q: the queue to use
- *
- */
-void nk_thread_queue_wake_one (nk_thread_queue_t * q)
-{
-    nk_queue_entry_t * elm = NULL;
-    nk_thread_t * t = NULL;
-    uint8_t flags = irq_disable_save();
-
-    if (in_interrupt_context()) {
-	THREAD_DEBUG("[Interrupt Context] Thread %lu (%s) is waking one waiter on thread queue (q=%p)\n", get_cur_thread()->tid, get_cur_thread()->name, (void*)q);
-    } else {
-	THREAD_DEBUG("Thread %lu (%s) is waking one waiter on thread queue (q=%p)\n", get_cur_thread()->tid, get_cur_thread()->name, (void*)q);
-    }
-
-    ASSERT(q);
-
-    elm = nk_dequeue_first_atomic(q);
-
-    /* no one is sleeping on this queue */
-    if (!elm) {
-        THREAD_DEBUG("No waiters on wait queue\n");
-        goto out;
-    }
-
-    t = container_of(elm, nk_thread_t, wait_node);
-
-    ASSERT(t);
-    ASSERT(t->status == NK_THR_WAITING);
-
-    if (nk_sched_awaken(t, t->current_cpu)) { 
-	THREAD_ERROR("Failed to awaken thread\n");
-	goto out;
-    }
-
-    nk_sched_kick_cpu(t->current_cpu);
-
-    THREAD_DEBUG("Thread queue wake one (q=%p) work up thread %lu (%s)\n", (void*)q, t->tid, t->name);
-
-out:
-    irq_enable_restore(flags);
-
-}
-
-
-
-
-/* 
- * nk_thread_queue_wake_all
- *
- * wake all threads waiting on this queue
- *
- * @q: the queue to use
- *
- * returns -EINVAL on error, 0 on success
- *
- */
-void nk_thread_queue_wake_all (nk_thread_queue_t * q)
-{
-    _thread_queue_wake_all(q,0);
-}
 
 /* 
  * nk_tls_key_create

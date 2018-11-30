@@ -809,6 +809,14 @@ menu Debugging
       help
         Turn on debug prints for threads
 
+    config DEBUG_WAITQUEUES
+      bool "Debug Wait Queues"
+      depends on DEBUG_PRINTS
+      default n
+      help
+        Turn on debug prints for wait queues
+	YOU PROBABLY DO NOT WANT TO DO THIS - SEE COMMENTS
+
     config DEBUG_GROUP
       bool "Debug Groups"
       depends on DEBUG_PRINTS

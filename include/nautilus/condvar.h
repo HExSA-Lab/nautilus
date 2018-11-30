@@ -28,10 +28,11 @@ extern "C" {
 #endif
 
 #include <nautilus/thread.h>
+#include <nautilus/waitqueue.h>
 
 typedef struct nk_condvar {
     NK_LOCK_T lock;
-    nk_thread_queue_t * wait_queue;
+    nk_wait_queue_t * wait_queue;
     unsigned nwaiters;
     unsigned long long wakeup_seq;
     unsigned long long woken_seq;
