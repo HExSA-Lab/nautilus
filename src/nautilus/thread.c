@@ -181,7 +181,7 @@ _nk_thread_init (nk_thread_t * t,
 
 
     t->stack      = stack;
-    t->rsp        = (uint64_t)stack + t->stack_size - sizeof(uint64_t);
+    t->rsp        = (uint64_t)stack + t->stack_size - (2*sizeof(uint64_t));
     t->tid        = atomic_inc(next_tid) + 1;
     t->refcount   = is_detached ? 1 : 2; // thread references itself as well
     t->parent     = parent;
