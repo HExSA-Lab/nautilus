@@ -8,14 +8,14 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
- * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
- * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
+ * Copyright (c) 2018, Kyle C. Hale <khale@cs.iit.edu>
+ * Copyright (c) 2018, The V3VEE Project  <http://www.v3vee.org> 
  *                     The Hobbes Project <http://xstack.sandia.gov/hobbes>
  * All rights reserved.
  *
- * Author: Kyle C. Hale <kh@u.northwestern.edu>
+ * Author: Kyle C. Hale <khale@cs.iit.edu>
  *
  * This is free software.  You are permitted to use,
  * redistribute, and modify it as specified in the file "LICENSE.txt".
@@ -28,7 +28,9 @@
 #include <nautilus/idt.h>
 #include <nautilus/irq.h>
 #include <nautilus/msr.h>
+#include <nautilus/smp.h>
 
+#include <nautilus/backtrace.h>
 #ifndef NAUT_CONFIG_DEBUG_FPU
 #undef DEBUG_PRINT
 #define DEBUG_PRINT(fmt, args...)
@@ -68,10 +70,48 @@
     }
 
 
+extern uint8_t cpu_info_ready;
+
+static inline uint16_t
+get_x87_status (void)
+{
+    uint16_t status;
+    asm volatile("fnstsw %[_a]"  : [_a] "=a" (status) : :);
+
+    return status;
+}
+
+static inline void
+set_x87_ctrl (uint16_t val)
+{
+    asm volatile ("fldcw %[_m]" :: [_m] "m" (val) : "memory");
+}
+
+static inline uint16_t 
+get_x86_ctrl (void)
+{
+    uint16_t ctl;
+
+    asm volatile("fnstcw %[_m]" : [_m] "=m" (ctl) :: "memory");
+
+    return ctl;
+}
+
+static inline void
+clear_x87_excp (void)
+{
+    asm volatile ("fnclex" :::);
+}
 
 int mf_handler (excp_entry_t * excp, excp_vec_t vec, void *state)
 {
-    panic("x86 Floating Point Exception\n");
+    cpu_id_t cpu_id = cpu_info_ready ? my_cpu_id() : 0xffffffff;
+    unsigned tid = cpu_info_ready ? get_cur_thread()->tid : 0xffffffff;
+    FPU_WARN("x87 Floating Point Exception (RIP=%p (core=%u, thread=%u)\n",
+            (void*)excp->rip,
+
+    clear_x87_excp();
+
     return 0;
 }
 
@@ -102,7 +142,19 @@ enable_x87 (void)
 
     write_cr0(r);
 
+
     asm volatile ("fninit" ::: "memory");
+
+    /*
+     * - mask all x87 exceptions
+     * - double extended precision
+     * - round to nearest (even)
+     * - infinity ctrl N/A
+     *
+     * (fninit should set to this value,
+     * but being paranoid)
+     */ 
+    set_x87_ctrl(0x037f);
 }
 
 static uint8_t 
@@ -382,5 +434,4 @@ fpu_init (struct naut_info * naut, int is_ap)
         }
 
     }
-
 }
