@@ -1,3 +1,4 @@
+[![Build Status](https://travis-ci.com/HExSA-Lab/nautilus.svg?branch=master)](https://travis-ci.com/HExSA-Lab/nautilus)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ![Nautilus Logo](http://cs.iit.edu/~khale/nautilus/img/nautilus_logo.png "Nautilus Logo")
