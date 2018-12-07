@@ -108,7 +108,7 @@ int mf_handler (excp_entry_t * excp, excp_vec_t vec, void *state)
     cpu_id_t cpu_id = cpu_info_ready ? my_cpu_id() : 0xffffffff;
     unsigned tid = cpu_info_ready ? get_cur_thread()->tid : 0xffffffff;
     FPU_WARN("x87 Floating Point Exception (RIP=%p (core=%u, thread=%u)\n",
-            (void*)excp->rip,
+            (void*)excp->rip, cpu_id, tid);
 
     clear_x87_excp();
 
