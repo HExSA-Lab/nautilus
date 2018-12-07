@@ -63,6 +63,24 @@
 
 
 #define PCI_SUBCLASS_BRIDGE_PCI 0x4
+#define PCI_BAR_OFFSET     0x10
+
+#define PCI_BAR_UAR_OFFSET 0x18
+
+#define PCI_BAR_SIZE_MAGIC 0xffffffff
+#define PCI_BAR_IO_MASK    0xfffffffc
+#define PCI_BAR_MEM_MASK   0xfffffff0
+#define PCI_BAR_MEM_MASK64 0xfffffffffffffff0
+
+#define PCI_GET_MBAR_TYPE(b) (((b) >> 1) & 0x3)
+
+#define PCI_MBAR_TYPE_32    0x0
+#define PCI_MBAR_TYPE_RSVD0 0x1
+#define PCI_MBAR_TYPE_64    0x2
+#define PCI_MBAR_TYPE_RSVD1 0x3
+
+#define PCI_MBAR_IS_64(b) (PCI_GET_MBAR_TYPE(b) == PCI_MBAR_TYPE_64)
+#define PCI_MBAR_IS_32(b) (PCI_GET_MBAR_TYPE(b) == PCI_MBAR_TYPE_32)
 
 
 struct naut_info; 
@@ -165,6 +183,8 @@ struct pci_cfg_space {
 } __packed;
 
 
+typedef enum {PCI_BAR_NONE=0, PCI_BAR_MEM, PCI_BAR_IO} pci_bar_type_t;
+
 typedef enum {PCI_MSI_NONE=0, PCI_MSI_32, PCI_MSI_64, PCI_MSI_32_PER_VEC, PCI_MSI_64_PER_VEC } pci_msi_type_t;
 
 
@@ -258,6 +278,22 @@ uint16_t pci_dev_cfg_readw(struct pci_dev *dev, uint8_t off);
 uint32_t pci_dev_cfg_readl(struct pci_dev *dev, uint8_t off);
 void     pci_dev_cfg_writew(struct pci_dev *dev, uint8_t off, uint16_t val);
 void     pci_dev_cfg_writel(struct pci_dev *dev, uint8_t off, uint32_t val);
+
+uint64_t pci_get_bar_addr(struct pci_dev * dev, uint8_t barnum);
+uint64_t pci_get_mmio_size(struct pci_dev * dev, uint8_t barnum);
+pci_bar_type_t pci_get_bar_type (struct pci_dev * dev, uint8_t barnum);
+
+/* command register manipulation */
+void pci_dev_disable_io(struct pci_dev * d);
+void pci_dev_enable_io(struct pci_dev * d);
+void pci_dev_disable_mmio(struct pci_dev * d);
+void pci_dev_enable_mmio(struct pci_dev * d);
+void pci_dev_disable_irq(struct pci_dev * d);
+void pci_dev_enable_irq(struct pci_dev * d);
+void pci_dev_enable_mwi(struct pci_dev * d);
+void pci_dev_disable_mwi(struct pci_dev * d);
+void pci_dev_enable_master(struct pci_dev * d);
+void pci_dev_disable_master(struct pci_dev * d);
 
 // returns the offset in the config space of the capability
 // or zero if the capability does not exist

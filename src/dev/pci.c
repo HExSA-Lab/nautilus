@@ -188,6 +188,27 @@ pci_get_sec_bus (uint8_t bus, uint8_t dev, uint8_t fun)
 }
 
 
+static inline uint16_t
+pci_get_cmd (uint8_t bus, uint8_t dev, uint8_t fun)
+{
+    return (pci_cfg_readw(bus, dev, fun, 0x4) & 0xffff);
+}
+
+
+static inline void
+pci_set_cmd (uint8_t bus, uint8_t dev, uint8_t fun, uint16_t val)
+{
+	pci_cfg_writew(bus, dev, fun, 0x6, val);
+}
+
+
+static inline uint16_t
+pci_get_status (uint8_t bus, uint8_t dev, uint8_t fun)
+{
+    return (pci_cfg_readw(bus, dev, fun, 0x6) & 0xffff);
+}
+
+
 static void
 pci_add_dev_to_bus (struct pci_dev * dev, 
                     struct pci_bus * bus)
@@ -592,6 +613,220 @@ static struct nk_dev_int ops = {
     .close=0,
 };
 
+
+static inline int
+get_membar_size (uint32_t baddr)
+{
+    // only applies to memory BARs
+    if (baddr == 0 || !(baddr & 0x1)) {
+        return 0;
+    }
+
+    if (PCI_MBAR_IS_64(baddr)) {
+        return 64;
+    } else {
+        return 32;
+    }
+
+    return 0;
+}
+
+
+uint64_t
+pci_get_bar_addr (struct pci_dev * d, uint8_t barnum)
+{
+    uint32_t offset = PCI_BAR_OFFSET + (barnum * 4);
+    uint64_t bar    = pci_dev_cfg_readl(d, offset);
+
+    if (!bar) {
+        return 0;
+    }
+
+    // we need to get the upper 32 bits of the address if this is a 64-bit BAR
+    if (get_membar_size(bar) == 64) {
+        bar |= ((uint64_t)pci_dev_cfg_readl(d, offset + 4)) << 32;
+        return bar & PCI_BAR_MEM_MASK64;
+    }
+
+    return (pci_get_bar_type(d, barnum) == PCI_BAR_IO) ? (bar & PCI_BAR_IO_MASK) : (bar & PCI_BAR_MEM_MASK);
+}
+
+
+static uint32_t
+__get_mmio_size_32 (struct pci_dev * d, uint32_t offset)
+{
+    uint32_t baddr = pci_dev_cfg_readl(d, offset);
+    uint32_t size  = 0;
+
+    if (!baddr) {
+        return 0;
+    }
+
+    pci_dev_cfg_writel(d, offset, PCI_BAR_SIZE_MAGIC);
+
+    size = pci_dev_cfg_readl(d, offset);
+
+    size &= (baddr & 0x1) ? PCI_BAR_IO_MASK : PCI_BAR_MEM_MASK;
+
+    // restore original
+    pci_dev_cfg_writel(d, offset, baddr);
+
+    return ~size + 1;
+}
+
+
+static uint32_t
+__get_mmio_size_64 (struct pci_dev * d, uint32_t offset)
+{
+    uint32_t baddr0 = pci_dev_cfg_readl(d, offset);
+    uint32_t baddr1 = pci_dev_cfg_readl(d, offset + 4);
+    uint64_t size   = 0;
+
+    if (!baddr0) {
+        return 0;
+    }
+
+    pci_dev_cfg_writel(d, offset, PCI_BAR_SIZE_MAGIC);
+
+    size = pci_dev_cfg_readl(d, offset);
+
+    pci_dev_cfg_writel(d, offset + 4, PCI_BAR_SIZE_MAGIC);
+
+    size |= ((uint64_t)pci_dev_cfg_readl(d, offset + 4)) << 32;
+
+    // I/O BARs cannot be 64-bit
+    size &= PCI_BAR_MEM_MASK64;
+
+    // restore originals
+    pci_dev_cfg_writel(d, offset, baddr0);
+    pci_dev_cfg_writel(d, offset + 4, baddr1);
+
+    return ~size + 1;
+}
+
+
+uint64_t
+pci_get_mmio_size (struct pci_dev * d, uint8_t barnum)
+{
+    uint32_t offset = PCI_BAR_OFFSET + (barnum * 4);
+    uint32_t bar    = pci_dev_cfg_readl(d, offset);
+
+    if (get_membar_size(bar) == 64) {
+        return __get_mmio_size_64(d, offset);
+    } else {
+        return (uint64_t)__get_mmio_size_32(d, offset);
+    }
+
+    return 0;
+}
+
+
+pci_bar_type_t 
+pci_get_bar_type (struct pci_dev * d, uint8_t barnum)
+{
+    uint32_t offset = PCI_BAR_OFFSET + (barnum * 4);
+    uint32_t baddr  = pci_dev_cfg_readl(d, offset);
+    uint32_t size   = 0;
+
+    if (!baddr) {
+        return PCI_BAR_NONE;
+    } else if (baddr & 0x1) {
+        return PCI_BAR_IO;
+    } else {
+        return PCI_BAR_MEM;
+    }
+
+    return PCI_BAR_NONE;
+}
+
+
+void 
+pci_dev_disable_io (struct pci_dev * d)
+{
+	uint16_t cmd = pci_get_cmd(d->bus->num, d->num, d->fun);
+    cmd &= 0xfffe;
+    pci_set_cmd(d->bus->num, d->num, d->fun, cmd);
+}
+
+
+void
+pci_dev_enable_io (struct pci_dev * d)
+{
+	uint16_t cmd = pci_get_cmd(d->bus->num, d->num, d->fun);
+	cmd |= 1;
+	pci_set_cmd(d->bus->num, d->num, d->fun, cmd);
+}
+
+
+void 
+pci_dev_disable_mmio (struct pci_dev * d)
+{
+    uint16_t cmd = pci_get_cmd(d->bus->num, d->num, d->fun);
+    cmd &= 0xfffd;
+    pci_set_cmd(d->bus->num, d->num, d->fun, cmd);
+}
+
+
+void
+pci_dev_enable_mmio (struct pci_dev * d)
+{
+    uint16_t cmd = pci_get_cmd(d->bus->num, d->num, d->fun);
+    cmd |= 0x2;
+    pci_set_cmd(d->bus->num, d->num, d->fun, cmd);
+}
+
+
+void 
+pci_dev_disable_irq (struct pci_dev * d)
+{
+    uint16_t cmd = pci_get_cmd(d->bus->num, d->num, d->fun);
+    cmd |= (1<<10);
+    pci_set_cmd(d->bus->num, d->num, d->fun, cmd);
+}
+
+
+void
+pci_dev_enable_irq (struct pci_dev * d)
+{
+	uint16_t cmd = pci_get_cmd(d->bus->num, d->num, d->fun);
+    cmd &= ~(1<<10);
+    pci_set_cmd(d->bus->num, d->num, d->fun, cmd);
+}
+
+void 
+pci_dev_enable_mwi (struct pci_dev * d)
+{
+    uint16_t cmd = pci_get_cmd(d->bus->num, d->num, d->fun);
+    cmd |= (1<<4);
+    pci_set_cmd(d->bus->num, d->num, d->fun, cmd);
+}
+
+
+void
+pci_dev_disable_mwi (struct pci_dev * d)
+{
+    uint16_t cmd = pci_get_cmd(d->bus->num, d->num, d->fun);
+    cmd &= ~(1<<4);
+    pci_set_cmd(d->bus->num, d->num, d->fun, cmd);
+}
+
+
+void 
+pci_dev_enable_master (struct pci_dev * d)
+{
+	uint16_t cmd = pci_get_cmd(d->bus->num, d->num, d->fun);
+	cmd |= 0x4;
+	pci_set_cmd(d->bus->num, d->num, d->fun, cmd);
+}
+
+
+void
+pci_dev_disable_master (struct pci_dev * d)
+{
+    uint16_t cmd = pci_get_cmd(d->bus->num, d->num, d->fun);
+    cmd &= 0xfffb;
+    pci_set_cmd(d->bus->num, d->num, d->fun, cmd);
+}
 
 
 /*
