@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
@@ -36,7 +36,6 @@
 #define BIT(nr)			(1UL << (nr))
 #define BIT_MASK(nr)		(1UL << ((nr) % BITS_PER_LONG))
 #define BIT_WORD(nr)		((nr) / BITS_PER_LONG)
-#define BITS_PER_BYTE		8
 #define BITS_TO_LONGS(nr)	DIV_ROUND_UP(nr, BITS_PER_BYTE * sizeof(long))
 #define min(x, y) ({                \
             typeof(x) _min1 = (x);          \
@@ -94,7 +93,7 @@
 
 #include <asm/bitops.h>
 
-static __inline__ int get_bitmask_order(unsigned int count)
+static __inline__ unsigned get_bitmask_order(unsigned int count)
 {
 	int order;
 
@@ -102,7 +101,7 @@ static __inline__ int get_bitmask_order(unsigned int count)
 	return order;	/* We could be slightly more clever with -1 here... */
 }
 
-static __inline__ int get_count_order(unsigned int count)
+static __inline__ unsigned get_count_order(unsigned int count)
 {
 	int order;
 

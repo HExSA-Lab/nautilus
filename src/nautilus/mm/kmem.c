@@ -299,7 +299,7 @@ create_zone (struct mem_region * region)
     }
 
     /* add this region to the global region list */
-    list_add_tail(&(region->glob_link), &glob_zone_list);
+    list_add(&(region->glob_link), &glob_zone_list);
 
     /* Initialize the underlying buddy allocator */
     return buddy_init(pa_to_va(region->base_addr), pool_order, min_order);

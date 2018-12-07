@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
@@ -31,14 +31,14 @@
 #include <lib/bitops.h>
 #include <nautilus/naut_string.h>
 
-extern int __bitmap_empty(const unsigned long *bitmap, int bits);
-extern int __bitmap_full(const unsigned long *bitmap, int bits);
+extern int __bitmap_empty(const unsigned long *bitmap, unsigned long bits);
+extern int __bitmap_full(const unsigned long *bitmap, unsigned long bits);
 extern void __bitmap_complement(unsigned long *dst, const unsigned long *src,
-			int bits);
+			unsigned long bits);
 extern void __bitmap_shift_right(unsigned long *dst,
-                        const unsigned long *src, int shift, int bits);
+                        const unsigned long *src, int shift, unsigned long bits);
 extern void __bitmap_shift_left(unsigned long *dst,
-                        const unsigned long *src, int shift, int bits);
+                        const unsigned long *src, int shift, unsigned long bits);
 
 extern void bitmap_set(unsigned long *map, int i, int len);
 extern void bitmap_clear(unsigned long *map, int start, int nr);
@@ -48,10 +48,10 @@ extern unsigned long bitmap_find_next_zero_area(unsigned long *map,
 					 unsigned int nr,
 					 unsigned long align_mask);
 
-extern int bitmap_find_free_region(unsigned long *bitmap, int bits, int order);
-extern void bitmap_release_region(unsigned long *bitmap, int pos, int order);
-extern int bitmap_allocate_region(unsigned long *bitmap, int pos, int order);
-extern void bitmap_copy_le(void *dst, const unsigned long *src, int nbits);
+extern int bitmap_find_free_region(unsigned long *bitmap, unsigned long bits, int order);
+extern void bitmap_release_region(unsigned long *bitmap, unsigned long pos, int order);
+extern int bitmap_allocate_region(unsigned long *bitmap, unsigned long pos, int order);
+extern void bitmap_copy_le(void *dst, const unsigned long *src, unsigned long nbits);
 
 #define BITMAP_FIRST_WORD_MASK(start) (~0UL << ((start) % BITS_PER_LONG))
 #define BITMAP_LAST_WORD_MASK(nbits)					\
@@ -63,39 +63,39 @@ extern void bitmap_copy_le(void *dst, const unsigned long *src, int nbits);
 #define small_const_nbits(nbits) \
 	(__builtin_constant_p(nbits) && (nbits) <= BITS_PER_LONG)
 
-static inline void bitmap_zero(unsigned long *dst, int nbits)
+static inline void bitmap_zero(unsigned long *dst, unsigned long nbits)
 {
 	if (small_const_nbits(nbits))
 		*dst = 0UL;
 	else {
-		int len = BITS_TO_LONGS(nbits) * sizeof(unsigned long);
+		unsigned long len = BITS_TO_LONGS(nbits) * sizeof(unsigned long);
 		memset(dst, 0, len);
 	}
 }
 
-static inline void bitmap_fill(unsigned long *dst, int nbits)
+static inline void bitmap_fill(unsigned long *dst, unsigned long nbits)
 {
-	size_t nlongs = BITS_TO_LONGS(nbits);
+	unsigned long nlongs = BITS_TO_LONGS(nbits);
 	if (!small_const_nbits(nbits)) {
-		int len = (nlongs - 1) * sizeof(unsigned long);
+		unsigned long len = (nlongs - 1) * sizeof(unsigned long);
 		memset(dst, 0xff,  len);
 	}
 	dst[nlongs - 1] = BITMAP_LAST_WORD_MASK(nbits);
 }
 
 static inline void bitmap_copy(unsigned long *dst, const unsigned long *src,
-			int nbits)
+			unsigned long nbits)
 {
 	if (small_const_nbits(nbits))
 		*dst = *src;
 	else {
-		int len = BITS_TO_LONGS(nbits) * sizeof(unsigned long);
+		unsigned long len = BITS_TO_LONGS(nbits) * sizeof(unsigned long);
 		memcpy(dst, src, len);
 	}
 }
 
 
-static inline int bitmap_empty(const unsigned long *src, int nbits)
+static inline int bitmap_empty(const unsigned long *src, unsigned long nbits)
 {
 	if (small_const_nbits(nbits))
 		return ! (*src & BITMAP_LAST_WORD_MASK(nbits));
@@ -103,7 +103,7 @@ static inline int bitmap_empty(const unsigned long *src, int nbits)
 		return __bitmap_empty(src, nbits);
 }
 
-static inline int bitmap_full(const unsigned long *src, int nbits)
+static inline int bitmap_full(const unsigned long *src, unsigned long nbits)
 {
 	if (small_const_nbits(nbits))
 		return ! (~(*src) & BITMAP_LAST_WORD_MASK(nbits));
@@ -113,7 +113,7 @@ static inline int bitmap_full(const unsigned long *src, int nbits)
 
 
 static inline void bitmap_shift_right(unsigned long *dst,
-			const unsigned long *src, int n, int nbits)
+			const unsigned long *src, int n, unsigned long nbits)
 {
 	if (small_const_nbits(nbits))
 		*dst = *src >> n;
@@ -122,7 +122,7 @@ static inline void bitmap_shift_right(unsigned long *dst,
 }
 
 static inline void bitmap_shift_left(unsigned long *dst,
-			const unsigned long *src, int n, int nbits)
+			const unsigned long *src, int n, unsigned long nbits)
 {
 	if (small_const_nbits(nbits))
 		*dst = (*src << n) & BITMAP_LAST_WORD_MASK(nbits);

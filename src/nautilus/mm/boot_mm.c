@@ -149,6 +149,8 @@ free_usable_ram (boot_mem_info_t * mem)
             memory_map[i].len >= PAGE_SIZE) {
             BMM_DEBUG("Freeing memory region @[%p - %p]\n", memory_map[i].addr, memory_map[i].addr + memory_map[i].len);
             mm_boot_free_mem(memory_map[i].addr, memory_map[i].len);
+        } else {
+            BMM_DEBUG("  *skipping* memory region @[%p - %p] (type=%s)\n", memory_map[i].addr, memory_map[i].addr + memory_map[i].len, mem_region_types[memory_map[i].type]);
         }
 
     }
@@ -181,10 +183,11 @@ mm_boot_init (ulong_t mbd)
      * some global data that we will subsequently use here  */
     detect_mem_map(mbd);
 
-    BMM_PRINT("Detected %llu.%llu MB of usable System RAM\n", mm_info.usable_ram/1000000, mm_info.usable_ram%1000000);
 
     npages = mm_info.last_pfn + 1;
     pm_len = (npages/BITS_PER_LONG + !!(npages%BITS_PER_LONG)) * sizeof(long);
+
+    BMM_PRINT("Detected %llu.%llu MB (%lu pages) of usable System RAM\n", mm_info.usable_ram/(1024*1024), mm_info.usable_ram%(1024*1024), npages);
 
     mem->page_map = (ulong_t*)pm_start;
     mem->npages   = npages;

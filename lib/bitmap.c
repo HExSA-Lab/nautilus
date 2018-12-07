@@ -298,9 +298,9 @@ found_middle_swap:
  * for the best explanations of this ordering.
  */
 
-int __bitmap_empty(const unsigned long *bitmap, int bits)
+int __bitmap_empty(const unsigned long *bitmap, unsigned long bits)
 {
-	int k, lim = bits/BITS_PER_LONG;
+	unsigned long k, lim = bits/BITS_PER_LONG;
 	for (k = 0; k < lim; ++k)
 		if (bitmap[k])
 			return 0;
@@ -313,9 +313,9 @@ int __bitmap_empty(const unsigned long *bitmap, int bits)
 }
 
 
-int __bitmap_full(const unsigned long *bitmap, int bits)
+int __bitmap_full(const unsigned long *bitmap, unsigned long bits)
 {
-	int k, lim = bits/BITS_PER_LONG;
+	unsigned long k, lim = bits/BITS_PER_LONG;
 	for (k = 0; k < lim; ++k)
 		if (~bitmap[k])
 			return 0;
@@ -352,6 +352,7 @@ void bitmap_set(unsigned long *map, int start, int nr)
 void bitmap_clear(unsigned long *map, int start, int nr)
 {
 	unsigned long *p = map + BIT_WORD(start);
+    printk("clearing at bitmap addr %p\n", (void*)p);
 	const int size = start + nr;
 	int bits_to_clear = BITS_PER_LONG - (start % BITS_PER_LONG);
 	unsigned long mask_to_clear = BITMAP_FIRST_WORD_MASK(start);
@@ -498,9 +499,9 @@ done:
  * Return the bit offset in bitmap of the allocated region,
  * or -errno on failure.
  */
-int bitmap_find_free_region(unsigned long *bitmap, int bits, int order)
+int bitmap_find_free_region(unsigned long *bitmap, unsigned long bits, int order)
 {
-	int pos, end;		/* scans bitmap by regions of size order */
+	unsigned long pos, end;		/* scans bitmap by regions of size order */
 
 	for (pos = 0 ; (end = pos + (1 << order)) <= bits; pos = end) {
 		if (!__reg_op(bitmap, pos, order, REG_OP_ISFREE))
@@ -523,7 +524,7 @@ int bitmap_find_free_region(unsigned long *bitmap, int bits, int order)
  *
  * No return value.
  */
-void bitmap_release_region(unsigned long *bitmap, int pos, int order)
+void bitmap_release_region(unsigned long *bitmap, unsigned long pos, int order)
 {
 	__reg_op(bitmap, pos, order, REG_OP_RELEASE);
 }
@@ -540,7 +541,7 @@ void bitmap_release_region(unsigned long *bitmap, int pos, int order)
  * Return 0 on success, or %-EBUSY if specified region wasn't
  * free (not all bits were zero).
  */
-int bitmap_allocate_region(unsigned long *bitmap, int pos, int order)
+int bitmap_allocate_region(unsigned long *bitmap, unsigned long pos, int order)
 {
 	if (!__reg_op(bitmap, pos, order, REG_OP_ISFREE))
 		return -1;
