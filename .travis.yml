@@ -7,12 +7,12 @@ env:
 dist: xenial
 
 addons:
-  apt:
-    update: true
-    packages:
-      - grub2
-      - xorriso
-      - curl
+    apt:
+        update: true
+        packages:
+            - grub2
+            - xorriso
+            - curl
 
     coverity_scan:
 
