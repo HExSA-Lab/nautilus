@@ -10,4 +10,4 @@ addons:
       - xorriso
       - curl
 
-    script: curl -o .config https://gist.githubusercontent.com/khale/f683ac0423e9adb94ea5d6ec95eac126/raw/f9aeeeeac100f4d21dc50e0eaa588d5dbc3bfa53/default_nautilus_config.config && make isoimage
+script: curl -o .config https://gist.githubusercontent.com/khale/f683ac0423e9adb94ea5d6ec95eac126/raw/f9aeeeeac100f4d21dc50e0eaa588d5dbc3bfa53/default_nautilus_config.config && make isoimage
