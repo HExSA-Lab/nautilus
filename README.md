@@ -1,57 +1,68 @@
-```
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-    _   __               __   _  __                
-   / | / /____ _ __  __ / /_ (_)/ /__  __ _____    
-  /  |/ // __ `// / / // __// // // / / // ___/ 
- / /|  // /_/ // /_/ // /_ / // // /_/ /(__  )     
-/_/ |_/ \__,_/ \__,_/ \__//_//_/ \__,_//____/
+![Nautilus Logo](http://cs.iit.edu/~khale/nautilus/img/nautilus_logo.png "Nautilus Logo")
 
-
-```
-
-# The Nautilus AeroKernel
-
-Nautilus is an example of an AeroKernel, a very thin kernel-layer exposed 
-(much like a library OS, or libOS) directly to the runtime and application. 
-AeroKernels are suited particularly well for parallel runtimes that need fine-grained,
+# Nautilus
+Nautilus is an example of an Aerokernel, a very thin kernel-layer exposed 
+(much like Unikernel) directly to a runtime system and/or application. 
+AeroKernels are suited particularly well for *parallel* runtimes that need fine-grained,
 explicit control of the machine to squeeze every bit of performance out of it. Note that
-an AeroKernel does not, by default, have a user-mode! There are several reasons for this, 
+an Aerokernel does not, by default, have a user-mode! There are several reasons for this, 
 simplicity and performance among the most important. Furthermore, there are no heavy-weight
-processes---only threads, all of which share an address space. Therefore, Nautilus is an 
-example of a single address-space OS (SASOS). The runtime can implement user-mode features
+processes---only threads, all of which share an address space. Therefore, Nautilus is also an 
+example of a single address-space OS (SASOS). The *runtime* can implement user-mode features
 or address space isolation if this is required for its execution model.
 
-# Hybrid Runtimes (HRTs) and Hybrid Virtual Machines (HVM)
 
-We call the combination of an AeroKernel and the runtime/application using it
-a Hybrid Runtime, in that it is both a runtime *and* a kernel, esp. regarding its
+## Table of Contents
+
+- [Background](#background)
+- [Prerequisites](#prerequisites)
+- [Hardware Support](#hardware-support)
+- [Building](#building)
+- [Using QEMU](#using-qemu)
+- [Using BOCHS](#using-bochs)
+- [Using Gem5](#using-gem5)
+- [Rapid Development](#rapid-development)
+- [Resources](#resources)
+- [Maintainers](#maintainers)
+- [License](#license)
+- [Acknowledgements](#acknowledgements)
+
+
+## Background
+We call the combination of an Aerokernel and the runtime/application using it
+a Hybrid Runtime (HRT), in that it is both a runtime *and* a kernel, especially regarding its
 ability to use the full machine and determine the proper abstractions to the raw hardware
-(if the runtime developer sees a mismatch with his/her needs and the AeroKernel mechanisms, 
+(if the runtime developer sees a mismatch with his/her needs and the Aerokernel mechanisms, 
 they can be overridden). 
 
 If stronger isolation or more complete POSIX/Linux compatibility is required, it is useful
 to run the HRT in the context of a Hybrid Virtual Machine. An HVM allows a virtual machine
-to split the hardware resources among a regular OS (ROS) and an HRT. The HRT portion of the 
+to split the (virtual) hardware resources among a regular OS (ROS) and an HRT. The HRT portion of the 
 HVM can then be seen as a kind of software accelerator. Note that because of the simplicity 
 of the hardware abstractions in a typical HRT, virtualization overheads are much, much less
 significant than in, e.g. a Linux guest. 
 
-# Prerequisites
+## Prerequisites
 
-- gcc cross compiler (more on this to come)
-- grub version >= 2.02
-- xorriso (for CD burning)
-- QEMU recommended if you don't want to run on raw hardware
+- `gcc` cross compiler or clang (experimental) 
+- `grub` version >= ~2.02
+- `xorriso` (for creating ISO images)
+- `qemu` or `bochs` (for testing and debugging)
 
-# Hardware Support
+## Hardware Support
 
 Nautilus works with the following hardware:
 
 - x86_64 machines (AMD and Intel)
-- Intel Xeon Phi, both KNC and KNL (see http://philix.halek.co for instructions)
-- As a Hybrid Virtual Machine (HVM) in the Palacios VMM (see http://v3vee.org/palacios)
+- Intel Xeon Phi, both KNC and KNL using [Philix](http://philix.halek.co) for easy booting
+- As a Hybrid Virtual Machine (HVM) in the [Palacios VMM](http://v3vee.org/palacios)
 
-# Building
+Nautilus can also run as a virtual machine under QEMU, BOCHS, KVM, and in a simulated
+environment using [Gem5](http://gem5.org/Main_Page)
+
+## Building
 
 First, configure Nautilus by running 
 
@@ -73,7 +84,7 @@ $> ln -s /usr/bin/grub2-mkrescue /usr/bin/grub-mkrescue
 ```
 
 
-# Running and Debugging under QEMU
+## Using QEMU
 
 Here's an example:
 
@@ -81,11 +92,15 @@ Here's an example:
 
 Recommended:
 
-`$> qemu-system-x86_64 -cdrom nautilus.iso -m 2048`
+```
+$> qemu-system-x86_64 -cdrom nautilus.iso -m 2048
+```
 
 Nautilus has multicore support, so this will also work just fine:
 
-`$> qemu-system-x86_64 -cdrom nautilus.iso -m 2048 -smp 4`
+```
+$> qemu-system-x86_64 -cdrom nautilus.iso -m 2048 -smp 4
+```
 
 You should see Nautilus boot up on all 4 cores.
 
@@ -105,7 +120,9 @@ debug a physical machine remotely. All prints after the serial port has been
 initialized will be redirected to COM1. To use this, find the SERIAL_REDIRECT
 entry and enable it in `make menuconfig`. You can now run like this:
 
-`$> qemu-system-x86_64 -cdrom nautilus.iso -m 2G -serial stdio`
+```
+$> qemu-system-x86_64 -cdrom nautilus.iso -m 2G -serial stdio
+```
 
 Sometimes it is useful to interact with the Nautilus root shell via serial port,
 e.g. when you're running under QEMU on a system that does not have a windowing
@@ -146,7 +163,7 @@ sudo qemu-system-x86_64 -smp 2 \
 ```
 
 
-# Running and Debugging under BOCHS
+## Using BOCHS
 
 While we recommend using QEMU, sometimes it is nice to use the native debugging 
 support in BOCHS. We've used BOCHS successfully with version 2.6.8. You must have
@@ -165,7 +182,7 @@ cpuid: level=6, mmx=1, level=6, x86_64=1, 1g_pages=1
 megs: 2048
 ```
 
-# Running and Debugging under Gem5
+## Using Gem5
 
 You can configure and build Nautilus for execution in the Gem5
 architectural simulator (http://gem5.org).  Note that Gem5 is very
@@ -178,8 +195,10 @@ nautilus.bin to ~gem5/binaries, and run it using Gem5's example full
 system configuration (~gem5/configs/example/fs.py), like this (for two
 cpus):
 
-cd ~gem5
-build/X86/gem5.opt -d run.out configs/example/fs.py -n 2
+```
+$> cd ~gem5
+$> build/X86/gem5.opt -d run.out configs/example/fs.py -n 2
+```
 
 Nautilus on Gem5 follows Gem5's boot model for Linux.  If you don't
 want to change anything, just symlink binaries/nautilus.bin as the
@@ -187,25 +206,31 @@ linux kernel executable the example config expects.  Alternatively,
 you can modify the config like this, or do something similar in your
 own config:
 
+```
      test_sys = makeLinuxX86System(...)
 +++  test_sys.kernel = binary('nautilus.bin')
+```
 
 Once Gem5 is running, you can debug Nautilus in the following
 Gem5-standard ways:
 
+```
 telnet localhost 3456  # access serial0 / com1
+```
 
+```
 gdb binaries/nautilus.bin
 (gdb) target remote localhost:7000 # attach debugger to cpu 0
 (gdb) set architecture i386:x86-64
 (gdb) ...
+```
 
 Note that if you want to interact with Nautilus running on Gem5, you
 will need to use the virtual console on a char device ("serial0") to
 do so.   If you don't want to interact, please see the "autoexec.bat"
 startup script feature in src/arch/gem5/init.c.
 
-# Rapid Development
+## Rapid Development
 
 If you'd like to get started quickly with development, a good way is to use 
 [Vagrant](https://www.vagrantup.com/). We've provided a `Vagrantfile` in
@@ -233,35 +258,39 @@ $> vagrant ssh
 [vagrant@localhost] . ./demo
 ```
 
-# Resources
+## Resources
 
 You can find publications related to Nautilus and HRTs/HVMs at 
 http://halek.co, http://pdinda.org, http://interweaving.org,
-and the labs below.
+and the lab websites below.
 
 Our labs:
 
-[HExSA Lab](http://hexsa.halek.co) at IIT 
-[Prescience Lab](http://www.presciencelab.org) at Northwestern
+[HExSA Lab](http://hexsa.halek.co) at [IIT](https://www.iit.edu)
+[Prescience Lab](http://www.presciencelab.org) at [Northwestern](https://www.northwestern.edu)
 
+## Maintainers
 
-# Acknowledgements
+Primary development is done by [Kyle Hale](http://halek.co) and [Peter
+Dinda](http://pdinda.org). However, many people contribute to the development
+and maintenance of Nautilus. Please see [this
+page](http://cs.iit.edu/~khale/nautilus/) as well as comments in the headers
+and the commit logs for details.   
+
+## License 
+[MIT](LICENSE)
+
+## Acknowledgements
 
 Nautilus was made possible by support from the United States National Science
-Foundation (NSF) via grant CNS-0709168, the Department of Energy (DOE) via
+Foundation (NSF) via grants CCF-1533560, CRI-1730689, REU-1757964, CNS-1718252,
+CNS-0709168, CNS-1763743, and CNS-1763612, the Department of Energy (DOE) via
 grant DE-SC0005343, and Sandia National Laboratories through the Hobbes
-Project, which is funded by the 2013 Exascale Operating and Runtime Systems
+Project, which was funded by the 2013 Exascale Operating and Runtime Systems
 Program under the Office of Advanced Scientific Computing Research in the DOE
 Office of Science. Sandia National Laboratories is a multi-program laboratory
 managed and operated by Sandia Corporation, a wholly owned subsidiary of
-Lockheed Martin Corporation, for the U.S. Department of Energy�s National
+Lockheed Martin Corporation, for the U.S. Department of Energy's National
 Nuclear Security Administration under contract DE-AC04-94AL85000.
 
 Kyle C. Hale (c) 2018 
-
-Illinois Institute of Technology 
-
-Northwestern University 
-
-Numerous people develop Nautilus.  Please see copyrights in the
-headers and the commit logs for details.   
