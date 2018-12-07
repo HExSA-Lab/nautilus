@@ -203,6 +203,20 @@ config DEBUG_E1000_PCI
     help
       Turn on debug prints for the E1000 PCI driver
 
+config MLX3_PCI
+    bool "Mellanox ConnectX-3 PCI Driver"
+    depends on X86_64_HOST
+    default n
+    help
+      Adds experimental driver for the Mellanox ConnectX-3 HCA Adapter
+
+config DEBUG_MLX3_PCI
+    bool "Debug Mellanox ConnectX-3"
+    depends on DEBUG_PRINTS && MLX3_PCI
+    default n
+    help
+      Turn on debug prints for the Mellanox ConnectX-3 HCA Driver
+
 
 config RAMDISK
     bool "RAM Disk Support"

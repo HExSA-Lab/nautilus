@@ -89,6 +89,9 @@
 #ifdef NAUT_CONFIG_VIRTIO_PCI
 #include <dev/virtio_pci.h>
 #endif
+#ifdef NAUT_CONFIG_MLX3_PCI
+#include <dev/mlx3_ib.h>
+#endif
 #ifdef NAUT_CONFIG_E1000_PCI
 #include <dev/e1000_pci.h>
 #endif
@@ -454,6 +457,10 @@ init (unsigned long mbd,
 
 #ifdef NAUT_CONFIG_VIRTIO_PCI
     virtio_pci_init(naut);
+#endif
+
+#ifdef NAUT_CONFIG_MLX3_PCI
+    mlx3_init(naut);
 #endif
 
 #ifdef NAUT_CONFIG_E1000_PCI
