@@ -1,5 +1,9 @@
 language: c
 
+env: 
+    global:
+        - secure: "gyFOidtqUCA3rJdYrkj4lQ"
+
 dist: xenial
 
 addons:
@@ -9,5 +13,30 @@ addons:
       - grub2
       - xorriso
       - curl
+
+    coverity_scan:
+
+        # GitHub project metadata
+        # ** specific to your project **
+        project:
+            name: HExSA-Lab/nautilus
+            version: 1.0
+            description: Nautilus
+
+            # Where email notification of build analysis results will be sent
+            notification_email: khale@cs.iit.edu
+
+            # Commands to prepare for build_command
+            # ** likely specific to your build **
+            build_command_prepend: curl -o .config https://gist.githubusercontent.com/khale/f683ac0423e9adb94ea5d6ec95eac126/raw/f9aeeeeac100f4d21dc50e0eaa588d5dbc3bfa53/default_nautilus_config.config
+
+            # The command that will be added as an argument to "cov-build" to compile your project for analysis,
+            # ** likely specific to your build **
+            build_command: make
+
+            # Pattern to match selecting branches that will run analysis. We recommend leaving this set to 'coverity_scan'.
+            # Take care in resource usage, and consider the build frequency allowances per
+            #   https://scan.coverity.com/faq#frequency
+            #branch_pattern: coverity_scan
 
 script: curl -o .config https://gist.githubusercontent.com/khale/f683ac0423e9adb94ea5d6ec95eac126/raw/f9aeeeeac100f4d21dc50e0eaa588d5dbc3bfa53/default_nautilus_config.config && make isoimage
