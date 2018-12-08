@@ -8,7 +8,7 @@
 # Nautilus
 Nautilus is an example of an Aerokernel, a very thin kernel-layer exposed 
 (much like Unikernel) directly to a runtime system and/or application. 
-AeroKernels are suited particularly well for *parallel* runtimes that need fine-grained,
+Aerokernels are suited particularly well for *parallel* runtimes that need fine-grained,
 explicit control of the machine to squeeze every bit of performance out of it. Note that
 an Aerokernel does not, by default, have a user-mode! There are several reasons for this, 
 simplicity and performance among the most important. Furthermore, there are no heavy-weight
@@ -49,7 +49,7 @@ significant than in, e.g. a Linux guest.
 
 ## Prerequisites
 
-- `gcc` cross compiler or clang (experimental) 
+- `gcc` cross compiler or `clang` (experimental) 
 - `grub` version >= ~2.02
 - `xorriso` (for creating ISO images)
 - `qemu` or `bochs` (for testing and debugging)
@@ -82,7 +82,7 @@ the GRUB2 binaries, in which case a workaround with symlinks was sufficient.
 On newer systems, Grub 2 renamed the binaries, so you might want to symlink to
 them, e.g. as follows:
 
-```
+```Shell
 $> ln -s /usr/bin/grub2-mkrescue /usr/bin/grub-mkrescue
 ```
 
@@ -95,22 +95,22 @@ Here's an example:
 
 Recommended:
 
-```
+```Shell
 $> qemu-system-x86_64 -cdrom nautilus.iso -m 2048
 ```
 
 Nautilus has multicore support, so this will also work just fine:
 
-```
+```Shell
 $> qemu-system-x86_64 -cdrom nautilus.iso -m 2048 -smp 4
 ```
 
 You should see Nautilus boot up on all 4 cores.
 
-Nautilus is a NUMA-aware AeroKernel. To see this in action, try (with a sufficiently new
+Nautilus is a NUMA-aware Aerokernel. To see this in action, try (with a sufficiently new
 version of QEMU):
 
-```
+```Shell
 $> qemu-system-x86_64 -cdrom nautilus.iso \
                       -m 8G \
                       -numa node,nodeid=0,cpus=0-1 \
@@ -123,7 +123,7 @@ debug a physical machine remotely. All prints after the serial port has been
 initialized will be redirected to COM1. To use this, find the SERIAL_REDIRECT
 entry and enable it in `make menuconfig`. You can now run like this:
 
-```
+```Shell
 $> qemu-system-x86_64 -cdrom nautilus.iso -m 2G -serial stdio
 ```
 
@@ -141,7 +141,7 @@ your config.
 If you'd like to use Nautilus networking with QEMU, you should use a TUN/TAP
 interface. First, you can run the following on your host machine:
 
-```
+```Shell
 $> sudo tunctl -d tap0
 $> sudo tunctl -t tap0
 $> sudo ifconfig tap0 up 10.10.10.2 netmask 255.255.255.0
@@ -151,25 +151,25 @@ Then you can use the tap interface with QEMU as follows. This particular
 invocation attaches both a virtual e1000 fast ethernet card and a virtio
 network interface:
 
-```
-sudo qemu-system-x86_64 -smp 2 \ 
-                        -m 2048 \
-                        -vga std \
-                        -serial stdio \
-                        -cdrom nautilus.iso \
-                        -netdev tap,ifname=tap0,script=no,id=net0 \
-                            -device virtio-net,netdev=net0 \
-                        -netdev user,id=net1 \
-                            -device e1000,netdev=net1 \
-                        -drive if=none,id=hd0,format=raw,file=nautilus.iso \
-                            -device virtio-blk,drive=hd0
+```Shell
+$> sudo qemu-system-x86_64 -smp 2 \ 
+                           -m 2048 \
+                           -vga std \
+                           -serial stdio \
+                           -cdrom nautilus.iso \
+                           -netdev tap,ifname=tap0,script=no,id=net0 \
+                               -device virtio-net,netdev=net0 \
+                           -netdev user,id=net1 \
+                               -device e1000,netdev=net1 \
+                           -drive if=none,id=hd0,format=raw,file=nautilus.iso \
+                               -device virtio-blk,drive=hd0
 ```
 
 
 ## Using BOCHS
 
 While we recommend using QEMU, sometimes it is nice to use the native debugging 
-support in BOCHS. We've used BOCHS successfully with version 2.6.8. You must have
+support in [BOCHS](http://bochs.sourceforge.net/). We've used BOCHS successfully with version 2.6.8. You must have
 a version of BOCHS that is built with x86_64 support, which does not seem to be the
 default in a lot of package repos. We had to build it manually. You probably also 
 want to enable the native debugger.
@@ -187,24 +187,24 @@ megs: 2048
 
 ## Using Gem5
 
-You can configure and build Nautilus for execution in the Gem5
-architectural simulator (http://gem5.org).  Note that Gem5 is very
+You can configure and build Nautilus for execution in the [Gem5
+architectural simulator](http://gem5.org).  Note that Gem5 is very
 slow.  Simulated time is 2-3 orders of magnitude slower than
 real-time.  If you care about interaction, and not simulation
 accuracy, configure Nautilus to override the APIC timing calibration
 results, a suboption under the Gem5 target architecture.  Once you
 have built the kernel for the Gem5 target architecture, you can copy
-nautilus.bin to ~gem5/binaries, and run it using Gem5's example full
-system configuration (~gem5/configs/example/fs.py), like this (for two
+`nautilus.bin` to `~gem5/binaries`, and run it using Gem5's example full
+system configuration (`~gem5/configs/example/fs.py`), like this (for two
 cpus):
 
-```
+```Shell
 $> cd ~gem5
 $> build/X86/gem5.opt -d run.out configs/example/fs.py -n 2
 ```
 
 Nautilus on Gem5 follows Gem5's boot model for Linux.  If you don't
-want to change anything, just symlink binaries/nautilus.bin as the
+want to change anything, just symlink `binaries/nautilus.bin` as the
 linux kernel executable the example config expects.  Alternatively,
 you can modify the config like this, or do something similar in your
 own config:
@@ -217,11 +217,11 @@ own config:
 Once Gem5 is running, you can debug Nautilus in the following
 Gem5-standard ways:
 
-```
-telnet localhost 3456  # access serial0 / com1
+```Shell
+$> telnet localhost 3456  # access serial0 / com1
 ```
 
-```
+```GDB
 gdb binaries/nautilus.bin
 (gdb) target remote localhost:7000 # attach debugger to cpu 0
 (gdb) set architecture i386:x86-64
@@ -229,9 +229,9 @@ gdb binaries/nautilus.bin
 ```
 
 Note that if you want to interact with Nautilus running on Gem5, you
-will need to use the virtual console on a char device ("serial0") to
-do so.   If you don't want to interact, please see the "autoexec.bat"
-startup script feature in src/arch/gem5/init.c.
+will need to use the virtual console on a char device (`serial0`) to
+do so.   If you don't want to interact, please see the `autoexec.bat`
+startup script feature in `src/arch/gem5/init.c`.
 
 ## Rapid Development
 
@@ -244,7 +244,7 @@ VMWare provider). We hope to get this working for VirtualBox, and perhaps AWS
 soon. If you already have Vagrant installed, to get started you can do the
 following from the top-level Nautilus directory:
 
-```
+```Shell
 $> vagrant up
 ```
 
@@ -253,9 +253,9 @@ packages. It will automatically clone the latest version of Nautilus and build
 it. To connect to the VM, you can ssh into it, and immediately start running
 Nautilus. There is a demo put in the VM's nautilus directory which will boot
 Nautilus in QEMU with a virtual console on a serial port and the QEMU monitor in
-another tmux pane:
+another `tmux` pane:
 
-```
+```Shell
 $> vagrant ssh
 [vagrant@localhost] cd nautilus
 [vagrant@localhost] . ./demo
@@ -285,15 +285,15 @@ and the commit logs for details.
 
 ## Acknowledgements
 
-Nautilus was made possible by support from the United States National Science
-Foundation (NSF) via grants CCF-1533560, CRI-1730689, REU-1757964, CNS-1718252,
-CNS-0709168, CNS-1763743, and CNS-1763612, the Department of Energy (DOE) via
-grant DE-SC0005343, and Sandia National Laboratories through the Hobbes
-Project, which was funded by the 2013 Exascale Operating and Runtime Systems
-Program under the Office of Advanced Scientific Computing Research in the DOE
-Office of Science. Sandia National Laboratories is a multi-program laboratory
+Nautilus was made possible by support from the United States [National Science
+Foundation](https://nsf.gov) (NSF) via grants [CCF-1533560](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1533560), [CRI-1730689](https://nsf.gov/awardsearch/showAward?AWD_ID=1730689&HistoricalAwards=false), [REU-1757964](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1757964), [CNS-1718252](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1718252&HistoricalAwards=false),
+CNS-0709168, [CNS-1763743](https://www.nsf.gov/awardsearch/showAward?AWD_ID=0709168), and [CNS-1763612](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1763612&HistoricalAwards=false), the [Department of Energy](https://www.energy.gov/) (DOE) via
+grant DE-SC0005343, and [Sandia National Laboratories](https://www.sandia.gov/) through the [Hobbes
+Project](https://xstack.sandia.gov/hobbes/), which was funded by the [2013 Exascale Operating and Runtime Systems
+Program](https://science.energy.gov/~/media/grants/pdf/lab-announcements/2013/LAB_13-02.pdf) under the [Office of Advanced Scientific Computing Research](https://science.energy.gov/ascr) in the [DOE
+Office of Science](https://science.energy.gov/). Sandia National Laboratories is a multi-program laboratory
 managed and operated by Sandia Corporation, a wholly owned subsidiary of
-Lockheed Martin Corporation, for the U.S. Department of Energy's National
-Nuclear Security Administration under contract DE-AC04-94AL85000.
+Lockheed Martin Corporation, for the U.S. Department of Energy's [National
+Nuclear Security Administration](https://www.energy.gov/nnsa/national-nuclear-security-administration) under contract [DE-AC04-94AL85000](https://govtribe.com/award/federal-contract-award/definitive-contract-deac0494al85000).
 
-Kyle C. Hale (c) 2018 
+[Kyle C. Hale](http://halek.co) © 2018 
