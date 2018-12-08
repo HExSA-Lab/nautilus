@@ -2,10 +2,6 @@ language: c
 
 dist: xenial
 
-env: 
-    global:
-        - secure: "gyFOidtqUCA3rJdYrkj4lQ"
-
 addons:
     coverity_scan:
         # GitHub project metadata
