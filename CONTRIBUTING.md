@@ -197,7 +197,7 @@ as a whole, consider using `panic()`.
 This includes unimplemented features and unhandled cases. These cases
 should **always** return -1 (and ideally do something like the following).
 
-```
+```C
 ERROR_PRINT("UNIMPLEMENTED (%s)\n", __func__);
 ```
 
@@ -205,19 +205,19 @@ ERROR_PRINT("UNIMPLEMENTED (%s)\n", __func__);
 Try to make variable names short and concise, but
 unambiguous. 
 
-```
+```C
 int network_packet_count;
 ```
 
 is very clear, but too long.
 
-```
+```C
 int npc;
 ```
 
 is concise but conveys no meaning.
 
-```
+```C
 int net_pkt_cnt;
 ```
 
@@ -243,19 +243,19 @@ functions.
 We prefer `glibc` style function headers with return types on
 separate lines as the function name, e.g.:
 
-
+```C
     static inline int
     foo (int arg1, int arg2)
     {
         return 0;
     }
-
+```
 not this:
-
+```C
     static inline int foo(int arg1,int arg2) {
         return 0;
     }
-
+```
 Note the liberal use of whitespace here (and the space before the parameter
 list).  The opening bracket comes on the line *after* the parameter list to
 look more symmetric.
@@ -264,7 +264,7 @@ look more symmetric.
 
 In general, prefer multiline comment syntax with `*`s added
 to extra lines. E.g., this:
-
+```C
     /*
      * This is a comment for a function.
      * It uses proper alignment and does not
@@ -274,9 +274,9 @@ to extra lines. E.g., this:
     {
         return 0;
     }
-
+```
 not this:
-
+```C
     // this comment is not proper style for Nautilus. It runs on too long in 
     // an individual
     // line and does not maintain balance. Furthermore, it uses
@@ -284,23 +284,23 @@ not this:
     // using visual select followed by gq to automatically balance
     // subsequent lines.
     int foo(void) { return 0;}
-
+```
 
 #### Conditionals
 
 Prefer this:
-
+```C
     if (cond == 0) {
         a++;
     }
     foo(a);
-
+```
 over this:
-
+```C
     if (cond == 0) 
         a++
     foo(a);
-
+```
 #### Debugging Output
 Debugging output can be added when you're developing but do not want prints to
 appear when the code is running regularly.
@@ -326,7 +326,7 @@ appear properly in the commit message. If you have a university affiliated e-mai
 one over personal e-mails. Pull requests or patchsets that have improper e-mails or 
 names (e.g. Author: root@root.com) will be rejected.
 * For multiple-author commits, adhere to the following style
-    ```
+    ```Shell
     git commit --author="John Doe, Sam Smith, and Brian Bootloader <jdoe,ssmith,bboot@cs.univ.edu>"
     ```
 
