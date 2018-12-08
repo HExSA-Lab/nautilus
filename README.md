@@ -2,7 +2,7 @@
 [![Build Status](https://travis-ci.com/HExSA-Lab/nautilus.svg?branch=master)](https://travis-ci.com/HExSA-Lab/nautilus)
 [![Coverity Scan Build Status](https://scan.coverity.com/projects/17390/badge.svg)](https://scan.coverity.com/projects/hexsa-lab-nautilus)
 [![CodeFactor](https://www.codefactor.io/repository/github/hexsa-lab/nautilus/badge)](https://www.codefactor.io/repository/github/hexsa-lab/nautilus)
-[![Total alerts](https://img.shields.io/lgtm/alerts/g/HExSA-Lab/nautilus.svg?logo=lgtm&logoWidth=18)]
+[![Total alerts](https://img.shields.io/lgtm/alerts/g/HExSA-Lab/nautilus.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/HExSA-Lab/nautilus/alerts/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 # Nautilus
