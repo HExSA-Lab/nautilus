@@ -115,7 +115,7 @@ int nk_join(nk_thread_id_t t, void ** retval);
 int nk_join_all_children(int (*output_consumer)(void *output));
 
 // called explictly or implicitly when a thread exits
-void nk_thread_exit(void * retval);
+void nk_thread_exit(void * retval) __attribute__((noreturn));
 
 // garbage collect an exited thread - typically called
 // by the reaper logic in the scheduler

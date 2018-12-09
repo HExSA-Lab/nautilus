@@ -130,9 +130,9 @@ time_t time(time_t * timer);
 
 
 
-void abort(void);
+void abort(void) __attribute__((noreturn));
 int __popcountdi2(long long a);
-void exit(int status);
+void exit(int status) __attribute__((noreturn));
 int clock_gettime(clockid_t, struct timespec*);
 void __assert_fail(const char*, const char*, unsigned, const char*);
 int vfprintf(FILE*, const char*, va_list);
