@@ -31,7 +31,7 @@ extern "C" {
 
 #include <lib/bitops.h>
 
-extern __attribute__((const, noreturn)) int ____ilog2_NaN(void);
+extern __attribute__((const)) int ____ilog2_NaN(void);
 
 #define is_power_of_2(x) ((x) != 0 && (((x) & ((x) - 1)) == 0))
 static inline __attribute__((const))

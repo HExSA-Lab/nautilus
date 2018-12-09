@@ -22,7 +22,7 @@ static int conf_lineno, conf_warnings, conf_unsaved;
 
 const char conf_def_filename[] = ".config";
 
-const char conf_defname[] = "arch/$ARCH/defconfig";
+const char conf_defname[] = "setups/$ARCH/defconfig";
 
 const char *conf_confnames[] = {
 	".config",
@@ -333,7 +333,7 @@ int conf_write(const char *name)
 	struct symbol *sym;
 	struct menu *menu;
 	const char *basename;
-	char dirname[128], tmpname[128], newname[128];
+	char dirname[128], tmpname[128], newname[256];
 	int type, l;
 	const char *str;
 	time_t now;
@@ -341,44 +341,64 @@ int conf_write(const char *name)
 	char *env;
 
 	dirname[0] = 0;
-	if (name && name[0]) {
-		struct stat st;
-		char *slash;
 
-		if (!stat(name, &st) && S_ISDIR(st.st_mode)) {
-			strcpy(dirname, name);
-			strcat(dirname, "/");
-			basename = conf_def_filename;
-		} else if ((slash = strrchr(name, '/'))) {
-			int size = slash - name + 1;
-			memcpy(dirname, name, size);
-			dirname[size] = 0;
-			if (slash[1])
-				basename = slash + 1;
-			else
-				basename = conf_def_filename;
-		} else
-			basename = name;
-	} else
-		basename = conf_def_filename;
+    memset(newname, 0, 256);
 
-	sprintf(newname, "%s.tmpconfig.%d", dirname, (int)getpid());
+    if (name && name[0]) {
+        struct stat st;
+        char *slash;
+
+        if (!stat(name, &st) && S_ISDIR(st.st_mode)) {
+            strcpy(dirname, name);
+            strcat(dirname, "/");
+            basename = conf_def_filename;
+        } else if ((slash = strrchr(name, '/'))) {
+            int size = slash - name + 1;
+            memcpy(dirname, name, size);
+            dirname[size] = 0;
+            if (slash[1]) {
+                basename = slash + 1;
+            } else {
+                basename = conf_def_filename;
+            }
+        } else {
+            basename = name;
+        }
+    } else {
+        basename = conf_def_filename;
+    }
+
+	snprintf(newname, 256, "%s.tmpconfig.%d", dirname, (int)getpid());
+
 	out = fopen(newname, "w");
-	if (!out)
+
+	if (!out) {
 		return 1;
+    }
+
 	out_h = NULL;
+
 	if (!name) {
+
 		out_h = fopen(".tmpconfig.h", "w");
+
 		if (!out_h)
 			return 1;
+
 		file_write_dep(NULL);
 	}
+
 	sym = sym_lookup("KERNELVERSION", 0);
+
 	sym_calc_value(sym);
+
 	time(&now);
+
 	env = getenv("KCONFIG_NOTIMESTAMP");
-	if (env && *env)
+
+	if (env && *env) {
 		use_timestamp = 0;
+    }
 
 	fprintf(out, _("#\n"
 		       "# Automatically generated make config: don't edit\n"
@@ -388,7 +408,8 @@ int conf_write(const char *name)
 		     sym_get_string_value(sym),
 		     use_timestamp ? "# " : "",
 		     use_timestamp ? ctime(&now) : "");
-	if (out_h)
+
+	if (out_h) {
 		fprintf(out_h, "/*\n"
 			       " * Automatically generated C config: don't edit\n"
 			       " * Nautilus version: %s\n"
@@ -398,11 +419,14 @@ int conf_write(const char *name)
 			       sym_get_string_value(sym),
 			       use_timestamp ? " * " : "",
 			       use_timestamp ? ctime(&now) : "");
+    }
 
-	if (!sym_change_count)
+	if (!sym_change_count) {
 		sym_clear_all_valid();
+    }
 
 	menu = rootmenu.list;
+
 	while (menu) {
 		sym = menu->sym;
 		if (!sym) {

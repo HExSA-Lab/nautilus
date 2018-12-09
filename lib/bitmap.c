@@ -352,7 +352,6 @@ void bitmap_set(unsigned long *map, int start, int nr)
 void bitmap_clear(unsigned long *map, int start, int nr)
 {
 	unsigned long *p = map + BIT_WORD(start);
-    printk("clearing at bitmap addr %p\n", (void*)p);
 	const int size = start + nr;
 	int bits_to_clear = BITS_PER_LONG - (start % BITS_PER_LONG);
 	unsigned long mask_to_clear = BITMAP_FIRST_WORD_MASK(start);

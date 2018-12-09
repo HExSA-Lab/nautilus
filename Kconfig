@@ -556,7 +556,6 @@ menu "Garbage Collection Options"
 
      config ENABLE_BDWGC
       bool "BDWGC"
-      default n
       depends on GARBAGE_COLLECTION
       help
         If enabled, the BDWGC garbage colector is used.
@@ -565,7 +564,6 @@ menu "Garbage Collection Options"
 
      config ENABLE_PDSGC
       bool "PDSGC"
-      default n
       depends on GARBAGE_COLLECTION
       help
         If enabled, the home-grown PDSGC garbage colector is used.
