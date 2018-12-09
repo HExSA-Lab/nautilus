@@ -28,6 +28,7 @@
 
 #include <nautilus/nautilus.h>
 #include <nautilus/thread.h>
+#include <nautilus/timer.h>
 #include <nautilus/waitqueue.h>
 #include <nautilus/list.h>
 #include <dev/ps2.h>
@@ -125,6 +126,7 @@ struct nk_virtual_console {
   uint32_t num_threads;
   struct list_head vc_node;
   nk_wait_queue_t *waiting_threads;
+  nk_timer_t *timer;
 };
 
 
@@ -164,6 +166,23 @@ static inline void copy_vc_to_display(struct nk_virtual_console *vc)
 #endif
 }
 
+#ifdef NAUT_CONFIG_VIRTUAL_CONSOLE_DISPLAY_NAME
+
+#define VC_TIMER_MS 500UL
+#define VC_TIMER_NS (1000000UL*VC_TIMER_MS)
+
+static void vc_timer_callback(void *state)
+{
+    struct nk_virtual_console *vc = (struct nk_virtual_console *)state;
+
+    nk_vc_display_str_specific(vc,vc->name,strlen(vc->name),0xf0,VGA_WIDTH-strlen(vc->name),0);
+
+    nk_timer_reset(vc->timer, VC_TIMER_NS);
+    nk_timer_start(vc->timer);
+}
+    
+#endif
+
 
 struct nk_virtual_console *nk_create_vc (char *name, 
 					 enum nk_vc_type new_vc_type, 
@@ -194,15 +213,26 @@ struct nk_virtual_console *nk_create_vc (char *name,
   new_vc->num_threads = 0;
   snprintf(buf,NK_WAIT_QUEUE_NAME_LEN,"vc-%s-wait",name);
   new_vc->waiting_threads = nk_wait_queue_create(buf);
-
+#ifdef NAUT_CONFIG_VIRTUAL_CONSOLE_DISPLAY_NAME
+  snprintf(buf,NK_TIMER_NAME_LEN,"vc-%s-timer",name);
+  new_vc->timer = nk_timer_create(buf);
+#endif
+  
   // clear to new attr
   for (i = 0; i < VGA_HEIGHT*VGA_WIDTH; i++) {
     new_vc->BUF[i] = vga_make_entry(' ', new_vc->cur_attr);
   }
 
+#ifdef NAUT_CONFIG_VIRTUAL_CONSOLE_DISPLAY_NAME
+  // start timer
+  nk_timer_set(new_vc->timer,VC_TIMER_NS,NK_TIMER_CALLBACK,vc_timer_callback,new_vc,0);
+  nk_timer_start(new_vc->timer);
+#endif
+  
   STATE_LOCK();
   list_add_tail(&new_vc->vc_node, &vc_list);
   STATE_UNLOCK();
+
   return new_vc;
 }
 
@@ -239,6 +269,10 @@ static int _destroy_vc(struct nk_virtual_console *vc)
 
   list_del(&vc->vc_node);
   nk_wait_queue_destroy(vc->waiting_threads);
+#ifdef NAUT_CONFIG_VIRTUAL_CONSOLE_DISPLAY_NAME
+  nk_timer_cancel(vc->timer);
+  nk_timer_destroy(vc->timer);
+#endif
   free(vc);
   return 0;
 }
@@ -463,6 +497,48 @@ int nk_vc_display_char(uint8_t c, uint8_t attr, uint8_t x, uint8_t y)
   return rc;
 }
   
+
+int nk_vc_display_str_specific(struct nk_virtual_console *vc,
+			       uint8_t *c, uint8_t n, uint8_t attr, uint8_t x, uint8_t y)
+{
+  int rc = 0;
+  uint16_t i;
+  uint16_t limit = (x+(uint16_t)n) > VGA_WIDTH ? VGA_WIDTH : x+(uint16_t)n;
+
+  if (vc) { 
+    BUF_LOCK_CONF;
+    BUF_LOCK(vc);
+    for (i=0;i<limit;i++) {
+	rc |= _vc_display_char_specific(vc, c[i], attr, x+i, y);
+    }
+    BUF_UNLOCK(vc);
+  }
+  return rc;
+}
+
+int nk_vc_display_str(uint8_t *c, uint8_t n, uint8_t attr, uint8_t x, uint8_t y) 
+{
+  int rc=0;
+  uint16_t i;
+  uint16_t limit = (x+(uint16_t)n) > VGA_WIDTH ? VGA_WIDTH : x+(uint16_t)n;
+  struct nk_virtual_console *vc = get_cur_thread()->vc;
+
+  if (!vc) { 
+    vc = default_vc;
+  }
+  if (vc) { 
+    BUF_LOCK_CONF;
+    BUF_LOCK(vc);
+    for (i=0;i<limit;i++) {
+	rc |= _vc_display_char_specific(vc, c[i], attr, x+i, y);
+    }
+    BUF_UNLOCK(vc);
+  }
+
+  return rc;
+}
+  
+
 
 static int _vc_setpos(uint8_t x, uint8_t y) 
 {
