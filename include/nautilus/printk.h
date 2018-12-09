@@ -31,7 +31,7 @@ extern "C" {
 #include <stdarg.h>
 #include <nautilus/naut_types.h>
 
-void panic (const char * fmt, ...);
+void panic (const char * fmt, ...) __attribute__((noreturn));
 int printk (const char * fmt, ...);
 int vprintk(const char * fmt, va_list args);
 int early_printk (const char * fmt, va_list args);

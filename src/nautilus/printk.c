@@ -117,7 +117,7 @@ vprintk (const char * fmt, va_list args)
 
 
 void 
-panic (const char * fmt, ...)
+panic (const char * fmt, ...) 
 {
     va_list arg;
 
@@ -126,6 +126,7 @@ panic (const char * fmt, ...)
     va_end(arg);
 
    __asm__ __volatile__ ("cli");
+
    while(1);
 }
 
