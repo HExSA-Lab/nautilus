@@ -269,6 +269,7 @@ http://halek.co, http://pdinda.org, http://interweaving.org,
 and the lab websites below.
 
 Our labs:
+
 <img src="http://cs.iit.edu/~khale/images/hexsa-logo.png" height=100/>
 
 [HExSA Lab](http://hexsa.halek.co) at [IIT](https://www.iit.edu)
