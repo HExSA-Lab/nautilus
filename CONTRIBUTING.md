@@ -69,6 +69,9 @@ a physical machine which you can control via serial port or BMC (e.g.
 with [IPMI + PXE boot](http://cs.iit.edu/~khale/docs/notes/pxe-server.html) 
 or with [PXE boot and a serial cable](http://cs.iit.edu/~khale/docs/notes/pxe.html)).
 
+We've provided a default `Vagrantfile` to use with [Vagrant](https://www.vagrantup.com/) for
+rapid development. See more in the [README](https://github.com/HExSA-Lab/nautilus/blob/master/README.md).
+
 ### Contributing Code
 You'll first want to make sure you have a Github account. Then, head
 over to the [Nautilus github page](https://github.com/HExSA-Lab/nautilus.git)
@@ -237,6 +240,36 @@ in the header file.
 In the case that they're interfacing with some external runtime system or
 library, it decreases the probability that they will collide with other
 functions.
+
+#### Design
+
+Generally you should try to make your code as general and reusable as possible. 
+You should try to separate things out into separate functions when applicable, and
+carefully considering performance implications. See [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself).
+
+#### Performance
+
+Please be cognizant of page size and cache effects when you write performance critical code. 
+
+For example, if you write a data structure, some component of which you know will be shared, consider
+aligning entries on a cache line. E.g. instead of:
+
+```C
+    struct perf_critical {
+        int a;
+        int b;
+        uint8_t data_buf[SIZE];
+     };
+```
+do this:
+
+```C
+    struct perf_critical {
+        int a;
+        int b;
+        uint8_t data_buf[SIZE] __attribute__((aligned(L1_LINE_SIZE)); // usually 64 bytes
+    };
+```
 
 #### Function style
 
