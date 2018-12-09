@@ -200,6 +200,12 @@ config USE_TICKETLOCKS
       Uses ticketlocks (similar to Linux impl.) instead of
       default spinlocks
 
+config VIRTUAL_CONSOLE_DISPLAY_NAME
+   bool "Display name of current virtual console"
+   default y
+   help
+        Puts the name of the current virtual console in the upper left
+	
 config VIRTUAL_CONSOLE_CHARDEV_CONSOLE
    bool "Place a virtual console interface on a character device"
    default n

@@ -76,8 +76,11 @@ int nk_vc_scrollup_specific(struct nk_virtual_console *vc);
 int nk_vc_setpos(uint8_t x, uint8_t y);
 int nk_vc_setpos_specific(struct nk_virtual_console *vc, uint8_t x, uint8_t y);
 int nk_vc_display_char(uint8_t c, uint8_t attr, uint8_t x, uint8_t y);
+int nk_vc_display_str(uint8_t *c, uint8_t n, uint8_t attr, uint8_t x, uint8_t y);
 int nk_vc_display_char_specific(struct nk_virtual_console *vc,
 				uint8_t c, uint8_t attr, uint8_t x, uint8_t y);
+int nk_vc_display_str_specific(struct nk_virtual_console *vc,
+			       uint8_t *c, uint8_t n, uint8_t attr, uint8_t x, uint8_t y);
 
 int nk_vc_enqueue_scancode(struct nk_virtual_console *vc, nk_scancode_t scan);
 int nk_vc_enqueue_keycode(struct nk_virtual_console *vc, nk_keycode_t key);
