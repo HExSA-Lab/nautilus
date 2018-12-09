@@ -2,7 +2,7 @@
 # Nautilus Contribution Guidelines
 
 We are happy to have contributors to our project. If you'd like to contribute
-a feature or general effort towards Nautilus, we ask that you first read these
+a feature, bug fix, or other component to Nautilus, we ask that you first read these
 guidelines.
 
 ## Table of Contents
@@ -236,7 +236,7 @@ file where they are defined should be declared as static and **not** included
 in the header file. 
 
 2. **`nk_` prefix**: Major interface functions should be named with the prefix
-"nk_". This allows easy understanding of how to interact with the subsystems.
+`nk_`. This allows easy understanding of how to interact with the subsystems.
 In the case that they're interfacing with some external runtime system or
 library, it decreases the probability that they will collide with other
 functions.
@@ -358,6 +358,9 @@ and will always print.
 appear properly in the commit message. If you have a university affiliated e-mail, prefer that
 one over personal e-mails. Pull requests or patchsets that have improper e-mails or 
 names (e.g. Author: root@root.com) will be rejected.
+* If you have GNU privacy utilities install (i.e., `gpg`), sign commits with your
+PGP key when possible (using
+`git commit -S`)
 * For multiple-author commits, adhere to the following style
     ```Shell
     git commit --author="John Doe, Sam Smith, and Brian Bootloader <jdoe,ssmith,bboot@cs.univ.edu>"
