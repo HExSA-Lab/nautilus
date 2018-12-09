@@ -67,9 +67,10 @@ environment using [Gem5](http://gem5.org/Main_Page)
 
 ## Building
 
-First, configure Nautilus by running 
-
-`make menuconfig`
+First, configure Nautilus by running either
+`make menuconfig` or `make defconfig`. The latter
+generates a default configuration for you. The former 
+allows you to customize your kernel build.
 
 Select any options you require, then 
 run `make` to build the HRT binary image. To make a bootable CD-ROM, 
