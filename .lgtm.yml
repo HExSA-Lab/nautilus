@@ -1,0 +1,35 @@
+path_classifiers:
+    test:
+        - src/test
+        - include/test
+    drivers:
+        - src/dev
+        - include/dev
+    gc:
+        - src/gc
+        - include/gc
+    acpi:
+        - src/acpi
+        - include/acpi
+    net:
+        - src/net
+        - include/net
+    rt:
+        - src/rt
+        - include/rt
+    core:
+        - src/nautilus
+        - include/nautilus
+
+extraction:
+    cpp:
+        prepare:
+            packages:
+                - gcc
+                - libstdc++-static
+            configure:
+                command: 
+                    - $GNU_MAKE defconfig
+            index:
+                build_command:
+                    - $GNU_MAKE -j6

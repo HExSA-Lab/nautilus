@@ -16,7 +16,7 @@ addons:
 
         # Commands to prepare for build_command
         # ** likely specific to your build **
-        build_command_prepend: curl -o .config https://gist.githubusercontent.com/khale/f683ac0423e9adb94ea5d6ec95eac126/raw/f9aeeeeac100f4d21dc50e0eaa588d5dbc3bfa53/default_nautilus_config.config
+        build_command_prepend: make defconfig
 
         # The command that will be added as an argument to "cov-build" to compile your project for analysis,
         # ** likely specific to your build **
@@ -32,7 +32,6 @@ addons:
         packages:
             - grub2
             - xorriso
-            - curl
+            - libstdc++-static
 
-
-script: curl -o .config https://gist.githubusercontent.com/khale/f683ac0423e9adb94ea5d6ec95eac126/raw/f9aeeeeac100f4d21dc50e0eaa588d5dbc3bfa53/default_nautilus_config.config && make isoimage
+script: make defconfig && make isoimage
