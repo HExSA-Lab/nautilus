@@ -4,7 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-
 /*
 ** This definition must come before the inclusion of 'stdio.h'; it
 ** should not affect non-POSIX systems
@@ -13,14 +12,6 @@
 #define	_LARGEFILE_SOURCE	1
 #define _FILE_OFFSET_BITS	64
 #endif
-
-/*
-#include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-*/ 
-
 
 #define liolib_c
 #define LUA_LIB

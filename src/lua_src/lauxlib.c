@@ -4,13 +4,6 @@
 ** See Copyright Notice in lua.h
 */
 
-
-//#include <errno.h>
-//#include <stdarg.h>
-//#include <stdio.h>
-//#include <stdlib.h>
-//#include <string.h>
-//int errno = 0;
 #include <nautilus/libccompat.h>
 #define LIB_LUA
 
@@ -46,7 +39,6 @@
 ** search for 'objidx' in table at index -1.
 ** return 1 + string at top if find a good name.
 */
-int errno=0;
 
 static int findfield (lua_State *L, int objidx, int level) {
   if (level == 0 || !lua_istable(L, -1))

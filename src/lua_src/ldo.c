@@ -102,25 +102,25 @@ static void seterrorobj (lua_State *L, int errcode, StkId oldtop) {
 }
 
 
-l_noret luaD_throw (lua_State *L, int errcode) {
-  if (L->errorJmp) {  /* thread has an error handler? */
-    L->errorJmp->status = errcode;  /* set status */
-    LUAI_THROW(L, L->errorJmp);  /* jump to it */
-  }
-  else {  /* thread has no error handler */
-    L->status = cast_byte(errcode);  /* mark it as dead */
-    if (G(L)->mainthread->errorJmp) {  /* main thread has a handler? */
-      setobjs2s(L, G(L)->mainthread->top++, L->top - 1);  /* copy error obj. */
-      luaD_throw(G(L)->mainthread, errcode);  /* re-throw in main thread */
+l_noret 
+luaD_throw (lua_State *L, int errcode) {
+    if (L->errorJmp) {  /* thread has an error handler? */
+        L->errorJmp->status = errcode;  /* set status */
+        LUAI_THROW(L, L->errorJmp);  /* jump to it */
+    } else {  /* thread has no error handler */
+        L->status = cast_byte(errcode);  /* mark it as dead */
+        if (G(L)->mainthread->errorJmp) {  /* main thread has a handler? */
+            setobjs2s(L, G(L)->mainthread->top++, L->top - 1);  /* copy error obj. */
+            luaD_throw(G(L)->mainthread, errcode);  /* re-throw in main thread */
+        }
+        else {  /* no handler at all; abort */
+            if (G(L)->panic) {  /* panic function? */
+                lua_unlock(L);
+                (G(L)->panic)(L);  /* call it (last chance to jump out) */
+            }
+            abort();
+        }
     }
-    else {  /* no handler at all; abort */
-      if (G(L)->panic) {  /* panic function? */
-        lua_unlock(L);
-        (G(L)->panic)(L);  /* call it (last chance to jump out) */
-      }
-      abort();
-    }
-  }
 }
 
 

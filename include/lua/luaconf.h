@@ -401,7 +401,7 @@
 */
 #define LUA_NUMBER_SCAN		"%lf"
 #define LUA_NUMBER_FMT		"%f"
-#define lua_number2str(s,n)	snprintf((s), LUA_NUMBER_FMT,"%d", (n))
+#define lua_number2str(s,n)	snprintf((s), (n), LUA_NUMBER_FMT, "%d")
 #define LUAI_MAXNUMBER2STR	32 /* 16 digits, sign, point, and \0 */
 
 
