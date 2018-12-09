@@ -269,8 +269,12 @@ http://halek.co, http://pdinda.org, http://interweaving.org,
 and the lab websites below.
 
 Our labs:
+<img src="http://cs.iit.edu/~khale/images/hexsa-logo.png" height=100/>
 
 [HExSA Lab](http://hexsa.halek.co) at [IIT](https://www.iit.edu)
+
+<img src="http://cs.iit.edu/~khale/nautilus/img/prescience.png" height=100/>
+
 [Prescience Lab](http://www.presciencelab.org) at [Northwestern](https://www.northwestern.edu)
 
 ## Maintainers
@@ -282,9 +286,14 @@ page](http://cs.iit.edu/~khale/nautilus/) as well as comments in the headers
 and the commit logs for details.   
 
 ## License 
-[MIT](LICENSE)
+[![MIT License](http://seawisphunter.com/minibuffer/api/MIT-License-transparent.png)](https://github.com/HExSA-Lab/nautilus/blob/master/LICENSE.txt)
 
 ## Acknowledgements
+
+<img align="left" src="https://www.nsf.gov/images/logos/NSF_4-Color_bitmap_Logo.png" height=100/>
+<img align="left" src="https://ucrtoday.ucr.edu/wp-content/uploads/2018/06/DOE-logo.png" height=100/>
+<img src="https://upload.wikimedia.org/wikipedia/commons/3/32/Sandia_National_Laboratories_logo.svg" height=100/>
+
 
 Nautilus was made possible by support from the United States [National Science
 Foundation](https://nsf.gov) (NSF) via grants [CCF-1533560](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1533560), [CRI-1730689](https://nsf.gov/awardsearch/showAward?AWD_ID=1730689&HistoricalAwards=false), [REU-1757964](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1757964), [CNS-1718252](https://www.nsf.gov/awardsearch/showAward?AWD_ID=1718252&HistoricalAwards=false),
