@@ -147,6 +147,7 @@ typedef struct mb_mb64_hrt {
     
 } __attribute__((packed)) mb_mb64_hrt_t;
 
+
 typedef struct mb_data {
     mb_header_t   *header;
     mb_info_t     *info;
@@ -159,47 +160,53 @@ typedef struct mb_data {
 } mb_data_t;
 
 
-
-static int is_elf(uint8_t *data, uint64_t size)
+static int 
+is_elf (uint8_t *data, uint64_t size)
 {
     if (*((uint32_t*)data)==ELF_MAGIC) {
-	return 1;
+        return 1;
     } else { 
-	return 0;
+        return 0;
     }
 }
 
-static mb_header_t *find_mb_header(uint8_t *data, uint64_t size)
+
+static mb_header_t *
+find_mb_header (uint8_t *data, uint64_t size)
 {
     uint64_t limit = size > 32768 ? 32768 : size;
     uint64_t i;
-
 
     DEBUG("scanning for mb header at %p (%lu bytes)\n",data,size);
     // Scan for the .boot magic cookie
     // must be in first 32K, assume 4 byte aligned
     for (i=0;i<limit;i+=4) { 
-	if (*((uint32_t*)&data[i])==MB2_MAGIC) {
-	    DEBUG("Found multiboot header at offset 0x%llx\n",i);
-	    return (mb_header_t *) &data[i];
-	} 
+        if (*((uint32_t*)&data[i])==MB2_MAGIC) {
+            DEBUG("Found multiboot header at offset 0x%llx\n",i);
+            return (mb_header_t *) &data[i];
+        } 
     }
+
     return 0;
 }
 
-static int checksum4_ok(uint32_t *data, uint64_t size)
+
+static int 
+checksum4_ok (uint32_t *data, uint64_t size)
 {
     int i;
     uint32_t sum=0;
 
     for (i=0;i<size;i++) {
-	sum+=data[i];
+        sum+=data[i];
     }
 
     return sum==0;
 }
 
-static int parse_multiboot_header(void *data, uint64_t size, mb_data_t *mb)
+
+static int 
+parse_multiboot_header (void *data, uint64_t size, mb_data_t *mb)
 {
     uint64_t i;
     
@@ -212,25 +219,24 @@ static int parse_multiboot_header(void *data, uint64_t size, mb_data_t *mb)
     mb_framebuf_t *mb_framebuf=0;
     mb_modalign_t *mb_modalign=0;
     mb_mb64_hrt_t *mb_mb64_hrt=0;
-    
 
     if (!is_elf(data,size)) { 
-	ERROR("HRT is not an ELF\n");
-	return -1;
+        ERROR("HRT is not an ELF\n");
+        return -1;
     }
 
     mb_header = find_mb_header(data,size);
 
     if (!mb_header) { 
-	ERROR("No multiboot header found\n");
-	return -1;
+        ERROR("No multiboot header found\n");
+        return -1;
     }
 
     // Checksum applies only to the header itself, not to 
     // the subsequent tags... 
     if (!checksum4_ok((uint32_t*)mb_header,4)) { 
-	ERROR("Multiboot header has bad checksum\n");
-	return -1;
+        ERROR("Multiboot header has bad checksum\n");
+        return -1;
     }
 
     DEBUG("Multiboot header: arch=0x%x, headerlen=0x%x\n", mb_header->arch, mb_header->headerlen);
@@ -356,20 +362,20 @@ struct nk_exec *nk_load_exec(char *path)
     DEBUG("Loading executable at path %s\n", path);
 
     if (!(page = malloc(MB_LOAD))) { 
-	ERROR("Failed to allocate temporary space for loading file %s\n",path);
-	goto out_bad;
+        ERROR("Failed to allocate temporary space for loading file %s\n",path);
+        goto out_bad;
     }
 
     memset(page,0,MB_LOAD);
     
     if (FS_FD_ERR(fd = nk_fs_open(path,O_RDONLY,0666))) { 
-	ERROR("Executable file %s could not be opened\n", path);
-	goto out_bad;
+        ERROR("Executable file %s could not be opened\n", path);
+        goto out_bad;
     }
 
     if (nk_fs_read(fd,page,MB_LOAD)!=MB_LOAD) { 
-	ERROR("Could not read first page of file %s\n", path);
-	goto out_bad;
+        ERROR("Could not read first page of file %s\n", path);
+        goto out_bad;
     }
 
     // the MB header should be in the first 2 pages by construction
@@ -377,22 +383,22 @@ struct nk_exec *nk_load_exec(char *path)
     mb_data_t m;
 
     if (parse_multiboot_header(page, MB_LOAD, &m)) { 
-	ERROR("Cannot parse multiboot kernel header from first page of %s\n", path);
-	goto out_bad;
+        ERROR("Cannot parse multiboot kernel header from first page of %s\n", path);
+        goto out_bad;
     }
 
     DEBUG("Parsed MB header from %s\n", path);
 
     if (!m.mb64_hrt) { 
-	ERROR("%s is not a MB64 image\n", path);
-	goto out_bad;
+        ERROR("%s is not a MB64 image\n", path);
+        goto out_bad;
     }
 
 #define REQUIRED_FLAGS (MB_TAG_MB64_HRT_FLAG_RELOC | MB_TAG_MB64_HRT_FLAG_EXE)
 
     if ((m.mb64_hrt->hrt_flags & REQUIRED_FLAGS)!=REQUIRED_FLAGS) {
-	ERROR("%s's flags (%lx) do not include %lx\n", m.mb64_hrt->hrt_flags, REQUIRED_FLAGS);
-	goto out_bad;
+        ERROR("%s's flags (%lx) do not include %lx\n", path, m.mb64_hrt->hrt_flags, REQUIRED_FLAGS);
+        goto out_bad;
     }
     
     uint64_t load_start, load_end, bss_end;
@@ -416,8 +422,8 @@ struct nk_exec *nk_load_exec(char *path)
     e = malloc(sizeof(struct nk_exec));
     
     if (!e) { 
-	ERROR("Cannot allocate executable exec for %s\n", path);
-	goto out_bad;
+        ERROR("Cannot allocate executable exec for %s\n", path);
+        goto out_bad;
     }
 
     memset(e,0,sizeof(*e));
@@ -425,8 +431,8 @@ struct nk_exec *nk_load_exec(char *path)
     e->blob = malloc(blob_size);
 
     if (!e->blob) { 
-	ERROR("Cannot allocate executable blob for %s\n",path);
-	goto out_bad;
+        ERROR("Cannot allocate executable blob for %s\n",path);
+        goto out_bad;
     }
     
     e->blob_size = blob_size;
@@ -437,8 +443,8 @@ struct nk_exec *nk_load_exec(char *path)
     
     
     if ((n = nk_fs_read(fd,e->blob,e->blob_size))<0) {
-	ERROR("Unable to read blob from %s\n", path);
-	goto out_bad;
+        ERROR("Unable to read blob from %s\n", path);
+        goto out_bad;
     }
 
     DEBUG("Tried to read 0x%lx byte blob, got 0x%lx bytes\n", e->blob_size, n);
@@ -472,23 +478,24 @@ static void * (*__nk_func_table[])() = {
 };
 
 
-int             nk_start_exec(struct nk_exec *exec, void *in, void **out)
+int 
+nk_start_exec (struct nk_exec *exec, void *in, void **out)
 {
     int (*start)(void *, void **,void * (**)());
 
     if (!exec) { 
-	ERROR("Exec of null\n");
-	return -1;
+        ERROR("Exec of null\n");
+        return -1;
     }
 
     if (!exec->blob) { 
-	ERROR("Exec of null blob\n");
-	return -1;
+        ERROR("Exec of null blob\n");
+        return -1;
     }
 
     if (exec->entry_offset > exec->blob_size) { 
-	ERROR("Exec attempt beyond end of blob\n");
-	return -1;
+        ERROR("Exec attempt beyond end of blob\n");
+        return -1;
     }
 
     start = exec->blob + exec->entry_offset;
@@ -503,26 +510,29 @@ int             nk_start_exec(struct nk_exec *exec, void *in, void **out)
 }
 
 
-int             nk_unload_exec(struct nk_exec *exec)
+int 
+nk_unload_exec (struct nk_exec *exec)
 {
     if (exec && exec->blob) {
-	free(exec->blob);
+        free(exec->blob);
     }
     if (exec) { 
-	free(exec);
+        free(exec);
     }
     return 0;
 }
 
 
 // these don't do much now
-int  nk_loader_init()
+int  
+nk_loader_init( )
 {
     DEBUG("init\n");
     return 0;
 }
 
-void nk_loader_deinit()
+void 
+nk_loader_deinit ()
 {
     DEBUG("deinit\n");
 }

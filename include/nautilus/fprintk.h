@@ -1,3 +1,5 @@
+#ifndef __FPRINTK_H__
+#define __FPRINTK_H__
 /* 
  * This file is part of the Nautilus AeroKernel developed
  * by the Hobbes and V3VEE Projects with funding from the 
@@ -8,7 +10,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2016, Kyle C. Hale <khale@cs.iit.edu>
  * Copyright (c) 2016, The V3VEE Project  <http://www.v3vee.org> 
@@ -34,3 +36,5 @@ struct fprintk_state {
 
 int vfprintk(nk_fs_fd_t fd, const char * fmt, va_list args);
 int fprintk(nk_fs_fd_t fd, const char * fmt, ...);
+
+#endif

@@ -906,7 +906,7 @@ int handle_ioapic(char *buf)
 	    for (num=0;num<sys->num_ioapics;num++) {
 		io = sys->ioapics[num];
 		nk_vc_printf("ioapic %u: id=%u %u pins address=%p\n",
-			     num, io->id, io->num_entries, io->base);
+			     num, io->id, io->num_entries, (void*)io->base);
 		if (what[0]=='d') { 
 		    uint64_t entry;
 		    for (pin=0;pin<io->num_entries;pin++) { 
@@ -975,10 +975,10 @@ int handle_pci(char *buf)
       ((bwdq='d', sscanf(buf,"pci poke %x %x %x %x %x", &bus, &slot, &func, &off,&data))==5)) {
       if (bwdq=='w') { 
 	  pci_cfg_writew(bus,slot,func,off,(uint16_t)data);
-	  nk_vc_printf("PCI[%x:%x.%x:%x] = 0x%04lx\n",bus,slot,func,off,(uint16_t)data);
+	  nk_vc_printf("PCI[%x:%x.%x:%x] = 0x%04x\n",bus,slot,func,off,(uint16_t)data);
       } else {
 	  pci_cfg_writel(bus,slot,func,off,(uint32_t)data);
-	  nk_vc_printf("PCI[%x:%x.%x:%x] = 0x%08lx\n",bus,slot,func,off,(uint32_t)data);
+	  nk_vc_printf("PCI[%x:%x.%x:%x] = 0x%08x\n",bus,slot,func,off,(uint32_t)data);
       }
       return 0;
   }
@@ -988,10 +988,10 @@ int handle_pci(char *buf)
       ((bwdq='d', sscanf(buf,"pci peek %x %x %x %x", &bus, &slot, &func, &off))==4)) {
       if (bwdq=='w') { 
 	  data = pci_cfg_readw(bus,slot,func,off);
-	  nk_vc_printf("PCI[%x:%x.%x:%x] = 0x%04lx\n",bus,slot,func,off,(uint16_t)data);
+	  nk_vc_printf("PCI[%x:%x.%x:%x] = 0x%04x\n",bus,slot,func,off,(uint16_t)data);
       } else {
 	  data = pci_cfg_readl(bus,slot,func,off);
-	  nk_vc_printf("PCI[%x:%x.%x:%x] = 0x%08lx\n",bus,slot,func,off,(uint32_t)data);
+	  nk_vc_printf("PCI[%x:%x.%x:%x] = 0x%08x\n",bus,slot,func,off,(uint32_t)data);
       }
       return 0;
   }
@@ -1718,7 +1718,7 @@ static int handle_cmd(char *buf, int n)
       uint64_t i,k;
       for (i=0;i<size;i++) { 
 	  data = msr_read(msr+i);
-	  nk_vc_printf("MSR[0x%08x] = 0x%016lx ",msr+i,data);
+	  nk_vc_printf("MSR[0x%08x] = 0x%016lx ",(uint32_t)(msr+i),data);
 	  for (k=0;k<8;k++) { 
 	      nk_vc_printf("%02x",*(k + (uint8_t*)&data));
 	  }
@@ -1748,7 +1748,7 @@ static int handle_cmd(char *buf, int n)
       for (i=0;i<size;i++) {
 	  if (sub) { 
 	      cpuid_sub(id,idsub,&r);
-	      nk_vc_printf("CPUID[0x%08x, 0x%08x] =",id+i,idsub);
+	      nk_vc_printf("CPUID[0x%08x, 0x%08x] =",(uint32_t)(id+i),idsub);
 	  } else {
 	      cpuid(id+i,&r);
 	      nk_vc_printf("CPUID[0x%08x] =",id+i);
@@ -1783,7 +1783,7 @@ static int handle_cmd(char *buf, int n)
       char *typestr;
 	  
       if (nk_mtrr_find_type((void*)addr,&type,&typestr)) {
-	  nk_vc_printf("Cannot find memory type for %p\n",addr);
+	  nk_vc_printf("Cannot find memory type for %p\n",(void*)addr);
       } else {
 	  nk_vc_printf("Mem[0x%016lx] has type 0x%02x %s\n", addr, type, typestr);
       }
@@ -1804,7 +1804,7 @@ static int handle_cmd(char *buf, int n)
   }
 
   if (sscanf(buf,"burn a %s %llu %u %llu", name, &size_ns, &tpr, &priority)==4) { 
-    nk_vc_printf("Starting aperiodic burner %s with tpr %u, size %llu ms.and priority %llu\n",name,size_ns,priority);
+    nk_vc_printf("Starting aperiodic burner %s with tpr %u, size %llu ms.and priority %llu\n", name, tpr, size_ns, priority);
     size_ns *= 1000000;
     launch_aperiodic_burner(name,size_ns,tpr,priority);
     return 0;

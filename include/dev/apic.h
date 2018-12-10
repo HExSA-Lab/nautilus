@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
@@ -262,9 +262,9 @@ static inline void
 apic_write (struct apic_dev * apic, uint_t reg, uint32_t val)
 {
     if (apic->mode==APIC_X2APIC) { 
-	_apic_msr_write(X2APIC_MMIO_REG_OFFSET_TO_MSR(reg), (uint64_t)val);
+        _apic_msr_write(X2APIC_MMIO_REG_OFFSET_TO_MSR(reg), (uint64_t)val);
     } else {
-	*((volatile uint32_t *)(apic->base_addr + reg)) = val;
+        *((volatile uint32_t *)(apic->base_addr + reg)) = val;
     }
 }
 
@@ -272,20 +272,21 @@ static inline uint32_t
 apic_read (struct apic_dev * apic, uint_t reg)
 {
     if (apic->mode==APIC_X2APIC) { 
-	return (uint32_t) _apic_msr_read(X2APIC_MMIO_REG_OFFSET_TO_MSR(reg));
+        return (uint32_t) _apic_msr_read(X2APIC_MMIO_REG_OFFSET_TO_MSR(reg));
     } else {
-	return *((volatile uint32_t *)(apic->base_addr + reg));
+        return *((volatile uint32_t *)(apic->base_addr + reg));
     }
 }
+
+void panic(const char *fmt, ...);
 
 static inline void
 apic_write64 (struct apic_dev * apic, uint_t reg, uint64_t val)
 {
     if (apic->mode==APIC_X2APIC) { 
-	_apic_msr_write(X2APIC_MMIO_REG_OFFSET_TO_MSR(reg), val);
+        _apic_msr_write(X2APIC_MMIO_REG_OFFSET_TO_MSR(reg), val);
     } else {
-	void panic(const char *fmt, ...);
-	panic("apic_write_64 attemped while not using X2APIC\n");
+        panic("apic_write_64 attemped while not using X2APIC\n");
     }
 }
 
@@ -293,10 +294,9 @@ static inline uint32_t
 apic_read64 (struct apic_dev * apic, uint_t reg)
 {
     if (apic->mode==APIC_X2APIC) { 
-	return _apic_msr_read(X2APIC_MMIO_REG_OFFSET_TO_MSR(reg));
+        return _apic_msr_read(X2APIC_MMIO_REG_OFFSET_TO_MSR(reg));
     } else {
-	void panic(const char *fmt, ...);
-	panic("apic_read_64 attemped while not using X2APIC\n");
+        panic("apic_read_64 attemped while not using X2APIC\n");
     }
 }
 
@@ -304,11 +304,11 @@ apic_read64 (struct apic_dev * apic, uint_t reg)
 static inline void apic_write_icr(struct apic_dev *apic, uint32_t dest, uint32_t lo)
 {
     if (apic->mode==APIC_X2APIC) {
-	uint64_t val = (((uint64_t)dest))<<32 | lo;
-	apic_write64(apic,APIC_REG_ICR,val);
+        uint64_t val = (((uint64_t)dest))<<32 | lo;
+        apic_write64(apic,APIC_REG_ICR,val);
     } else {
-	apic_write(apic, APIC_REG_ICR2, dest << APIC_ICR2_DST_SHIFT );
-	apic_write(apic, APIC_REG_ICR, lo);
+        apic_write(apic, APIC_REG_ICR2, dest << APIC_ICR2_DST_SHIFT );
+        apic_write(apic, APIC_REG_ICR, lo);
     }
 
 }

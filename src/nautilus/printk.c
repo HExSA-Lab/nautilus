@@ -1215,7 +1215,7 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list args)
 
 		case FORMAT_TYPE_FLOAT:
 		case FORMAT_TYPE_DOUBLE: {
-		    char buf[160];
+		    char dbuf[160];
 		    char *c;
 		    int numdigits, prec;
 		    int k;
@@ -1229,9 +1229,9 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list args)
 
 		    double d = (double) va_arg(args,double);
 
-		    dtoa_printf_helper(d,spec.fp_fmt,numdigits,prec,buf,160);
+		    dtoa_printf_helper(d,spec.fp_fmt,numdigits,prec,dbuf,160);
 		    
-		    for (c=buf ; *c && str<(end-1); str++, c++) {
+		    for (c=dbuf ; *c && str<(end-1); str++, c++) {
 			*str = *c;
 		    }
 		    *str=0;

@@ -560,7 +560,7 @@ static void print_thread(rt_thread *r, void *priv)
 
     if (cpu==t->current_cpu || cpu<0) { 
 
-	nk_vc_printf("%llut %lur %lluc%s %s %s %s %llus %lluc %llur %llud %llue", 
+	nk_vc_printf("%llut %lur %dc%s %s %s %s %llus %lluc %llur %llud %llue", 
 		     t->tid, 
 		     t->refcount,
 		     t->current_cpu,
@@ -717,7 +717,7 @@ void nk_sched_dump_time(int cpu_arg)
 	    struct apic_dev *apic = sys->cpus[cpu]->apic;
 	    struct tsc_info *tsc = &sys->cpus[cpu]->sched_state->tsc;
 			 
-            nk_vc_printf("%dc %luhz %luppt %lucpu %lucpt %luts %luct %lutc %lust %lustc %ldstr %ldstrc\n",
+            nk_vc_printf("%dc %luhz %luppt %lucpu %lucpt %uts %uct %lutc %lust %lustc %ldstr %ldstrc\n",
 			 cpu, apic->bus_freq_hz, apic->ps_per_tick,
 			 apic->cycles_per_us, apic->cycles_per_tick,
 			 apic->timer_set, apic->current_ticks, apic->timer_count,

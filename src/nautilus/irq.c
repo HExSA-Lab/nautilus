@@ -121,7 +121,7 @@ register_int_handler (uint16_t int_vec,
 {
 
     if (!handler) {
-        ERROR_PRINT("Attempt to register interrupt %d with invalid handler\n");
+        ERROR_PRINT("Attempt to register interrupt %d with invalid handler\n", int_vec);
         return -1;
     }
 
@@ -144,7 +144,7 @@ register_irq_handler (uint16_t irq,
     uint8_t int_vector;
 
     if (!handler) {
-        ERROR_PRINT("Attempt to register IRQ %d with invalid handler\n");
+        ERROR_PRINT("Attempt to register IRQ %d with invalid handler\n", irq);
         return -1;
     }
 
