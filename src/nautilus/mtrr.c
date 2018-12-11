@@ -762,7 +762,7 @@ handle_mt (char * buf, void * priv)
 }
 
 static struct shell_cmd_impl mt_impl = {
-    .cmd      = "mt ",
+    .cmd      = "mt",
     .help_str = "mt addr",
     .handler  = handle_mt,
 };
