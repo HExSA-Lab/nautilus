@@ -27,6 +27,7 @@
 #include <nautilus/naut_string.h>
 #include <nautilus/prog.h>
 #include <nautilus/linker.h>
+#include <nautilus/shell.h>
 
 #ifndef NAUT_CONFIG_DEBUG_LINKER
 #undef DEBUG_PRINT
@@ -162,8 +163,8 @@ prog_info (struct naut_info * naut)
 }
 
 
-int
-handle_prog_cmd (char * buf)
+static int
+handle_prog (char * buf, void * priv)
 {
     buf += 4;
 
@@ -185,3 +186,9 @@ handle_prog_cmd (char * buf)
 }
 
 
+static struct shell_cmd_impl prog_impl = {
+    .cmd      = "prog",
+    .help_str = "prog run | prog info",
+    .handler  = handle_prog,
+};
+nk_register_shell_cmd(prog_impl);

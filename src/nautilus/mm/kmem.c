@@ -35,6 +35,7 @@
 #include <nautilus/math.h>
 #include <nautilus/intrinsics.h>
 #include <nautilus/percpu.h>
+#include <nautilus/shell.h>
 
 #include <dev/gpio.h>
 
@@ -975,3 +976,182 @@ void *realloc(void *p, size_t n)
 {
     return ext_realloc(p,n);
 }
+
+static int
+handle_meminfo (char * buf, void * priv)
+{
+    uint64_t num = kmem_num_pools();
+    struct kmem_stats *s = malloc(sizeof(struct kmem_stats)+num*sizeof(struct buddy_pool_stats));
+    uint64_t i;
+
+    if (!s) { 
+        nk_vc_printf("Failed to allocate space for mem info\n");
+        return 0;
+    }
+
+    s->max_pools = num;
+
+    kmem_stats(s);
+
+    for (i=0;i<s->num_pools;i++) { 
+        nk_vc_printf("pool %lu %p-%p %lu blks free %lu bytes free\n  %lu bytes min %lu bytes max\n", 
+                i,
+                s->pool_stats[i].start_addr,
+                s->pool_stats[i].end_addr,
+                s->pool_stats[i].total_blocks_free,
+                s->pool_stats[i].total_bytes_free,
+                s->pool_stats[i].min_alloc_size,
+                s->pool_stats[i].max_alloc_size);
+    }
+
+    nk_vc_printf("%lu pools %lu blks free %lu bytes free\n", s->total_num_pools, s->total_blocks_free, s->total_bytes_free);
+    nk_vc_printf("  %lu bytes min %lu bytes max\n", s->min_alloc_size, s->max_alloc_size);
+
+    free(s);
+
+    return 0;
+}
+
+
+static struct shell_cmd_impl meminfo_impl = {
+    .cmd      = "meminfo",
+    .help_str = "meminfo [detail]",
+    .handler  = handle_meminfo,
+};
+nk_register_shell_cmd(meminfo_impl);
+
+
+#define BYTES_PER_LINE 16
+
+static int
+handle_mem (char * buf, void * priv)
+{
+    uint64_t addr, data, len, size;
+
+    if ((sscanf(buf, "mem %lx %lu %lu",&addr,&len,&size)==3) ||
+            (size=8, sscanf(buf, "mem %lx %lu", &addr, &len)==2)) { 
+        uint64_t i,j,k;
+        for (i=0;i<len;i+=BYTES_PER_LINE) {
+            nk_vc_printf("%016lx :",addr+i);
+            for (j=0;j<BYTES_PER_LINE && (i+j)<len; j+=size) {
+                nk_vc_printf(" ");
+                for (k=0;k<size;k++) { 
+                    nk_vc_printf("%02x", *(uint8_t*)(addr+i+j+k));
+                }
+            }
+            nk_vc_printf(" ");
+            for (j=0;j<BYTES_PER_LINE && (i+j)<len; j+=size) {
+                for (k=0;k<size;k++) { 
+                    nk_vc_printf("%c", isalnum(*(uint8_t*)(addr+i+j+k)) ? 
+                            *(uint8_t*)(addr+i+j+k) : '.');
+                }
+            }
+            nk_vc_printf("\n");
+        }	      
+
+        return 0;
+    }
+    return 0;
+}
+
+static struct shell_cmd_impl mem_impl = {
+    .cmd      = "mem",
+    .help_str = "mem x n [s]",
+    .handler  = handle_mem,
+};
+nk_register_shell_cmd(mem_impl);
+
+
+static int
+handle_peek (char * buf, void * priv)
+{
+    uint64_t addr, data, len, size;
+    char bwdq;
+
+    if (((bwdq='b', sscanf(buf,"peek b %lx", &addr))==1) ||
+            ((bwdq='w', sscanf(buf,"peek w %lx", &addr))==1) ||
+            ((bwdq='d', sscanf(buf,"peek d %lx", &addr))==1) ||
+            ((bwdq='q', sscanf(buf,"peek q %lx", &addr))==1) ||
+            ((bwdq='q', sscanf(buf,"peek %lx", &addr))==1)) {
+        switch (bwdq) { 
+            case 'b': 
+                data = *(uint8_t*)addr;       
+                nk_vc_printf("Mem[0x%016lx] = 0x%02lx\n",addr,data);
+                break;
+            case 'w': 
+                data = *(uint16_t*)addr;       
+                nk_vc_printf("Mem[0x%016lx] = 0x%04lx\n",addr,data);
+                break;
+            case 'd': 
+                data = *(uint32_t*)addr;       
+                nk_vc_printf("Mem[0x%016lx] = 0x%08lx\n",addr,data);
+                break;
+            case 'q': 
+                data = *(uint64_t*)addr;       
+                nk_vc_printf("Mem[0x%016lx] = 0x%016lx\n",addr,data);
+                break;
+            default:
+                nk_vc_printf("Unknown size requested\n",bwdq);
+                break;
+        }
+        return 0;
+    }
+
+    nk_vc_printf("invalid poke command\n");
+
+    return 0;
+}
+
+static struct shell_cmd_impl peek_impl = {
+    .cmd      = "peek",
+    .help_str = "peek [bwdq] x",
+    .handler  = handle_peek,
+};
+nk_register_shell_cmd(peek_impl);
+
+static int
+handle_poke (char * buf, void * priv)
+{
+    uint64_t addr, data, len, size;
+    char bwdq;
+
+    if (((bwdq='b', sscanf(buf,"poke b %lx %lx", &addr,&data))==2) ||
+            ((bwdq='w', sscanf(buf,"poke w %lx %lx", &addr,&data))==2) ||
+            ((bwdq='d', sscanf(buf,"poke d %lx %lx", &addr,&data))==2) ||
+            ((bwdq='q', sscanf(buf,"poke q %lx %lx", &addr,&data))==2) ||
+            ((bwdq='q', sscanf(buf,"poke %lx %lx", &addr, &data))==2)) {
+        switch (bwdq) { 
+            case 'b': 
+                *(uint8_t*)addr = data; clflush_unaligned((void*)addr,1);
+                nk_vc_printf("Mem[0x%016lx] = 0x%02lx\n",addr,data);
+                break;
+            case 'w': 
+                *(uint16_t*)addr = data; clflush_unaligned((void*)addr,2);
+                nk_vc_printf("Mem[0x%016lx] = 0x%04lx\n",addr,data);
+                break;
+            case 'd': 
+                *(uint32_t*)addr = data; clflush_unaligned((void*)addr,4);
+                nk_vc_printf("Mem[0x%016lx] = 0x%08lx\n",addr,data);
+                break;
+            case 'q': 
+                *(uint64_t*)addr = data; clflush_unaligned((void*)addr,8);
+                nk_vc_printf("Mem[0x%016lx] = 0x%016lx\n",addr,data);
+                break;
+            default:
+                nk_vc_printf("Unknown size requested\n");
+                break;
+        }
+        return 0;
+    }
+
+    nk_vc_printf("invalid poke command\n");
+
+    return 0;
+}
+
+static struct shell_cmd_impl poke_impl = {
+    .cmd      = "poke",
+    .help_str = "poke [bwdq] x y",
+    .handler  = handle_poke,
+};
+nk_register_shell_cmd(poke_impl);

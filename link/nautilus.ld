@@ -78,6 +78,12 @@ SECTIONS
         *(.gnu.linkconce.got*)
     }
 
+    .shell_cmds ALIGN(0x1000) : AT(ADDR(.got)+SIZEOF(.got))
+    {
+        __start_shell_cmds = .;
+        *(.shell_cmds*);
+        __stop_shell_cmds = .;
+    }
 
     _loadEnd = .; 
     

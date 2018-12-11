@@ -26,6 +26,7 @@
 #include <nautilus/nautilus.h>
 #include <nautilus/waitqueue.h>
 #include <nautilus/scheduler.h>
+#include <nautilus/shell.h>
 
 
 /*
@@ -437,3 +438,18 @@ void nk_wait_queue_dump_queues()
     STATE_UNLOCK();
 }
 
+
+static int
+handle_wqs (char * buf, void * priv)
+{
+    nk_wait_queue_dump_queues();
+    return 0;
+}
+
+
+static struct shell_cmd_impl wqs_impl = {
+    .cmd      = "wqs",
+    .help_str = "wqs",
+    .handler  = handle_wqs,
+};
+nk_register_shell_cmd(wqs_impl);

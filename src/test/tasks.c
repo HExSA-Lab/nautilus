@@ -22,6 +22,7 @@
  */
 
 #include <nautilus/nautilus.h>
+#include <nautilus/shell.h>
 #include <nautilus/task.h>
 #include <nautilus/scheduler.h>
 
@@ -188,3 +189,15 @@ int test_tasks()
 }
 
 
+static int
+handle_tasks (char * buf, void * priv)
+{
+    return test_tasks();
+}
+
+static struct shell_cmd_impl tasks_impl = {
+    .cmd      = "tasktest",
+    .help_str = "tasktest",
+    .handler  = handle_tasks,
+};
+nk_register_shell_cmd(tasks_impl);

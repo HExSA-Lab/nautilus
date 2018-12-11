@@ -28,6 +28,7 @@
 #include <nautilus/atomic.h>
 #include <nautilus/mm.h>
 #include <nautilus/libccompat.h>
+#include <nautilus/shell.h>
 #include <nautilus/irq.h>
 
 #include <nautilus/instrument.h>
@@ -533,7 +534,40 @@ nk_instrument_calibrate (unsigned loops)
 }
 
 
+static int
+handle_shell_instr (char * buf, void * priv)
+{
+    char what[80];
+
+    if (sscanf(buf,"inst%s* %s", what)==1) { 
+        if (!strncasecmp(what,"sta",3)) {
+            nk_vc_printf("starting instrumentation\n");
+            nk_instrument_start();
+            return 0;
+        } else if (!strncasecmp(what,"e",1) || !strncasecmp(what,"sto",3)) {
+            nk_vc_printf("ending instrumentation\n");
+            nk_instrument_end();
+            return 0;
+        } else if (!strncasecmp(what,"c",1)) {
+            nk_vc_printf("clearing instrumentation\n");
+            nk_instrument_clear();
+            return 0;
+        } else if (!strncasecmp(what,"q",1)) {
+            nk_vc_printf("querying instrumentation\n");
+            nk_instrument_query();
+            return 0;
+        } 
+    }
+
+    nk_vc_printf("unknown instrumentation request\n");
+
+    return 0;
+}
 
 
-
-
+static struct shell_cmd_impl instr_impl = {
+    .cmd      = "instr",
+    .help_str = "instrument start|end/stop|clear|query",
+    .handler  = handle_shell_instr,
+};
+nk_register_shell_cmd(instr_impl);

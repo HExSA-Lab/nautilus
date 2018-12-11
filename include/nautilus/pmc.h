@@ -236,8 +236,4 @@ void     nk_pmc_write(perf_event_t * event, uint64_t val);
 
 void     nk_pmc_report(void);
 
-
-void test_pmc(int pmc_id);
-
-
 #endif /* !__PMC_H__! */
