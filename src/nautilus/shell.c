@@ -62,10 +62,65 @@ struct shell_cmd_state {
     struct list_head cmd_list;
 };
 
+struct iter_stack_entry { 
+    int idx;
+    struct shell_rtree_node * node;
+};
+
 struct shell_rtree_iter {
     struct shell_rtree_node * tree;
     char * substr;
+
+    int idx;
+    int node_idx;
+
+    struct iter_stack_entry * stack[SHELL_MAX_CMD];
+    int sp;
 };
+
+static inline void
+iter_push_entry (struct shell_rtree_iter * iter,
+                 struct shell_rtree_node * node, 
+                 int idx)
+{
+    struct iter_stack_entry * ent = NULL;
+
+    if (iter->sp >= (SHELL_MAX_CMD - 1)) {
+        return;
+    }
+
+    ent = malloc(sizeof(*ent));
+    if (!ent) {
+        ERROR("Could not allocate iter stack entry\n");
+        return;
+    }
+
+    ent->node = node;
+    ent->idx  = idx;
+
+    iter->stack[iter->sp++] = ent;
+}
+
+static inline struct shell_rtree_node *
+iter_pop_entry (struct shell_rtree_iter * iter, int * idx)
+{
+    struct iter_stack_entry * ent  = NULL;
+    struct shell_rtree_node * node = NULL;
+
+    if (iter->sp <= 0) {
+        return NULL;
+    }
+
+    ent = iter->stack[--iter->sp];
+    iter->stack[iter->sp] = NULL;
+
+    *idx = ent->idx;
+    node = ent->node;
+
+    free(ent);
+
+    return node;
+}
 
 
 static struct shell_rtree_node *
@@ -158,6 +213,130 @@ static void *
 shell_rtree_delete (char * key)
 {
     ERROR("UNIMPLEMENTED (%s)\n", __func__);
+    return NULL;
+}
+
+
+static struct shell_rtree_iter *
+shell_rtree_iter_create (struct shell_rtree_node * node, char * cmd)
+{
+    struct shell_rtree_iter * iter = malloc(sizeof(*iter));
+
+    if (!iter) {
+        ERROR("Couldn't allocate rtree iterator\n");
+        return NULL;
+    }
+
+    memset(iter, 0, sizeof(*iter));
+
+    iter->substr   = cmd;
+    iter->tree     = node;
+    iter->sp       = 0;
+    iter->idx      = 0;
+    iter->node_idx = -1;
+
+    return iter;
+}
+
+
+static void *
+shell_rtree_iter_get_next (struct shell_rtree_iter * iter)
+{
+    int i;
+    void * data = NULL;
+
+    while (iter->node_idx < RTREE_NUM_ENTRIES && !data) {
+
+        if (iter->node_idx < 0 && iter->tree->data) {
+            data = iter->tree->data;
+        } else if (iter->tree->ents[iter->node_idx]) {
+            iter_push_entry(iter, iter->tree, iter->node_idx + 1);
+            iter->tree = iter->tree->ents[iter->node_idx];
+            iter->node_idx = -1;
+            continue;
+        }
+
+        iter->node_idx++;
+
+        // we reached the end of our subtrees
+        if (iter->node_idx == RTREE_NUM_ENTRIES) {
+            int new_nidx;
+            struct shell_rtree_node * node = iter_pop_entry(iter, &new_nidx);
+            if (node) {
+                // go back to parent
+                iter->tree = node;
+                iter->node_idx = new_nidx;
+            }
+        }
+
+    }
+
+    iter->idx++;
+
+    return data;
+}
+
+
+static void
+shell_rtree_iter_destroy (struct shell_rtree_iter * iter)
+{
+    int i;
+
+    for (i = 0; i < SHELL_MAX_CMD; i++) {
+        if (iter->stack[i]) {
+            free(iter->stack[i]);
+        }
+    }
+
+    free(iter);
+}
+
+
+static struct shell_rtree_node *
+__match (struct shell_rtree_node * node, 
+         char * orig, 
+         char * subcmd, 
+         struct shell_rtree_iter ** iter)
+{
+    uchar_t c = CHAR_TO_IDX(subcmd);
+
+    if (BAD_KEY(subcmd)) {
+        WARN("bad key (%s)\n", subcmd);
+        return NULL;
+    }
+
+    if (!*subcmd) {
+        if (iter) {
+            struct shell_rtree_iter * i = shell_rtree_iter_create(node, orig);
+            *iter = i;
+        }
+        return node;
+    } else {
+        if (node->ents[c]) {
+            return __match(node->ents[c], orig, subcmd + 1, iter);
+        }
+    }
+
+    return NULL;
+}
+
+
+static inline struct shell_rtree_node *
+shell_rtree_match (struct shell_rtree_node * root, char * subcmd)
+{
+    return __match(root, subcmd, subcmd, NULL);
+}
+
+
+static inline struct shell_rtree_iter *
+shell_rtree_iter_from_match (struct shell_rtree_node * root, char * subcmd)
+{
+    struct shell_rtree_iter * iter = NULL;
+
+    if (__match(root, subcmd, subcmd, &iter) != NULL) {
+        return iter;
+    }
+
     return NULL;
 }
 
@@ -403,19 +582,63 @@ static struct shell_cmd_impl shell_impl = {
 nk_register_shell_cmd(shell_impl);
 
 
+static void
+__dump_helps (struct shell_rtree_node * node)
+{
+    int i;
+    struct shell_cmd * cmd;
+
+    if (node->data) {
+        cmd = node->data;
+        nk_vc_printf("  %s\n", cmd->impl->help_str);
+    }
+
+    for (i = 0; i < RTREE_NUM_ENTRIES; i++) {
+        if (node->ents[i]) {
+            __dump_helps(node->ents[i]);
+        }
+    }
+}
+
+
+static inline void
+dump_helps (struct shell_rtree_node * node)
+{
+    nk_vc_printf("\nAvailable commands:\n\n");
+    __dump_helps(node);
+    nk_vc_printf("\n");
+}
+
+
 static int
 handle_help (char * buf, void * priv)
 {
     struct shell_cmd * my_cmd = (struct shell_cmd *)priv;
     struct shell_cmd * cmd    = NULL;
+    char sub[SHELL_MAX_CMD];
 
-    nk_vc_printf("Available commands: \n\n");
-    list_for_each_entry(cmd, &(my_cmd->shell_state->cmd_list), node) {
-        if (cmd->impl && cmd->impl->help_str) {
-            nk_vc_printf("  %s\n", cmd->impl->help_str);
+    memset(sub, 0, SHELL_MAX_CMD);
+
+    if (sscanf(buf, "help %s", sub) == 1) {
+
+        struct shell_rtree_iter * iter = shell_rtree_iter_from_match(my_cmd->shell_state->root, sub);
+
+        if (!iter) {
+            nk_vc_printf("No help strings match '%s'\n", sub);
+            return 0;
         }
+
+        struct shell_cmd * d;
+
+        while ((d = (struct shell_cmd*)shell_rtree_iter_get_next(iter))) {
+            nk_vc_printf("  %s\n", d->impl->help_str);
+        }
+
+        shell_rtree_iter_destroy(iter);
+
+    } else if (strncmp(buf, "help", 4) == 0) {
+        dump_helps(my_cmd->shell_state->root);
     }
-    nk_vc_printf("\n");
 
     return 0;
 }
