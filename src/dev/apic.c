@@ -29,6 +29,7 @@
 #include <nautilus/percpu.h>
 #include <nautilus/intrinsics.h>
 #include <nautilus/mm.h>
+#include <nautilus/shell.h>
 #include <nautilus/timer.h>
 #include <nautilus/dev.h>
 #include <dev/apic.h>
@@ -1387,3 +1388,33 @@ static int apic_timer_handler(excp_entry_t * excp, excp_vec_t vec, void *state)
 
     return 0;
 }
+
+static int
+handle_int (char * buf, void * priv)
+{
+    int cpu, intr;
+
+    if ((sscanf(buf,"int %d %d", &cpu, &intr)==2) ||
+            (cpu=my_cpu_id(), sscanf(buf,"int %d",&intr)==1)) {
+        if (cpu==my_cpu_id()) {
+            apic_self_ipi(per_cpu_get(apic), intr);
+        } else if (cpu>=0) {
+            apic_ipi(per_cpu_get(apic),cpu,intr);
+        } else {
+            apic_bcast_ipi(per_cpu_get(apic),intr);
+            apic_self_ipi(per_cpu_get(apic), intr);
+        }
+        return 0;
+    }
+
+    nk_vc_printf("invalid int command\n");
+
+    return 0;
+}
+
+static struct shell_cmd_impl int_impl = {
+    .cmd      = "int",
+    .help_str = "int [cpu] v",
+    .handler  = handle_int,
+};
+nk_register_shell_cmd(int_impl);

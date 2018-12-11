@@ -26,6 +26,7 @@
 #include <nautilus/scheduler.h>
 #include <nautilus/msg_queue.h>
 #include <nautilus/list.h>
+#include <nautilus/shell.h>
 
 // This is a trival implementation of classic message queues for threads ONLY
 // interrupt handlers can use the "try" functions
@@ -455,3 +456,17 @@ int nk_msg_queue_pull_timeout(struct nk_msg_queue *q, void **m, uint64_t timeout
     return 1;
 }
 
+static int
+handle_mqs (char * buf, void * priv)
+{
+    nk_msg_queue_dump_queues();
+    return 0;
+}
+
+
+static struct shell_cmd_impl mqs_impl = {
+    .cmd      = "mqs",
+    .help_str = "mqs",
+    .handler  = handle_mqs,
+};
+nk_register_shell_cmd(mqs_impl);

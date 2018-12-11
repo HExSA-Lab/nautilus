@@ -25,6 +25,7 @@
 #include <nautilus/spinlock.h>
 #include <nautilus/dev.h>
 #include <nautilus/thread.h>
+#include <nautilus/shell.h>
 
 #ifndef NAUT_CONFIG_DEBUG_DEV
 #undef DEBUG_PRINT
@@ -176,3 +177,18 @@ void nk_dev_dump_devices()
     STATE_UNLOCK();
 }
 
+
+static int
+handle_devs (char * buf, void * priv)
+{
+    nk_dev_dump_devices();
+    return 0;
+}
+
+
+static struct shell_cmd_impl devs_impl = {
+    .cmd      = "devs",
+    .help_str = "devs",
+    .handler  = handle_devs,
+};
+nk_register_shell_cmd(devs_impl);

@@ -59,6 +59,7 @@
 #include <nautilus/cpuid.h>
 #include <nautilus/random.h>
 #include <nautilus/backtrace.h>
+#include <nautilus/shell.h>
 #include <dev/apic.h>
 #include <dev/gpio.h>
 
@@ -4309,3 +4310,347 @@ static void timing_test(uint64_t N, uint64_t M, int print)
 
 }
 
+
+static int
+handle_cores (char * buf, void * priv)
+{
+    int cpu;
+
+    if (sscanf(buf, "cores %d", &cpu) != 1) {
+      cpu = -1; 
+    }
+
+    nk_sched_dump_cores(cpu);
+
+    return 0;
+}
+
+
+static struct shell_cmd_impl cores_impl = {
+    .cmd      = "cores",
+    .help_str = "cores [n]",
+    .handler  = handle_cores,
+};
+nk_register_shell_cmd(cores_impl);
+
+
+static int
+handle_threads (char * buf, void * priv)
+{
+    int cpu;
+
+    if (sscanf(buf, "threads %d", &cpu) != 1) {
+        cpu = -1; 
+    }
+
+    nk_sched_dump_threads(cpu);
+
+    return 0;
+}
+
+static struct shell_cmd_impl threads_impl = {
+    .cmd      = "threads",
+    .help_str = "threads [n]",
+    .handler  = handle_threads,
+};
+nk_register_shell_cmd(threads_impl);
+
+static int
+handle_reap (char * buf, void * priv)
+{
+    nk_sched_reap(1); // unconditional reap
+    return 0;
+}
+
+
+static struct shell_cmd_impl reap_impl = {
+    .cmd      = "reap",
+    .help_str = "reap",
+    .handler  = handle_reap,
+};
+nk_register_shell_cmd(reap_impl);
+
+
+static int
+handle_time (char * buf, void * priv)
+{
+    int cpu;
+
+    if (sscanf(buf, "time %d", &cpu) != 1) {
+        cpu = -1; 
+    }
+
+    nk_sched_dump_time(cpu);
+
+    return 0;
+}
+
+
+static struct shell_cmd_impl time_impl = {
+    .cmd      = "time",
+    .help_str = "time [n]",
+    .handler  = handle_time,
+};
+nk_register_shell_cmd(time_impl);
+
+struct burner_args {
+    struct nk_virtual_console *vc;
+    char     name[SHELL_MAX_CMD];
+    uint64_t size_ns; 
+    struct nk_sched_constraints constraints;
+} ;
+
+
+// enable this to flip a GPIO periodically within
+// the main loop of test thread
+#define GPIO_OUTPUT 0
+
+#if GPIO_OUPUT
+#define GET_OUT() inb(0xe010)
+#define SET_OUT(x) outb(x,0xe010)
+#else
+#define GET_OUT() 
+#define SET_OUT(x) 
+#endif
+
+#define SWITCH() SET_OUT(~GET_OUT())
+#define LOOP() {SWITCH(); udelay(1000); }
+
+
+static void 
+burner (void * in, void ** out)
+{
+    uint64_t start, end, dur;
+    struct burner_args *a = (struct burner_args *)in;
+
+    nk_thread_name(get_cur_thread(),a->name);
+
+    if (nk_bind_vc(get_cur_thread(), a->vc)) { 
+        ERROR_PRINT("Cannot bind virtual console for burner %s\n",a->name);
+        return;
+    }
+
+    nk_vc_printf("%s (tid %llu) attempting to promote itself\n", a->name, get_cur_thread()->tid);
+#if 1
+    if (nk_sched_thread_change_constraints(&a->constraints)) { 
+        nk_vc_printf("%s (tid %llu) rejected - exiting\n", a->name, get_cur_thread()->tid);
+        return;
+    }
+#endif
+
+    nk_vc_printf("%s (tid %llu) promotion complete - spinning for %lu ns\n", a->name, get_cur_thread()->tid, a->size_ns);
+
+    while (1) {
+        NK_GPIO_OUTPUT_MASK(0x1, GPIO_XOR);
+        start = nk_sched_get_realtime();
+        //LOOP();
+        udelay(10);
+        end = nk_sched_get_realtime();
+        dur = end - start;
+        //	nk_vc_printf("%s (tid %llu) start=%llu, end=%llu left=%llu\n",a->name,get_cur_thread()->tid, start, end,a->size_ns);
+        if (dur >= a->size_ns) { 
+            nk_vc_printf("%s (tid %llu) done - exiting\n",a->name,get_cur_thread()->tid);
+            free(in);
+            return;
+        } else {
+            a->size_ns -= dur;
+        }
+    }
+}
+
+
+static int 
+launch_aperiodic_burner (char * name, 
+                         uint64_t size_ns, 
+                         uint32_t tpr, 
+                         uint64_t priority)
+{
+    nk_thread_id_t tid;
+    struct burner_args *a;
+
+    a = malloc(sizeof(struct burner_args));
+
+    if (!a) { 
+        return -1;
+    }
+    
+    strncpy(a->name,name,SHELL_MAX_CMD); a->name[SHELL_MAX_CMD-1]=0;
+
+    a->vc                                   = get_cur_thread()->vc;
+    a->size_ns                              = size_ns;
+    a->constraints.type                     = APERIODIC;
+    a->constraints.interrupt_priority_class = (uint8_t) tpr;
+    a->constraints.aperiodic.priority       = priority;
+
+    if (nk_thread_start(burner, (void*)a , NULL, 1, PAGE_SIZE_4KB, &tid, 1)) { 
+        free(a);
+        return -1;
+    } else {
+        return 0;
+    }
+}
+
+static int 
+launch_sporadic_burner (char * name, 
+                        uint64_t size_ns, 
+                        uint32_t tpr, 
+                        uint64_t phase, 
+                        uint64_t size, 
+                        uint64_t deadline, 
+                        uint64_t aperiodic_priority)
+{
+    nk_thread_id_t tid;
+    struct burner_args *a;
+
+    a = malloc(sizeof(struct burner_args));
+    if (!a) { 
+        return -1;
+    }
+    
+    strncpy(a->name,name,SHELL_MAX_CMD); a->name[SHELL_MAX_CMD-1]=0;
+
+    a->vc                                      = get_cur_thread()->vc;
+    a->size_ns                                 = size_ns;
+    a->constraints.type                        = SPORADIC;
+    a->constraints.interrupt_priority_class    = (uint8_t) tpr;
+    a->constraints.sporadic.phase              = phase;
+    a->constraints.sporadic.size               = size;
+    a->constraints.sporadic.deadline           = deadline;
+    a->constraints.sporadic.aperiodic_priority = aperiodic_priority;
+
+    if (nk_thread_start(burner, (void*)a , NULL, 1, PAGE_SIZE_4KB, &tid, 1)) {
+        free(a);
+        return -1;
+    } else {
+        return 0;
+    }
+}
+
+static int 
+launch_periodic_burner (char * name, 
+                        uint64_t size_ns, 
+                        uint32_t tpr, 
+                        uint64_t phase, 
+                        uint64_t period, 
+                        uint64_t slice)
+{
+    nk_thread_id_t tid;
+    struct burner_args *a;
+
+    a = malloc(sizeof(struct burner_args));
+    if (!a) { 
+        return -1;
+    }
+    
+    strncpy(a->name,name,SHELL_MAX_CMD); a->name[SHELL_MAX_CMD-1]=0;
+
+    a->vc                                   = get_cur_thread()->vc;
+    a->size_ns                              = size_ns;
+    a->constraints.type                     = PERIODIC;
+    a->constraints.interrupt_priority_class = (uint8_t) tpr;
+    a->constraints.periodic.phase           = phase;
+    a->constraints.periodic.period          = period;
+    a->constraints.periodic.slice           = slice;
+
+    if (nk_thread_start(burner, (void*)a , NULL, 1, PAGE_SIZE_4KB, &tid, 1)) {
+        free(a);
+        return -1;
+    } else {
+        return 0;
+    }
+}
+
+static int
+handle_burn (char * buf, void * priv)
+{
+    uint64_t size_ns;
+    uint32_t tpr;
+    uint64_t priority, phase;
+    uint64_t period, slice;
+    uint64_t size, deadline;
+    char name[SHELL_MAX_CMD];
+
+    if (sscanf(buf, "burn a %s %llu %u %llu", name, &size_ns, &tpr, &priority) == 4) { 
+        nk_vc_printf("Starting aperiodic burner %s with tpr %u, size %llu ms.and priority %llu\n", name, tpr, size_ns, priority);
+        size_ns *= 1000000;
+        launch_aperiodic_burner(name,size_ns,tpr,priority);
+        return 0;
+    }
+
+    if (sscanf(buf,"burn s %s %llu %u %llu %llu %llu %llu", name, &size_ns, &tpr, &phase, &size, &deadline, &priority) == 7) { 
+
+        nk_vc_printf("Starting sporadic burner %s with size %llu ms tpr %u phase %llu from now size %llu ms deadline %llu ms from now and priority %lu\n",name,size_ns,tpr,phase,size,deadline,priority);
+        
+        size_ns  *= 1000000;
+        phase    *= 1000000;
+        size     *= 1000000;
+        deadline *= 1000000;
+
+        deadline += nk_sched_get_realtime();
+
+        launch_sporadic_burner(name,size_ns,tpr,phase,size,deadline,priority);
+
+        return 0;
+    }
+
+    if (sscanf(buf,"burn p %s %llu %u %llu %llu %llu", name, &size_ns, &tpr, &phase, &period, &slice)==6) { 
+        nk_vc_printf("Starting periodic burner %s with size %llu ms tpr %u phase %llu from now period %llu ms slice %llu ms\n",name,size_ns,tpr,phase,period,slice);
+        size_ns *= 1000000;
+        phase   *= 1000000; 
+        period  *= 1000000;
+        slice   *= 1000000;
+
+        launch_periodic_burner(name,size_ns,tpr,phase,period,slice);
+        return 0;
+    }
+
+    if (sscanf(buf, "burn up %s %llu %u %llu %llu %llu", name, &size_ns, &tpr, &phase, &period, &slice)==6) { 
+        nk_vc_printf("Starting periodic burner %s with size %llu ms tpr %u phase %llu from now period %llu us slice %llu us\n",name,size_ns,tpr,phase,period,slice);
+        size_ns *= 1000000;
+        phase   *= 1000; 
+        period  *= 1000;
+        slice   *= 1000;
+
+        launch_periodic_burner(name,size_ns,tpr,phase,period,slice);
+        return 0;
+    }
+
+    nk_vc_printf("Unknown burner command (%s)\n", buf);
+
+    return 0;
+}
+
+static struct shell_cmd_impl burn_impl = {
+    .cmd      = "burn",
+    .help_str = "burn a name size_ms tpr priority\n" 
+                "  burn s name size_ms tpr phase size deadline priority\n" 
+                "  burn p name size_ms tpr phase period slice",
+    .handler  = handle_burn,
+};
+nk_register_shell_cmd(burn_impl);
+
+
+static int 
+test_stop (char * buf, void * priv)
+{
+    int i;
+
+#define N 16
+    
+    for (i = 0; i < N; i++) { 
+        nk_vc_printf("Stopping world iteration %d\n", i);
+        nk_sched_stop_world();
+        nk_vc_printf("Executing during stopped world iteration %d\n", i);
+        nk_sched_start_world();
+    }
+
+    return 0;
+}
+
+
+static struct shell_cmd_impl stop_impl = {
+    .cmd      = "stop",
+    .help_str = "stop",
+    .handler  = test_stop,
+};
+nk_register_shell_cmd(stop_impl);

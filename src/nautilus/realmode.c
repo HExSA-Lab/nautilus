@@ -25,6 +25,7 @@
 #include <nautilus/spinlock.h>
 #include <nautilus/irq.h>
 #include <nautilus/realmode.h>
+#include <nautilus/shell.h>
 
 #ifndef NAUT_CONFIG_DEBUG_REAL_MODE_INTERFACE
 #undef DEBUG_PRINT
@@ -133,3 +134,75 @@ int nk_real_mode_finish()
 
     return 0;
 }
+
+
+static int 
+handle_real (char * cmd, void * priv)
+{
+    struct nk_real_mode_int_args test;
+
+    if ((nk_real_mode_set_arg_defaults(&test),
+	 sscanf(cmd,"real %hx %hx %hx %hx %hx %hx:%hx", 
+		&test.vector, &test.ax, &test.bx, &test.cx, &test.cx, &test.es, &test.di)==7) ||
+	(nk_real_mode_set_arg_defaults(&test),
+	 sscanf(cmd,"real %hx %hx %hx %hx %hx:%hx", 
+		&test.vector, &test.ax, &test.bx, &test.cx, &test.es, &test.di)==6) ||
+	(nk_real_mode_set_arg_defaults(&test),
+	 sscanf(cmd,"real %hx %hx %hx %hx:%hx", 
+		&test.vector, &test.ax, &test.bx, &test.es, &test.di)==5) ||
+	(nk_real_mode_set_arg_defaults(&test),
+	 sscanf(cmd,"real %hx %hx %hx:%hx", 
+		&test.vector, &test.ax, &test.es, &test.di)==4) ||
+	(nk_real_mode_set_arg_defaults(&test),
+	 sscanf(cmd,"real %hx %hx:%hx", 
+		&test.vector, &test.ax, &test.es, &test.di)==3) ||
+	(nk_real_mode_set_arg_defaults(&test),
+	 sscanf(cmd,"real %hx %hx %hx %hx %hx", 
+		&test.vector, &test.ax, &test.bx, &test.cx, &test.dx)==5) ||
+	(nk_real_mode_set_arg_defaults(&test),
+	 sscanf(cmd,"real %hx %hx %hx %hx", 
+		&test.vector, &test.ax, &test.bx, &test.cx)==4) ||
+	(nk_real_mode_set_arg_defaults(&test),
+	 sscanf(cmd,"real %hx %hx %hx", 
+		&test.vector, &test.ax, &test.bx)==3) ||
+	(nk_real_mode_set_arg_defaults(&test),
+	 sscanf(cmd,"real %hx %hx", 
+		&test.vector, &test.ax)==2) ||	
+	(nk_real_mode_set_arg_defaults(&test),
+	 sscanf(cmd,"real %hx",
+		&test.vector)==1)) {
+
+            nk_vc_printf("Req: int %hx ax=%04hx bx=%04hx cx=%04hx dx=%04hx es:di=%04hx:%04hx\n",
+                    test.vector, test.ax, test.bx, test.cx, test.dx, test.es, test.di);
+
+            if (nk_real_mode_start()) { 
+                nk_vc_printf("start failed\n");
+                return -1;
+            } else {
+                if (nk_real_mode_int(&test)) { 
+                    nk_vc_printf("int failed\n");
+                    nk_real_mode_finish();
+                    return -1;
+                } else {
+                    nk_vc_printf("Res: ax=%04hx bx=%04hx cx=%04hx dx=%04hx si=%04hx di=%04hx\n"
+                            "     flags=%04hx cs=%04hx ds=%04hx ss=%04hx fs=%04hx gs=%04hx es=%04hx\n",
+                            test.ax, test.bx, test.cx, test.dx, test.si, test.di,
+                            test.flags, test.cs, test.ds, test.ss, test.fs, test.gs, test.es);
+                    nk_real_mode_finish();
+                    return 0;
+                }
+            }
+
+    } else {
+        nk_vc_printf("Don't understand %s\n",cmd);
+        return -1;
+    }
+}
+
+
+static struct shell_cmd_impl real_impl = {
+    .cmd      = "real",
+    .help_str = "real int [ax [bx [cx [dx]]]] [es:di]",
+    .handler  = handle_real,
+};
+nk_register_shell_cmd(real_impl);

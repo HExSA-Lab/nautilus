@@ -775,6 +775,14 @@ menu Debugging
       help
         Turn on debug prints for SMP code
 
+    config DEBUG_SHELL
+      bool "Debug Shell"
+      depends on DEBUG_PRINTS
+      default n
+      help
+        Turn on debug prints for the shell
+
+
     config DEBUG_HRT
       bool "Debug HRT"
       depends on DEBUG_PRINTS && HVM_HRT

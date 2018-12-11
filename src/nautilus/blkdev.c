@@ -24,6 +24,7 @@
 #include <nautilus/nautilus.h>
 #include <nautilus/dev.h>
 #include <nautilus/blkdev.h>
+#include <nautilus/shell.h>
 
 #ifndef NAUT_CONFIG_DEBUG_BLKDEV
 #undef DEBUG_PRINT
@@ -243,3 +244,60 @@ int nk_block_dev_write(struct nk_block_dev *dev,
     }
 
 }
+
+static int 
+handle_blktest (char * buf, void * priv)
+{
+    char name[32], rw[16];
+    uint64_t start, count;
+    struct nk_block_dev *d;
+    struct nk_block_dev_characteristics c;
+
+    if ((sscanf(buf,"blktest %s %s %lu %lu",name,rw,&start,&count)!=4)
+            || (*rw!='r' && *rw!='w') ) { 
+        nk_vc_printf("Don't understand %s\n",buf);
+        return -1;
+    }
+
+    if (!(d=nk_block_dev_find(name))) { 
+        nk_vc_printf("Can't find %s\n",name);
+        return -1;
+    }
+
+    if (nk_block_dev_get_characteristics(d,&c)) { 
+        nk_vc_printf("Can't get characteristics of %s\n",name);
+        return -1;
+    }
+
+    char data[c.block_size+1];
+    uint64_t i,j;
+
+
+    for (i=start;i<start+count;i++) { 
+        if (*rw == 'w') { 
+            for (j=0;j<c.block_size;j++) { 
+                data[j] = "abcdefghijklmnopqrstuvwxyz0123456789"[j%36];
+            }
+            if (nk_block_dev_write(d,i,1,data,NK_DEV_REQ_BLOCKING,0,0)) {
+                nk_vc_printf("Failed to write block %lu\n",i);
+                return -1;
+            }
+        } else if (*rw == 'r') {
+            if (nk_block_dev_read(d,i,1,data,NK_DEV_REQ_BLOCKING,0,0)) {
+                nk_vc_printf("Failed to read block %lu\n",i);
+                return -1;
+            }
+            data[c.block_size] = 0;
+            nk_vc_printf("%s\n",data);
+        }
+    }
+    return 0;
+}
+
+
+static struct shell_cmd_impl blktest_impl = {
+    .cmd      = "blktest",
+    .help_str = "blktest dev r|w start count",
+    .handler  = handle_blktest,
+};
+nk_register_shell_cmd(blktest_impl);

@@ -28,6 +28,7 @@
  */
 
 #include <nautilus/nautilus.h>
+#include <nautilus/shell.h>
 
 #ifndef NAUT_CONFIG_DEBUG_ISOCORE
 #undef DEBUG_PRINT
@@ -114,4 +115,43 @@ int nk_isolate(void (*code)(void *arg),
     return -1;
 }
     
+
+static void 
+isotest (void *arg)
+{
+    // note trying to do anything in here with NK
+    // features, even a print, is unlikely to work due to
+    // relocation, interrupts off, etc.   
+    //serial_print("Hello from isocore, my arg is %p\n", arg);
+    serial_putchar('H');
+    serial_putchar('I');
+    serial_putchar('!');
+    serial_putchar('\n');
+    while (1) { }  // does actually get here in testing
+}
+
     
+static int
+handle_iso (char * buf, void * priv)
+{
+    void (*code)(void*) = isotest;
+    uint64_t codesize   = PAGE_SIZE_4KB; // we are making pretend here
+    uint64_t stacksize  = PAGE_SIZE_4KB;
+    void *arg           = (void*)0xdeadbeef;
+
+    nk_vc_printf("Testing isolated core - this will not return!\n");
+
+    return nk_isolate(code, 
+                      codesize,
+                      stacksize,
+                      arg);
+    return 0;
+}
+
+
+static struct shell_cmd_impl iso_impl = {
+    .cmd      = "iso",
+    .help_str = "iso",
+    .handler  = handle_iso,
+};
+nk_register_shell_cmd(iso_impl);

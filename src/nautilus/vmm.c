@@ -23,6 +23,7 @@
 
 #include <nautilus/nautilus.h>
 #include <nautilus/vmm.h>
+#include <nautilus/shell.h>
 #include "palacios.h"
 
 struct v3_vm_info;
@@ -135,4 +136,26 @@ int nk_vmm_deinit()
   return palacios_vmm_exit();
 }
 
+
+static int
+handle_vm (char * buf, void * priv)
+{
+    if (sscanf(buf,"vm %s", name)==1) { 
+        extern int guest_start;
+        nk_vmm_start_vm(name, &guest_start, 0xffffffff);
+        return 0;
+    }
+
+    nk_vc_printf("Unknown VMM command\n");
+
+    return 0;
+}
+
+
+static struct shell_cmd_impl vm_impl = {
+    .cmd      = "vm",
+    .help_str = "vm name [embedded image]",
+    .handler  = handle_vm,
+};
+nk_register_shell_cmd(vm_impl);
   

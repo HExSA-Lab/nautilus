@@ -656,7 +656,7 @@ nk_htable_get_iter_key (struct nk_hashtable_iter * iter)
 
 addr_t 
 nk_htable_get_iter_value (struct nk_hashtable_iter * iter) 
-{ 
+{
     return iter->entry->value; 
 }
 

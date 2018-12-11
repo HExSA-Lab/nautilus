@@ -32,6 +32,7 @@
 #include <nautilus/netdev.h>
 #include <nautilus/printk.h>
 #include <nautilus/mm.h>                      // malloc
+#include <nautilus/shell.h>
 #include <dev/pci.h>
 #include <nautilus/vc.h>                      // nk_vc_printf
 
@@ -781,3 +782,34 @@ static void nk_hostnamei() {
 }
 
 */
+
+static int
+handle_udp_echo (char * buf, void * priv)
+{
+    char nic[80];
+    char ip[80];
+    uint32_t port, num;
+
+    if (sscanf(buf,"udpecho %s %s %u %u", nic, ip, &port, &num) == 4) { 
+        nk_vc_printf("Testing udp echo server\n");
+        test_net_udp_echo(nic,ip,port,num);
+        return 0;
+    } 
+
+    if (sscanf(buf,"udpecho %s", nic) == 1) { 
+        nk_vc_printf("Testing udp echo server\n");
+        test_net_udp_echo(nic, "10.10.10.10", 5000, 20);
+        return 0;
+    }
+
+    nk_vc_printf("unknown udp_echo command\n");
+
+    return 0;
+}
+
+static struct shell_cmd_impl udp_impl = {
+    .cmd      = "udpecho",
+    .help_str = "udpecho nic [ip port num]",
+    .handler  = handle_udp_echo,
+};
+nk_register_shell_cmd(udp_impl);

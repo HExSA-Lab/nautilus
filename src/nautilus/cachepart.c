@@ -34,6 +34,8 @@
 #include <nautilus/printk.h> 
 #include <nautilus/msr.h>
 #include <nautilus/thread.h>
+#include <nautilus/shell.h>
+#include <test/cachepart.h>
 
 
 /*
@@ -836,3 +838,49 @@ int nk_cache_part_group_release(nk_thread_group_t *group, nk_cache_part_t part)
 {
     return do_group(group,RELEASE,part,0);
 }
+
+static int
+handle_cp (char * buf, void * priv)
+{
+    nk_cache_part_dump();
+    return 0;
+}
+
+
+static int
+cptest (char * buf, void * priv)
+{
+    uint64_t size, iteration;
+    int percent, flag, num_threads, shared;
+
+    if (sscanf(buf, "cacheparttest %lu %lu %d %d %d", &size, &iteration, &percent, &num_threads, &shared) == 5) {
+        nk_vc_printf("Testing cache partitioning with multiple threads\n");
+        test_cat_multi_threads(size, iteration, percent, num_threads, shared);
+        return 0;
+    }
+
+    if (sscanf(buf, "cacheparttest %lu %lu %d", &size, &iteration, &percent) == 3) {
+        nk_vc_printf("Testing cache partitioning with a single thread\n");
+        test_cat_single_thread(size, iteration, percent);
+        return 0;
+    }
+
+    nk_vc_printf("Unhandled cachepart test\n");
+
+    return 0;
+}
+
+
+static struct shell_cmd_impl cp_impl = {
+    .cmd      = "cachepart",
+    .help_str = "cachepart",
+    .handler  = handle_cp,
+};
+nk_register_shell_cmd(cp_impl);
+
+static struct shell_cmd_impl cptest_impl = {
+    .cmd      = "cacheparttest",
+    .help_str = "cacheparttest size iter percent [threads shared]",
+    .handler  = cptest,
+};
+nk_register_shell_cmd(cptest_impl);

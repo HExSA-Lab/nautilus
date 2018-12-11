@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
@@ -29,6 +29,7 @@
 #include <nautilus/timer.h>
 #include <nautilus/scheduler.h>
 #include <nautilus/spinlock.h>
+#include <nautilus/shell.h>
 
 #include <stddef.h>
 
@@ -257,3 +258,51 @@ void nk_timer_deinit()
     INFO("Timers deinited\n");
     return;
 }
+
+
+static int
+handle_delay (char * buf, void * priv)
+{
+    uint64_t time_us;
+
+    if (sscanf(buf,"delay %lu", &time_us) == 1) {
+        nk_vc_printf("Delaying for %lu us\n", time_us);
+        nk_delay(time_us*1000UL);
+        return 0;
+    }
+
+    nk_vc_printf("invalid delay format\n");
+
+    return 0;
+}
+
+static int
+handle_sleep (char * buf, void * priv)
+{
+    uint64_t time_us;
+
+    if (sscanf(buf,"sleep %lu", &time_us) == 1) {
+        nk_vc_printf("Sleeping for %lu us\n", time_us);
+        nk_sleep(time_us*1000UL);
+        return 0;
+    }
+
+    nk_vc_printf("invalid sleep format\n");
+
+    return 0;
+}
+
+
+static struct shell_cmd_impl delay_impl = {
+    .cmd      = "delay",
+    .help_str = "delay us",
+    .handler  = handle_delay,
+};
+nk_register_shell_cmd(delay_impl);
+
+static struct shell_cmd_impl sleep_impl = {
+    .cmd      = "sleep",
+    .help_str = "sleep us",
+    .handler  = handle_sleep,
+};
+nk_register_shell_cmd(sleep_impl);

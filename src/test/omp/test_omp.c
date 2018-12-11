@@ -1,4 +1,5 @@
 #include <nautilus/nautilus.h>
+#include <nautilus/shell.h>
 #include <rt/omp/omp.h>
 
 #define N 4
@@ -42,7 +43,8 @@ static void report_num_threads(int level)
     }
 }
 
-static int omp_nested()
+static int 
+omp_nested (void)
 {
     omp_set_dynamic(0);
     #pragma omp parallel num_threads(2)
@@ -61,16 +63,34 @@ static int omp_nested()
 }
 
 
- int test_omp()
- {
-     nk_omp_thread_init();
-     nk_vc_printf("Starting simple test\n");
-     omp_simple();
-     //     goto out;
-     nk_vc_printf("Starting nested test\n");
-     omp_nested();
- out:
-     nk_vc_printf("OMP test finished\n");
-     nk_omp_thread_deinit();
-     return 0;
- }
+int 
+test_omp (void)
+{
+    nk_omp_thread_init();
+    nk_vc_printf("Starting simple test\n");
+    omp_simple();
+    //     goto out;
+    nk_vc_printf("Starting nested test\n");
+    omp_nested();
+//out:
+    nk_vc_printf("OMP test finished\n");
+    nk_omp_thread_deinit();
+    return 0;
+}
+
+
+static int
+handle_omp (char * buf, void * priv)
+{
+    test_omp();
+    return 0;
+}
+
+
+static struct shell_cmd_impl omp_impl = {
+    .cmd      = "omp",
+    .help_str = "omp",
+    .handler  = handle_omp,
+};
+nk_register_shell_cmd(omp_impl);
+
