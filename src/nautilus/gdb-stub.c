@@ -188,6 +188,7 @@
 #include <nautilus/idt.h>
 #include <nautilus/shutdown.h>
 #include <nautilus/scheduler.h>
+#include <nautilus/shell.h>
 #include <nautilus/gdb-stub.h>
 #include <nautilus/cpu_state.h>
 
@@ -1467,3 +1468,17 @@ int nk_gdb_init_ap()
     return 0;
 }
 
+static int
+handle_break (char * buf, void * priv)
+{
+    nk_gdb_breakpoint_here();
+    return 0;
+}
+
+
+static struct shell_cmd_impl break_impl = {
+    .cmd      = "break",
+    .help_str = "break",
+    .handler  = handle_break,
+};
+nk_register_shell_cmd(break_impl);

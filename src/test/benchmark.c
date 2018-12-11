@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
@@ -50,6 +50,7 @@
 #include <nautilus/numa.h>
 #include <nautilus/nemo.h>
 #include <nautilus/pmc.h>
+#include <nautilus/shell.h>
 
 #endif
 
@@ -1142,5 +1143,18 @@ int main () {
     return 0;
 }
 
+static int
+handle_bench (char * buf, void * priv)
+{
+    run_benchmarks();
+    return 0;
+}
+
+static struct shell_cmd_impl bench_impl = {
+    .cmd      = "bench",
+    .help_str = "bench",
+    .handler  = handle_bench,
+};
+nk_register_shell_cmd(bench_impl);
 
 #endif

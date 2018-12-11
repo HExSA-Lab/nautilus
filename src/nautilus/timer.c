@@ -32,6 +32,7 @@
 #include <nautilus/waitqueue.h>
 #include <nautilus/scheduler.h>
 #include <nautilus/spinlock.h>
+#include <nautilus/shell.h>
 
 #include <stddef.h>
 
@@ -452,3 +453,64 @@ void nk_timer_dump_timers()
     STATE_UNLOCK();
 }
 
+static int
+handle_delay (char * buf, void * priv)
+{
+    uint64_t time_us;
+
+    if (sscanf(buf,"delay %lu", &time_us) == 1) {
+        nk_vc_printf("Delaying for %lu us\n", time_us);
+        nk_delay(time_us*1000UL);
+        return 0;
+    }
+
+    nk_vc_printf("invalid delay format\n");
+
+    return 0;
+}
+
+static int
+handle_sleep (char * buf, void * priv)
+{
+    uint64_t time_us;
+
+    if (sscanf(buf,"sleep %lu", &time_us) == 1) {
+        nk_vc_printf("Sleeping for %lu us\n", time_us);
+        nk_sleep(time_us*1000UL);
+        return 0;
+    }
+
+    nk_vc_printf("invalid sleep format\n");
+
+    return 0;
+}
+
+
+static int
+handle_timers (char * buf, void * priv)
+{
+    nk_timer_dump_timers();
+    return 0;
+}
+
+
+static struct shell_cmd_impl delay_impl = {
+    .cmd      = "delay",
+    .help_str = "delay us",
+    .handler  = handle_delay,
+};
+nk_register_shell_cmd(delay_impl);
+
+static struct shell_cmd_impl sleep_impl = {
+    .cmd      = "sleep",
+    .help_str = "sleep us",
+    .handler  = handle_sleep,
+};
+nk_register_shell_cmd(sleep_impl);
+
+static struct shell_cmd_impl timers_impl = {
+    .cmd      = "timers",
+    .help_str = "timers",
+    .handler  = handle_timers,
+};
+nk_register_shell_cmd(timers_impl);

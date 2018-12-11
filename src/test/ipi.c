@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2016, Kyle C. Hale <khale@cs.iit.edu>
  * Copyright (c) 2016, The V3VEE Project  <http://www.v3vee.org> 
@@ -29,6 +29,7 @@
 #include <nautilus/naut_assert.h>
 #include <nautilus/fs.h>
 #include <nautilus/fprintk.h>
+#include <nautilus/shell.h>
 #include <dev/apic.h>
 #include <test/ipi.h>
 #include <asm/bitops.h>
@@ -666,3 +667,123 @@ ipi_run_exps (ipi_exp_data_t * data)
 
 	return 0;
 }
+
+
+static int
+handle_ipitest (char * buf, void * priv)
+{
+	uint32_t trials, sid, did;
+
+	ipi_exp_data_t * data = malloc(sizeof(ipi_exp_data_t));
+	if (!data) {
+		nk_vc_printf("ERROR: could not allocate IPI experiment data\n");
+		return -1;
+	}
+	memset(data, 0, sizeof(ipi_exp_data_t));
+	
+	buf += 7;
+	while (*buf && *buf==' ') { buf++;}
+
+	if (!*buf) {
+		nk_vc_printf("No test type given\n");
+		return 0;
+	}
+
+	// get the experiment type (oneway, roundtrip, or broadcast)
+	if (sscanf(buf, "oneway %u", &trials)==1) {
+		data->type = EXP_ONEWAY;
+		buf += 6;
+	} else if (sscanf(buf, "roundtrip %u", &trials)==1) {
+		data->type = EXP_ROUNDTRIP;
+		buf += 9;
+	} else if (sscanf(buf, "broadcast %u", &trials)==1) {
+		data->type = EXP_BROADCAST;
+		buf += 9;
+	} else {
+		nk_vc_printf("Unknown IPI test type\n");
+		return 0;
+	}
+
+	data->trials = (trials > IPI_MAX_TRIALS) ? IPI_MAX_TRIALS : trials;
+
+    buf++;
+
+    // skip over trial count
+    while (*buf && *buf!=' ') { buf++;}
+
+    // find next arg
+	while (*buf && *buf==' ') { buf++;}
+
+    if (!strncasecmp(buf, "-f", 2)) {
+
+#ifndef NAUT_CONFIG_EXT2_FILESYSTEM_DRIVER 
+        nk_vc_printf("Not compiled with FS support, cannot use -f\n");
+        return 0;
+    }
+#else
+        char fbuf[IPI_MAX_FNAME_LEN];
+        data->use_file = 1;
+        buf += 2;
+
+        // find next arg
+        while (*buf && *buf==' ') { buf++;}
+
+        if (sscanf(buf, "%s", fbuf)==1) {
+            if (!strncasecmp(buf, "-", 1)) {
+                nk_vc_printf("No filename given\n");
+                return 0;
+            }
+            strncpy(data->fname, fbuf, IPI_MAX_FNAME_LEN);
+
+            // skip over the filename
+            while(*buf && *buf!=' ') {buf++;}
+
+            // find next arg
+            while (*buf && *buf==' ') {buf++;}
+
+        } else {
+            nk_vc_printf("No filename given\n");
+            return 0;
+        }
+#endif
+
+    // which source type is it 
+	if (sscanf(buf, "-s %u", &sid)==1) {
+        data->src_type = SRC_ONE;
+        data->src_core = sid; 
+        buf += 3;
+
+        // skip over src core
+        while (*buf && *buf!=' ') { buf++;}
+
+        // find next arg
+        while (*buf && *buf==' ') { buf++;}
+
+	} else { 
+        data->src_type = SRC_ALL;
+    }
+
+        
+    if (sscanf(buf, "-d %u", &did)==1) {
+        data->dst_type = DST_ONE;
+        data->dst_core = did;
+    } else {
+        data->dst_type = DST_ALL;
+    }
+		
+	if (ipi_run_exps(data) != 0) {
+        nk_vc_printf("Could not run ipi experiment\n");
+        return 0;
+    }
+
+    free(data);
+
+	return 0;
+}
+
+static struct shell_cmd_impl ipitest_impl = {
+    .cmd      = "ipitest",
+    .help_str = "ipitest type (oneway | roundtrip | broadcast) trials [-f <filename>] [-s <src_id> | all] [-d <dst_id> | all]",
+    .handler  = handle_ipitest,
+};
+nk_register_shell_cmd(ipitest_impl);

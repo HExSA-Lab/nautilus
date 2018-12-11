@@ -25,6 +25,7 @@
 #include <nautilus/smp.h>
 #include <nautilus/cpuid.h>
 #include <nautilus/msr.h>
+#include <nautilus/shell.h>
 #include <nautilus/mtrr.h>
 
 #define NAUT_CONFIG_MTRR_DEBUG 0
@@ -713,3 +714,56 @@ nk_mtrr_deinit (void)
 }
 
 #endif
+
+static int
+handle_mtrrs (char * buf, void * priv)
+{
+    int cpu;
+
+    if ((sscanf(buf,"mtrrs %d", &cpu)==1) ||
+            (cpu=-1, !strcmp(buf,"mtrrs"))) {
+        nk_mtrr_dump(cpu);
+        return 0;
+    }
+
+    nk_vc_printf("invalid mtrr command\n");
+
+    return 0;
+}
+
+static struct shell_cmd_impl mtrrs_impl = {
+    .cmd      = "mtrrs",
+    .help_str = "mtrrs [cpu]",
+    .handler  = handle_mtrrs,
+};
+nk_register_shell_cmd(mtrrs_impl);
+
+
+static int
+handle_mt (char * buf, void * priv)
+{
+    uint64_t addr;
+
+    if (sscanf(buf,"mt %lx", &addr)==1) {
+        uint8_t type;
+        char *typestr;
+
+        if (nk_mtrr_find_type((void*)addr,&type,&typestr)) {
+            nk_vc_printf("Cannot find memory type for %p\n",(void*)addr);
+        } else {
+            nk_vc_printf("Mem[0x%016lx] has type 0x%02x %s\n", addr, type, typestr);
+        }
+        return 0;
+    }
+
+    nk_vc_printf("invalid mt command\n");
+
+    return 0;
+}
+
+static struct shell_cmd_impl mt_impl = {
+    .cmd      = "mt ",
+    .help_str = "mt addr",
+    .handler  = handle_mt,
+};
+nk_register_shell_cmd(mt_impl);

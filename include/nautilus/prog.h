@@ -34,8 +34,6 @@ struct nk_prog_info {
     char ** argv;
 };
 
-int handle_prog_cmd (char * buf);
-
 int nk_prog_init (struct naut_info * naut);
 int nk_prog_run (struct naut_info * naut);
 

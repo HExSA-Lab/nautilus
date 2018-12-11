@@ -27,6 +27,7 @@
 #include <nautilus/waitqueue.h>
 #include <nautilus/scheduler.h>
 #include <nautilus/semaphore.h>
+#include <nautilus/shell.h>
 
 // This is a trival implementation of classic semaphores for threads ONLY
 // interrupts can use the try functions only
@@ -461,3 +462,18 @@ void nk_semaphore_dump_semaphores()
     STATE_UNLOCK();
 }
 
+
+static int
+handle_sems (char * buf, void * priv)
+{
+    nk_semaphore_dump_semaphores();
+    return 0;
+}
+
+
+static struct shell_cmd_impl sems_impl = {
+    .cmd      = "sems",
+    .help_str = "sems",
+    .handler  = handle_sems,
+};
+nk_register_shell_cmd(sems_impl);

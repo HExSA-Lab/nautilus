@@ -9,10 +9,7 @@
 #ifndef lua_h
 #define lua_h
 
-//#include <stdarg.h>
-//#include <stddef.h>
 #include <nautilus/libccompat.h>
-
 #include "luaconf.h"
 
 
@@ -396,7 +393,6 @@ LUA_API int (lua_gethookmask) (lua_State *L);
 LUA_API int (lua_gethookcount) (lua_State *L);
 
 int lua_main(int argc, char **argv);
-void handle_lua_cmd(char *);
 struct lua_Debug {
   int event;
   const char *name;	/* (n) */

@@ -25,6 +25,7 @@
 #include <nautilus/nautilus_exe.h>
 #include <nautilus/loader.h>
 #include <nautilus/fs.h>
+#include <nautilus/shell.h>
 
 #ifndef NAUT_CONFIG_DEBUG_LOADER
 #undef DEBUG_PRINT
@@ -537,3 +538,42 @@ nk_loader_deinit ()
     DEBUG("deinit\n");
 }
 
+
+static int
+handle_run (char * buf, void * priv)
+{
+    char path[80];
+
+    if (sscanf(buf,"run %s", path)!=1) { 
+        nk_vc_printf("Can't determine what to run\n");
+        return 0;
+    }
+
+    struct nk_exec *e = nk_load_exec(path);
+
+    if (!e) { 
+        nk_vc_printf("Can't load %s\n", path);
+        return 0;
+    }
+
+    nk_vc_printf("Loaded executable, now running\n");
+
+    if (nk_start_exec(e,0,0)) { 
+        nk_vc_printf("Failed to run %s\n", path);
+    }
+
+    nk_vc_printf("Unloading executable\n");
+
+    if (nk_unload_exec(e)) { 
+        nk_vc_printf("Failed to unload %s\n",path);
+    }
+
+    return 0;
+}    
+
+static struct shell_cmd_impl run_impl = {
+    .cmd      = "run",
+    .help_str = "run path",
+    .handler  = handle_run,
+};
+nk_register_shell_cmd(run_impl);

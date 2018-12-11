@@ -24,6 +24,7 @@
 #include <nautilus/nautilus.h>
 #include <nautilus/thread.h>
 #include <nautilus/scheduler.h>
+#include <nautilus/shell.h>
 #include <nautilus/vc.h>
 
 #define DO_PRINT       0
@@ -289,3 +290,16 @@ int test_threads()
 }
 
 
+static int
+handle_threads (char * buf, void * priv)
+{
+    test_threads();
+    return 0;
+}
+
+static struct shell_cmd_impl threads_impl = {
+    .cmd      = "threadtest",
+    .help_str = "threadtest",
+    .handler  = handle_threads,
+};
+nk_register_shell_cmd(threads_impl);

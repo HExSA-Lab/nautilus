@@ -1,6 +1,8 @@
 // Converted from Edinburgh OpenMP benchmark main code
 // to run as kernel code
 
+#include <nautilus/nautilus.h>
+#include <nautilus/shell.h>
 #include <rt/omp/omp.h>
 
 int schedbench_main(int argc, char **argv);
@@ -37,4 +39,18 @@ int test_ompbench()
 
     return 0;
 }
+
+static int
+handle_ompb (char * buf, void * priv)
+{
+    test_ompbench();
+    return 0;
+}
+
+static struct shell_cmd_impl ompb_impl = {
+    .cmd      = "ompb",
+    .help_str = "ompb",
+    .handler  = handle_ompb,
+};
+nk_register_shell_cmd(ompb_impl);
 

@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2016, Brady Lee and David Williams
  * Copyright (c) 2016, Peter Dinda
@@ -23,10 +23,11 @@
  * This is free software.  You are permitted to use,
  * redistribute, and modify it as specified in the file "LICENSE.txt".
  */
-
 #include <nautilus/nautilus.h>
 #include <nautilus/fs.h>
 #include <nautilus/testfs.h>
+#include <nautilus/shell.h>
+#include <nautilus/blkdev.h>
 
 #define INFO(fmt, args...)  INFO_PRINT("fs: " fmt, ##args)
 #define DEBUG(fmt, args...) DEBUG_PRINT("fs: " fmt, ##args)
@@ -553,7 +554,45 @@ void nk_fs_dump_files()
 }
 
 
+static int
+handle_attach (char * buf, void * priv)
+{
+    char type[32], devname[32], fsname[32]; 
+    uint64_t start, count;
+    struct nk_block_dev *d;
+    struct nk_block_dev_characteristics c;
+    int rc;
 
+    if (sscanf(buf,"attach %s %s %s",devname, type, fsname)!=3) {
+        nk_vc_printf("Don't understand %s\n",buf);
+        return -1;
+    }
+
+    if (!strcmp(type,"ext2")) { 
+#ifndef NAUT_CONFIG_EXT2_FILESYSTEM_DRIVER 
+        nk_vc_printf("Not compiled with EXT2 support, cannot attach\n");
+        return -1;
+#else
+        if (nk_fs_ext2_attach(devname,fsname,0)) {
+            nk_vc_printf("Failed to attach %s as ext2 volume with name %s\n", devname,fsname);
+            return -1;
+        } else {
+            nk_vc_printf("Device %s attached as ext2 volume with name %s\n", devname,fsname);
+            return 0;
+        }
+#endif
+    } else {
+        nk_vc_printf("FS type %s is not supported\n", type);
+        return -1;
+    }
+}
+
+static struct shell_cmd_impl attach_impl = {
+    .cmd      = "attach",
+    .help_str = "attach",
+    .handler  = handle_attach,
+};
+nk_register_shell_cmd(attach_impl);
 
 
 
@@ -671,6 +710,76 @@ void test_fs() {
 	DEBUG("Done");
 }
 
-#endif
+static int
+handle_fses (char * buf, void * priv)
+{
+    nk_fs_dump_filesystems();
+    return 0;
+}
 
-//#include "testfs.c"
+static int
+handle_ofs (char * buf, void * priv)
+{
+    nk_fs_dump_files();
+    return 0;
+}
+
+static int
+handle_cat (char * buf, void * priv)
+{
+    char data[SHELL_MAX_CMD];
+    ssize_t ct, i;
+
+    buf+=3;
+
+    while (*buf && *buf==' ') { buf++;}
+
+    if (!*buf) { 
+        nk_vc_printf("No file requested\n");
+        return 0;
+    }
+
+    nk_fs_fd_t fd = nk_fs_open(buf,O_RDONLY,0);
+
+    if (FS_FD_ERR(fd)) { 
+        nk_vc_printf("Cannot open \"%s\"\n",buf);
+        return 0;
+    }
+
+    do {
+        ct = nk_fs_read(fd, data, SHELL_MAX_CMD);
+        if (ct<0) {
+            nk_vc_printf("Error reading file\n");
+            nk_fs_close(fd);
+            return 0;
+        }
+        for (i=0;i<ct;i++) {
+            nk_vc_printf("%c",data[i]);
+        }
+    } while (ct>0);
+
+    return 0;
+}
+
+static struct shell_cmd_impl fses_impl = {
+    .cmd      = "fses",
+    .help_str = "fses",
+    .handler  = handle_fses,
+};
+nk_register_shell_cmd(fses_impl);
+
+static struct shell_cmd_impl ofs_impl = {
+    .cmd      = "ofs",
+    .help_str = "ofs",
+    .handler  = handle_ofs,
+};
+nk_register_shell_cmd(ofs_impl);
+
+static struct shell_cmd_impl cat_impl = {
+    .cmd      = "cat",
+    .help_str = "cat [path]",
+    .handler  = handle_cat,
+};
+nk_register_shell_cmd(cat_impl);
+
+#endif

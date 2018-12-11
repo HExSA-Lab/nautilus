@@ -607,8 +607,8 @@ lua_main (int argc, char ** argv)
 #define LUA_MAX_CMD_TOKENS 128
 #define LUA_MAX_TOKEN_LEN 64
 
-void 
-handle_lua_cmd (char * buf)
+static int 
+handle_lua_cmd (char * buf, void * priv)
 {
     char * argv[LUA_MAX_CMD_TOKENS];
     char * tmp  = NULL;
@@ -637,4 +637,13 @@ handle_lua_cmd (char * buf)
     for (i = 0; i < count; i++) {
         free(argv[i]);
     }
+
+    return 0;
 }
+
+static struct shell_cmd_impl lua_impl = {
+    .cmd      = "lua",
+    .help_str = "lua",
+    .handler  = handle_lua_cmd,
+};
+nk_register_shell_cmd(lua_impl);
