@@ -35,8 +35,9 @@
 #define WARN(fmt, args...)  WARN_PRINT("SHELL: " fmt, ##args)
 #define ERROR(fmt, args...) ERROR_PRINT("SHELL: " fmt, ##args)
 
-#define CHAR_TO_IDX(k) (tolower(*(k)) - 'a')
+#define CHAR_TO_IDX(k) (tolower((k)) - 'a')
 #define BAD_KEY(k) (*(k) == ' ')
+
 
 struct shell_op {
   char name[SHELL_OP_NAME_LEN];
@@ -55,11 +56,16 @@ struct shell_cmd {
     void * priv_data;
     struct list_head node;
     struct shell_cmd_state * shell_state;
+    unsigned * sort_key;
+
+    char * hist_line;
 };
 
 struct shell_cmd_state {
     struct shell_rtree_node * root;
     struct list_head cmd_list;
+
+    struct shell_rtree_node * hist_root;
 };
 
 struct iter_stack_entry { 
@@ -77,6 +83,8 @@ struct shell_rtree_iter {
     struct iter_stack_entry * stack[SHELL_MAX_CMD];
     int sp;
 };
+
+
 
 static inline void
 iter_push_entry (struct shell_rtree_iter * iter,
@@ -101,6 +109,7 @@ iter_push_entry (struct shell_rtree_iter * iter,
     iter->stack[iter->sp++] = ent;
 }
 
+
 static inline struct shell_rtree_node *
 iter_pop_entry (struct shell_rtree_iter * iter, int * idx)
 {
@@ -111,7 +120,8 @@ iter_pop_entry (struct shell_rtree_iter * iter, int * idx)
         return NULL;
     }
 
-    ent = iter->stack[--iter->sp];
+    iter->sp--;
+    ent = iter->stack[iter->sp];
     iter->stack[iter->sp] = NULL;
 
     *idx = ent->idx;
@@ -152,15 +162,28 @@ shell_rtree_deinit (struct shell_rtree_node * root)
 }
 
 
+static inline uchar_t
+get_idx_from_char (uchar_t c)
+{
+    if (c == ' ') {
+        return 26;
+    } else if (c == '-') {
+        return 27;
+    } else if (c == '_') {
+        return 28;
+    } else if ((c >= 'a' && c <= 'z') || (c >= 'A' || c <= 'Z')) {
+        return CHAR_TO_IDX(c);
+    } 
+
+    ERROR("Bad command character '%c'\n", isprint(c) ? c : '?');
+    return 0;
+}
+
+
 static void *
 shell_rtree_lookup (struct shell_rtree_node * node, char * key)
 {
-    uchar_t c = CHAR_TO_IDX(key);
-
-    if (BAD_KEY(key)) {
-        WARN("bad key (%s)\n", key);
-        return NULL;
-    }
+    uchar_t c = get_idx_from_char(*key);
 
     if (!*key) {
         return node->data;
@@ -174,25 +197,24 @@ shell_rtree_lookup (struct shell_rtree_node * node, char * key)
 }
 
 
+/*
+ * returns 0 on success
+ * returns 1 if key already present
+ * returns -1 on error
+ */
 static int
 shell_rtree_insert (struct shell_rtree_node * node,
                     char * key, 
                     void * data)
 {
-    uchar_t c = CHAR_TO_IDX(key);
-
-    if (BAD_KEY(key)) {
-        WARN("Bad key (%s)\n", key);
-        return 0;
-    }
+    uchar_t c = get_idx_from_char(*key);
 
     if (!*key) {
         if (!node->data) {
             node->data = data;
             return 0;
         } else {
-            WARN("Key already exists in cmd tree\n");
-            return 0;
+            return 1;
         }
     } 
 
@@ -222,6 +244,8 @@ shell_rtree_iter_create (struct shell_rtree_node * node, char * cmd)
 {
     struct shell_rtree_iter * iter = malloc(sizeof(*iter));
 
+    DEBUG("Creating iterator for '%s'\n", cmd);
+
     if (!iter) {
         ERROR("Couldn't allocate rtree iterator\n");
         return NULL;
@@ -247,8 +271,10 @@ shell_rtree_iter_get_next (struct shell_rtree_iter * iter)
 
     while (iter->node_idx < RTREE_NUM_ENTRIES && !data) {
 
-        if (iter->node_idx < 0 && iter->tree->data) {
+        // try our interior first
+        if (iter->node_idx < 0) {
             data = iter->tree->data;
+        // if we don't have anything, dive into the tree
         } else if (iter->tree->ents[iter->node_idx]) {
             iter_push_entry(iter, iter->tree, iter->node_idx + 1);
             iter->tree = iter->tree->ents[iter->node_idx];
@@ -298,12 +324,7 @@ __match (struct shell_rtree_node * node,
          char * subcmd, 
          struct shell_rtree_iter ** iter)
 {
-    uchar_t c = CHAR_TO_IDX(subcmd);
-
-    if (BAD_KEY(subcmd)) {
-        WARN("bad key (%s)\n", subcmd);
-        return NULL;
-    }
+    uchar_t c = CHAR_TO_IDX(*subcmd);
 
     if (!*subcmd) {
         if (iter) {
@@ -341,12 +362,135 @@ shell_rtree_iter_from_match (struct shell_rtree_node * root, char * subcmd)
 }
 
 
-static int
+/*
+ * naive insertion sort of commands
+ * good avg case with small command set
+ */
+static inline void
+cmd_sort_desc (struct shell_cmd ** buf, int num)
+{
+    int i, j;
+
+    for (i = 0; i < num; i++) {
+        for (j = i + 1; j < num; j++) {
+            if (*(buf[j]->sort_key) > *(buf[i]->sort_key)) {
+                struct shell_cmd * t = buf[i];
+                buf[i] = buf[j];
+                buf[j] = t;
+            }
+        }
+    }
+}
+
+
+static struct shell_cmd **
+shell_rtree_get_sorted_match (struct shell_rtree_node * root, 
+                              char * subcmd, 
+                              int lim, 
+                              int * ret_num)
+{
+    struct shell_cmd ** buf = malloc(sizeof(struct shell_cmd*)*lim);
+    struct shell_cmd * cmd  = NULL;
+    int i = 0;
+
+    if (!buf) {
+        ERROR("Could not allocate sorted buf\n");
+        return NULL;
+    }
+    memset(buf, 0, sizeof(struct shell_cmd*)*lim);
+
+    struct shell_rtree_iter * iter = shell_rtree_iter_from_match(root, subcmd);
+
+    if (!iter) {
+        goto out_no;
+    }
+
+    while ((cmd = shell_rtree_iter_get_next(iter)) && i < lim) {
+        buf[i++] = cmd;
+    }
+
+    *ret_num = i;
+
+    cmd_sort_desc(buf, i);
+
+    shell_rtree_iter_destroy(iter);
+
+    return buf;
+
+out_no:
+    free(buf);
+    return NULL;
+}
+
+
+static inline int
 shell_add_cmd (struct shell_cmd_state * state, struct shell_cmd * cmd)
 {
     DEBUG("Adding cmd (%s) to shell command set\n", cmd->impl->cmd);
+
     list_add(&(cmd->node), &(state->cmd_list));
-    return shell_rtree_insert(state->root, cmd->impl->cmd, (void*)cmd);
+
+    if (shell_rtree_insert(state->root, cmd->impl->cmd, (void*)cmd) < 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
+
+static inline int
+shell_add_cmd_to_hist (struct shell_cmd_state * state, char * buf)
+{
+    struct shell_cmd * cmd = NULL;
+    char * hist            = NULL;
+    int end                = 0;
+    int i                  = 0;
+    int ret;
+
+    if (!*buf || *buf == ' ') {
+        return 0;
+    }
+
+    DEBUG("Adding buf (%s) to history list\n", buf);
+
+    while (i < SHELL_MAX_CMD && buf[i]) {
+        if (buf[i] != ' ') {
+            end = i;
+        }
+        i++;
+    }
+
+    hist = malloc(end + 1);
+    strncpy(hist, buf, end + 1);
+    hist[end+1] = 0;
+
+    DEBUG("Original: %s (len=%d)\n", buf, i);
+    DEBUG("Sanitized: %s (len=%d)\n", hist, end+1);
+
+    cmd = shell_rtree_lookup(state->hist_root, hist);
+
+    if (cmd) {
+        DEBUG("command in history already, bumping\n");
+        cmd->ref_cnt++;
+        return 0;
+    }
+
+    cmd = malloc(sizeof(*cmd));
+    if (!cmd) {
+        ERROR("Could not add buf to history\n");
+        return -1;
+    }
+    memset(cmd, 0, sizeof(*cmd));
+
+    cmd->ref_cnt     = 1;
+    cmd->priv_data   = cmd;
+    cmd->sort_key    = &(cmd->ref_cnt);
+    cmd->shell_state = state;
+    cmd->hist_line   = hist;
+
+    DEBUG("Inserting into tree\n");
+
+    return shell_rtree_insert(state->hist_root, hist, cmd);
 }
 
 
@@ -354,9 +498,10 @@ static int
 shell_handle_cmd (struct shell_cmd_state * state, char * buf, int max)
 {
     struct shell_cmd * cmd = NULL;
+    char cmd_buf[SHELL_MAX_CMD];
     int i = 0;
     int j = 0;
-    char cmd_buf[SHELL_MAX_CMD];
+    int ret = -1;
 
     memset(cmd_buf, 0, SHELL_MAX_CMD);
 
@@ -372,12 +517,16 @@ shell_handle_cmd (struct shell_cmd_state * state, char * buf, int max)
     cmd = shell_rtree_lookup(state->root, cmd_buf);
 
     if (cmd && cmd->impl && cmd->impl->handler) {
-        return cmd->impl->handler(buf, cmd->priv_data);
+        ret = cmd->impl->handler(buf, cmd->priv_data);
     }
             
-    nk_vc_printf("Don't understand \"%s\"\n", cmd_buf);
+    if (ret < 0) {
+        nk_vc_printf("Don't understand \"%s\"\n", cmd_buf);
+    } else {
+        shell_add_cmd_to_hist(state, buf);
+    }
 
-    return 0;
+    return ret;
 }
 
 
@@ -396,7 +545,8 @@ shell_cmd_init (void)
         return NULL;
     }
 
-    state->root = shell_rtree_init();
+    state->root      = shell_rtree_init();
+    state->hist_root = shell_rtree_init();
 
     INIT_LIST_HEAD(&state->cmd_list);
 
@@ -423,6 +573,7 @@ shell_cmd_init (void)
         c->impl        = *tmp_cmd;
         c->priv_data   = c;
         c->shell_state = state;
+        c->sort_key    = &(c->ref_cnt);
 
         if (shell_add_cmd(state, c) != 0) {
             ERROR("Could not register shell cmd (%s)\n", c->impl->cmd);
@@ -453,7 +604,6 @@ shell (void * in, void ** out)
     struct shell_cmd_state * state = NULL;
     char buf[SHELL_MAX_CMD];
     char lastbuf[SHELL_MAX_CMD];
-    int first = 1;
 
     state = shell_cmd_init();
 
@@ -501,17 +651,8 @@ shell (void * in, void ** out)
         nk_vc_gets(buf, SHELL_MAX_CMD, 1);
         nk_vc_setattr(OUTPUT_CHAR);
 
-        if (!buf[0] && !first) { 
-            // continue; // turn off autorepeat for now
-            if (shell_handle_cmd(state, lastbuf, SHELL_MAX_CMD)) { 
-                break;
-            }
-        } else {
-            if (shell_handle_cmd(state, buf, SHELL_MAX_CMD)) {
-                break;
-            }
-            memcpy(lastbuf, buf, SHELL_MAX_CMD);
-            first = 0;
+        if (shell_handle_cmd(state, buf, SHELL_MAX_CMD) == 1) { 
+            break;
         }
     }
 
@@ -678,3 +819,61 @@ static struct shell_cmd_impl vcs_impl = {
     .handler  = handle_vcs,
 };
 nk_register_shell_cmd(vcs_impl);
+
+
+static int
+handle_hist (char * buf, void * priv)
+{
+    struct shell_cmd * my_cmd = priv;
+    struct shell_cmd ** cmds  = NULL;
+    struct shell_cmd * cmd    = NULL;
+    char sub[SHELL_MAX_CMD];
+    int histarg;
+    int num;
+    int i;
+
+    memset(sub, 0, SHELL_MAX_CMD);
+
+    if (sscanf(buf, "history %d", &histarg) == 1) {
+        cmds = shell_rtree_get_sorted_match(my_cmd->shell_state->hist_root, 
+                                            "",
+                                            histarg,
+                                            &num);
+    } else if (sscanf(buf, "history %s", sub) == 1) {
+        cmds = shell_rtree_get_sorted_match(my_cmd->shell_state->hist_root, 
+                                            sub,
+                                            SHELL_DEFAULT_HIST_DISPLAY,
+                                            &num);
+    } else if (strncmp(buf, "history", 4) == 0) {
+        cmds = shell_rtree_get_sorted_match(my_cmd->shell_state->hist_root, 
+                                            "",
+                                            SHELL_DEFAULT_HIST_DISPLAY,
+                                            &num);
+    } else {
+        nk_vc_printf("invalid history command\n");
+        return -1;
+    }
+
+
+    if (!cmds) {
+        nk_vc_printf("No matches\n");
+        return 0;
+    }
+
+    for (i = 0; i < num; i++) {
+        if (cmds[i] && cmds[i]->hist_line) {
+            nk_vc_printf("%s\n", cmds[i]->hist_line);
+        }
+    }
+
+    free(cmds);
+
+    return 0;
+}
+
+static struct shell_cmd_impl hist_impl = {
+    .cmd      = "history",
+    .help_str = "history [substr | n]",
+    .handler  = handle_hist,
+};
+nk_register_shell_cmd(hist_impl);
