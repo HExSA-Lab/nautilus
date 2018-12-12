@@ -596,6 +596,64 @@ shell_cmd_deinit (struct shell_cmd_state * state)
 }
 
 
+static int
+user_typed (char * buf, void * priv, int offset)
+{
+    struct shell_cmd_state * state = priv;
+    struct shell_cmd ** cmds  = NULL;
+    int num;
+    int i = 0;
+    char typed[SHELL_MAX_CMD];
+    uint8_t x,y;
+    int accept = 0;
+    int skipped = 0;
+
+    memset(typed, 0, SHELL_MAX_CMD);
+
+    strcpy(typed, buf);
+
+    nk_vc_getpos(&x, &y);
+
+    // clear my previous suggestions
+    for (i = x; i < SHELL_MAX_CMD; i++) {
+        nk_vc_display_char(' ', OUTPUT_CHAR, i, y);
+    }
+
+    if (buf[offset] == '\t') {
+        accept = 1;
+        typed[offset--] = 0;
+        DEBUG("Accepting best match\n");
+    }
+
+    cmds = shell_rtree_get_sorted_match(state->hist_root, 
+            typed,
+            1,
+            &num);
+
+    if (!cmds) {
+        DEBUG("No matches\n");
+        return 0;
+    } 
+
+    if (cmds[0] && cmds[0]->hist_line) {
+
+        if (accept)  {
+            strncpy(buf, cmds[0]->hist_line, SHELL_MAX_CMD);
+            skipped = strlen(buf) - offset;
+            nk_vc_setpos(x + skipped - 1, y);
+        }
+
+        for (i = 0; i < SHELL_MAX_CMD && cmds[0]->hist_line[offset + i + 1]; i++) {
+                nk_vc_display_char(cmds[0]->hist_line[offset +  i + 1], accept ? INPUT_CHAR : 0x97, x + i, y);
+        }
+    }
+
+    free(cmds);
+
+    return skipped;
+}
+
+
 static void 
 shell (void * in, void ** out)
 {
@@ -648,12 +706,14 @@ shell (void * in, void ** out)
         nk_vc_setattr(PROMPT_CHAR);
         nk_vc_printf("%s> ", (char*)in);
         nk_vc_setattr(INPUT_CHAR);
-        nk_vc_gets(buf, SHELL_MAX_CMD, 1);
+        nk_vc_gets(buf, SHELL_MAX_CMD, 1, user_typed, state);
         nk_vc_setattr(OUTPUT_CHAR);
 
         if (shell_handle_cmd(state, buf, SHELL_MAX_CMD) == 1) { 
             break;
         }
+
+        memset(buf, 0, SHELL_MAX_CMD);
     }
 
     nk_vc_printf("Exiting shell %s\n", (char*)in);
