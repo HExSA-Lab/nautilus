@@ -36,8 +36,6 @@
 #define ERROR(fmt, args...) ERROR_PRINT("SHELL: " fmt, ##args)
 
 #define CHAR_TO_IDX(k) (tolower((k)) - 'a')
-#define BAD_KEY(k) (*(k) == ' ')
-
 
 struct shell_op {
   char name[SHELL_OP_NAME_LEN];
@@ -58,6 +56,7 @@ struct shell_cmd {
     struct shell_cmd_state * shell_state;
     unsigned * sort_key;
 
+    unsigned hist_stamp;
     char * hist_line;
 };
 
@@ -66,6 +65,7 @@ struct shell_cmd_state {
     struct list_head cmd_list;
 
     struct shell_rtree_node * hist_root;
+    unsigned hist_seq;
 };
 
 struct iter_stack_entry { 
@@ -166,16 +166,17 @@ static inline uchar_t
 get_idx_from_char (uchar_t c)
 {
     if (c == ' ') {
-        return 26;
+        return 36;
     } else if (c == '-') {
-        return 27;
+        return 37;
     } else if (c == '_') {
-        return 28;
-    } else if ((c >= 'a' && c <= 'z') || (c >= 'A' || c <= 'Z')) {
+        return 38;
+    } else if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
         return CHAR_TO_IDX(c);
-    } 
+    } else if (c >= '0' && c <= '9') {
+        return c - 22;
+    }
 
-    ERROR("Bad command character '%c'\n", isprint(c) ? c : '?');
     return 0;
 }
 
@@ -324,7 +325,9 @@ __match (struct shell_rtree_node * node,
          char * subcmd, 
          struct shell_rtree_iter ** iter)
 {
-    uchar_t c = CHAR_TO_IDX(*subcmd);
+    uchar_t c = get_idx_from_char(*subcmd);
+
+    DEBUG("Match on '%s'\n", subcmd);
 
     if (!*subcmd) {
         if (iter) {
@@ -383,42 +386,64 @@ cmd_sort_desc (struct shell_cmd ** buf, int num)
 }
 
 
+#define min(x, y) ((x) <= (y) ? (x) : (y))
+
 static struct shell_cmd **
 shell_rtree_get_sorted_match (struct shell_rtree_node * root, 
                               char * subcmd, 
                               int lim, 
                               int * ret_num)
 {
-    struct shell_cmd ** buf = malloc(sizeof(struct shell_cmd*)*lim);
+    struct shell_cmd ** buf;
+    struct shell_cmd ** limbuf;
     struct shell_cmd * cmd  = NULL;
     int i = 0;
-
-    if (!buf) {
-        ERROR("Could not allocate sorted buf\n");
-        return NULL;
-    }
-    memset(buf, 0, sizeof(struct shell_cmd*)*lim);
 
     struct shell_rtree_iter * iter = shell_rtree_iter_from_match(root, subcmd);
 
     if (!iter) {
-        goto out_no;
+        return NULL;
     }
 
-    while ((cmd = shell_rtree_iter_get_next(iter)) && i < lim) {
+    buf = malloc(sizeof(struct shell_cmd*)*SHELL_HIST_BUF_SZ);
+    if (!buf) {
+        ERROR("Could not allocate sorted buf\n");
+        return NULL;
+    }
+    memset(buf, 0, sizeof(struct shell_cmd*)*SHELL_HIST_BUF_SZ);
+
+    limbuf = malloc(sizeof(struct shell_cmd*)*lim);
+    if (!limbuf) {
+        ERROR("Could not allocate sorted buf (limited)\n");
+        return NULL;
+    }
+    memset(limbuf, 0, sizeof(struct shell_cmd*)*lim);
+
+    while ((cmd = shell_rtree_iter_get_next(iter)) && i < SHELL_HIST_BUF_SZ) {
         buf[i++] = cmd;
     }
-
-    *ret_num = i;
-
+    
     cmd_sort_desc(buf, i);
+
+    *ret_num = min(i, lim);
+
+    if (*ret_num == 0) {
+        goto out;
+    }
+
+    DEBUG("Returning %d results\n", *ret_num);
+
+    memcpy(limbuf, buf, sizeof(void*)*(*ret_num));
+
+    free(buf);
 
     shell_rtree_iter_destroy(iter);
 
-    return buf;
+    return limbuf;
 
-out_no:
+out:
     free(buf);
+    free(limbuf);
     return NULL;
 }
 
@@ -447,7 +472,7 @@ shell_add_cmd_to_hist (struct shell_cmd_state * state, char * buf)
     int i                  = 0;
     int ret;
 
-    if (!*buf || *buf == ' ') {
+    if (!*buf) {
         return 0;
     }
 
@@ -464,14 +489,13 @@ shell_add_cmd_to_hist (struct shell_cmd_state * state, char * buf)
     strncpy(hist, buf, end + 1);
     hist[end+1] = 0;
 
-    DEBUG("Original: %s (len=%d)\n", buf, i);
-    DEBUG("Sanitized: %s (len=%d)\n", hist, end+1);
-
     cmd = shell_rtree_lookup(state->hist_root, hist);
 
     if (cmd) {
         DEBUG("command in history already, bumping\n");
         cmd->ref_cnt++;
+        cmd->hist_stamp = state->hist_seq++;
+        DEBUG("Setting hist cnt (%d)\n", cmd->hist_stamp);
         return 0;
     }
 
@@ -484,11 +508,12 @@ shell_add_cmd_to_hist (struct shell_cmd_state * state, char * buf)
 
     cmd->ref_cnt     = 1;
     cmd->priv_data   = cmd;
-    cmd->sort_key    = &(cmd->ref_cnt);
+    cmd->sort_key    = &(cmd->hist_stamp);
     cmd->shell_state = state;
     cmd->hist_line   = hist;
+    cmd->hist_stamp  = state->hist_seq++;
 
-    DEBUG("Inserting into tree\n");
+    DEBUG("Inserting into hist tree (stamp=%d)\n", cmd->hist_stamp);
 
     return shell_rtree_insert(state->hist_root, hist, cmd);
 }
@@ -626,9 +651,9 @@ user_typed (char * buf, void * priv, int offset)
     }
 
     cmds = shell_rtree_get_sorted_match(state->hist_root, 
-            typed,
-            1,
-            &num);
+                                        typed,
+                                        1,
+                                        &num);
 
     if (!cmds) {
         DEBUG("No matches\n");
