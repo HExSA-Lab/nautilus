@@ -37,8 +37,8 @@
 #define INPUT_CHAR  0x3f
 #define OUTPUT_CHAR 0x9f
 
-/* 'a'-'z' , '-', '_', ' '  */
-#define RTREE_NUM_ENTRIES 29
+/* '0'-'9', 'a'-'z' , '-', '_', ' '  */
+#define RTREE_NUM_ENTRIES 39
 
 struct shell_cmd_impl {
     char * cmd;
