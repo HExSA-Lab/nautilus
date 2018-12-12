@@ -30,11 +30,15 @@
 #define SHELL_MAX_CMD 80
 #define SHELL_STACK_SIZE (PAGE_SIZE_2MB) 
 
+#define SHELL_HIST_BUF_SZ 128
+#define SHELL_DEFAULT_HIST_DISPLAY 20
+
 #define PROMPT_CHAR 0xcf
 #define INPUT_CHAR  0x3f
 #define OUTPUT_CHAR 0x9f
 
-#define RTREE_NUM_ENTRIES 26
+/* 'a'-'z' , '-', '_', ' '  */
+#define RTREE_NUM_ENTRIES 29
 
 struct shell_cmd_impl {
     char * cmd;
