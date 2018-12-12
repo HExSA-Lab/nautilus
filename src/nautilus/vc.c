@@ -482,6 +482,20 @@ static int _vc_setpos(uint8_t x, uint8_t y)
   return 0;
 }
 
+static void _vc_getpos(uint8_t * x, uint8_t * y)
+{
+    struct nk_virtual_console *vc = get_cur_thread()->vc;
+
+    if (!vc) { 
+        vc = default_vc;
+    }
+
+    if (vc) { 
+        if (x) *x = vc->cur_x;
+        if (y) *y = vc->cur_y;
+    }
+}
+
 
 int nk_vc_setpos(uint8_t x, uint8_t y) 
 {
@@ -500,6 +514,23 @@ int nk_vc_setpos(uint8_t x, uint8_t y)
 
   return rc;
 }
+
+
+void nk_vc_getpos(uint8_t * x, uint8_t * y)
+{
+  struct nk_virtual_console *vc = get_cur_thread()->vc;
+
+  if (!vc) { 
+    vc = default_vc;
+  }
+  if (vc) { 
+    BUF_LOCK_CONF;
+    BUF_LOCK(vc);
+    _vc_getpos(x,y);
+    BUF_UNLOCK(vc)
+  }
+}
+
 
 static int _vc_setpos_specific(struct nk_virtual_console *vc, uint8_t x, uint8_t y) 
 {
@@ -1085,48 +1116,58 @@ int nk_vc_getchar()
   return nk_vc_getchar_extended(1);
 }
 
-int nk_vc_gets (char *buf, int n, int display)
+int nk_vc_gets (char *buf, int n, int display, int(*notifier)(char *, void*, int), void *priv)
 {
-  int i;
-  int c;
+    int i;
+    int c;
 
 start:
 
-  for (i = 0; i < n-1; i++) {
+    for (i = 0; i < n-1; i++) {
 
-    buf[i] = nk_vc_getchar();
+        buf[i] = nk_vc_getchar();
 
-    if (buf[i] == ASCII_BS) {
+        if (buf[i] == ASCII_BS) {
 
-    	buf[i--] = 0; // kill the backspace
+            buf[i--] = 0; // kill the backspace
 
-	if (i < 0) {
-		goto start;
-	} 
+            if (i < 0) {
+                goto start;
+            } 
 
-	buf[i--] = 0; // kill the prev char
+            buf[i--] = 0; // kill the prev char
 
-	if (display) {
-		nk_vc_putchar(ASCII_BS);
-	}
+            if (display) {
+                nk_vc_putchar(ASCII_BS);
+            }
 
-	continue;
+            continue;
+        }
+
+        if (buf[i] == '\t') {
+            int skipped = notifier(buf, priv, i);
+            i += skipped;
+            continue;
+        }
+
+        if (display) { 
+            nk_vc_putchar(buf[i]);
+            if (notifier && buf[i] != '\n') {
+                notifier(buf, priv, i);
+            }
+        }
+
+
+        if (buf[i] == '\n') {
+            buf[i] = 0;
+            return i;
+        }
+
     }
 
-    if (display) { 
-      nk_vc_putchar(buf[i]);
-    }
+    buf[n-1]=0;
 
-    if (buf[i] == '\n') {
-      buf[i] = 0;
-      return i;
-    }
-
-  }
-
-  buf[n-1]=0;
-
-  return n-1;
+    return n-1;
 }
 
 nk_scancode_t nk_vc_get_scancode(int wait)

@@ -74,6 +74,7 @@ int nk_vc_clear_specific(struct nk_virtual_console *vc, uint8_t attr);
 int nk_vc_scrollup(void);
 int nk_vc_scrollup_specific(struct nk_virtual_console *vc);
 int nk_vc_setpos(uint8_t x, uint8_t y);
+void nk_vc_getpos(uint8_t * x, uint8_t * y);
 int nk_vc_setpos_specific(struct nk_virtual_console *vc, uint8_t x, uint8_t y);
 int nk_vc_display_char(uint8_t c, uint8_t attr, uint8_t x, uint8_t y);
 int nk_vc_display_char_specific(struct nk_virtual_console *vc,
@@ -89,7 +90,7 @@ nk_scancode_t nk_vc_get_scancode(int wait);
 
 int nk_vc_getchar_extended(int wait);
 int nk_vc_getchar();
-int nk_vc_gets(char *buf, int n, int display);
+int nk_vc_gets(char *buf, int n, int display, int(*notifier)(char * buf, void * priv, int o), void * priv);
 
 int nk_vc_handle_keyboard(nk_scancode_t scan);
 int nk_vc_handle_mouse(nk_mouse_event_t *mouse);
