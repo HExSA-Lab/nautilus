@@ -61,6 +61,8 @@
 #include <nautilus/shell.h>
 #include <nautilus/pmc.h>
 #include <nautilus/prog.h>
+#include <nautilus/cmdline.h>
+#include <test/test.h>
 
 #ifdef NAUT_CONFIG_ENABLE_REMOTE_DEBUGGING 
 #include <nautilus/gdb-stub.h>
@@ -505,6 +507,15 @@ init (unsigned long mbd,
     nk_pmc_init(naut);
 
     launch_vmm_environment();
+
+    nk_cmdline_init(naut);
+    nk_test_init(naut);
+
+    nk_cmdline_dispatch(naut);
+
+#ifdef NAUT_CONFIG_RUN_TESTS_AT_BOOT
+    nk_run_tests(naut);
+#endif
 
     nk_launch_shell("root-shell",0,0,0);
 

@@ -64,13 +64,26 @@ SECTIONS
         *(.data*)
         *(.gnu.linkonce.d*)
     }
+
+    .tests ALIGN(0x1000) : AT(ADDR(.data) + SIZEOF(.data))
+    {
+        __start_tests = .;
+        *(.tests*);
+        __stop_tests = .;
+    }
+
+    .cmdline_flags ALIGN(0x1000) : AT(ADDR(.tests) + SIZEOF(.tests))
+    {
+        __start_flags = .;
+        *(.cmdline_flags*);
+        __stop_flags = .;
+    }
     
-    .rodata ALIGN(0x1000) : AT(ADDR(.data) + SIZEOF(.data))
+    .rodata ALIGN(0x1000) : AT(ADDR(.cmdline_flags) + SIZEOF(.cmdline_flags))
     {
         *(.rodata*)
         *(.gnu.linkonce.r*)
     }
-    
 
     .got ALIGN(0x1000) : AT(ADDR(.rodata)+SIZEOF(.rodata))
     {

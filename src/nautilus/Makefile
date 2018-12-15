@@ -52,7 +52,8 @@ obj-y += \
 	module.o \
 	linker.o \
 	prog.o \
-	getopt.o 
+	getopt.o \
+	cmdline.o 
 
 obj-$(NAUT_CONFIG_PROFILE) += instrument.o
 obj-$(NAUT_CONFIG_XEON_PHI) += sfi.o

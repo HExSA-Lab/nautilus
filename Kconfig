@@ -186,6 +186,15 @@ config MAX_THREADS
     help
       Maximum number of threads in system (or any core) at once
 
+config RUN_TESTS_AT_BOOT
+    bool "Run all tests from the testing framework at boot"
+    default n
+    help
+      This causes the testing framework to be run immediately after
+      boot and before the shell or runtimes are launched. It will then
+      exit immediately using QEMU. This allows us to have automated
+      testing using continuous integration tools.
+
 config THREAD_EXIT_KEYCODE
     int "Thread Exit Keycode"
     range 1 255
@@ -757,6 +766,20 @@ menu Debugging
       default n
       help
         Turn on debugging for the boot memory allocator
+
+    config DEBUG_CMDLINE
+      bool "Debug Command Line Processing"
+      depends on DEBUG_PRINTS
+      default n
+      help
+        Turn on debugging for the kernel command line processor
+
+    config DEBUG_TESTS
+      bool "Debug Testing Framework"
+      depends on DEBUG_PRINTS
+      default n
+      help
+        Turn on debugging for the kernel testing framework
 
     config DEBUG_BUDDY
       bool "Debug Buddy Allocator"
