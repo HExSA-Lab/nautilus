@@ -24,10 +24,11 @@
 #define __SHUTDOWN_H__
 
 
-void reboot(void);
-void acpi_shutdown(void);
-void shutdown(void);
-void qemu_shutdown(void);
+void reboot(void) __attribute__((noreturn));;
+void acpi_shutdown(void) __attribute__((noreturn));
+void shutdown(void) __attribute__((noreturn));
+void qemu_shutdown(void) __attribute__((noreturn));
+void qemu_shutdown_with_code(uint16_t code) __attribute__((noreturn));
 
 
 
