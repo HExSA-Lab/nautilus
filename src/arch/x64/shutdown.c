@@ -192,24 +192,31 @@ out_noacpi:
  * NOTE: this requires that QEMU was passed the flag
  * -device isa-debug-exit 
  */
-static inline void
-qemu_isa_debug_exit (void)
+static inline void  __attribute__((noreturn))
+qemu_isa_debug_exit (uint16_t code)
 {
-    outb(0x31, 0x501);
+    outb(code, 0x501);
+
+    while (1) halt();
 }
 
 
+/*
+ * QEMU's ISA debug device can be used to
+ * shut it down. You must run QEMU with the
+ * -device isa-debug-exit flag. It will take
+ *  the value written to the port and use it
+ *  to derive the exit code that QEMU produces:
+ *     exit( (val << 1) | 1);
+ */
 void
 qemu_shutdown (void)
 {
-    const char * s = "Shutdown";
-    const char * ptr;
+    qemu_isa_debug_exit(0x32);
+}
 
-    for (ptr = s; *ptr != '\0'; ptr++) {
-        outb(*ptr, 0x8900);
-    }
-
-    /* if that doesn't work, we can try the isa-debug
-     * port that newer QEMU versions support */
-    qemu_isa_debug_exit();
+void
+qemu_shutdown_with_code (uint16_t code)
+{
+    qemu_isa_debug_exit(code);
 }
