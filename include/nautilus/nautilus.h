@@ -210,10 +210,16 @@ struct sys_info {
     struct nk_link_info * linker_info;
 
     struct nk_prog_info * prog_info;
+
 };
 
+struct cmdline_state;
+struct nk_test_harness;
 struct naut_info {
     struct sys_info sys;
+    struct cmdline_state * cmdline;
+    struct nk_test_harness * test_info;
+
 };
 
 #ifdef __NAUTILUS_MAIN__
