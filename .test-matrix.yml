@@ -1,0 +1,12 @@
+# Each list element is a separate test
+# There is only one run directive per test
+# However, each test can be executed with several configs (listed by the configs option)
+# NOTE: for qemu commands, you *must* add the -device isa-debug-exit flag, otherwise the test will not terminate!
+- base_test:
+    configs:
+        - test
+    prep: echo "This is an example prep script"
+    run: qemu-system-x86_64 -cdrom nautilus.iso -m 1G -serial stdio -device isa-debug-exit -monitor /dev/null -nographic
+    test_flags:
+        - "-test sampletest \"foo bar baz\""
+        - "-test sampletest \"three more args\""
