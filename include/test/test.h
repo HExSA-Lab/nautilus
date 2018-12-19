@@ -27,6 +27,7 @@
 struct nk_test_impl {
     char * name;
     int (*handler)(int argc, char * argv[]);
+    char * default_args;
 }; 
 
 int nk_run_tests(struct naut_info * naut);
