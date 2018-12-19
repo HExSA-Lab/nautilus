@@ -724,16 +724,23 @@ endef
 
 # if NAUT_CONFIG_LUA_TEST is defined then call the function lua__ to
 # generate additional wrapper code
+#
+
+quiet_cmd_isoimage = MKISO   $(ISO_NAME)
+define cmd_isoimage 
+	mkdir -p .iso/boot/grub && \
+	cp configs/grub.cfg .iso/boot/grub && \
+	cp $(BIN_NAME) $(SYM_NAME) .iso/boot && \
+	$(GRUBMKRESCUE) -o $(ISO_NAME) .iso >/dev/null 2>&1 && \
+	rm -rf .iso
+endef
+
 
 isoimage: nautilus
 ifdef NAUT_CONFIG_LUA_TEST
 	$(call lua__)
 endif
-	@mkdir -p .iso/boot/grub/
-	@cp configs/grub.cfg .iso/boot/grub
-	@cp $(BIN_NAME) $(SYM_NAME) .iso/boot
-	$(GRUBMKRESCUE) -o $(ISO_NAME) .iso
-	@rm -rf .iso
+	$(call cmd,isoimage)
 
 nautilus.asm: $(BIN_NAME)
 	$(OBJDUMP) --disassemble $< > $@
