@@ -14,7 +14,6 @@
  * Copyright (c) 2018, The V3VEE Project  <http://www.v3vee.org> 
  *                     The Hobbes Project <http://xstack.sandia.gov/hobbes>
  * All rights reserved.
- *
  * Author: Kyle C. Hale <khale@cs.iit.edu>
  *
  * This is free software.  You are permitted to use,
@@ -209,6 +208,8 @@ out_err:
 }
 
 
+#define ARGMAX 80
+
 /*
  * format is -test testname "arg1 arg2 -f arg3"
  *                 ^
@@ -217,7 +218,6 @@ out_err:
 static int
 parse_args (char * args, int * argc, char ** argv[])
 {
-#define ARGMAX 80
     char * arg_vec[ARGMAX];
     char * arg_copy  = NULL;
     char  * testname = NULL;
@@ -332,30 +332,69 @@ handle_test_from_cmdline (char * args)
 }
 
 
+static int
+handle_all (char * args)
+{
+    struct nk_test_harness * state  = nk_get_nautilus_info()->test_info;
+    struct nk_hashtable_iter * iter = nk_create_htable_iter(state->htable);
+
+    INFO("Enabling all tests\n");
+
+    if (!iter) {
+        ERROR("Could not create test htable iter\n");
+        return -1;
+    }
+
+    do {
+        char * testname = (char*)nk_htable_get_iter_key(iter);
+        struct nk_test * test = (struct nk_test*)nk_htable_get_iter_value(iter);
+        char argbuf[ARGMAX];
+
+        test->enabled = 1;
+
+        snprintf(argbuf, ARGMAX, "%s \"%s\"", testname, test->impl->default_args);
+
+        if (handle_test_from_cmdline(argbuf) != 0) {
+            ERROR("Could not enable test '%s'\n", testname);
+            return -1;
+        }
+
+    } while (nk_htable_iter_advance(iter) != 0);
+
+    return 0;
+}
+
 
 /*
  * The following can be used like so in the grub.cfg:
- * multiboot2 /nautilus.bin -test sometest "foo bar baz" -test sometest "three more args"
+ * multiboot2 /nautilus.bin -test sampletest "foo bar baz" -test sampletest "three more args"
  */
 
 static struct nk_cmdline_impl test_cmdline_impl = {
-    .name = "test",
+    .name    = "test",
     .handler = handle_test_from_cmdline,
 };
-
 nk_register_cmdline_flag(test_cmdline_impl);
+
+static struct nk_cmdline_impl all_cmdline_impl = {
+    .name    = "test-all",
+    .handler = handle_all,
+};
+nk_register_cmdline_flag(all_cmdline_impl);
 
 
 static int
-handle_test1 (int argc, char ** argv)
+handle_sample_test (int argc, char ** argv)
 {
+    DEBUG("In sample test handler\n");
     return 0;
 }
 
 
 static struct nk_test_impl test_impl = {
-    .name = "sometest",
-    .handler = handle_test1,
+    .name         = "sampletest",
+    .handler      = handle_sample_test,
+    .default_args = "foo bar baz",
 };
 
 nk_register_test(test_impl);
