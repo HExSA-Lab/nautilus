@@ -729,8 +729,11 @@ isoimage: nautilus
 ifdef NAUT_CONFIG_LUA_TEST
 	$(call lua__)
 endif
-	cp $(BIN_NAME) $(SYM_NAME) iso/boot
-	$(GRUBMKRESCUE) -o $(ISO_NAME) iso
+	@mkdir -p .iso/boot/grub/
+	@cp configs/grub.cfg .iso/boot/grub
+	@cp $(BIN_NAME) $(SYM_NAME) .iso/boot
+	$(GRUBMKRESCUE) -o $(ISO_NAME) .iso
+	@rm -rf .iso
 
 nautilus.asm: $(BIN_NAME)
 	$(OBJDUMP) --disassemble $< > $@
