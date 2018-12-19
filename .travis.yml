@@ -32,5 +32,8 @@ addons:
         packages:
             - grub2
             - xorriso
+            
 
-script: make defconfig && make isoimage
+before_install: pip install pyyaml --user
+
+script: scripts/run_tests.py

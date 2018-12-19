@@ -1,11 +1,17 @@
 # Each list element is a separate test
 # There is only one run directive per test
 # However, each test can be executed with several configs (listed by the configs option)
+#
 # NOTE: for qemu commands, you *must* add the -device isa-debug-exit flag, otherwise the test will not terminate!
-- base_test:
+# NOTE: you must make sure commands used in either the run or prep script are properly installed (this includes for Travis).
+#       Edit the .travis.yml file if you need extra packages during an automated build test
+# NOTE: "Run all tests from the testing framework at boot" *must* be enabled in your config
+#
+- example_test:
     configs:
-        - test
-    prep: echo "This is an example prep script"
+        - default # this corresponds to configs/testing/default.config
+        - full-debug
+    prep: echo "Hello World"
     run: qemu-system-x86_64 -cdrom nautilus.iso -m 1G -serial stdio -device isa-debug-exit -monitor /dev/null -nographic
     test_flags:
         - "-test sampletest \"foo bar baz\""
