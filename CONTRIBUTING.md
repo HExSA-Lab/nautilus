@@ -8,6 +8,7 @@ guidelines.
 ## Table of Contents
 - [How Can I Contribute?](#how-can-i-contribute)
 - [Development Model](#development-model)
+- [Testing](#testing)
 
 
 ## How Can I Contribute?
@@ -177,4 +178,144 @@ Now, go to the page for your Github fork, and select the appropriate branch. You
 can then click the "pull request" button. If you need to make changes after
 submitting the pull request, don't worry; the pull request will track new changes
 as you push them to the branch for which you created the request.
+
+## Testing
+As you add components to Nautilus, it is a good idea to test them. We've now made this a bit easier
+with a testing framework. With this framework, you can add test code within whatever file you're editing
+and automatically have it invoked either from a `qemu` invocation or the automated build process
+when your code is merged in to the master branch.
+
+### Adding a Test
+The first step is to add a function to whatever file you're working on which tests the
+relevant pieces of code. You can see an example called `sample_test()` near the bottom
+of `src/test/test.c`. All test functions must return an `int` and accept two arguments, 
+`int argc` and `char * argv[]` (just like `main()` in a regular C program). Here is an example:
+
+```C
+static int
+my_test (int argc, char * argv[])
+{
+    int ret = do_something();
+    if (ret != 0) {
+        ERROR_PRINT("My unit test failed\n");
+        return -1;
+    }
+    
+    printk("My unit test succeeded\n");
+    return 0;
+}
+```
+
+This is a very simple test which calls the function `do_something()` and reports the return value. **Note that any test which
+does not return 0 will be reported as a failure by the test framework**. Each test is passed arguments in the traditional way,
+much like the C runtime. You can parse these manually or include the `<nautilus/getopt.h>` header and use the `getopt()` function
+to parse arguments for your test.
+
+Once you have this function in place, you then need to register it with the testing framework (again, see `src/test/test.c` 
+for examples). This is done as follows:
+
+```C
+static struct nk_test_impl my_test_impl = {
+    .name = "mytest",
+    .handler = my_test,
+    .default_args = "foo bar baz",
+};
+nk_register_test(my_test_impl);
+```
+This tells Nautilus that it should make this test available. `name` is the name of the test. We'll see how this is used in
+a bit. The important thing now is that you pass the test function you wrote before as the `handler` argument. 
+
+### Invoking your test from the kernel command-line
+
+The kernel command-line is passed to Nautilus from GRUB (the bootloader) using a configuration file. The default configuration file
+is found in `configs/grub.cfg`. This config file is used to generate the isoimage which you boot with QEMU. If you want to invoke your
+test manually, you can modify `configs/grub.cfg`. 
+
+Nautilus understands a special command-line flag (`-test`) used to invoke a test. The format is as follows:
+
+```Shell
+-test <testname> "[arg1] [arg2] [arg...]"
+```
+
+Where `<testname>` corresponds to the name you gave in your test registration. You can even specify multiple invocations of the same test (e.g. with different arguments). For example, for the test we wrote above, I might
+invoke it like so:
+
+```Shell
+-test mytest "foo bar baz" -test mytest "1 2 3"
+```
+This will cause our test to be invoked twice, first with the arguments `foo bar baz` and then with `1 2 3`. To tie it together, we can invoke this test by modifying the default `grub.cfg`. For this example, we would want to fill it with, e.g. the following contents:
+
+```
+set timeout=0
+set default=0
+menuentry "Nautilus" {
+    multiboot2 /boot/nautilus.bin -test mytest "foo bar baz" -test mytest "1 2 3"
+    module2 /boot/nautilus.syms
+    boot
+}
+```
+This will tell GRUB to pass these command-line parameters along to the kernel. 
+
+### Configuring the kernel for testing
+By default, Nautilus will not run any tests at all. To get it to run tests on bootup, you must
+configure the kernel (with `make menuconfig`) with the option `Configuration` -> `Run all tests from the testing framework at boot` enabled. Once you've done this, you can now build the kernel (using `make isoimage`). In order to actually run your tests, you'll
+want to use QEMU. By default, however, the kernel will just hang after (and if) it passes all enabled tests. If you want it to shutdown after it has passed all tests (for example, if you're scripting your tests), you'll want to add the flag `-device isa-debug-exit` to your QEMU invocation. For example:
+
+```Shell
+$> qemu-system-x86_64 -cdrom nautilus.iso -m 1G -serial stdio -monitor /dev/null -nographic -device isa-debug-exit
+```
+
+### Special tests
+As you might have guessed before, your test will **only** be run if you invoke it explicitly. If you'd like to run *every* test
+which has been registered, there is a special flag for that as well, called `-test-all` which will invoke all tests. Because there
+is no simple way to pass arguments to all tests which will be run in this fashion, you can specify a set of default arguments when writing your test which will be used when the `-test-all` flag is given. In the example above, I've provided `.default_args = "foo bar baz"`, so that when I use the following grub configuration:
+
+```
+set timeout=0
+set default=0
+menuentry "Nautilus" {
+    multiboot2 /boot/nautilus.bin -test-all
+    module2 /boot/nautilus.syms
+    boot
+}
+```
+My test will be invoked with the arguments `foo bar baz`, and every other test will also be invoked using *its* default arguments.
+
+### Integration into the Build
+The test framework is integrated with the build system, so that when new commits are made to the `master` branch or when
+pull requests are merged into that branch, a set of preselected tests will be run to make sure everything is still working. This integration is done with the Travis CI framework. To add a test that you've written to this set of tests, you must add it to the *test matrix*, which is specified in the file `.test-matrix.yml`. The Nautilus build system will parse this file, and for each test specification that it encounters it will generate a new GRUB configuration with the appropriate command-line arguments and launch a script to run the test (usually via a QEMU invocation of some sort).
+
+### Adding to the test matrix
+The test matrix is specified using the [YAML](https://learnxinyminutes.com/docs/yaml/) format. Here is an example of how we would add
+the test we created above to the matrix:
+
+```
+- mytest:
+    configs:
+        - default 
+        - full-debug
+    prep: echo "Hello World"
+    run: qemu-system-x86_64 -cdrom nautilus.iso -m 1G -serial stdio -device isa-debug-exit -monitor /dev/null -nographic
+    test_flags:
+        - "-test mytest \"foo bar baz\""
+        - "-test mytest \"1 2 3\""
+        
+- some-other-test:
+    configs:
+        - custom
+        - custom2
+    prep: dd if=/dev/zero of=hdd.img count=1024 bs=1024
+    run: qemu-system-x86_64 -cdrom nautilus.iso -m 1G -hda hdd.img -device isa-debug-exit
+    test_flags:
+        - "-test some-other-test \"a b c\"
+```
+
+Each test is a list element, and comprises a one-element YAML dictionary, where the key is the test name and the value is another dictionary **necessarily** containing the following items:
+
+* `configs`: a list of kernel configurations this test should be run with. There are two base configurations already provided, `default` and `full-debug`. These are different instances of `.config` files generated by `Kconfig`. `default` corresponds to the file  `configs/default.config`. If you want another configuration, add it to the list in the test matrix and add the `.config` file for it (with a reasonable name) to the `configs/` directory. 
+* `prep`: if you need to run any commands (external to Nautilus) before running your test, you can specify those here. The second test above uses this to generate a virtual disk image to use with QEMU.
+* `run`: this is the command to run the test. It will almost always be an invocation of QEMU. Again, remember that you need the `-device isa-debug-exit` flag for QEMU to shutdown properly after the test is complete.
+* `test_flags`: this is a list of specific tests which will be run on this test invocation. Note that the first example above corresponds directly to our manual configuration using `grub.cfg` before.
+
+Make sure to commit your `.config` files and your additions to `.test-matrix.yml`. Then, if your PR gets merged in or your commits are pushed to the master branch, your tests will be run automatically. If *any* test fails, the automatic build will fail, indicating that something went wrong. This can be diagnosed using the Travis CI web interface.
 
