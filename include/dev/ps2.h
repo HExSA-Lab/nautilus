@@ -40,6 +40,11 @@ struct naut_info;
 typedef uint16_t nk_keycode_t;
 typedef uint16_t nk_scancode_t;
 
+#define KBD_DATA_REG 0x60
+#define KBD_ACK_REG  0x61
+#define KBD_CMD_REG  0x64
+#define KBD_STATUS_REG  0x64
+
 // Special tags to indicate unavailabilty
 #define NO_KEY      ((nk_keycode_t)(0xffff))
 #define NO_SCANCODE ((nk_scancode_t)(0xffff))
