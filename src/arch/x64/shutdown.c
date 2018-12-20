@@ -28,35 +28,87 @@
 #include <acpi/acpi.h>
 #include <dev/ps2.h>
 
-void 
-reboot (void) 
+static void
+kbd_reboot (void)
+{
+    uint8_t tmp;
+
+    cli();
+
+    /* empty the 8042 buffers */
+    tmp = inb(KBD_CMD_REG);
+    do {
+        if (tmp & 0x1)
+            inb(KBD_DATA_REG);
+    } while (tmp & 0x2);
+
+    /* hit reset */
+    outb(0xfe, KBD_CMD_REG);
+}
+
+
+static inline void 
+a20_reboot (void) 
 {
     /* resetting A20 should be a bit quicker */
     outb(1, 0x92);
-
-#if 0
-    cli();
-
-    tmp = inb(KBD_CMD_REG);
-    do {
-        if (__CHECK_BIT(tmp, KBD_BIT_KDATA)) {
-            inb(KBD_DATA_REG);
-        }
-    } while (__CHECK_BIT(tmp, KBD_BIT_UDATA));
-
-    outb(KBD_RESET, KBD_CMD_REG);
-#endif
-
-    while (1) {
-        halt();
-    }
 }
+
+
+static int
+try_acpi_reboot (struct acpi_table_header * hdr, void * arg)
+{
+    struct acpi_table_fadt * fadt = (struct acpi_table_fadt*)hdr;
+    struct acpi_generic_address * addr = &(fadt->reset_register);
+
+    printk("Attempting ACPI reboot\n");
+
+    printk("FADT rev no=%d\n", fadt->header.revision);
+
+    if (fadt->header.revision < 2) {
+        return 0;
+    }
+
+    if (addr->space_id == 0) {
+        DEBUG_PRINT("  Using sys mem (addr=%p)\n", (void*)addr->address);
+        while(1) halt();
+        volatile uint8_t * ra = (volatile uint8_t*)addr->address;
+        *ra = fadt->reset_value;
+    } else if (addr->space_id == 1) {
+        DEBUG_PRINT("  Using I/O (port=0x%04x)\n", addr->address);
+        while(1) halt();
+        outb(fadt->reset_value, addr->address);
+    } else {
+        DEBUG_PRINT("  Unsupported reboot mechanism (0x%02x)\n", fadt->reset_register.space_id);
+        while(1) halt();
+    }
+
+    return -1;
+}
+
 
 void
 acpi_reboot (void)
 {
-    /* NOT YET */
+    acpi_table_parse(ACPI_SIG_FADT, try_acpi_reboot, NULL);
 }
+
+
+void
+reboot (void)
+{
+    acpi_reboot();
+
+    /* if we're still here, use a20 */
+    a20_reboot();
+
+    /* final try, 8042 reset */
+    kbd_reboot();
+
+    /* we give up */
+    while (1) halt();
+}
+
 
 struct shutdown_info {
     uint32_t  smi_cmd;
@@ -82,7 +134,7 @@ try_acpi_shutdown (struct acpi_table_header * hdr, void * arg)
     struct shutdown_info * s = (struct shutdown_info *)arg;
     struct acpi_table_fadt * fadt = (struct acpi_table_fadt*)hdr;
 
-    printk("Parsing fadt\n");
+    DEBUG_PRINT("Parsing fadt\n");
 
     s->dsdt         = fadt->dsdt;
     s->xdsdt        = fadt->Xdsdt;
@@ -107,10 +159,10 @@ get_s5 (struct shutdown_info * s)
     char * cursor = NULL;
 
     if (memcmp((void*)(uint64_t)s->dsdt, "DSDT", 4)) {
-        printk("NOT REALLY DSDT\n");
+        DEBUG_PRINT("NOT REALLY DSDT\n");
     }
 
-    printk("dsdt is at %p, len=%u\n", (void*)hdr, len);
+    DEBUG_PRINT("dsdt is at %p, len=%u\n", (void*)hdr, len);
     for (i = 0; i < len; i++) {
         char * tmp = (char*)(uint64_t)s->dsdt + i;
         if (!memcmp(tmp, "_S5_", 4)) {
@@ -122,12 +174,12 @@ get_s5 (struct shutdown_info * s)
     }
 
     if (!s->shutdown_ok) {
-        printk("no S5 found\n");
+        DEBUG_PRINT("no S5 found\n");
         return 0;
     }
 
     if ((*(cursor-1) == 0x08 || ( *(cursor-2) == 0x08 && *(cursor-1) == '\\')) && *(cursor+4) == 0x12) {
-        printk("valid AML for shutdown\n");
+        DEBUG_PRINT("valid AML for shutdown\n");
 
         cursor += 5;
         cursor += ((*cursor & 0xc0) >> 6) + 2;

@@ -49,10 +49,6 @@
     GENERAL PS2
 ****************************************************************/
 
-#define KBD_DATA_REG 0x60
-#define KBD_ACK_REG  0x61
-#define KBD_CMD_REG  0x64
-#define KBD_STATUS_REG  0x64
 
 typedef union ps2_status {
     uint8_t  val;

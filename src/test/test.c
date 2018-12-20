@@ -69,6 +69,15 @@ test_eq_fn (addr_t key1, addr_t key2) {
 }
 
 
+static void
+shutdown_with_code (uint16_t code)
+{
+    qemu_shutdown_with_code(code);
+    /* if we're not running in QEMU, just reboot */
+    reboot();
+}
+
+
 static int
 __run_tests (struct naut_info * naut, int shutdown)
 {
@@ -121,7 +130,7 @@ __run_tests (struct naut_info * naut, int shutdown)
 
     if (shutdown) {
         INFO("Shutting down\n");
-        qemu_shutdown_with_code(0x31);
+        shutdown_with_code(0x31);
     }
 
     return 0;
@@ -131,11 +140,12 @@ __run_tests (struct naut_info * naut, int shutdown)
 int
 nk_run_tests (struct naut_info * naut)
 {
-    if (__run_tests(naut, 1) != 0) {
-        qemu_shutdown_with_code(0xff);
+    int ret = __run_tests(naut, 1);
+    if (ret != 0) {
+        shutdown_with_code(0xff);
     }
 
-    return __run_tests(naut, 1);
+    return ret;
 }
 
 
