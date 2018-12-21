@@ -105,7 +105,10 @@ __run_tests (struct naut_info * naut, int shutdown)
             INFO("  Instance %d (args: ", i);
                 int j;
                 for (j = 1; j < inst->argc; j++) {
-                    printk("%s ", inst->argv[j]);
+                    printk("%s", inst->argv[j]);
+                    if (j != inst->argc - 1) {
+                        printk(" ");
+                    }
                 }
                 printk(")\n");
 
@@ -223,6 +226,8 @@ out_err:
 
 
 #define ARGMAX 80
+#define ARG_OPEN '['
+#define ARG_CLOSE ']'
 
 /*
  * format is -test testname "arg1 arg2 -f arg3"
@@ -237,6 +242,7 @@ parse_args (char * args, int * argc, char ** argv[])
     char  * testname = NULL;
     char * curs      = NULL;
     char * tmp       = NULL;
+    int foundargs = 0;
     int len = 0;
 
     memset(arg_vec, 0, sizeof(char*)*ARGMAX);
@@ -261,12 +267,17 @@ parse_args (char * args, int * argc, char ** argv[])
 
     arg_vec[(*argc)++] = testname;
 
-    while (*curs && *curs != '\"') curs++;
+    while (*curs && *curs != ARG_OPEN) curs++;
+
+    if (*curs != ARG_OPEN) {
+        DEBUG("No args found, skipping\n");
+        goto out;
+    }
 
     tmp = ++curs;
     len = 0;
 
-    while (*curs && *curs != '\"') {
+    while (*curs && *curs != ARG_CLOSE) {
         curs++; len++;
     }
 
@@ -289,8 +300,8 @@ parse_args (char * args, int * argc, char ** argv[])
 
     DEBUG("Found %d args\n", *argc);
 
+out:
     *argv = malloc(sizeof(char*)*(*argc));
-
     memcpy(*argv, arg_vec, sizeof(char*)*(*argc));
 
     return 0;
@@ -339,7 +350,7 @@ handle_test_from_cmdline (char * args)
 
     DEBUG("Adding new test instance for '%s'\n", test->impl->name);
 
-    list_add(&inst->node, &test->inst_list);
+    list_add_tail(&inst->node, &test->inst_list);
     test->inst_cnt++;
 
     return 0;

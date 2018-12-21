@@ -87,56 +87,171 @@ dispatch_flag (struct cmdline_state * state, char * flag, char * args)
 }
 
 
+typedef enum {
+    FLAG_SCANNING,
+    FLAG_NAME_CONSUME,
+    FLAG_ARGS_FIND,
+    FLAG_NO_ARGS,
+    FLAG_ARGS_CONSUME,
+    FLAG_SUBARGS_CONSUME,
+    FLAG_ARGS_END,
+} cmdline_state_t;
+
+
+static char * 
+strndup (char * str, size_t lim)
+{
+    char * ret = malloc(strnlen(str, lim) + 1);
+    if (!ret) {
+        return NULL;
+    }
+    strncpy(ret, str, strnlen(str, lim));
+    ret[strnlen(str, lim)] = 0;
+    return ret;
+}
+
 int
 nk_cmdline_dispatch (struct naut_info * naut)
 {
     struct cmdline_state * state = naut->cmdline;
     char * cline = naut->sys.mb_info->boot_cmd_line;
+    char * flag_args = NULL;
+    char * cursor    = NULL;
+    char * flag      = NULL;
+    char * nonwhite  = NULL;
+    int len          = 0;
+    int i            = 0;
 
-    while (*cline) {
-        switch (*cline) {
-            case '-': { // found a flag word 
+    printk("parsing cmdline %s\n", cline);
 
-                char * word_curs = ++cline;
-                int len = 0;
+    cmdline_state_t state_id = FLAG_SCANNING;
 
-                while (*cline != ' ' && *cline != '\t') {
-                    len++; cline++;
+    for (i = 0; cline[i]; i++) {
+
+        switch (state_id) {
+            case FLAG_SCANNING:
+                if (cline[i] == '-') {
+                    cursor   = &cline[i+1];
+                    state_id = FLAG_NAME_CONSUME;
+                    len      = 0;
+                    DEBUG("Entering FLAG_NAME_CONSUME state\n");
                 }
-
-                char * new = malloc(len + 1);
-                strncpy(new, word_curs, len);
-                new[len] = 0;
-
-                while (*cline == ' ' || *cline == '\t') cline++;
-
-                char * arg_curs = cline;
-                len = 0;
-
-                while (*cline  && *cline != '-') {
-                    len++; cline++;
-                }
-
-                char * args = malloc(len + 1);
-                strncpy(args, arg_curs, len);
-                args[len] = 0;
-
-                DEBUG("Found flag (%s)\n", new);
-                DEBUG("  args: %s\n", args);
-
-                if (dispatch_flag(state, new, args)) {
-                    ERROR("Could not dispatch cmdline flag (%s)\n", new);
-                    free(new);
-                    free(args);
-                }
-
                 break;
-            }
+            case FLAG_NAME_CONSUME:
+                if (cline[i] == ' ' || cline[i] == '\t') {
+                    state_id = FLAG_ARGS_FIND;
+                    flag     = strndup(cursor, len);
+                    len      = 0;
+                    DEBUG("Entering FLAG_ARGS_FIND state (flag=%s)\n", flag);
+                } else {
+                    len++;
+                }
+                break;
+            case FLAG_ARGS_FIND:
+                if (cline[i] == ' ' || cline[i] == '\t') {
+                    break;
+                } else if (cline[i] == '-') {
+                    state_id = FLAG_NO_ARGS;
+                    DEBUG("Entering FLAG_NO_ARGS state\n");
+                    break;
+                } else { // non-whitespace char (also not -)
+                    DEBUG("Entering FLAG_ARGS_CONSUME state\n");
+                    state_id = FLAG_ARGS_CONSUME;
+                    cursor   = &cline[i];
+                    nonwhite = cursor;
+                    len      = 0;
+                }
+                break;
+            case FLAG_NO_ARGS:
+                if (dispatch_flag(state, flag, NULL)) {
+                    ERROR("Could not dispatch cmdline flag (%s)\n", flag);
+                    free(flag);
+                    return -1;
+                }
+                state_id = FLAG_SCANNING;
+                DEBUG("Entering FLAG_SCANNING state\n");
+                i--;
+                break;
+            case FLAG_ARGS_CONSUME:
+                if (strncmp(&cline[i], " -", 2) == 0) {
+                    state_id = FLAG_ARGS_END;
+                    len++;
+                    DEBUG("Entering FLAG_ARGS_END state\n");
+                    break;
+                } else if (cline[i] == '[') {
+                    state_id = FLAG_SUBARGS_CONSUME;
+                    DEBUG("Entering FLAG_SUBARGS_CONSUME state\n");
+                }
+
+                if (cline[i] != ' ' && cline[i] != '\t') {
+                    nonwhite = &cline[i];
+                }
+                len++;
+                break;
+            case FLAG_SUBARGS_CONSUME:
+                if (cline[i] == ']') {
+                    state_id = FLAG_ARGS_CONSUME;
+                    DEBUG("Entering FLAG_ARGS_CONSUME state\n");
+                } 
+
+                if (cline[i] != ' ' && cline[i] != '\t') {
+                    nonwhite = &cline[i];
+                }
+                len++;
+                break;
+            case FLAG_ARGS_END:
+                state_id  = FLAG_SCANNING;
+                flag_args = strndup(cursor, len);
+                cursor    = NULL;
+                nonwhite  = NULL;
+                len       = 0;
+                DEBUG("In FLAG_ARGS_END with flag=%s and args=%s\n", flag, flag_args);
+                if (dispatch_flag(state, flag, flag_args)) {
+                    ERROR("Could not dispatch cmdline flag (%s)\n", flag);
+                    free(flag);
+                    free(flag_args);
+                    return -1;
+                }
+                flag      = NULL;
+                flag_args = NULL;
+                i--;
+                DEBUG("Entering FLAG_SCANNING state\n");
+                break;
             default:
-                cline++;
-                break;
+                ERROR("Invalid command parser state: %d\n", state_id);
+                return -1;
         }
 
+    }
+
+    DEBUG("Reached end of input\n");
+    len++;
+
+    /* we reached the end */
+    switch (state_id) {
+        case FLAG_SCANNING: /* we never found any flags */
+            DEBUG("Never found any command flags\n");
+            break;
+        case FLAG_ARGS_FIND: /* we never found args for most recent flag */
+            if (dispatch_flag(state, flag, NULL)) {
+                ERROR("Could not dispatch cmdline flag (%s)\n", flag);
+                free(flag);
+                return -1;
+            }
+            break;
+        case FLAG_ARGS_CONSUME: /* we never encountered another flag */
+            flag_args = strndup(cursor, len);
+            DEBUG("Consumed args: %s\n", flag_args);
+            if (dispatch_flag(state, flag, flag_args)) {
+                ERROR("Could not dispatch cmdline flag (%s)\n", flag);
+                free(flag);
+                free(flag_args);
+                return -1;
+            }
+            break;
+        default:
+            ERROR("Invalid command parser state (%d)\n", state_id);
+            return -1;
     }
 
     return 0;
