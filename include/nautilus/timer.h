@@ -53,6 +53,10 @@ typedef struct nk_timer {
 nk_timer_t *nk_timer_create(char *name);
 void        nk_timer_destroy(nk_timer_t *t);
 
+// allocate a default timer for the current thread if needed
+// always returns the current thread's default timer
+nk_timer_t *nk_timer_get_thread_default();
+
 // configures the timer
 // Currently, flags can only be used in isolation (only one flag)
 //
