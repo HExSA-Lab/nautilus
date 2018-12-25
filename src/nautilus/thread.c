@@ -30,6 +30,7 @@
 #include <nautilus/paging.h>
 #include <nautilus/thread.h>
 #include <nautilus/waitqueue.h>
+#include <nautilus/timer.h>
 #include <nautilus/percpu.h>
 #include <nautilus/atomic.h>
 #include <nautilus/queue.h>
@@ -196,6 +197,14 @@ _nk_thread_init (nk_thread_t * t,
     // update the wait queue name given the current thread id
     snprintf(t->waitq->name,NK_WAIT_QUEUE_NAME_LEN,"thread-%lu-wait",t->tid);
 
+    // the timer is allocated at first use, not here, although it
+    // is possible for reanimated thread to already have a timer
+    // if so, also update its name
+    if (t->timer) {
+	snprintf(t->timer->name,NK_TIMER_NAME_LEN,"thread-%lu-timer",t->tid);
+    }
+	
+    
     return 0;
 }
 
@@ -313,7 +322,7 @@ nk_thread_create (nk_thread_fun_t fun,
 			      placement_cpu))) {
 	// we have succeeded in reanimating a dead thread, so
 	// now all we need to do is the management that
-	// nk_thread_destory() would otherwise have done
+	// nk_thread_destroy() would otherwise have done
 
 	nk_thread_brain_wipe(t);
 
@@ -376,6 +385,9 @@ nk_thread_create (nk_thread_fun_t fun,
     return 0;
 
 out_err:
+    if (t->timer) {
+	nk_timer_destroy(t->timer);
+    }
     if (t->waitq) { 
 	nk_wait_queue_destroy(t->waitq);
     }
@@ -487,6 +499,10 @@ int nk_thread_name(nk_thread_id_t tid, char *name)
   t->name[MAX_THREAD_NAME-1] = 0;
   // update wait queue based on name
   snprintf(t->waitq->name,NK_WAIT_QUEUE_NAME_LEN,"thread-%s-wait",t->name);
+  // update timer, if exists, based on name
+  if (t->timer) {
+      snprintf(t->timer->name,NK_TIMER_NAME_LEN,"thread-%s-timer",t->name);
+  }
   return 0;
 }
 
@@ -576,6 +592,11 @@ void nk_thread_exit (void * retval)
     /* wake up everyone who is waiting on me */
     nk_wait_queue_wake_all_extended(wq,1);
 
+    /* fire timer, if it exists */
+    if (me->timer) {
+	nk_timer_cancel(me->timer);
+    }
+    
     THREAD_DEBUG("Waiting wakeup complete\n");
 
     me->refcount--;
@@ -619,6 +640,11 @@ nk_thread_destroy (nk_thread_id_t t)
      * (waiters should already have been notified */
     nk_wait_queue_destroy(thethread->waitq);
 
+    if (thethread->timer) {
+	// cancel + destroy the timer if it exists
+	nk_timer_destroy(thethread->timer);
+    }
+    
     nk_sched_thread_state_deinit(thethread);
 
 #ifdef NAUT_CONFIG_ENABLE_BDWGC
@@ -635,7 +661,7 @@ nk_thread_destroy (nk_thread_id_t t)
  * nk_thread_brain_wipe
  *
  * "destroys" a thread without deallocating it so that
- * it can be reused.  This needs to mirror nk_thread_destory
+ * it can be reused.  This needs to mirror nk_thread_destroy
  *
  * Only threads returned from nk_sched_reanimate() should be 
  * be brain-wiped.   The caller also needs to initialize
@@ -663,10 +689,14 @@ static void nk_thread_brain_wipe(nk_thread_t *t)
     // we do not delete its own wait queue as we will simply
     // reuse it
 
+    // we do not destroy the timer, if it exists, but we will fire it
+    if (t->timer) {
+	nk_timer_cancel(t->timer);
+    }
+    
     // We do not deinit its scheduler state, since since
     // the scheduler will reuse the state in
     // nk_sched_thread_state_init()
-
 
     // GC handling must happen - only relevant for
     // Boehm at this point 

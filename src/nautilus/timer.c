@@ -44,10 +44,19 @@
 #define DEBUG(fmt, args...) DEBUG_PRINT("timer: " fmt, ##args)
 #define INFO(fmt, args...) INFO_PRINT("timer: " fmt, ##args)
 
+// guards list of all timers
 static spinlock_t state_lock;
 #define STATE_LOCK_CONF uint8_t _state_lock_flags
 #define STATE_LOCK() _state_lock_flags = spin_lock_irq_save(&state_lock)
+#define STATE_TRY_LOCK()  spin_try_lock_irq_save(&state_lock,&_state_lock_flags)
 #define STATE_UNLOCK() spin_unlock_irq_restore(&state_lock, _state_lock_flags);
+
+// guards list of active timers
+static spinlock_t active_lock;
+#define ACTIVE_LOCK_CONF uint8_t _active_lock_flags
+#define ACTIVE_LOCK() _active_lock_flags = spin_lock_irq_save(&active_lock)
+#define ACTIVE_TRY_LOCK()  spin_try_lock_irq_save(&active_lock,&_active_lock_flags)
+#define ACTIVE_UNLOCK() spin_unlock_irq_restore(&active_lock, _active_lock_flags);
 
 static struct list_head timer_list;
 static struct list_head active_timer_list;
@@ -101,8 +110,15 @@ nk_timer_t *nk_timer_create(char *name)
 
 void nk_timer_destroy(nk_timer_t *t)
 {
-    nk_timer_cancel(t); // remove from list at least
+    STATE_LOCK_CONF;
+    
+    nk_timer_cancel(t); // remove from active list 
     nk_wait_queue_destroy(t->waitq);
+    
+    STATE_LOCK();
+    list_del_init(&t->node); // remove from timer list
+    STATE_UNLOCK();
+    
     free(t);
 }
 
@@ -113,8 +129,14 @@ int nk_timer_set(nk_timer_t *t,
 		 void *p,
 		 uint32_t cpu)
 {
+    int oldstate;
+
+    oldstate = __sync_lock_test_and_set(&t->state, NK_TIMER_INACTIVE);
+
+    if (oldstate == NK_TIMER_ACTIVE) {
+	ERROR("Weird - setting active timer %s\n", t->name);
+    }
     
-    t->state = NK_TIMER_INACTIVE;
     t->flags = flags ;
     t->time_ns = nk_sched_get_realtime() + ns;
     t->callback = callback;
@@ -140,7 +162,14 @@ int nk_timer_set(nk_timer_t *t,
 int nk_timer_reset(nk_timer_t *t, 
 		   uint64_t ns)
 {
-    t->state = NK_TIMER_INACTIVE;
+    int oldstate;
+
+    oldstate = __sync_lock_test_and_set(&t->state, NK_TIMER_INACTIVE);
+
+    if (oldstate == NK_TIMER_ACTIVE) {
+	ERROR("Weird - resetting active timer %s\n", t->name);
+    }
+    
     t->time_ns = nk_sched_get_realtime() + ns;
 
     DEBUG("reset %s : state=%s flags=0x%llx (%s), time=%lluns, callback=%p priv=%p cpu=%lu\n",
@@ -160,35 +189,45 @@ int nk_timer_reset(nk_timer_t *t,
 
 int nk_timer_start(nk_timer_t *t)
 {
-    STATE_LOCK_CONF;
+    ACTIVE_LOCK_CONF;
+    int was_active=0;
     
-    STATE_LOCK();
-    t->state = NK_TIMER_ACTIVE;
-    list_add_tail(&t->active_node, &active_timer_list);
-    STATE_UNLOCK();
+    ACTIVE_LOCK();
+    if (t->state == NK_TIMER_ACTIVE) {
+	// do not add it again if it's already been started...
+	was_active = 1;
+    } else {
+	t->state = NK_TIMER_ACTIVE;
+	list_add_tail(&t->active_node, &active_timer_list);
+	was_active = 0;
+    }
+    ACTIVE_UNLOCK();
 
-    DEBUG("start %s mt=%d\n",t->name,list_empty(&active_timer_list));
+    if (was_active) { 
+	ERROR("Weird:  started already active timer %s\n",t->name);
+    } else {
+	DEBUG("start %s\n",t->name);
+    }
 
     return 0;
 }    
 
 int nk_timer_cancel(nk_timer_t *t)
 {
-    STATE_LOCK_CONF;
-    struct list_head *cur;
+    ACTIVE_LOCK_CONF;
+    int was_active=0;
 
-    STATE_LOCK();
-    // We need to scan the active list because the timer could have
-    // been canceled before this point or it could have fired
-    // in either case, it is *not* on the list
-    list_for_each(cur,&active_timer_list) {
-	if (cur==&(t->active_node)) {
-	    break;
-	}
+    ACTIVE_LOCK();
+    // we may not be active - only delete if we are
+    if (t->state == NK_TIMER_ACTIVE) { 
+	list_del_init(&t->active_node);
+	was_active=1;
     }
-    if (cur==&(t->active_node)) {
+    t->state = NK_TIMER_INACTIVE;
+    ACTIVE_UNLOCK();
+    // now do handling that does not require the lock
+    if (was_active) { 
 	DEBUG("canceling %s\n",t->name);
-	list_del_init(cur);
 	if (t->flags == NK_TIMER_WAIT_ALL) {
 	    nk_wait_queue_wake_all(t->waitq);
 	}
@@ -198,8 +237,6 @@ int nk_timer_cancel(nk_timer_t *t)
     } else {
 	DEBUG("not canceling %s as not in active list\n",t->name);
     }
-    t->state = NK_TIMER_INACTIVE;
-    STATE_UNLOCK();
     return 0;
 }
 
@@ -217,33 +254,59 @@ int nk_timer_wait(nk_timer_t *t)
 	  t->flags==NK_TIMER_SPIN ? "spin" :
 	  t->flags==NK_TIMER_CALLBACK ? "callback (uh...)" : "UNKNOWN");
 
+    // must be either active or signalled...
+    if (t->state == NK_TIMER_INACTIVE) {
+	ERROR("waiting on inactive timer %s\n",t->name);
+	return -1;
+    }
+    
     if (t->flags==NK_TIMER_CALLBACK) {
 	ERROR("trying to wait on a callback timer\n");
 	return -1;
     }
+    
     while (!check(t)) {
 	if (t->flags != NK_TIMER_SPIN) { 
-	    DEBUG("going to sleep on thread queue\n");
+	    DEBUG("going to sleep on wait queue\n");
 	    nk_wait_queue_sleep_extended(t->waitq, check, t);
 	} else {
 	    asm volatile ("pause");
 	}
-	DEBUG("try again\n");
+	//DEBUG("try again\n");
     }
     return 0;
 }
 
+nk_timer_t *nk_timer_get_thread_default()
+{
+    nk_thread_t *thread = get_cur_thread();
+
+    if (!thread->timer) {
+	char buf[NK_TIMER_NAME_LEN];
+	if (thread->name[0]) {
+	    snprintf(buf,NK_TIMER_NAME_LEN,"thread-%s-timer",thread->name);
+	} else {
+	    snprintf(buf,NK_TIMER_NAME_LEN,"thread-%lu-timer",thread->tid);
+	}
+	thread->timer = nk_timer_create(buf);
+    }
+
+    // note the per-thread timer is deallocated by nk_thread_destroy
+
+    return thread->timer;
+}
+
 static int _sleep(uint64_t ns, int spin) 
 {
-    nk_timer_t * t = nk_timer_create(0);
-    
+    nk_timer_t *t = nk_timer_get_thread_default();
+
     if (!t) { 
-        ERROR("failed to allocate timer in sleep\n");
+        ERROR("No timer available in sleep\n");
 	return -1;
     }
 
     if (nk_timer_set(t, 
-		     nk_sched_get_realtime() + ns,
+		     ns,
 		     spin ? NK_TIMER_SPIN : NK_TIMER_WAIT_ALL,
 		     0,
 		     0,
@@ -256,12 +319,9 @@ static int _sleep(uint64_t ns, int spin)
 	ERROR("Failed to start timer in sleep\n");
 	return -1;
     }
-		 
-    int rc = nk_timer_wait(t);
-    
-    nk_timer_destroy(t);
 
-    return rc;
+    return nk_timer_wait(t);
+    
 }
 
 int nk_sleep(uint64_t ns) { return _sleep(ns,0); }
@@ -270,72 +330,80 @@ int nk_delay(uint64_t ns) { return _sleep(ns,1); }
 //
 // Currently, the timer handler only makes sense on cpu 0
 //
+//
+// Note that debug output here is often a bad idea since
+// timers are used in places for efficient debug output
+// and so could cause deadlock.   Only enable the
+// debug output if you know what you are doing
 uint64_t nk_timer_handler (void)
 {
     if (my_cpu_id()!=0) {
-	DEBUG("update: cpu %d - ignored/infinity\n",my_cpu_id());
+	//DEBUG("update: cpu %d - ignored/infinity\n",my_cpu_id());
 	return -1;  // infinitely far in the future
     }
 
-    STATE_LOCK_CONF;
+    ACTIVE_LOCK_CONF;
     nk_timer_t *cur, *temp;
     uint64_t now = nk_sched_get_realtime();
     uint64_t earliest = -1;
     struct list_head expired_list;
     INIT_LIST_HEAD(&expired_list);
 
+    ACTIVE_LOCK();
+    
     // first, find expired timers with lock held
-    STATE_LOCK();
     list_for_each_entry_safe(cur, temp, &active_timer_list, active_node) {
+	//DEBUG("considering %s\n",cur->name);
 	if (now >= cur->time_ns) { 
-	    DEBUG("found expired timer %s\n",cur->name);
+	    //DEBUG("found expired timer %s\n",cur->name);
 	    cur->state = NK_TIMER_SIGNALLED;
 	    list_del_init(&cur->active_node);
 	    list_add_tail(&cur->active_node, &expired_list);
 	}
 	    
     }
-    STATE_UNLOCK();
+    ACTIVE_UNLOCK();
 
     // now handle expired timers without holding the lock
     // so that callbacks/etc can restart the timer if desired
     list_for_each_entry_safe(cur, temp, &expired_list, active_node) {
-	DEBUG("handle expired timer %s\n",cur->name);
+	//DEBUG("handle expired timer %s\n",cur->name);
 	list_del_init(&cur->active_node);
 	switch (cur->flags) {
 	case NK_TIMER_WAIT_ONE:
-	    DEBUG("waking one thread\n");
+	    //DEBUG("waking one thread\n");
 	    nk_wait_queue_wake_one(cur->waitq);
 	    break;
 	case NK_TIMER_WAIT_ALL:
-	    DEBUG("waking all threads\n");
+	    //DEBUG("waking all threads\n");
 	    nk_wait_queue_wake_all(cur->waitq);
 	    break;
 	case NK_TIMER_CALLBACK: 
 	    // launch callback, but do not wait for it
-	    DEBUG("launching callback for %s\n", cur->name);
+	    //DEBUG("launching callback for %s\n", cur->name);
 	    smp_xcall(cur->cpu,
 		      cur->callback,
 		      cur->priv,
 		      0);
 	    break;
 	default:
-	    ERROR("unsupported 0x%lx\n", cur->flags);
+	    //ERROR("unsupported 0x%lx\n", cur->flags);
 	    break;
 	}
     }
 
     // Now we need to scan for the earliest given that the callbacks
     // may have started new timers, with lock held
-    STATE_LOCK();
+    ACTIVE_LOCK();
     list_for_each_entry_safe(cur, temp, &active_timer_list, active_node) {
+	//DEBUG("check timer %s\n",cur->name);
 	if (cur->time_ns < earliest) { 
 	    earliest = cur->time_ns;
 	}
     }
-    STATE_UNLOCK();
+    ACTIVE_UNLOCK();
     
-    DEBUG("update: earliest is %llu\n",earliest);
+    //DEBUG("update: earliest is %llu\n",earliest);
 
     return earliest;
 }
@@ -344,6 +412,7 @@ uint64_t nk_timer_handler (void)
 int nk_timer_init()
 {
     spinlock_init(&state_lock);
+    spinlock_init(&active_lock);
     INIT_LIST_HEAD(&timer_list);
     INIT_LIST_HEAD(&active_timer_list);
 
@@ -364,6 +433,7 @@ void nk_timer_dump_timers()
     nk_timer_t *t=0;
 
     STATE_LOCK_CONF;
+    
     STATE_LOCK();
     list_for_each(cur,&timer_list) {
 	t = list_entry(cur,nk_timer_t, node);

@@ -196,6 +196,9 @@ struct nk_thread {
     
     int               num_wait;          // how many wait queues this thread is currently on
 
+    // the per-thread default timer is allocated on first use
+    struct nk_timer  *timer;
+
     /* thread state */
     nk_thread_status_t status;
 
@@ -209,7 +212,7 @@ struct nk_thread {
     void * output;      // our capture of the thread output (from exit)
     void * input;
     nk_thread_fun_t fun;
-
+   
     struct nk_sched_thread_state *sched_state;
 
     struct nk_virtual_console *vc;
