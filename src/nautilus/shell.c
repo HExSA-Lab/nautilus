@@ -121,8 +121,6 @@
 #endif
 
 
-#define DO_BLINKY 1
-
 #define MAX_CMD 80
 
 #define SHELL_STACK_SIZE (PAGE_SIZE_2MB) 
@@ -1928,30 +1926,6 @@ struct shell_op {
 };
 
 
-#if DO_BLINKY
-
-#define BLINK_MS 50UL
-#define BLINK_NS (1000000UL*BLINK_MS)
-
-struct blinky {
-    uint8_t attr;
-    struct nk_virtual_console *vc;
-    nk_timer_t *timer;
-};
-
-static void blinky_callback(void *state)
-{
-    struct blinky *b = state;
-
-    nk_vc_display_str_specific(b->vc,"NK",2,b->attr,80-2,24);
-    b->attr++;
-    nk_timer_reset(b->timer, BLINK_NS);
-    nk_timer_start(b->timer);
-    
-}
-
-#endif
-
 static void shell(void *in, void **out)
 {
   struct shell_op *op = (struct shell_op *)in;
@@ -1994,26 +1968,6 @@ static void shell(void *in, void **out)
       goto out;
     }
   }
-
-#if DO_BLINKY
-  
-  struct blinky b;
-
-  b.attr = 0;
-  b.vc = vc;
-  char temp[NK_TIMER_NAME_LEN];
-  snprintf(temp,NK_TIMER_NAME_LEN,"shell-%s-blinky-timer",op->name);
-  b.timer = nk_timer_create(temp);
-  nk_timer_set(b.timer,
-	       BLINK_NS,
-	       NK_TIMER_CALLBACK,
-	       blinky_callback,
-	       &b,
-	       0);
-  nk_timer_start(b.timer);
-
-#endif
-  
   
   while (1) {  
     nk_vc_setattr(PROMPT);
@@ -2040,11 +1994,6 @@ static void shell(void *in, void **out)
 
   nk_vc_printf("Exiting shell %s\n", (char*)in);
 
-#if DO_BLINKY
-  nk_timer_cancel(b.timer);
-  nk_timer_destroy(b.timer);
-#endif
-  
  out:
   free(in);
   nk_release_vc(get_cur_thread());
