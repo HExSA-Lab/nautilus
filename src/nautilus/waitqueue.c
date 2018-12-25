@@ -161,16 +161,29 @@ void nk_wait_queue_sleep_extended(nk_wait_queue_t *wq, int (*cond_check)(void *s
     }
 }
 
+struct op {
+    int             count;
+    nk_wait_queue_t **wq;
+    int             (**cond_check)(void *);
+    void            **state;
+};
+
 static int cond_check_multiple(void *state)
 {
-    void **s = (void **)state;
+    struct op *o = (struct op *)state;
     int i;
-    int count = (int)(uint64_t)s[0];
 
-    for (i=1;i<=count;i++) {
-	if (s[i]) {
-	    if (((int (*)(void *))s[i])(s[count+i])) {
-		return 1;
+    for (i=0;i<o->count;i++) {
+	WQ_DEBUG("cond check %s\n",o->wq[i]->name);
+	if (o->cond_check && o->cond_check[i]) {
+	    if (o->state && o->state[i]) {
+		if (o->cond_check[i](o->state[i])) { 
+		    return 1;
+		}
+	    } else {
+		if (o->cond_check[i](0)) {
+		    return 1;
+		}
 	    }
 	}
     }
@@ -179,12 +192,13 @@ static int cond_check_multiple(void *state)
 
 static void wait_queue_release(void *state)
 {
-    void **s = (void **)state;
+    struct op *o = (struct op *)state;
     int i;
-    int count = (int)(uint64_t)s[0];
-
-    for (i=1;i<=count;i++) {
-	spin_unlock(&((nk_wait_queue_t *)(s[2*count+i]))->lock);
+    for (i=0;i<o->count;i++) {
+	if (o->wq && o->wq[i]) {
+	    WQ_DEBUG("queue lock release %s\n", o->wq[i]->name);
+	    spin_unlock(&o->wq[i]->lock);
+	}
     }
 }
 
@@ -194,14 +208,12 @@ void nk_wait_queue_sleep_extended_multiple(int count, nk_wait_queue_t **wq, int 
     nk_thread_t * t = get_cur_thread();
     uint8_t flags;
 
-    void *s[3*count+1];
-    s[0] = (void*)(uint64_t)count;
-    
-    for (i=1;i<=count;i++) {
-	s[i] = !cond_check ? 0 : (void*)cond_check[i-1];
-	s[count+i] = !state ? 0 : state[i];
-	s[2*count+i] = (void*)wq[i];
-    }
+    struct op o;
+
+    o.count = count;
+    o.wq = wq;
+    o.cond_check = cond_check;
+    o.state = state;
     
     WQ_DEBUG("Thread %lu (%s) going to sleep on %d queues:\n", t->tid, t->name, count);
     for (i=0;i<count;i++) {
@@ -225,7 +237,7 @@ void nk_wait_queue_sleep_extended_multiple(int count, nk_wait_queue_t **wq, int 
     // check to see if any condition has been signalled before we actually go to sleep
     // this may have happened because our irq_disable_save and locking of wait queues
     // might have raced with a waker
-    if (cond_check && cond_check_multiple(s)) { 
+    if (cond_check && cond_check_multiple(&o)) { 
 	// At least one of the conditions we are waiting on has been achieved
 	// already.
 	for (i=0;i<count;i++) {
@@ -263,7 +275,7 @@ void nk_wait_queue_sleep_extended_multiple(int count, nk_wait_queue_t **wq, int 
 	// it will also reenable preemption on its context switch out
 	// and it will reset interrupts according to the thread it
 	// is switching to
-	nk_sched_sleep_extended(wait_queue_release,(void*)s);
+	nk_sched_sleep_extended(wait_queue_release,(void*)&o);
 
 	// When we return, all the wait queue locks are released, and
 	// our interrupt state is the same as we left it (off)
