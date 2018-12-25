@@ -125,7 +125,7 @@ uint64_t nk_char_dev_read(struct nk_char_dev *dev,
 		if (err < 0) { 
 		    return -1;
 		} else if (err==0) { 
-		    if (type==NK_DEV_REQ_NONBLOCKING) { 
+		    if (type==NK_DEV_REQ_NONBLOCKING || num>0 ) { 
 			return num;
 		    } else {
 			nk_dev_wait((struct nk_dev *)dev, is_readable, dev);
@@ -166,7 +166,7 @@ uint64_t nk_char_dev_write(struct nk_char_dev *dev,
 		if (err < 0) { 
 		    return -1;
 		} else if (err==0) { 
-		    if (type==NK_DEV_REQ_NONBLOCKING) { 
+		    if (type==NK_DEV_REQ_NONBLOCKING || num>0) { 
 			return num;
 		    } else {
 			nk_dev_wait((struct nk_dev *)dev, is_writeable, dev);
@@ -191,7 +191,7 @@ int nk_char_dev_status(struct nk_char_dev *dev)
     struct nk_char_dev_int *di = (struct nk_char_dev_int *)(d->interface);
 
     if (di->status) {
-	return di->status(dev);
+	return di->status(d->state);
     } else {
 	// default to readable/writable
 	return NK_CHARDEV_READABLE | NK_CHARDEV_WRITEABLE;
