@@ -52,7 +52,7 @@ void nk_semaphore_down(struct nk_semaphore *s);
 int  nk_semaphore_try_up(struct nk_semaphore *s);
 int  nk_semaphore_try_down(struct nk_semaphore *s);
 
-// 0 return indicates have semaphore, nonzero => timeout
+// 0 return indicates have semaphore, positive => timeout, negative=>error
 int nk_semaphore_down_timeout(struct nk_semaphore *s, uint64_t timeout_ns);
 
 int  nk_semaphore_init();
