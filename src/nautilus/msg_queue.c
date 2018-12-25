@@ -24,6 +24,7 @@
 #include <nautilus/nautilus.h>
 #include <nautilus/thread.h>
 #include <nautilus/waitqueue.h>
+#include <nautilus/timer.h>
 #include <nautilus/scheduler.h>
 #include <nautilus/msg_queue.h>
 #include <nautilus/list.h>
@@ -36,6 +37,11 @@
 
 // this is also a place where we can enhance performance by adding new types
 // of message queues
+
+// set this to one to use the tried and true polling based implementation
+// of push/pull with timeout instead of the (efficient) multiple wait queue
+// implementations
+#define USE_POLLING_TIMEOUT_FUNCS 0
 
 
 struct nk_msg_queue {
@@ -241,11 +247,13 @@ void nk_msg_queue_release(struct nk_msg_queue *q)
 
 int nk_msg_queue_full(struct nk_msg_queue *q)
 {
+    //DEBUG("full %s q->curcount=%lu q->queue_size=%lu\n", q->name, q->cur_count, q->queue_size);
     return  q->cur_count==q->queue_size;
 }    
 
 int nk_msg_queue_empty(struct nk_msg_queue *q)
 {
+    //DEBUG("empty %s q->curcount=%lu q->queue_size=%lu\n", q->name, q->cur_count, q->queue_size);
     return  q->cur_count==0;
 }    
     
@@ -410,14 +418,15 @@ void nk_msg_queue_pull(struct nk_msg_queue *q, void **m)
     }
 }
 
- 
-// hideous
+
+#if USE_POLLING_TIMEOUT_FUNCS
+
 int nk_msg_queue_push_timeout(struct nk_msg_queue *q, void *m, uint64_t timeout_ns)
 {
     uint64_t start = nk_sched_get_realtime();
     uint64_t now;
     
-    DEBUG("push timeout begin %s\n",q->name);
+    //DEBUG("push timeout begin %s %lu\n",q->name,timeout_ns);
     do {
 	if (!nk_msg_queue_try_push(q,m)) {
 	    // gotcha
@@ -435,13 +444,12 @@ int nk_msg_queue_push_timeout(struct nk_msg_queue *q, void *m, uint64_t timeout_
     return 1;
 }
 
-// hideous
 int nk_msg_queue_pull_timeout(struct nk_msg_queue *q, void **m, uint64_t timeout_ns)
 {
     uint64_t start = nk_sched_get_realtime();
     uint64_t now;
     
-    DEBUG("pull timeout begin %s\n",q->name);
+    DEBUG("pull timeout begin %s %lu\n",q->name,timeout_ns);
     do {
 	if (!nk_msg_queue_try_pull(q,m)) {
 	    // gotcha
@@ -459,3 +467,108 @@ int nk_msg_queue_pull_timeout(struct nk_msg_queue *q, void **m, uint64_t timeout
     return 1;
 }
 
+#else
+
+struct op {
+    struct nk_msg_queue *queue;
+    nk_timer_t          *timer;
+    int                  pull;
+};
+
+static int check_queue(void *s)
+{
+    struct op *o = (struct op *)s;
+    return o->pull ? !nk_msg_queue_empty(o->queue) : !nk_msg_queue_full(o->queue);
+}
+
+static int check_timer(void *s)
+{
+    struct op *o = (struct op *)s;
+    return __sync_fetch_and_or(&o->timer->state,0)==NK_TIMER_SIGNALLED;
+}
+
+
+static int _nk_msg_queue_push_pull_timeout(struct nk_msg_queue *q, void **m, uint64_t timeout_ns, int pull)
+{
+    QUEUE_LOCK_CONF;
+    uint64_t start = nk_sched_get_realtime();
+    uint64_t now = start;
+    int done=0;
+    char *kind = pull ? "pull" : "push";
+    
+    DEBUG("%s timeout=%lu %s start\n",kind, timeout_ns,q->name);
+
+ retry:
+    if ((now-start) > timeout_ns) {
+	// quick completion in this case
+	DEBUG("%s timeout %s ends with timeout\n",kind,q->name);
+	return 1;
+    }
+    
+    QUEUE_LOCK(q);
+    done = pull ? !_nk_msg_queue_try_pull(q,m) : !_nk_msg_queue_try_push(q,*m);
+    QUEUE_UNLOCK(q);
+
+    if (done) {
+	DEBUG("%s timeout  %s ends with action\n",kind,q->name);
+	return 0;
+    } else {
+	nk_timer_t *t = nk_timer_get_thread_default();
+
+	if (!t) {
+	    ERROR("Failed to acquire timer for thread...\n");
+	    return -1;
+	}
+
+	struct op o = { q, t, pull };
+	
+	// the queues we will simultaneously be on
+	nk_wait_queue_t *queues[2] = { pull ? q->pull_wait_queue : q->push_wait_queue, t->waitq} ;
+	// their condition checks
+        int (*condchecks[2])() = { check_queue, check_timer };
+	// and state
+	void *states[2] = { &o, &o }; 
+	
+	DEBUG("down sleep / timeout %s\n",q->name);
+
+	if (nk_timer_set(t, timeout_ns - (now-start), NK_TIMER_WAIT_ONE, 0, 0, 0)) {
+	    ERROR("Cannot set timer\n");
+	    return -1;
+	}
+
+	if (nk_timer_start(t)) {
+	    ERROR("Cannot start timer\n");
+	    return -1;
+	}
+
+	DEBUG("starting multiple sleep\n");
+	
+	nk_wait_queue_sleep_extended_multiple(2,queues,condchecks,states);
+
+	DEBUG("returned from multiple sleep and checking\n");
+
+	// once we get here, we know we are off both wait queues
+	// and we need to figure out what happened.   We can do that
+	// by just starting over from the top, but adjusting the time
+	// we also need to cancel the timer in case our wakeup was
+	// due to the queue and not the timer
+
+	nk_timer_cancel(t);
+	
+	now = nk_sched_get_realtime();
+
+	goto retry;
+    }
+}
+
+int nk_msg_queue_push_timeout(struct nk_msg_queue *q, void *m, uint64_t timeout_ns)
+{
+    return _nk_msg_queue_push_pull_timeout(q,&m,timeout_ns,0);
+}
+
+int nk_msg_queue_pull_timeout(struct nk_msg_queue *q, void **m, uint64_t timeout_ns)
+{
+    return _nk_msg_queue_push_pull_timeout(q,m,timeout_ns,1);
+}
+
+#endif
