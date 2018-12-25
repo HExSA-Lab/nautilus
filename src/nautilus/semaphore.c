@@ -23,6 +23,7 @@
 
 #include <nautilus/nautilus.h>
 #include <nautilus/thread.h>
+#include <nautilus/timer.h>
 #include <nautilus/waitqueue.h>
 #include <nautilus/scheduler.h>
 #include <nautilus/semaphore.h>
@@ -32,6 +33,11 @@
 
 // that is NOT intended to be used for anything that requires performance
 
+
+// set this to one to use the tried and true polling based implementation
+// of push/pull with timeout instead of the (efficient) multiple wait queue
+// implementations
+#define USE_POLLING_TIMEOUT_FUNCS 0
 
 #ifndef NAUT_CONFIG_DEBUG_SEMAPHORES
 #undef DEBUG_PRINT
@@ -67,8 +73,9 @@ struct nk_semaphore {
     // count>0  =>  normal operation (down will not wait)
     // count==0 =>  next down will wait
     // count <0 => -count waiters exist, next down will wait
-    int                count;
+    int                 count;
     nk_wait_queue_t    *wait_queue;
+    int                 prospective_count; // count blocked in timed down
 };
 
 struct nk_semaphore *nk_semaphore_create(char *name,
@@ -186,13 +193,15 @@ int nk_semaphore_try_up(struct nk_semaphore *s)
     DEBUG("try up start %s\n",s->name);
     
     int oldcount;
+    int prospectives;
     if (SEMAPHORE_TRY_LOCK(s)) {
 	return -1;
     }
     oldcount = s->count;
     s->count++;
+    prospectives = s->prospective_count;
     SEMAPHORE_UNLOCK(s);
-    if (oldcount<0) {
+    if (oldcount<0 || prospectives) {
 	// we just woke someone up
 	DEBUG("try up wake %s\n",s->name);
 	nk_wait_queue_wake_one(s->wait_queue);
@@ -209,11 +218,13 @@ void nk_semaphore_up(struct nk_semaphore *s)
     DEBUG("up start %s\n",s->name);
     
     int oldcount;
+    int prospectives;
     SEMAPHORE_LOCK(s);
     oldcount = s->count;
+    prospectives = s->prospective_count;
     s->count++;
     SEMAPHORE_UNLOCK(s);
-    if (oldcount<0) {
+    if (oldcount<0 || prospectives) {
 	// we just woke someone up
 	DEBUG("up wake %s\n",s->name);
 	nk_wait_queue_wake_one(s->wait_queue);
@@ -283,6 +294,27 @@ void nk_semaphore_down(struct nk_semaphore *s)
     }
 }
 
+struct op {
+    struct nk_semaphore *sem;
+    nk_timer_t          *timer;
+};
+
+// This only verifies that the count allows a possible down
+// it does not actually do the down
+static int check_count(void *s)
+{
+    struct op *o = (struct op *)s;
+    return __sync_fetch_and_or(&o->sem->count,0) >= 1;
+}
+
+static int check_timer(void *s)
+{
+    struct op *o = (struct op *)s;
+    return __sync_fetch_and_or(&o->timer->state,0)==NK_TIMER_SIGNALLED;
+}
+
+#if USE_POLLING_TIMEOUT_FUNCS
+
 // this is a hideous, busy-wait implementation
 // a real implementation would depend on being on multiple waitlists
 // or us actually implementing wait-on-multiple-objects
@@ -298,16 +330,101 @@ int nk_semaphore_down_timeout(struct nk_semaphore *s, uint64_t timeout_ns)
 	    // gotcha
 	    return 0;
 	}
-
+	
 	nk_sched_yield(0); // alternatively actually sleep here....
 	now = nk_sched_get_realtime();
-
+	
     } while ((now-start)<timeout_ns);
-
+    
     DEBUG("down timeout=%lu %s end (timeout)\n",timeout_ns,s->name);
     // timeout
     return 1;
 }
+
+#else
+
+int nk_semaphore_down_timeout(struct nk_semaphore *s, uint64_t timeout_ns)
+{
+    SEMAPHORE_LOCK_CONF;
+    uint64_t start = nk_sched_get_realtime();
+    uint64_t now = start;
+    int oldval=0;
+    
+    DEBUG("down timeout=%lu %s start\n",timeout_ns,s->name);
+
+ retry:
+    if ((now-start) > timeout_ns) {
+	// quick completion in this case
+	DEBUG("down timeout %s ends with timeout\n",s->name);
+	return 1;
+    }
+    
+    SEMAPHORE_LOCK(s);
+    oldval = s->count;
+    if (oldval>0) {
+	s->count--; // quick completion in this case
+    } 
+    SEMAPHORE_UNLOCK(s);
+
+    if (oldval>0) {
+	DEBUG("down timeout  %s ends with semaphore acquire\n",s->name);
+	return 0;
+    } else {
+	nk_timer_t *t = nk_timer_get_thread_default();
+
+	if (!t) {
+	    ERROR("Failed to acquire timer for thread...\n");
+	    return -1;
+	}
+
+	struct op o = { .sem = s, .timer = t };
+	
+	// the queues we will simultaneously be on
+	nk_wait_queue_t *queues[2] = { s->wait_queue, t->waitq} ;
+	// their condition checks
+        int (*condchecks[2])() = { check_count, check_timer };
+	// and state
+	void *states[2] = { &o, &o }; 
+	
+	DEBUG("down sleep / timeout %s\n",s->name);
+
+	if (nk_timer_set(t, timeout_ns - (now-start), NK_TIMER_WAIT_ONE, 0, 0, 0)) {
+	    ERROR("Cannot set timer\n");
+	    return -1;
+	}
+
+	if (nk_timer_start(t)) {
+	    ERROR("Cannot start timer\n");
+	    return -1;
+	}
+
+	// we are a prospective
+	__sync_fetch_and_add(&s->prospective_count,1);
+
+	DEBUG("starting multiple sleep\n");
+	
+	nk_wait_queue_sleep_extended_multiple(2,queues,condchecks,states);
+
+	DEBUG("returned from multiple sleep and checking\n");
+
+	// once we get here, we know we are off both wait queues
+	// and we need to figure out what happened.   We can do that
+	// by just starting over from the top, but adjusting the time
+	// we also need to cancel the timer in case our wakeup was
+	// due to the queue and not the time
+
+	nk_timer_cancel(t);
+  
+	// no longer a prospective
+	__sync_fetch_and_add(&s->prospective_count,-1);
+	
+	now = nk_sched_get_realtime();
+
+	goto retry;
+    }
+}
+
+#endif
 
 
 int nk_semaphore_init()
