@@ -30,6 +30,18 @@
 
 #include <dev/ps2.h>
 
+/*
+  Note that virtual console I/O can operate across a range of devices,
+  network connections, etc.   What specifically is being used depends on
+  the host, the compile-time configuration, and run-time connections.  
+  Some of the options can result in functions like nk_vc_printf or
+  nk_vc_getchar putting the caller to sleep - this also implies renabling
+  interrupts.  It's the caller's responsibility to avoid deadlock.  
+  See the source code for options to trade off between output and 
+  sleep avoidance. 
+ */
+
+
 struct nk_thread;
 
 enum nk_vc_type {RAW, COOKED, RAW_NOQUEUE};
@@ -101,6 +113,7 @@ int nk_vc_init(void);
 int nk_vc_is_active(void);
 
 int nk_vc_start_chardev_console(char *chardev);
+int nk_vc_stop_chardev_console(char *chardev);
 
 int nk_vc_deinit(void);
 
