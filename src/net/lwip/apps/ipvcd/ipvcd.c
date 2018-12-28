@@ -35,19 +35,26 @@
 #include <nautilus/naut_string.h>
 #include <nautilus/chardev.h>
 #include <nautilus/vc.h>
+#include <nautilus/timer.h>
 
 
-//#define DEBUG(fmt, args...) DEBUG_PRINT("ipvcd: " fmt, ##args)
-#define DEBUG(fmt,args...)
+
+//#define IPVCD_DEBUG(fmt, args...) INFO_PRINT("ipvcd: " fmt, ##args)
+#define IPVCD_ERROR(fmt, args...) ERROR_PRINT("ipvcd: " fmt, ##args)
+#define IPVCD_INFO(fmt, args...) INFO_PRINT("ipvcd: " fmt, ##args)
+#define IPVCD_DEBUG(fmt,args...)
 
 #define PORT 23
+
+#define MQ_SIZE 16*80*25  // 16 screens worth
 
 static uint64_t count=0;
 
 struct ipvc {
+    struct nk_char_dev   *cdev;
+    int                  shutdown;
     char                 name[32];
     int                  sock;
-    struct nk_char_dev  *cdev;
     // messages are just chars
     struct nk_msg_queue *in;
     struct nk_msg_queue *out;
@@ -70,6 +77,9 @@ static int do_status(void *state)
     if (!nk_msg_queue_full(vc->out)) {
 	rc |= NK_CHARDEV_WRITEABLE;
     }
+    if (vc->shutdown) {
+	rc |= NK_CHARDEV_READABLE | NK_CHARDEV_WRITEABLE;
+    }
     return rc;
 }
 
@@ -79,32 +89,35 @@ static int do_read(void *state, uint8_t *dest)
 
     void *msg;
 
-    
-    DEBUG("do_read\n");
+    //IPVCD_DEBUG("do_read\n");
+    if (vc->shutdown) {
+	return -1;
+    }
     if (!nk_msg_queue_try_pull(vc->in,&msg)) {
 	*dest = (uint8_t) (uint64_t) msg;
-	DEBUG("do_read success - %c\n",*dest);
+	IPVCD_DEBUG("do_read success - %c\n",*dest);
 	return 1;
     } else {
-	DEBUG("do_read no data\n");
+	IPVCD_DEBUG("do_read no data\n");
 	//nk_sched_yield(0);
 	return 0;
     }
 }
-
 static int do_write(void *state, uint8_t *src)
 {
     struct ipvc *vc = (struct ipvc *) state;
 
     void *msg = (void*)(uint64_t)(*src);
 
-    DEBUG("do_write of %c\n",*src);
-
+    //IPVCD_DEBUG("do_write of %c\n",*src);
+    if (vc->shutdown) {
+	return -1;
+    }
     if (!nk_msg_queue_try_push(vc->out,msg)) {
-	DEBUG("do_write success\n");
+	//IPVCD_DEBUG("do_write success\n");
 	return 1;
     } else {
-	DEBUG("do_write no space\n");
+	//IPVCD_DEBUG("do_write no space\n");
 	//nk_sched_yield(0);
 	return 0;
     }
@@ -123,25 +136,25 @@ static void handle(void *arg)
 {
     struct ipvc *vc = (struct ipvc *)arg;
 
-    // finish creating the vc
-    DEBUG("handling vc - sock=%d\n",vc->sock);
+    // finish creating th vc
+    IPVCD_DEBUG("handling vc - sock=%d\n",vc->sock);
     
     // we have message queues
-    vc->in = nk_msg_queue_create(0,128,0,0);
+    vc->in = nk_msg_queue_create(0,MQ_SIZE,0,0);
     if (!vc) {
-	ERROR("Failed to allocate input msg queue\n");
+	IPVCD_ERROR("Failed to allocate input msg queue\n");
 	goto out;
     }
-    vc->out = nk_msg_queue_create(0,128,0,0);
+    vc->out = nk_msg_queue_create(0,MQ_SIZE,0,0);
     if (!vc) {
-	ERROR("Failed to allocate output msg queue\n");
+	IPVCD_ERROR("Failed to allocate output msg queue\n");
 	goto out;
     }
 
     // we are a chardev
     vc->cdev = nk_char_dev_register(vc->name,0,&ops,vc);
     if (!vc->cdev) {
-	ERROR("Failed to register as chardev\n");
+	IPVCD_ERROR("Failed to register as chardev\n");
 	goto out;
     }
 
@@ -151,49 +164,77 @@ static void handle(void *arg)
     opt |= O_NONBLOCK;
     fcntl(vc->sock,F_SETFL,opt);
 
-    DEBUG("start console\n");
+    IPVCD_DEBUG("start console\n");
     
     // and we need support on the vc side
     if (nk_vc_start_chardev_console(vc->name)) {
-	ERROR("Failed to start chardev console\n");
+	IPVCD_ERROR("Failed to start chardev console\n");
 	goto out;
     }
 
+
+    int had_data;
+    
     // And now we will simply pump bytes both ways
     // burning CPU as we go...
     while (1) {
 	char c;
+	int rc;
 	void *msg=0;
-	int had_data=0;
-	if (read(vc->sock,&c,1)==1) {
+	
+	had_data=0;
+	rc = read(vc->sock,&c,1);
+	// we either got a byte of data or we are in an EAGAIN
+	// anything else should cause us to terminate the connection
+	if (rc==1) {
 	    // pump data 
-	    DEBUG("data in %c\n",c);
+	    IPVCD_DEBUG("data in %c (%x)\n",c,c);
 	    msg = (void*)(uint64_t)c;
 	    if (!nk_msg_queue_try_push(vc->in,msg)) { 
 		nk_dev_signal((struct nk_dev *)vc->cdev);
 	    }
-	    DEBUG("pushed input\n");
+	    IPVCD_DEBUG("pushed input\n");
 	    had_data=1;
-	}
+	} else if (!(rc<0 && errno==EAGAIN)) { 
+	    IPVCD_DEBUG("Closing session rc=%d errno=%d\n",rc,errno);
+	    goto endsession;
+	} // otherwise we are in EGAIN and proceed
 	if (!nk_msg_queue_try_pull(vc->out,&msg)) {
 	    c = (char)(uint64_t)msg;
-	    DEBUG("data out %c\n",c);
+	    IPVCD_DEBUG("data out %c (%x)\n",c,c);
+	    // the write could do an EGAIN here, in which
+	    // case we lose the byte
 	    write(vc->sock,&c,1);
 	    nk_dev_signal((struct nk_dev *)vc->cdev);
-	    DEBUG("pushed output\n");
+	    IPVCD_DEBUG("pushed output\n");
 	    had_data=1;
 	}
 	if (!had_data) {
-	    nk_sched_yield(0);
+	    IPVCD_DEBUG("no data - sleep\n");
+	    nk_sleep(1000000); // no data => do nothing for 1ms
+	    IPVCD_DEBUG("no data - awaken\n");
+	} else {
+	    IPVCD_DEBUG("had data\n");
 	}
     }
+
+ endsession:
+    // the connection is closed or we have some other error
+    // we cannot currently destruct a chardev device or
+    // a chardev console, so these are leaked at this point
+    __sync_fetch_and_or(&vc->shutdown,1);
+    nk_vc_stop_chardev_console(vc->name);
+
+    // we are leaking the device...
 	
  out:
     if (vc) {
 	if (vc->in) { nk_msg_queue_release(vc->in); vc->in=0; }
-	if (vc->out) { nk_msg_queue_release(vc->in); vc->out=0; }
+	if (vc->out) { nk_msg_queue_release(vc->out); vc->out=0; }
 	close(vc->sock); vc->sock=-1;
     }
+
+    IPVCD_DEBUG("exiting per-connection thread\n");
     
 }
     
@@ -218,42 +259,50 @@ static void ipvcd(void *arg)
     acc_sock = socket(AF_INET,SOCK_STREAM,0);
 
     if (acc_sock<0) {
-	printf("Failed to create socket\n");
+	IPVCD_ERROR("Failed to create socket\n");
 	return;
     }
 
 
     if (bind(acc_sock,(const struct sockaddr *)&addr,sizeof(addr))<0) {
-	printf("Failed to bind socket\n");
+	IPVCD_ERROR("Failed to bind socket\n");
 	return;
     }
 
 
     if (listen(acc_sock,5)<0) {
-	printf("Failed to listen on socket\n");
+	IPVCD_ERROR("Failed to listen on socket\n");
 	return;
     }
+
+    IPVCD_DEBUG("Accepting connections\n");
 
     
     while (1) {
 	src_len=sizeof(src_addr);
 	con_sock = accept(acc_sock,(struct sockaddr *)&src_addr,&src_len);
 	if (con_sock<0) {
-	    printf("Failed to accept connection\n");
+	    IPVCD_ERROR("Failed to accept connection\n");
 	    return ;
 	}
+
+	IPVCD_DEBUG("New connection\n");
 	
 	struct ipvc *vc = malloc(sizeof(*vc));
 	if (!vc) {
-	    ERROR("Cannot allocate for new connection\n");
+	    IPVCD_ERROR("Cannot allocate for new connection\n");
 	    close(con_sock);
 	    continue;
 	}
+
+	memset(vc,0,sizeof(*vc));
 	
 	snprintf(vc->name,32,"ipvcd-%lu",__sync_fetch_and_add(&count,1));
 	vc->sock = con_sock;
 	
 	sys_thread_new(vc->name,handle,(void*)vc,0,0);
+
+	IPVCD_DEBUG("Launched session thread %s for new connection\n", vc->name);
 	
     }
 }
@@ -262,6 +311,7 @@ static void ipvcd(void *arg)
 void ipvcd_init(void)
 {
     sys_thread_new("ipcvd", ipvcd, NULL, 0, 0);
+    INFO("inited\n");
 }
 
 #endif /* LWIP_SOCKETS */
