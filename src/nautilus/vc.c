@@ -87,6 +87,7 @@ static struct nk_virtual_console *list_vc = NULL;
 // each of which has a current vc
 struct chardev_console {
     int    inited;       // handler thread is up
+    int    shutdown;     // do shutdown (1 => start; trips init back to 0 when done)
     nk_thread_id_t   tid;  // thread handling this console
     char   name[DEV_NAME_LEN]; // device name
     struct nk_char_dev *dev; // device for I/O
@@ -255,8 +256,11 @@ static int _switch_to_vc(struct nk_virtual_console *vc)
   return 0;
 }
 
-static int _destroy_vc(struct nk_virtual_console *vc) 
+// destroy the vc, acquiring/releasing  if needed
+// if the lock is already held, release it and restore irq state
+static int _destroy_vc(struct nk_virtual_console *vc, int havelock, uint8_t flags) 
 {
+  STATE_LOCK_CONF;
 
   if (vc->num_threads || !nk_wait_queue_empty(vc->waiting_threads)) { 
     ERROR("Cannot destroy virtual console that has threads\n");
@@ -267,7 +271,15 @@ static int _destroy_vc(struct nk_virtual_console *vc)
     _switch_to_vc(list_vc);
   }
 
+  if (!havelock) {
+    STATE_LOCK();
+  } else {
+    _state_lock_flags = flags;
+  }
   list_del(&vc->vc_node);
+  STATE_UNLOCK();
+
+  // release lock early so the following can do output
   nk_wait_queue_destroy(vc->waiting_threads);
 #ifdef NAUT_CONFIG_VIRTUAL_CONSOLE_DISPLAY_NAME
   nk_timer_cancel(vc->timer);
@@ -279,13 +291,7 @@ static int _destroy_vc(struct nk_virtual_console *vc)
 
 int nk_destroy_vc(struct nk_virtual_console *vc) 
 {
-  STATE_LOCK_CONF;
-  int rc;
-
-  STATE_LOCK();
-  rc=_destroy_vc(vc);
-  STATE_UNLOCK();
-  return rc;
+  return _destroy_vc(vc,0,0);
 }
 
 
@@ -311,11 +317,18 @@ int nk_release_vc(nk_thread_t *thread)
   if (!thread || !thread->vc) { 
     return 0;
   }
+
+  struct nk_virtual_console *vc = thread->vc;
+
   STATE_LOCK();
+
   thread->vc->num_threads--;
-  if(thread->vc->num_threads == 0) {
-    if(thread->vc != default_vc) {//And it shouldn't be the default vc
-      _destroy_vc(thread->vc);
+  if (thread->vc->num_threads == 0) {
+    if (thread->vc != default_vc) {//don't destroy default_vc ever
+       thread->vc = NULL;
+       _destroy_vc(vc,1,_state_lock_flags);
+       // lock is also now released
+       return 0;
     }
   }
   thread->vc = NULL;
@@ -1375,30 +1388,98 @@ static int start_list()
 }
 
 
+static int char_dev_write_all(struct nk_char_dev *dev, 
+			      uint64_t count,
+			      uint8_t *src, 
+			      nk_dev_request_type_t type)
+
+{
+    uint64_t left, cur;
+
+    left = count;
+
+    while (left>0) {
+	cur = nk_char_dev_write(dev,left,&(src[count-left]),type);
+	if (cur < 0) {
+	    return -1;
+	} else {
+	    left-=cur;
+	}
+    }
+    
+    return 0;
+}
+    
+#define MAX_MATCHING_CHARDEV_CONSOLES 64
 
 static void _chardev_consoles_print(struct nk_virtual_console *vc, char *data, uint64_t len)
 {
-    struct list_head *cur;
+    struct list_head *cur=0;
+    struct chardev_console *c;    
+    struct chardev_console *matching_cdc[MAX_MATCHING_CHARDEV_CONSOLES];
+    int match_count = 0;
+    int match_cur;
 
     STATE_LOCK_CONF;
 
+    // search for matching consoles with the global lock held
+    // DOING NO OUTPUT AS WE DO SO TO AVOID POSSIBLE DEADLOCK
+    
     STATE_LOCK();
 
     list_for_each(cur,&chardev_console_list) {
-	struct chardev_console *c = list_entry(cur,struct chardev_console, chardev_node);
-	if (c->cur_vc == vc) { 
-	    uint64_t i;
-	    // translate lf->crlf
-	    for (i=0;i<len;i++) {
-		if (data[i]=='\n') { 
-		    nk_char_dev_write(c->dev,1,"\r",NK_DEV_REQ_BLOCKING);
-		}
-		nk_char_dev_write(c->dev,1,&data[i],NK_DEV_REQ_BLOCKING);
+	c = list_entry(cur,struct chardev_console, chardev_node);
+	if (c && c->cur_vc == vc) {
+	    matching_cdc[match_count++] = c;
+	    if (match_count==MAX_MATCHING_CHARDEV_CONSOLES) {
+		break;
 	    }
 	}
     }
     
     STATE_UNLOCK();
+
+    // now demux the print without the lock held
+    // so that recursive invocations (e.g. DEBUG statements) will work
+    
+    for (match_cur=0;match_cur<match_count;match_cur++) {
+	c = matching_cdc[match_cur];
+
+	uint64_t i;
+	for (i=0;i<len;i++) {
+	    // The caller may be invoking us with interrupts off and a
+	    // lock held.   This is technically incorrect on the part
+	    // of the caller, but debugging and other kinds of output
+	    // are all over the place, and may be incrementally introduced
+	    // during debugging. 
+	    //
+	    // If this happens, a blocking write to a chardev may
+	    // cause a sleep, which would reenable interrupts,
+	    // resulting in a chardev interrupt handler (or possibly
+	    // another thread) then running and attempting to acquire
+	    // the same lock, leading to deadlock.  To break this
+	    // circular dependency, we can use a non-blocking write if
+	    // interrupts are off.  This means we avoid the deadlock
+	    // at the potential cost of dropping data.  The following
+	    // allows us to select between these options.
+	    //
+	    // You probably want this set to 0
+	    //
+#define NONBLOCKING_OUTPUT_ON_INTERRUPTS_OFF 0
+
+#if NONBLOCKING_OUTPUT_ON_INTERRUPTS_OFF 
+#define OUTPUT(cp) ({ if (irqs_enabled()) { char_dev_write_all(c->dev,1,cp,NK_DEV_REQ_BLOCKING); } else { nk_char_dev_write(c->dev,1,cp,NK_DEV_REQ_NONBLOCKING), 0; } })
+#else
+#define OUTPUT(cp) (char_dev_write_all(c->dev,1,cp,NK_DEV_REQ_BLOCKING))
+#endif
+	    
+	    if (data[i]=='\n') { 
+		// translate lf->crlf
+		OUTPUT("\r");
+	    }
+	    OUTPUT(&data[i]);
+	}
+    }
 }
 
 static void chardev_consoles_print(struct nk_virtual_console *vc, char *data)
@@ -1413,8 +1494,13 @@ static void chardev_consoles_putchar(struct nk_virtual_console *vc, char data)
 
 static int chardev_console_handle_input(struct chardev_console *c, uint8_t data)
 {
-    if (c->cur_vc->type == COOKED) { 
-	return nk_enqueue_keycode(c->cur_vc,data);
+    if (c->cur_vc->type == COOKED) {
+	// translate CRLF => LF
+	if (data=='\r') {
+	    return 0; // ignore
+	} else {
+	    return nk_enqueue_keycode(c->cur_vc,data);
+	}
     } else {
 	// raw data not currently handled
 	return 0;
@@ -1432,7 +1518,6 @@ static void chardev_console(void *in, void **out)
     uint8_t data[3];
     char myname[80]; 
     uint8_t cur=0;
-
 
     struct chardev_console *c = (struct chardev_console *)in;
 
@@ -1459,16 +1544,22 @@ static void chardev_console(void *in, void **out)
 		
     snprintf(buf,80,"\r\n*** Console %s // prev=``1 next=``2 list=``3 ***\r\n",myname);
 
-    nk_char_dev_write(c->dev,strlen(buf),buf,NK_DEV_REQ_BLOCKING);
+    char_dev_write_all(c->dev,strlen(buf),buf,NK_DEV_REQ_BLOCKING);
 
     snprintf(buf,80,"\r\n*** %s ***\r\n",c->cur_vc->name);
-    nk_char_dev_write(c->dev,strlen(buf),buf,NK_DEV_REQ_BLOCKING);
+    char_dev_write_all(c->dev,strlen(buf),buf,NK_DEV_REQ_BLOCKING);
     
 
+ top:
     cur = 0;
-    while (1) {
+    while (__sync_fetch_and_add(&c->shutdown,0) == 0) {
 	if (nk_char_dev_read(c->dev,1,&data[cur],NK_DEV_REQ_BLOCKING)!=1) { 
-	    ERROR("FAILED TO READ CHARDEV %s\n",c->name);
+	    cur = 0;
+	    // note that we could get kicked out here if we are being asked
+	    // to shut down, which will be detected once the loop iterates
+	    // Note that this is ignoring other error handling
+	    // important not to do I/O here since we could have a dead connection
+	    goto top;
 	}
 
 
@@ -1511,30 +1602,38 @@ static void chardev_console(void *in, void **out)
 		break;
 	    case '3': {
 		// display the vcs
-		struct list_head *cur;
+		struct list_head *cur_vc;
 		int i;
 		char which;
 		strcpy(buf,"\r\nList of VCs (+ = new shell)\r\n\r\n");
-		nk_char_dev_write(c->dev,strlen(buf),buf,NK_DEV_REQ_BLOCKING);
+		char_dev_write_all(c->dev,strlen(buf),buf,NK_DEV_REQ_BLOCKING);
+		// ideally this would be done with the state lock held... 
 		i=0;
-		list_for_each(cur,&vc_list) {
-		    snprintf(buf,80,"%c : %s\r\n", 'a'+i, list_entry(cur,struct nk_virtual_console, vc_node)->name);
-		    nk_char_dev_write(c->dev,strlen(buf),buf,NK_DEV_REQ_BLOCKING);
+		list_for_each(cur_vc,&vc_list) {
+		    snprintf(buf,80,"%c : %s\r\n", 'a'+i, list_entry(cur_vc,struct nk_virtual_console, vc_node)->name);
+		    char_dev_write_all(c->dev,strlen(buf),buf,NK_DEV_REQ_BLOCKING);
 		    i++;
 		}
 		// get user input
-		if (nk_char_dev_read(c->dev,1,&which,NK_DEV_REQ_BLOCKING)!=1) { 
-		    nk_char_dev_write(c->dev,7,"\r\nERROR\n\n",NK_DEV_REQ_BLOCKING);
-		    next_node = cur_node;
-		    break;
-		} 
+		while (1) {
+		    if (nk_char_dev_read(c->dev,1,&which,NK_DEV_REQ_BLOCKING)!=1) { 
+			// a disconnect at this point should kick us back to the top
+			// to check for a shutdown
+			goto top;
+		    }
+		    if ((which=='+') || (which>='a' && which<('a'+i))) {
+			break;
+		    } else {
+			continue;
+		    }
+		}
 		if (which=='+') {
 		    new_shell();
 		} else {
 		    i=0;
-		    list_for_each(cur,&vc_list) {
+		    list_for_each(cur_vc,&vc_list) {
 			if (which == (i+'a')) { 
-			    next_node = cur;
+			    next_node = cur_vc;
 			    break;
 			}
 			i++;
@@ -1555,17 +1654,20 @@ static void chardev_console(void *in, void **out)
 		chardev_console_handle_input(c,data[2]);
 	    } else {
 		char buf[80];
-		
+
 		snprintf(buf,80,"\r\n*** %s ***\r\n",c->cur_vc->name);
-		
-		nk_char_dev_write(c->dev,strlen(buf),buf,NK_DEV_REQ_BLOCKING);
+
+		char_dev_write_all(c->dev,strlen(buf),buf,NK_DEV_REQ_BLOCKING);
+
 	    }
 	    
 	    cur = 0;
 
 	    continue;
 	}
-    }		
+    }
+    DEBUG("exiting console thread\n");
+    __sync_fetch_and_and(&c->inited,0);
 }
 
 
@@ -1609,6 +1711,44 @@ int nk_vc_start_chardev_console(char *chardev)
     
     return 0;
 }
+
+int nk_vc_stop_chardev_console(char *chardev)
+{
+    STATE_LOCK_CONF;
+    struct chardev_console *c = 0;
+    struct list_head *cur;
+    int found=0;
+
+    // find the console
+    STATE_LOCK();
+
+    list_for_each(cur,&chardev_console_list) {
+	c = list_entry(cur,struct chardev_console, chardev_node);
+	if (c && !strcmp(c->name,chardev)) {
+	    found = 1;
+	    break;
+	}
+    }
+
+    if (found) {
+	list_del_init(&c->chardev_node);
+    }
+    
+    STATE_UNLOCK();
+
+    if (found) { 
+	__sync_fetch_and_or(&c->shutdown,1);
+	// kick it to make sure it sees the shutdown
+	nk_dev_signal((struct nk_dev *)(c->dev));
+	// wait for it to ack exit
+	while (__sync_fetch_and_add(&c->inited,0)!=0) {}
+	DEBUG("console %s has stopped\n",c->name);
+	free(c);
+    }
+
+    return 0;
+}
+				       
 
 
 int nk_vc_init() 
