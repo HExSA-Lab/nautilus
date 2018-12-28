@@ -166,8 +166,8 @@ _nk_thread_init (nk_thread_t * t,
 
     INIT_LIST_HEAD(&(t->children));
 
-    /* I go on my parent's child list */
-    if (parent) {
+    /* I go on my parent's child list if I'm not detached */
+    if (parent && !is_detached) {
         list_add_tail(&(t->child_node), &(parent->children));
     }
 

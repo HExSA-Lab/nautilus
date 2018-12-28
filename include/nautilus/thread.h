@@ -184,8 +184,6 @@ struct nk_thread {
 
     int lock;
 
-    nk_queue_entry_t thr_list_node;
-
     /* parent/child relationship */
     struct nk_thread * parent;
     struct list_head children;
