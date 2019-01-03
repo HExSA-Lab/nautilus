@@ -1,3 +1,5 @@
+#include <nautilus/nautilus.h>
+#include <nautilus/shell.h>
 
 int ndpc_test_integral();
 int ndpc_test_fork();
@@ -23,3 +25,17 @@ int test_ndpc()
     
     return 0;
 }
+
+static int
+handle_ndpc (char * buf, void * priv)
+{
+    test_ndpc();
+    return 0;
+}
+
+static struct shell_cmd_impl ndpc_impl = {
+    .cmd      = "ndpc",
+    .help_str = "ndpc",
+    .handler  = handle_ndpc,
+};
+nk_register_shell_cmd(ndpc_impl);

@@ -27,6 +27,7 @@
 #include <nautilus/cpu.h>
 #include <nautilus/intrinsics.h>
 #include <nautilus/mm.h>
+#include <nautilus/shell.h>
 #include <nautilus/dev.h>
 
 #ifndef NAUT_CONFIG_DEBUG_PCI
@@ -1757,3 +1758,95 @@ void pci_dev_dump_msi_x(struct pci_dev *dev)
   }
   
 }
+
+
+static int
+handle_pci (char * buf, void * priv)
+{
+    int bus, slot, func, off;
+    uint64_t data;
+    char bwdq; 
+
+    if (strncmp(buf,"pci l",5)==0) { 
+        pci_dump_device_list();
+        return 0;
+    }
+
+    if (sscanf(buf,"pci raw %x %x %x", &bus, &slot, &func)==3) { 
+        int i,j;
+        uint32_t v;
+        for (i=0;i<256;i+=32) {
+            nk_vc_printf("%02x:", i);
+            for (j=0;j<8;j++) {
+                v = pci_cfg_readl(bus,slot,func,i+j*4);
+                nk_vc_printf(" %08x",v);
+            } 
+            nk_vc_printf("\n");
+        }
+        return 0;
+    }
+
+    if (sscanf(buf,"pci dev %x %x %x", &bus, &slot, &func)==3) { 
+        pci_dump_device(pci_find_device(bus,slot,func));
+        return 0;
+    }
+
+    if (!strncmp(buf,"pci dev",7)) {
+        pci_dump_devices();
+        return 0;
+    }
+
+    if (((bwdq='w', sscanf(buf,"pci poke w %x %x %x %x %x", &bus, &slot, &func, &off,&data))==5) ||
+            ((bwdq='d', sscanf(buf,"pci poke d %x %x %x %x %x", &bus, &slot, &func, &off,&data))==5) ||
+            ((bwdq='d', sscanf(buf,"pci poke %x %x %x %x %x", &bus, &slot, &func, &off,&data))==5)) {
+        if (bwdq=='w') { 
+            pci_cfg_writew(bus,slot,func,off,(uint16_t)data);
+            nk_vc_printf("PCI[%x:%x.%x:%x] = 0x%04x\n",bus,slot,func,off,(uint16_t)data);
+        } else {
+            pci_cfg_writel(bus,slot,func,off,(uint32_t)data);
+            nk_vc_printf("PCI[%x:%x.%x:%x] = 0x%08x\n",bus,slot,func,off,(uint32_t)data);
+        }
+        return 0;
+    }
+
+    if (((bwdq='w', sscanf(buf,"pci peek w %x %x %x %x", &bus, &slot, &func, &off))==4) ||
+            ((bwdq='d', sscanf(buf,"pci peek d %x %x %x %x", &bus, &slot, &func, &off))==4) ||
+            ((bwdq='d', sscanf(buf,"pci peek %x %x %x %x", &bus, &slot, &func, &off))==4)) {
+        if (bwdq=='w') { 
+            data = pci_cfg_readw(bus,slot,func,off);
+            nk_vc_printf("PCI[%x:%x.%x:%x] = 0x%04x\n",bus,slot,func,off,(uint16_t)data);
+        } else {
+            data = pci_cfg_readl(bus,slot,func,off);
+            nk_vc_printf("PCI[%x:%x.%x:%x] = 0x%08x\n",bus,slot,func,off,(uint32_t)data);
+        }
+        return 0;
+    }
+
+    if (sscanf(buf,"pci cfg %x %x %x", &bus, &slot, &func)) {
+        int i,j;
+        uint8_t data[256];
+        for (i=0;i<256;i+=4) {
+            *(uint32_t*)(&data[i]) = pci_cfg_readl(bus,slot,func,i);
+        }
+        for (i=0;i<256;i+=16) {
+            nk_vc_printf("PCI[%x:%x.%x].cfg[%02x] = ",bus,slot,func,i);
+            for (j=i;j<(i+16);j++) {
+                nk_vc_printf(" %02x",data[j]);
+            }
+            nk_vc_printf("\n");
+        }
+        return 0;
+    }
+
+    nk_vc_printf("unknown pci command\n");
+
+    return 0;
+}
+
+static struct shell_cmd_impl pci_impl = {
+    .cmd      = "pci",
+    .help_str = "pci list | pci raw/dev bus slot func | pci dev [bus slot func]\n"
+                "  pci peek|poke bus slot func off [val] | pci cfg bus slot func",
+    .handler  = handle_pci,
+};
+nk_register_shell_cmd(pci_impl);

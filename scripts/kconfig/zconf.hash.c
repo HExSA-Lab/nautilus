@@ -153,9 +153,6 @@ static struct kconf_id_strings_t kconf_id_strings_contents =
     "prompt"
   };
 #define kconf_id_strings ((const char *) &kconf_id_strings_contents)
-//#ifdef __GNUC__
-//__inline
-//#endif
 struct kconf_id *
 kconf_id_lookup (register const char *str, register unsigned int len)
 {

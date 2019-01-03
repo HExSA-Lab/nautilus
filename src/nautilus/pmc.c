@@ -26,6 +26,7 @@
 #include <nautilus/cpuid.h>
 #include <nautilus/pmc.h>
 #include <nautilus/mm.h>
+#include <nautilus/shell.h>
 
 
 /*
@@ -887,7 +888,7 @@ nk_pmc_init (struct naut_info * naut)
 }
 
 
-void
+static void
 test_pmc (int pmc_id)
 {
     uint64_t start, stop;
@@ -920,3 +921,27 @@ test_pmc (int pmc_id)
 
     PMC_INFO("  Count reported: %lld\n", stop-start);
 }
+
+
+static int
+handle_pmc (char * buf, void * priv)
+{
+    int pmc_id;
+
+    if (sscanf(buf, "pmctest %d", &pmc_id) == 1) {
+        test_pmc(pmc_id);
+        return 0;
+    }
+
+    nk_vc_printf("Unknown PMC test\n");
+
+    return 0;
+}
+
+
+static struct shell_cmd_impl pmc_impl = {
+    .cmd      = "pmctest",
+    .help_str = "pmctest id",
+    .handler  = handle_pmc,
+};
+nk_register_shell_cmd(pmc_impl);

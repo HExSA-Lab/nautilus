@@ -24,6 +24,7 @@
  */
 
 #include <nautilus/nautilus.h>
+#include <nautilus/shell.h>
 #include <nautilus/atomic.h>
 #include <nautilus/group.h>
 #include <nautilus/group_sched.h>
@@ -283,3 +284,16 @@ nk_thread_group_test() {
 
   return 0;
 }
+
+static int
+handle_groups (char * buf, void * priv)
+{
+    return nk_thread_group_test();
+}
+
+static struct shell_cmd_impl groups_impl = {
+    .cmd      = "grouptest",
+    .help_str = "grouptest",
+    .handler  = handle_groups,
+};
+nk_register_shell_cmd(groups_impl);

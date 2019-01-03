@@ -198,3 +198,57 @@ uint64_t nk_gpio_input_get()
     ERROR("unimplemented\n");
     return -1ULL;
 }
+
+static int 
+handle_gpio (char * buf, void * priv)
+{
+    char what[80];
+    uint64_t val;
+    uint64_t i;
+    int set = nk_gpio_cpu_mask_check(my_cpu_id());
+
+    if ((sscanf(buf,"gpio %s %lx", what, &val)==2) && what[0]=='s') {
+        nk_vc_printf("sweeping gpio output from 0 to %lx with ~10 us delay\n",val);
+        if (!set) {
+            nk_gpio_cpu_mask_add(my_cpu_id());
+        }
+        for (i=0;i<val;i++) { 
+            nk_gpio_output_set(i);
+            udelay(10);
+        }
+        if (!set) {
+            nk_gpio_cpu_mask_remove(my_cpu_id());
+        }
+        return 0;
+    }
+
+    if ((sscanf(buf,"gpio %s %lx", what, &val)==2) && what[0]=='o') {
+        nk_vc_printf("setting gpio output to %lx\n",val);
+        if (!set) {
+            nk_gpio_cpu_mask_add(my_cpu_id());
+        }
+        nk_gpio_output_set(val);
+        if (!set) {
+            nk_gpio_cpu_mask_remove(my_cpu_id());
+        }
+        return 0;
+    }
+
+    if ((sscanf(buf,"gpio %s",what)==1) && what[0]=='i') {
+        val = nk_gpio_input_get();
+        nk_vc_printf("gpio input is %llx\n",val);
+        return 0;
+    }
+
+    nk_vc_printf("unknown gpio request\n");
+
+    return 0;
+}
+
+
+static struct shell_cmd_impl gpio_impl = {
+    .cmd      = "gpio",
+    .help_str = "gpio in/out/sweep [val]",
+    .handler  = handle_gpio,
+};
+nk_register_shell_cmd(gpio_impl);

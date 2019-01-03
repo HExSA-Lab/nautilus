@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
@@ -23,6 +23,7 @@
 #include <nautilus/nautilus.h>
 #include <nautilus/cpuid.h>
 #include <nautilus/naut_string.h>
+#include <nautilus/shell.h>
 
 
 uint8_t 
@@ -98,9 +99,56 @@ detect_cpu (void)
     
     printk("Detected %s Processor\n", branding);
 }
-    
-
-    
-    
 
 
+static int
+handle_cpuid (char * buf, void * priv)
+{
+    uint32_t id, idsub, sub;
+    uint64_t size;
+
+    if ((sub=0, sscanf(buf,"cpuid %x %lu", &id, &size)==2) ||
+            (size=1, sub=0, sscanf(buf,"cpuid %x",&id)==1) ||
+            (size=1, sub=1, sscanf(buf,"cpuid sub %x %x",&id,&idsub)==2)) {
+        uint64_t i,j,k;
+        cpuid_ret_t r;
+        uint32_t val[4];
+
+        for (i=0;i<size;i++) {
+            if (sub) { 
+                cpuid_sub(id,idsub,&r);
+                nk_vc_printf("CPUID[0x%08x, 0x%08x] =",(uint32_t)(id+i),idsub);
+            } else {
+                cpuid(id+i,&r);
+                nk_vc_printf("CPUID[0x%08x] =",id+i);
+            }
+            val[0]=r.a; val[1]=r.b; val[2]=r.c; val[3]=r.d;
+            for (j=0;j<4;j++) {
+                nk_vc_printf(" ");
+                for (k=0;k<4;k++) { 
+                    nk_vc_printf("%02x",*(k + (uint8_t*)&(val[j])));
+                }
+            }
+            for (j=0;j<4;j++) {
+                nk_vc_printf(" ");
+                for (k=0;k<4;k++) { 
+                    nk_vc_printf("%c",isalnum(*(k + (uint8_t*)&(val[j]))) ?
+                            (*(k + (uint8_t*)&(val[j]))) : '.');
+                }
+            }
+            nk_vc_printf("\n");
+        }
+        return 0;
+    }
+
+    nk_vc_printf("unknown CPUID command\n");
+
+    return 0;
+}
+    
+static struct shell_cmd_impl cpuid_impl = {
+    .cmd      = "cpuid",
+    .help_str = "cpuid [sub] f [n]",
+    .handler  = handle_cpuid,
+};
+nk_register_shell_cmd(cpuid_impl);

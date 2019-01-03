@@ -65,7 +65,7 @@ config DEBUG_APIC
         Turn on debug prints for the LAPIC driver
 
 config DEBUG_IOAPIC
-    bool "DEBUG IOAPIC"
+    bool "Debug IOAPIC"
     depends on DEBUG_PRINTS
     default n
     help 
