@@ -203,6 +203,20 @@ config DEBUG_E1000_PCI
     help
       Turn on debug prints for the E1000 PCI driver
 
+config E1000E_PCI
+    bool "E1000E PCI NIC Driver"
+    depends on X86_64_HOST
+    default n
+    help
+      Adds the basic E1000E PCI network interface driver
+
+config DEBUG_E1000E_PCI
+    bool "Debug E1000E PCI"
+    depends on DEBUG_PRINTS && E1000E_PCI
+    default n
+    help
+      Turn on debug prints for the E1000E PCI driver
+
 config MLX3_PCI
     bool "Mellanox ConnectX-3 PCI Driver"
     depends on X86_64_HOST
