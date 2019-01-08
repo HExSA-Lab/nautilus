@@ -89,9 +89,9 @@
 // and the packet buffer pointed by the descriptors.
 // The number of descriptors is always a multiple of eight.
 
-#define TX_DSC_COUNT          16
+#define TX_DSC_COUNT          128
 #define TX_BLOCKSIZE          256 // bytes available per DMA block
-#define RX_DSC_COUNT          16  // equal to DMA block count
+#define RX_DSC_COUNT          128 // equal to DMA block count
 #define RX_BLOCKSIZE          256 // bytes available per DMA block
 
 // After this line, PLEASE DO NOT CHANGE ANYTHING.
@@ -431,7 +431,7 @@ static int e1000_init_receive_ring(struct e1000_state *state)
   uint32_t rctl_reg = E1000_RCTL_EN | E1000_RCTL_SBP | E1000_RCTL_UPE | E1000_RCTL_LPE | E1000_RCTL_BAM | E1000_RCTL_PMCF | E1000_RCTL_RDMTS_HALF | E1000_RCTL_BSIZE_2048;
   
   // receive buffer threshold and size
-  DEBUG("rctl_reg = 0x%08x, expected value: 0x%08x\n", rctl_reg, 0x0083832e);
+  DEBUG("rctl_reg = 0x%08x\n", rctl_reg);
   // WRITE_MEM(state, RCTL_OFFSET, 0x0083832e);
   WRITE_MEM(state, RCTL_OFFSET, rctl_reg);
   DEBUG("RDLEN=0x%08x, RDH=0x%08x, RDT=0x%08x, RCTL=0x%08x\n",
@@ -537,7 +537,7 @@ static int e1000_receive_packet(uint8_t* buffer,
   RXD_PREV_HEAD = READ_MEM(state, RDH_OFFSET);
   RXD_TAIL = READ_MEM(state, RDT_OFFSET);
   // e1000_init_single_rxd(RXD_TAIL, state);
-  memset(((struct e1000_rx_desc *)RXD_RING_BUFFER + TXD_TAIL),
+  memset(((struct e1000_rx_desc *)RXD_RING_BUFFER + RXD_TAIL),
          0, sizeof(struct e1000_rx_desc));
   RXD_ADDR(RXD_TAIL) = (uint64_t*) buffer;
   WRITE_MEM(state, RDT_OFFSET, RXD_INC(RXD_TAIL, 1));
@@ -663,13 +663,11 @@ static int e1000_post_receive(void *state,
   // mapping the callback always
   // if result != -1 receive packet
   int result = 0;
-  DEBUG("post receive fn callback 0x%p\n", callback);
   result  = e1000_map_callback(((struct e1000_state*)state)->rx_map, callback, context);
 
   if(!result) {
     result = e1000_receive_packet(src, len, (struct e1000_state*) state);
   }
-  DEBUG("post receive fn end\n");
   return result;
 }
 
@@ -715,6 +713,11 @@ static int e1000_irq_handler(excp_entry_t * excp, excp_vec_t vec, void *s)
       ERROR("receive an error packet\n");
       status = NK_NET_DEV_STATUS_ERROR;
     }
+    DEBUG("RDLEN=0x%08x, RDH=0x%08x, RDT=0x%08x, RCTL=0x%08x\n",
+		    READ_MEM(state, RDLEN_OFFSET),
+		    READ_MEM(state, RDH_OFFSET),
+		    READ_MEM(state, RDT_OFFSET),
+		    READ_MEM(state, RCTL_OFFSET));
     
     // in the irq, update only the head of the buffer
     RXD_PREV_HEAD = RXD_INC(1, RXD_PREV_HEAD);    
