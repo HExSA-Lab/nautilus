@@ -1236,7 +1236,7 @@ start:
         }
 
         if (buf[i] == '\t') {
-            int skipped = notifier(buf, priv, i);
+            int skipped = notifier ? notifier(buf, priv, i) : 0;
             i += skipped;
             continue;
         }

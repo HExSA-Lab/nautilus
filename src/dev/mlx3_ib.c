@@ -3423,6 +3423,8 @@ build_ib_header (struct ib_headers * header,
 
 out_err:
     free(lrh);
+
+    return -1;
 }
 
 

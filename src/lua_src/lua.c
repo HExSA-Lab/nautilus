@@ -277,7 +277,7 @@ pushline (lua_State * L, int firstline)
   char buf[80]; // for gets
   
   nk_vc_printf("\n %s%s ","LUA",prmt); 
-  int readstatus = nk_vc_gets(b,80,1);
+  int readstatus = nk_vc_gets(b,80,1,0,0);
 
   // int readstatus =1;
   lua_pop(L, 1);  /* remove result from 'get_prompt' */

@@ -715,11 +715,9 @@ handle_ipitest (char * buf, void * priv)
 	while (*buf && *buf==' ') { buf++;}
 
     if (!strncasecmp(buf, "-f", 2)) {
-
 #ifndef NAUT_CONFIG_EXT2_FILESYSTEM_DRIVER 
         nk_vc_printf("Not compiled with FS support, cannot use -f\n");
         return 0;
-    }
 #else
         char fbuf[IPI_MAX_FNAME_LEN];
         data->use_file = 1;
@@ -746,6 +744,7 @@ handle_ipitest (char * buf, void * priv)
             return 0;
         }
 #endif
+    }
 
     // which source type is it 
 	if (sscanf(buf, "-s %u", &sid)==1) {
@@ -780,6 +779,7 @@ handle_ipitest (char * buf, void * priv)
 
 	return 0;
 }
+
 
 static struct shell_cmd_impl ipitest_impl = {
     .cmd      = "ipitest",

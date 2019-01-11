@@ -42,6 +42,7 @@
 
 struct nk_thread;
 struct nk_thread_constraints;
+#include <nautilus/list.h>
 #include <nautilus/thread.h>
 #include <nautilus/scheduler.h>
 #include <gc/bdwgc/bdwgc.h>
@@ -231,7 +232,7 @@ GC_API void * GC_CALL GC_call_with_gc_active(GC_fn_type fn,
 }
 
 /* It may not be safe to allocate when we register the first thread.    */
-static struct GC_Thread_Rep first_thread;
+//static struct GC_Thread_Rep first_thread;
 
 /* Delete a thread from GC_threads.  We assume it is there.     */
 /* (The code intentionally traps if it wasn't.)                 */
@@ -300,7 +301,7 @@ GC_API int GC_CALL GC_unregister_my_thread(void)
 
 
 /* It may not be safe to allocate when we register the first thread.    */
-static struct GC_Thread_Rep first_thread;
+//static struct GC_Thread_Rep first_thread;
 
 /* Add a thread to GC_threads.  We assume it wasn't already there.      */
 /* Caller holds allocation lock.                                        */

@@ -76,7 +76,7 @@ struct nk_real_mode_int_args {
     uint16_t gs;    //
     uint16_t es;    //
     uint16_t flags; //  output only
-} __packed;
+} __packed __attribute__((aligned(4))) ;
 
 int nk_real_mode_init();
 int nk_real_mode_deinit();

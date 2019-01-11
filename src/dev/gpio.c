@@ -22,6 +22,7 @@
 
 #include <nautilus/nautilus.h>
 #include <nautilus/dev.h>
+#include <nautilus/shell.h>
 #include <dev/gpio.h>
 
 #ifndef NAUT_CONFIG_DEBUG_GPIO

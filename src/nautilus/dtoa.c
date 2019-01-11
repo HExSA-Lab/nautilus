@@ -5402,10 +5402,11 @@ dtoa_r(double dd, int mode, int ndigits, int *decpt, int *sign, char **rve, char
 					goto Roundup;
 				}
 			else if (i == ilim) {
-				switch(Rounding) {
-				  case 0: goto retc;
-				  case 2: goto Roundup;
-				  }
+			    switch(Rounding) { 
+				case 0: goto retc; break; 
+				case 2: goto Roundup; break;
+				default: break; /*fall through intended*/
+				}
 				ures = 2*res;
 				if (ures > den
 				|| (ures == den && dig & 1)

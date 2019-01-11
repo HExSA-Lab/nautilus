@@ -144,7 +144,8 @@ DESC_REAL_GDT_OFFSET = (_desc_real - _gdt)
 	// are 64 bits
 	pushq 	$DESC_REAL_GDT_OFFSET
 	pushq   $(_compat - _seg_start)
-	retfq
+	// retfq - llvm-as does not like retfq, hence this byte
+	.byte 0xcb  	// this is retfq
 
 	// if we survived, we are now in compatability mode
 _compat:
@@ -278,7 +279,7 @@ _compat_again:
 	// wrong.   See the comment for the previous retf
 	pushq 	$DESC_CODE
 	pushq   $(LOAD_ADDR+_long_orig_gdt - _seg_start)
-	retfq
+	.byte 0xcb   // this is retfq - see above
 
 _long_orig_gdt:
 	// Now we are back to using the original GDT's CS

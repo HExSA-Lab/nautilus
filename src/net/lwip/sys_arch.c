@@ -199,7 +199,7 @@ void sys_mutex_free(sys_mutex_t *mutex)
 int sys_mutex_valid(sys_mutex_t *mutex)
 {
     DEBUG("Is mu %p valid\n",mutex);
-    int rc= sys_mutex_valid(mutex);
+    int rc=sys_sem_valid(mutex);
     DEBUG("mu returning %d\n",rc);
     return rc;
 }

@@ -171,7 +171,7 @@ static int _scan_modes(struct vesa_mode_request *r, vesa_mode_t *mode, scan_acti
 		(m.width == r->width) &&
 		(m.height == r->height) &&
 		(r->text || m.bpp == r->bpp) &&
-		(((m.attributes & VESA_ATTR_GRAPHICS) && !r->text && (m.attributes && VESA_ATTR_LINEARFB)) ||
+		(((m.attributes & VESA_ATTR_GRAPHICS) && !r->text && (m.attributes & VESA_ATTR_LINEARFB)) ||
 		 (!(m.attributes & VESA_ATTR_GRAPHICS) && r->text))) {
 
 		DEBUG(" FOUND mode %04x:\n",*cur);
