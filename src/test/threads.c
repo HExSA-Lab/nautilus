@@ -99,7 +99,11 @@ static int test_create_join(int nump, int numt)
 }
 
 
-static int __noinline __attribute__((noclone)) test_fork_join(int nump, int numt)
+static int __noinline
+#ifndef __clang__
+__attribute__((noclone))
+#endif
+test_fork_join(int nump, int numt)
 {
     int i,j;
 
@@ -201,7 +205,11 @@ static int test_recursive_create_join()
 
 volatile static uint64_t hack;
 
-static void __noinline __attribute__((noclone)) _test_recursive_fork_join(uint64_t depth, uint64_t pass)
+static void __noinline
+#ifndef __clang__
+__attribute__((noclone))
+#endif
+_test_recursive_fork_join(uint64_t depth, uint64_t pass)
 {
     if (depth > 0) { 
 	get_cur_thread()->vc = get_cur_thread()->parent->vc;

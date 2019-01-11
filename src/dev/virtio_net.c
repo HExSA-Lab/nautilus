@@ -310,7 +310,7 @@ static int process_used_ring(struct virtio_net_dev *d, int qidx)
 
         head = &virtq->vq.desc[desc_idx];
         header = (uint8_t *) head->addr;
-        if (!head->flags & VIRTQ_DESC_F_NEXT) {
+        if (!(head->flags & VIRTQ_DESC_F_NEXT)) {
             ERROR("head in used ring does not have next flag\n");
             return -1;
         }

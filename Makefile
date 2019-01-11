@@ -308,11 +308,14 @@ NAUT_INCLUDE      := -D__NAUTILUS__ -Iinclude \
 CPPFLAGS        := $(NAUT_INCLUDE) -D__NAUTILUS__
 
 
+#CLANG_SUFFIX=-6.0
+CLANG_SUFFIX=
+
 ifneq ($(USE_CLANG)a, a)
-  AS		= $(CROSS_COMPILE)llvm-as
+  AS		= $(CROSS_COMPILE)llvm-as$(CLANG_SUFFIX)
   LD		= $(CROSS_COMPILE)ld
-  CC		= $(CROSS_COMPILE)clang
-  CXX             = $(CROSS_COMPILE)clang++
+  CC		= $(CROSS_COMPILE)clang$(CLANG_SUFFIX)
+  CXX             = $(CROSS_COMPILE)clang++$(CLANG_SUFFIX)
 else
   AS		= $(CROSS_COMPILE)as
   LD		= $(CROSS_COMPILE)ld
@@ -330,11 +333,13 @@ COMMON_FLAGS :=-fno-omit-frame-pointer \
 			   -mcmodel=large 
 
 
+
 ifeq ($(USE_CLANG)a, a)
 COMMON_FLAGS += -O2 \
 				-fno-delete-null-pointer-checks
 else 
-COMMON_FLAGS += -O1
+COMMON_FLAGS += -O3  # -fno-delete-null-pointer-checks
+# -O3 will also work
 endif
 
 #

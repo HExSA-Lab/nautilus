@@ -212,7 +212,7 @@ typedef struct pci_msi_x_table_entry {
   uint32_t  msg_addr_hi;
   uint32_t  msg_data;
   uint32_t  vector_control;
-} __packed pci_msi_x_table_entry_t;
+} __packed __attribute__((aligned(4))) pci_msi_x_table_entry_t;
 
 
 struct pci_msi_x_info {

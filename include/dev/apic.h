@@ -278,7 +278,7 @@ apic_read (struct apic_dev * apic, uint_t reg)
     }
 }
 
-void panic(const char *fmt, ...);
+void panic(const char *fmt, ...) __attribute__((noreturn));
 
 static inline void
 apic_write64 (struct apic_dev * apic, uint_t reg, uint64_t val)

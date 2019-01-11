@@ -294,6 +294,10 @@ smp_setup_xcall_bsp (struct cpu * core)
 static int
 smp_ap_setup (struct cpu * core)
 {
+    // Note that any use of SSE/AVX, for example produced by
+    // clang/llvm optimation, that happens before fpu_init will
+    // cause a panic.  Initialize FPU ASAP.
+    
     // setup IDT
     lidt(&idt_descriptor);
 
@@ -305,6 +309,8 @@ smp_ap_setup (struct cpu * core)
     // set GS base (for per-cpu state)
     msr_write(MSR_GS_BASE, (uint64_t)core_addr);
 
+    fpu_init(nk_get_nautilus_info(), FPU_AP_INIT);
+    
     if (nk_mtrr_init_ap()) {
 	ERROR_PRINT("Could not initialize MTRRs for core %u\n",core->id);
 	return -1;
@@ -317,7 +323,6 @@ smp_ap_setup (struct cpu * core)
     }
 #endif
 
-    fpu_init(nk_get_nautilus_info(), FPU_AP_INIT);
     
     apic_init(core);
 
@@ -411,7 +416,7 @@ smp_ap_entry (struct cpu * core)
 
     // wait for the other cores and turn on interrupts
     smp_ap_finish(my_cpu);
-
+    
     ASSERT(irqs_enabled());
 
     sti();

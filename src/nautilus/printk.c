@@ -116,8 +116,9 @@ vprintk (const char * fmt, va_list args)
 }
 
 
+ __attribute__((noreturn))
 void 
-panic (const char * fmt, ...) 
+panic (const char * fmt, ...)
 {
     va_list arg;
 
