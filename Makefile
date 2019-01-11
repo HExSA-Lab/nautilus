@@ -308,20 +308,33 @@ NAUT_INCLUDE      := -D__NAUTILUS__ -Iinclude \
 CPPFLAGS        := $(NAUT_INCLUDE) -D__NAUTILUS__
 
 
-#CLANG_SUFFIX=-6.0
-CLANG_SUFFIX=
+#
+# Include .config early so that we have access to the toolchain-related options
+#
 
-ifneq ($(USE_CLANG)a, a)
-  AS		= $(CROSS_COMPILE)llvm-as$(CLANG_SUFFIX)
+include .config
+
+COMPILER_PREFIX := $(patsubst "%",%,$(NAUT_CONFIG_COMPILER_PREFIX))
+COMPILER_SUFFIX := $(patsubst "%",%,$(NAUT_CONFIG_COMPILER_SUFFIX))
+
+
+#
+# Note we use the system linker in all cases
+#
+ifdef NAUT_CONFIG_USE_CLANG
+  AS		= $(CROSS_COMPILE)$(COMPILER_PREFIX)llvm-as$(COMPILER_SUFFIX)
   LD		= $(CROSS_COMPILE)ld
-  CC		= $(CROSS_COMPILE)clang$(CLANG_SUFFIX)
-  CXX             = $(CROSS_COMPILE)clang++$(CLANG_SUFFIX)
-else
-  AS		= $(CROSS_COMPILE)as
-  LD		= $(CROSS_COMPILE)ld
-  CC		= $(CROSS_COMPILE)gcc
-  CXX             = $(CROSS_COMPILE)g++
+  CC		= $(CROSS_COMPILE)$(COMPILER_PREFIX)clang$(COMPILER_SUFFIX)
+  CXX           = $(CROSS_COMPILE)$(COMPILER_PREFIX)clang++$(COMPILER_SUFFIX)
 endif
+
+ifdef NAUT_CONFIG_USE_GCC
+  AS		= $(CROSS_COMPILE)$(COMPILER_PREFIX)as$(COMPILER_SUFFIX)
+  LD		= $(CROSS_COMPILE)ld
+  CC		= $(CROSS_COMPILE)$(COMPILER_PREFIX)gcc$(COMPILER_SUFFIX)
+  CXX           = $(CROSS_COMPILE)$(COMPILER_PREFIX)g++$(COMPILER_SUFFIX)
+endif
+
 
 
 COMMON_FLAGS :=-fno-omit-frame-pointer \
@@ -334,12 +347,13 @@ COMMON_FLAGS :=-fno-omit-frame-pointer \
 
 
 
-ifeq ($(USE_CLANG)a, a)
-COMMON_FLAGS += -O2 \
-				-fno-delete-null-pointer-checks
-else 
-COMMON_FLAGS += -O3  # -fno-delete-null-pointer-checks
-# -O3 will also work
+ifdef NAUT_CONFIG_USE_GCC
+  COMMON_FLAGS += -O2  -fno-delete-null-pointer-checks
+endif
+
+ifdef NAUT_CONFIG_USE_CLANG
+  COMMON_FLAGS += -O2  # -fno-delete-null-pointer-checks
+   # -O3 will also work - PAD
 endif
 
 #
@@ -373,7 +387,7 @@ CFLAGS:=   $(COMMON_FLAGS) \
 #
 
 # if we're using Clang, we can't use these
-ifeq ($(USE_CLANG)a, a)
+ifdef NAUT_CONFIG_USE_GCC
 CFLAGS += -std=gnu99 \
 		  -Wno-frame-address \
 		  $(call cc-option, -Wno-unused-but-set-variable,) 
