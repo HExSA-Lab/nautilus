@@ -45,7 +45,7 @@ struct nk_barrier {
 
     /* this is on another cache line (Assuming 64b) */
     volatile unsigned notify;
-} __attribute__ ((packed));
+} __attribute__ ((packed)) __attribute((aligned(64)));
 
 int nk_barrier_init (nk_barrier_t * barrier, uint32_t count);
 int nk_barrier_destroy (nk_barrier_t * barrier);

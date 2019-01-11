@@ -802,6 +802,9 @@ menu Debugging
       default n
       help
         Turn on debug prints for FPU related code (SIMD,MMX,SSE,etc.)
+	NOTE: Output during FPU init can result in boot failure
+	      if your compiler has optimized print functions assuming
+	      the FPU is already working
 
     config DEBUG_SMP
       bool "Debug SMP"

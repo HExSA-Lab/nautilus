@@ -49,7 +49,9 @@ spin_lock (volatile spinlock_t * lock)
 {
     NK_PROFILE_ENTRY();
     
-    while (__sync_lock_test_and_set(lock, 1));
+    while (__sync_lock_test_and_set(lock, 1)) {
+	// spin away
+    }
 
     NK_PROFILE_EXIT();
 }

@@ -1441,7 +1441,7 @@ static int char_dev_write_all(struct nk_char_dev *dev,
 
     while (left>0) {
 	cur = nk_char_dev_write(dev,left,&(src[count-left]),type);
-	if (cur < 0) {
+	if (cur == -1ULL) {
 	    return -1;
 	} else {
 	    left-=cur;

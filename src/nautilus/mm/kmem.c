@@ -108,7 +108,7 @@ struct kmem_block_hdr {
                      /* order==1 => allocation in progress, unsafe */
     struct buddy_mempool * zone; /* zone to which this block belongs */
     uint64_t flags;  /* flags for this allocated block */
-} __packed;
+} __packed __attribute((aligned(8)));
 
 
 static struct kmem_block_hdr *block_hash_entries=0;

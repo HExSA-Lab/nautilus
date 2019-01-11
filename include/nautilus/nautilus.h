@@ -139,6 +139,9 @@ do {									\
     }									\
 } while (0)
 
+
+void panic(const char *, ...) __attribute__((noreturn));
+    
 #define panic(fmt, args...)         panic("PANIC at %s(%d): " fmt, __FILE__, __LINE__, ##args)
 
 #ifndef NAUT_CONFIG_DEBUG_PRINTS

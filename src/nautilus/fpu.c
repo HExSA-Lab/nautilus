@@ -36,7 +36,12 @@
 #define DEBUG_PRINT(fmt, args...)
 #endif
 
-#define FPU_PRINT(fmt, args...) printk("FPU: " fmt, ##args)
+//
+// NOTE: Turning on debugging output for fpu initialization can
+// result in failure if the compiler has optimized print-formatting
+// using SSE or other similar instructions.   
+//
+
 #define FPU_DEBUG(fmt, args...) DEBUG_PRINT("FPU: " fmt, ##args)
 #define FPU_WARN(fmt, args...)  WARN_PRINT("FPU: " fmt, ##args)
 

@@ -287,12 +287,20 @@ init (unsigned long mbd,
 {
     struct naut_info * naut = &nautilus_info;
 
+    // At this point, we have no FPU, so we need to be
+    // sure that nothing we invoke could be using SSE or
+    // similar due to compiler optimization
+    
+    nk_low_level_memset(naut, 0, sizeof(struct naut_info));
 
-    memset(naut, 0, sizeof(struct naut_info));
+    fpu_init(naut, FPU_BSP_INIT);
+
+    // Now we are safe to use optimized code that relies
+    // on SSE
+
 
     //no vga
     //vga_early_init();
-
 
     spinlock_init(&printk_lock);
 
@@ -382,8 +390,6 @@ init (unsigned long mbd,
     nk_timer_init();
 
     apic_init(naut->sys.cpus[0]);
-
-    fpu_init(naut);
 
     nk_rand_init(naut->sys.cpus[0]);
 

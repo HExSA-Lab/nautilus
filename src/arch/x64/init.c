@@ -264,7 +264,6 @@ static int launch_vmm_environment()
 " Kyle C. Hale (c) 2014 | Northwestern University   \n" \
 "+===============================================+  \n\n"
 
-
 extern struct naut_info * smp_ap_stack_switch(uint64_t, uint64_t, struct naut_info*);
 
 void
@@ -273,8 +272,17 @@ init (unsigned long mbd,
 {
     struct naut_info * naut = &nautilus_info;
 
-    memset(naut, 0, sizeof(struct naut_info));
 
+     // At this point, we have no FPU, so we need to be
+    // sure that nothing we invoke could be using SSE or
+    // similar due to compiler optimization
+    
+    nk_low_level_memset(naut, 0, sizeof(struct naut_info));
+
+    fpu_init(naut, FPU_BSP_INIT);
+
+    // Now we are safe to use optimized code that relies
+    // on SSE
 
     vga_early_init();
 
@@ -283,8 +291,6 @@ init (unsigned long mbd,
     setup_idt();
 
     nk_int_init(&(naut->sys));
-
-    fpu_init(naut, FPU_BSP_INIT);
 
     // Bring serial device up early so we can have output
     serial_early_init();

@@ -878,9 +878,9 @@ time_syscall (void)
         rdtscll(syscall_start);
 
         /* the callee will just do a retq, no sysret. Demeted huh? */
-        asm volatile ("pushq $b\n\t"
+        asm volatile ("pushq $b%=\n\t"
                       "syscall\n\t"
-                      "b:\n\t" : : : "memory", "rcx");
+                      "b%=:\n" : : : "memory", "rcx");
 
 
         PRINT("TRIAL %u %llu\n", i, syscall_end-syscall_start);

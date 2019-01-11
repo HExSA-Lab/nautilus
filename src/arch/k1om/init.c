@@ -146,7 +146,16 @@ init (unsigned long mbd, unsigned long magic)
 
     asm volatile("movabsq $0x7a7a90, %%rax; movl $0xb003b003, (%%rax)" : :: "rax");
     
-    memset(naut, 0, sizeof(struct naut_info));
+    // At this point, we have no FPU, so we need to be
+    // sure that nothing we invoke could be using SSE or
+    // similar due to compiler optimization
+    
+    nk_low_level_memset(naut, 0, sizeof(struct naut_info));
+
+    fpu_init(naut, FPU_BSP_INIT);
+
+    // Now we are safe to use optimized code that relies
+    // on SSE
 
     phi_cons_init();
 
@@ -186,8 +195,6 @@ init (unsigned long mbd, unsigned long magic)
     nk_timer_init();
 
     apic_init(naut->sys.cpus[naut->sys.bsp_id]);
-
-    fpu_init(naut);
 
     nk_rand_init(naut->sys.cpus[naut->sys.bsp_id]);
 
