@@ -20,7 +20,7 @@
  * This is free software.  You are permitted to use,
  * redistribute, and modify it as specified in the file "LICENSE.txt".
  */
-#ifndef _NK_NESL_VCODE_
+#ifndef _NK_NESL_VCODE__
 #define _NK_NESL_VCODE__
 
 // Run-time startup and shutdown - invoke in init

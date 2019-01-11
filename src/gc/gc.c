@@ -85,15 +85,23 @@ handle_leaks (char * buf, void * priv)
 static int
 handle_bdwgc (char * buf, void * priv)
 {
+#ifdef NAUT_CONFIG_TEST_BDWGC
     nk_vc_printf("Testing BDWGC garbage collector\n");
     return nk_gc_bdwgc_test();
+#else
+    return 0;
+#endif
 }
 
 static int
 handle_pdsgc (char * buf, void * priv)
 {
-	nk_vc_printf("Testing PDSGC garbage collector\n");
-	return nk_gc_pdsgc_test();
+#ifdef NAUT_CONFIG_TEST_PDSGC
+    nk_vc_printf("Testing PDSGC garbage collector\n");
+    return nk_gc_pdsgc_test();
+#else
+    return 0;
+#endif
 }
 
 static struct shell_cmd_impl collect_impl = {

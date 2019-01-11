@@ -2,7 +2,8 @@
 #include "ndpc_glue.h"
 #include "fact.hh"
 
-using namespace std;
+//
+//using namespace std;
 
 
 

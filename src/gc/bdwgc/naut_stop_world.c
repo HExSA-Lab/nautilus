@@ -42,6 +42,7 @@
  */
 
 
+#include <nautilus/list.h>
 #include <nautilus/scheduler.h>
 #include "private/pthread_support.h"
 

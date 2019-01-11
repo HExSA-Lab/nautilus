@@ -203,7 +203,7 @@ int size;
 {
 
 #ifndef SPEEDHACKS
-    static const unsigned int const bucket_size[NBUCKETS] = {
+    static const unsigned int bucket_size[NBUCKETS] = {
 	0x1, 0x2, 0x4, 0x8, 
 	0x10, 0x20, 0x40, 0x80, 
 	0x100, 0x200, 0x400, 0x800, 

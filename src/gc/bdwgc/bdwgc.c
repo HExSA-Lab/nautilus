@@ -26,6 +26,7 @@
 
 struct nk_thread;
 
+#include <nautilus/list.h>
 #include <nautilus/thread.h>
 #include <gc/bdwgc/bdwgc.h>
 #include "bdwgc_internal.h"
