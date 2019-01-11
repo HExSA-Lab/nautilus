@@ -169,10 +169,39 @@ menu "Build"
       help
         Adds support for Rust code, and builds the Rust example and Shell command
 
+   
+    choice
+      prompt "Compiler and related toolchain to use"
+      default USE_GCC
+      help
+          Chose whether to use GCC or CLang to build Nautilus
+          Currently, GCC is by far the most tested option
+	  No guarantees that Clang will be able to build everything
+     config USE_GCC
+       bool "GCC"
+     config USE_CLANG
+       bool "Clang/LLVM"
+    endchoice
+
+    config COMPILER_PREFIX
+       string "Prefix for compiler toolchain commands"
+       default ""
+       help
+           Relevant toolchain commands are prepended with this string
+	   to allow for cross-compilation, etc
+
+    config COMPILER_SUFFIX
+       string "Suffix for compiler toolchain commands"
+       default ""
+       help
+           Relevant toolchain commands are appended with this string
+	   to allow for different versions, etc
+   
     config TOOLCHAIN_ROOT
       string "Toolchain Root"
       help 
-       Directory where the intended GCC toolchain, binutils, libraries, grub, etc are installed.
+       Directory where the intended compiler toolchain, binutils, libraries, grub, etc are installed.
+       You probably want this to be blank and use PATH mechanisms to get the tools you need
 
 
 endmenu
