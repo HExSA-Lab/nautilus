@@ -149,12 +149,12 @@ endmenu
 menu "Build"
 
     config USE_NAUT_BUILTINS
-        bool "Use GCC Built-in Utility Functions"
+        bool "Use built-in utility functions"
         default y
         help
-          Compiles the Nuatilus kernel with built-in functions
-          like __builtin_strcpy etc., as opposed to Nautilus
-          versions, the full set of which may not be supported
+          Compiles NK with its own implementations of functions
+          like strcpy etc., as opposed to using the compiler-builtins,
+	  which might not cover all of the ones needed.
 
     config CXX_SUPPORT
       bool "Enable C++ support"
