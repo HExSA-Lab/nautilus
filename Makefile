@@ -311,8 +311,14 @@ CPPFLAGS        := $(NAUT_INCLUDE) -D__NAUTILUS__
 #
 # Include .config early so that we have access to the toolchain-related options
 #
-
-include .config
+ifeq (,$(wildcard .config))
+   NAUT_CONFIG_USE_GCC=1
+   NAUT_CONFIG_USE_CLANG=0
+   NAUT_CONFIG_COMPILER_PREFIX=
+   NAUT_CONFIG_COMPILER_SUFFIX=
+else
+   include .config
+endif
 
 COMPILER_PREFIX := $(patsubst "%",%,$(NAUT_CONFIG_COMPILER_PREFIX))
 COMPILER_SUFFIX := $(patsubst "%",%,$(NAUT_CONFIG_COMPILER_SUFFIX))
