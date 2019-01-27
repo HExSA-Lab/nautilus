@@ -203,7 +203,7 @@ static void wait_queue_release(void *state)
     }
 }
 
-void nk_wait_queue_sleep_extended_multiple(int count, nk_wait_queue_t **wq, int (**cond_check)(void *state), void **state)
+void nk_wait_queue_sleep_extended_multiple(int num_wq, nk_wait_queue_t **wq, int (**cond_check)(void *state), void **state)
 {
     int i;
     nk_thread_t * t = get_cur_thread();
@@ -211,13 +211,13 @@ void nk_wait_queue_sleep_extended_multiple(int count, nk_wait_queue_t **wq, int 
 
     struct op o;
 
-    o.count = count;
+    o.count = num_wq;
     o.wq = wq;
     o.cond_check = cond_check;
     o.state = state;
     
-    WQ_DEBUG("Thread %lu (%s) going to sleep on %d queues:\n", t->tid, t->name, count);
-    for (i=0;i<count;i++) {
+    WQ_DEBUG("Thread %lu (%s) going to sleep on %d queues:\n", t->tid, t->name, num_wq);
+    for (i=0;i<num_wq;i++) {
 	WQ_DEBUG("  queue: %s,  cond_check: %p, state: %p\n", wq[i]->name, cond_check[i], state[i]);
     }
     
@@ -229,7 +229,7 @@ void nk_wait_queue_sleep_extended_multiple(int count, nk_wait_queue_t **wq, int 
     // Acquire all wait queue locks
     // wait queues must be provided in order to assure that the following
     // cannot deadlock
-    for (i=0;i<count;i++) {
+    for (i=0;i<num_wq;i++) {
 	spin_lock(&wq[i]->lock);
     }
     
@@ -241,7 +241,7 @@ void nk_wait_queue_sleep_extended_multiple(int count, nk_wait_queue_t **wq, int 
     if (cond_check && cond_check_multiple(&o)) { 
 	// At least one of the conditions we are waiting on has been achieved
 	// already.
-	for (i=0;i<count;i++) {
+	for (i=0;i<num_wq;i++) {
 	    spin_unlock(&wq[i]->lock);
 	}
 	irq_enable_restore(flags);
@@ -255,7 +255,7 @@ void nk_wait_queue_sleep_extended_multiple(int count, nk_wait_queue_t **wq, int 
 	
 	t->status = NK_THR_WAITING;
 
-	if (nk_wait_queue_enqueue_multiple_extended(count, wq, t, 1)) {
+	if (nk_wait_queue_enqueue_multiple_extended(num_wq, wq, t, 1)) {
 	    WQ_ERROR("Cannot enqueue thread onto one or more wait queues....\n");
 	    panic("Cannot enqueue thread onto one or more wait queues....\n");
 	    return;
@@ -285,7 +285,7 @@ void nk_wait_queue_sleep_extended_multiple(int count, nk_wait_queue_t **wq, int 
 	// we have not been signalled - we can be awoken only once
 	//
 	// note that the dequeue will need to reacquire the locks
-	nk_wait_queue_dequeue_multiple_extended(count,wq,t,0);
+	nk_wait_queue_dequeue_multiple_extended(num_wq,wq,t,0);
 	
 	// we now need to restore state note that for the duration we
 	// were switched out, other threads may have had interrupts
