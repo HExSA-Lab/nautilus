@@ -1643,15 +1643,15 @@ static void chardev_console(void *in, void **out)
 		break;
 	    case '3': {
 		// display the vcs
-		struct list_head *cur_vc;
+		struct list_head *cur_local_vc;
 		int i;
 		char which;
 		strcpy(buf,"\r\nList of VCs (+ = new shell)\r\n\r\n");
 		char_dev_write_all(c->dev,strlen(buf),buf,NK_DEV_REQ_BLOCKING);
 		// ideally this would be done with the state lock held... 
 		i=0;
-		list_for_each(cur_vc,&vc_list) {
-		    snprintf(buf,80,"%c : %s\r\n", 'a'+i, list_entry(cur_vc,struct nk_virtual_console, vc_node)->name);
+		list_for_each(cur_local_vc,&vc_list) {
+		    snprintf(buf,80,"%c : %s\r\n", 'a'+i, list_entry(cur_local_vc,struct nk_virtual_console, vc_node)->name);
 		    char_dev_write_all(c->dev,strlen(buf),buf,NK_DEV_REQ_BLOCKING);
 		    i++;
 		}
@@ -1672,9 +1672,9 @@ static void chardev_console(void *in, void **out)
 		    new_shell();
 		} else {
 		    i=0;
-		    list_for_each(cur_vc,&vc_list) {
+		    list_for_each(cur_local_vc,&vc_list) {
 			if (which == (i+'a')) { 
-			    next_node = cur_vc;
+			    next_node = cur_local_vc;
 			    break;
 			}
 			i++;
