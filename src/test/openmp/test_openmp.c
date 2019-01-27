@@ -1,6 +1,6 @@
 #include <nautilus/nautilus.h>
 #include <nautilus/shell.h>
-#include <rt/omp/omp.h>
+#include <rt/openmp/openmp.h>
 
 #define N 4
 volatile float a[N];
@@ -66,7 +66,7 @@ omp_nested (void)
 int 
 test_omp (void)
 {
-    nk_omp_thread_init();
+    nk_openmp_thread_init();
     nk_vc_printf("Starting simple test\n");
     omp_simple();
     //     goto out;
@@ -74,7 +74,7 @@ test_omp (void)
     omp_nested();
 //out:
     nk_vc_printf("OMP test finished\n");
-    nk_omp_thread_deinit();
+    nk_openmp_thread_deinit();
     return 0;
 }
 

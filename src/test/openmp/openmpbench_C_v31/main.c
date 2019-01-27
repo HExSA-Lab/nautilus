@@ -3,7 +3,7 @@
 
 #include <nautilus/nautilus.h>
 #include <nautilus/shell.h>
-#include <rt/omp/omp.h>
+#include <rt/openmp/openmp.h>
 
 int schedbench_main(int argc, char **argv);
 int arraybench_main(int argc, char **argv);
@@ -15,7 +15,7 @@ int test_ompbench()
 {
     char *args[2];
 
-    nk_omp_thread_init();
+    nk_openmp_thread_init();
 
     args[1] = 0;
 
@@ -35,7 +35,7 @@ int test_ompbench()
     syncbench_main(1, args);
 #endif
 
-    nk_omp_thread_deinit();
+    nk_openmp_thread_deinit();
 
     return 0;
 }
