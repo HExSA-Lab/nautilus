@@ -135,8 +135,8 @@
 #endif
 
 
-#ifdef NAUT_CONFIG_OMP_RT
-#include <rt/omp/omp.h>
+#ifdef NAUT_CONFIG_OPENMP_RT
+#include <rt/openmp/openmp.h>
 #endif
 
 #ifdef NAUT_CONFIG_NESL_RT
@@ -212,8 +212,8 @@ runtime_init (void)
 	nk_nesl_init();
 #endif
 
-#ifdef NAUT_CONFIG_OMP_RT
-	nk_omp_init();
+#ifdef NAUT_CONFIG_OPENMP_RT
+	nk_openmp_init();
 #endif
 	
 }

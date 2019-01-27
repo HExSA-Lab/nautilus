@@ -10,7 +10,7 @@ obj-y += test.o
 
 obj-$(NAUT_CONFIG_TEST_CACHEPART) += cachepart.o
 
-obj-$(NAUT_CONFIG_OMP_RT_TESTS)  += omp/
+obj-$(NAUT_CONFIG_OPENMP_RT_TESTS)  += openmp/
 obj-$(NAUT_CONFIG_NDPC_RT_TESTS) += ndpc/
 obj-$(NAUT_CONFIG_NESL_RT_TESTS) += nesl/
 

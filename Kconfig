@@ -1077,23 +1077,36 @@ menu "Runtimes"
             help 
               Include NESL simple tests 
 
-        config OMP_RT
-          bool  "OpenMP RT (GOMP-compatible)"
+        config OPENMP_RT
+          bool  "OpenMP RT"
 	  default n
 	  help
 	      Include the GOMP-compatible OpenMP run-time
 
-        config OMP_RT_DEBUG
+        choice
+	    depends on OPENMP_RT
+            prompt "OpenMP RT"
+            default OPENMP_RT_OMP
+
+          config OPENMP_RT_OMP
+              bool "CLANG-compatible (OMP)"
+
+          config OPENMP_RT_GOMP
+              bool "GNU-compatible (GOMP) [going away]"
+
+        endchoice
+	
+        config OPENMP_RT_DEBUG
             bool "Debug OpenMP RT";
 	    default n
-            depends on OMP_RT
+            depends on OPENMP_RT
             help 
               Debugging output for the OpenMP RT
 
-        config OMP_RT_TESTS
+        config OPENMP_RT_TESTS
             bool "Include tests/benchmarks for OpenMP RT";
 	    default n
-            depends on OMP_RT
+            depends on OPENMP_RT
             help 
               Include OpenMP simple tests and Edinburgh microbenchmarks
 
