@@ -20,13 +20,13 @@
  * This is free software.  You are permitted to use,
  * redistribute, and modify it as specified in the file "LICENSE.txt".
  */
-#ifndef _NK_OMP_
-#define _NK_OMP_
+#ifndef _NK_GOMP_
+#define _NK_GOMP_
 
 // Run-time startup and shutdown - invoke in init
 // after scheduling is active
-int nk_omp_init();
-void nk_omp_deinit();
+int nk_openmp_init();
+void nk_openmp_deinit();
 
 
 // Promote the current thread into an OMP "main"
@@ -35,8 +35,8 @@ void nk_omp_deinit();
 // created/used by an OMP program will automatically be
 // OMP threads
 
-int nk_omp_thread_init();
-int nk_omp_thread_deinit();
+int nk_openmp_thread_init();
+int nk_openmp_thread_deinit();
 
 
 //

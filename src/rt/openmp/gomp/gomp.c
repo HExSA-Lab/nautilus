@@ -24,17 +24,17 @@
 #include <nautilus/spinlock.h>
 #include <nautilus/scheduler.h>
 #include <nautilus/smp.h>
-#include <rt/omp/omp.h>
+#include <rt/openmp/gomp/gomp.h>
 
 
-#ifndef NAUT_CONFIG_OMP_RT_DEBUG
+#ifndef NAUT_CONFIG_OPENMP_RT_DEBUG
 #define DEBUG(fmt, args...)
 #else
-#define DEBUG(fmt, args...) DEBUG_PRINT("omp: " fmt, ##args)
+#define DEBUG(fmt, args...) DEBUG_PRINT("gomp: " fmt, ##args)
 #endif
 
-#define ERROR(fmt, args...) ERROR_PRINT("omp: " fmt, ##args)
-#define INFO(fmt, args...) INFO_PRINT("omp: " fmt, ##args)
+#define ERROR(fmt, args...) ERROR_PRINT("gomp: " fmt, ##args)
+#define INFO(fmt, args...) INFO_PRINT("gomp: " fmt, ##args)
 
 
 // this is hanging off the "input" argument
@@ -777,11 +777,11 @@ make: *** [nautilus.bin] Error 1
 */
 
 
-int nk_omp_thread_init()
+int nk_openmp_thread_init()
 {
     struct nk_thread *t = get_cur_thread();
     
-    DEBUG("nk_omp_thread_init() of thread %p\n", t);
+    DEBUG("nk_openmp_thread_init() of thread %p\n", t);
 
     if (t->input) { 
 	DEBUG("Overriding current thread input...\n");
@@ -813,7 +813,7 @@ int nk_omp_thread_init()
 
     nk_counting_barrier_init(&o->team_barrier,1);
 
-    DEBUG("nk_omp_init(): cookie=%lx, team=%d, num_threads_in_team=%d, thread_num_in_team=%d, level=%d, num_threads_in_level=%d,f=%p, in=%p, thread_num=%d, thread=%p\n", o->cookie, o->team, o->num_threads_in_team, o->thread_num_in_team, o->level, o->num_threads_in_level, o->f, o->in, o->thread_num, o->thread);
+    DEBUG("nk_openmp_init(): cookie=%lx, team=%d, num_threads_in_team=%d, thread_num_in_team=%d, level=%d, num_threads_in_level=%d,f=%p, in=%p, thread_num=%d, thread=%p\n", o->cookie, o->team, o->num_threads_in_team, o->thread_num_in_team, o->level, o->num_threads_in_level, o->f, o->in, o->thread_num, o->thread);
 
 
     return 0;
@@ -821,11 +821,11 @@ int nk_omp_thread_init()
 }
 
 
-int nk_omp_thread_deinit()
+int nk_openmp_thread_deinit()
 {
     struct nk_thread *t = get_cur_thread();
     
-    DEBUG("nk_omp_thread_deinit() of thread %p\n", t);
+    DEBUG("nk_openmp_thread_deinit() of thread %p\n", t);
 
     struct omp_thread *o = (struct omp_thread *)t->input;
 
@@ -837,13 +837,13 @@ int nk_omp_thread_deinit()
 }
 
 
-int nk_omp_init()
+int nk_openmp_init()
 {
     INFO("init\n");
     return 0;
 }
 
-void nk_omp_deinit()
+void nk_openmp_deinit()
 {
     INFO("deinit\n");
 }

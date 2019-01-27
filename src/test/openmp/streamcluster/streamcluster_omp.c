@@ -18,7 +18,7 @@
 #include <nautilus/scheduler.h>
 #include <nautilus/libccompat.h>
 #include <nautilus/naut_string.h>
-#include <rt/omp/omp.h>
+#include <rt/openmp/openmp.h>
 
 #ifdef ENABLE_PARSEC_HOOKS
 #include <hooks.h>
@@ -1208,7 +1208,7 @@ int test_omp_streamcluster(int numt)
   strcpy(outfilename, "output.txt");
   nproc = numt;
 
-     nk_omp_thread_init();
+     nk_openmp_thread_init();
   
 	
 	ompthreads = nproc;
@@ -1252,7 +1252,7 @@ int test_omp_streamcluster(int numt)
   __parsec_bench_end();
 #endif
 
-  nk_omp_thread_deinit();
+  nk_openmp_thread_deinit();
   
   return 0;
 }
