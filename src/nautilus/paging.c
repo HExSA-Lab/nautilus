@@ -431,7 +431,7 @@ __fill_pd (pde_t * pd,
                 return;
             }
             memset(pt, 0, PAGE_SIZE_4KB);
-            pt[i] = (ulong_t)pt | flags;
+            pd[i] = (ulong_t)pt | flags;
         }
 
         base_addr += PAGE_SIZE_2MB;
@@ -477,12 +477,16 @@ __construct_tables_4k (pml4e_t * pml, ulong_t bytes)
     for (i = 0; i < NUM_PML4_ENTRIES && filled_pdpts < num_pdpts; i++) {
 
         pdpte_t * pdpt = (pdpte_t*)PTE_ADDR(pml[i]);
-        __fill_pdpt(pdpt, PS_4K, addr, num_pds, PTE_PRESENT_BIT | PTE_WRITABLE_BIT);
+        ulong_t pdpte_to_fill = ((num_pds - filled_pds) > NUM_PDPT_ENTRIES) ? NUM_PDPT_ENTRIES:
+            (num_pds - filled_pds);
+        __fill_pdpt(pdpt, PS_4K, addr, pdpte_to_fill, PTE_PRESENT_BIT | PTE_WRITABLE_BIT);
 
         for (j = 0; j < NUM_PDPT_ENTRIES && filled_pds < num_pds; j++) {
 
             pde_t * pd = (pde_t*)PTE_ADDR(pdpt[j]);
-            __fill_pd(pd, PS_4K, addr, num_pts, PTE_PRESENT_BIT | PTE_WRITABLE_BIT);
+            ulong_t pde_to_fill = ((num_pts - filled_pts) > NUM_PD_ENTRIES) ? NUM_PD_ENTRIES:
+                (num_pts - filled_pts);
+            __fill_pd(pd, PS_4K, addr, pde_to_fill, PTE_PRESENT_BIT | PTE_WRITABLE_BIT);
 
             for (k = 0; k < NUM_PD_ENTRIES && filled_pts < num_pts; k++) {
 
@@ -524,7 +528,9 @@ __construct_tables_2m (pml4e_t * pml, ulong_t bytes)
     for (i = 0; i < NUM_PML4_ENTRIES && filled_pdpts < num_pdpts; i++) {
 
         pdpte_t * pdpt = (pdpte_t*)PTE_ADDR(pml[i]);
-        __fill_pdpt(pdpt, PS_2M, addr, num_pds, PTE_PRESENT_BIT | PTE_WRITABLE_BIT);
+        ulong_t pdpte_to_fill = ((num_pds - filled_pds) > NUM_PDPT_ENTRIES) ? NUM_PDPT_ENTRIES:
+            (num_pds - filled_pds);
+        __fill_pdpt(pdpt, PS_2M, addr, pdpte_to_fill, PTE_PRESENT_BIT | PTE_WRITABLE_BIT);
 
         for (j = 0; j < NUM_PDPT_ENTRIES && filled_pds < num_pds; j++) {
 
