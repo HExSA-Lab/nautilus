@@ -1231,8 +1231,11 @@ mlx3_map_icm (struct mlx3_ib * mlx, unsigned pages, void * data, uint64_t card_v
     uint32_t pa_l;
     uint32_t va_h;
     uint32_t va_l;
+
+    //DEBUG("\nStart Iter\n");
     mlx3_cmd_box_t * cmd = create_cmd_mailbox(mlx);
 
+  //  DEBUG("\nMAlloc success\n");
     ptr  = (uint64_t)data;
     vptr = card_va;
 
@@ -1241,9 +1244,9 @@ mlx3_map_icm (struct mlx3_ib * mlx, unsigned pages, void * data, uint64_t card_v
      *Warning !! not 100 % sure about this
      */
 
-    if (align > ilog2(ICM_TABLE_CHUNK_SIZE)) {
-        DEBUG("Alignment greater than max chunk size, defaulting to 256KB\n");
-        align = ilog2(ICM_TABLE_CHUNK_SIZE);
+    if (align > ilog2(PAGE_SIZE_4KB)) {
+        DEBUG("Warning !! Alignment greater than 4KB , defaulting to 4KB\n");
+        align = ilog2(PAGE_SIZE_4KB);
     }
 
     cnt = (pages * PAGE_SIZE_4KB) / (1 << align) +
@@ -1262,7 +1265,7 @@ mlx3_map_icm (struct mlx3_ib * mlx, unsigned pages, void * data, uint64_t card_v
 
         MLX3_SETL(cmd->buf, 0x8, pa_h);
         MLX3_SETL(cmd->buf, 0xC, pa_l);
-
+       // printk("\nAddr %p pa_h %p pa_l %p flip pal %p flip pah %p\n", ptr, pa_h, bswab32(pa_l), bswab32(pa_h));
         err = mlx3_mailbox_cmd(mlx,
                 cmd->buf,
                 NA,
@@ -1271,6 +1274,7 @@ mlx3_map_icm (struct mlx3_ib * mlx, unsigned pages, void * data, uint64_t card_v
                 CMD_MAP_ICM,
                 CMD_TIME_CLASS_A);
 
+//        DEBUG("\nEnd on %d Iter\n", i);
         if (err) {
             ERROR("Could not map ICM area\n");
             goto out_err;
@@ -3164,7 +3168,7 @@ create_eq (struct mlx3_ib * mlx)
     __mzero_checked(eq->buffer, (npages * PAGE_SIZE_4KB) + eqe_padding, 
             "Could not allocate EQ buffer\n", goto out_err0);
 
-    // Align address to 64 bit Might waste some buffer space 
+    // Align address to 32 byte Might waste some buffer space 
     while (((uint64_t)eq->buffer & (31)) && (cnt < eqe_padding)) {
         DEBUG("Alignment Count %d Buffer %p \n", cnt, eq->buffer);
         eq->buffer++; 
