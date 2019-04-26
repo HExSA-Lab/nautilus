@@ -62,7 +62,7 @@ ENTRY(nk_thread_switch)
 
     pushq $0             /* push fake intr number */
 
-    SAVE_GPRS()
+    SAVE_GPRS() // ENRICO: needed for fibers as well
 
     incw %gs:8           // increment interrupt nesting level
 	                 // pretend we are doing an interrupt-driven switch
@@ -211,7 +211,7 @@ ENTRY(nk_thread_entry)
 #endif
 
     sti
-    retq
+    retq // ENRICO: return to the return address that we set
 
 #ifdef NAUT_CONFIG_ENABLE_STACK_CHECK
 bad:

@@ -34,6 +34,7 @@
 #include <nautilus/smp.h>
 #include <nautilus/irq.h>
 #include <nautilus/thread.h>
+#include <nautilus/fiber.h>
 #include <nautilus/waitqueue.h>
 #include <nautilus/task.h>
 #include <nautilus/future.h>
@@ -446,6 +447,11 @@ init (unsigned long mbd,
     serial_init();
 
     nk_sched_start();
+    
+#ifdef NAUT_CONFIG_FIBER_THREAD
+    nk_fiber_init();
+    nk_fiber_startup();
+#endif
 
 #ifdef NAUT_CONFIG_CACHEPART
     nk_cache_part_start();
