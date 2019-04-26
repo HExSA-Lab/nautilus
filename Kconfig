@@ -436,8 +436,59 @@ config VIRTUAL_CONSOLE_SERIAL_MIRROR_ALL
 	  which of these behaviors you want if you are executing tasks
 	  in idle loops.
 	  
-       
-	  
+    config FIBER_THREAD
+        bool "Handle fibers in a special thread"
+        default true;
+	help
+	  When enabled, each cpu has a thread that consumes fibers.
+	  The thread can run at an arbitrary aperiodic priority.
+
+    config FIBER_THREAD_PRIORITY
+       depends on FIBER_THREAD
+       int "Aperiodic priority for fiber threads"
+       default 100000000
+       help 
+          Priority for the fiber threads.  The default here is
+	      the quantum in ns.   By adjusting this, you can adjust
+	      how much priority fibers effectively have in the system.
+    choice 
+    prompt "Select Fiber Thread Idle Type"
+    depends on FIBER_THREAD
+    default ENABLE_WAKE
+
+     config ENABLE_SPIN
+      bool "FIBER_THREAD_SPIN"
+      depends on FIBER_THREAD
+      help
+        If enabled, the fiber thread will spin (yield continuously) 
+        even when no fibers are in the fiber queue.
+
+     config ENABLE_SLEEP
+      bool "FIBER_THREAD_SLEEP"
+      depends on FIBER_THREAD
+      help
+        If enabled, the fiber thread will sleep when no fibers are 
+        in the fiber queue. The fiber thread will be woken up when 
+        enough time elapses or a fiber is added to the fiber queue.
+        
+     config ENABLE_WAIT
+      bool "FIBER_THREAD_WAIT"
+      depends on FIBER_THREAD
+      help
+        If enabled, the fiber thread will wait on a wait queue when no 
+        fibers are in the fiber queue. The fiber thread will be woken up
+        when enough time elapses or a fiber is added to the fiber queue.
+
+    endchoice
+
+    config FIBER_THREAD_SLEEP_TIME
+         int "sleep time for fiber threads"
+         depends on ENABLE_SLEEP
+         default 10000000
+         help
+           The amount of time the fiber thread will sleep for when
+           there are no fibers on the fiber queue.
+ 
     config INTERRUPT_THREAD
        bool "Restrict interrupts to special real-time interrupt thread"
        default false
@@ -890,6 +941,19 @@ menu Debugging
       help
         Turn on debug prints for threads
 
+    config DEBUG_FIBERS
+      bool "Debug Fibers"
+      depends on DEBUG_PRINTS
+      default n
+      help
+        Turn on debug prints for fibers
+
+    config DEBUG_TASKS
+      bool "Debug Tasks"
+      depends on DEBUG_PRINTS
+      default n
+      help
+        Turn on debug prints for tasks
 
     config DEBUG_WAITQUEUES
       bool "Debug Wait Queues"
@@ -899,12 +963,6 @@ menu Debugging
         Turn on debug prints for wait queues
 	YOU PROBABLY DO NOT WANT TO DO THIS - SEE COMMENTS
 
-config DEBUG_TASKS
-      bool "Debug Tasks"
-      depends on DEBUG_PRINTS
-      default n
-      help
-        Turn on debug prints for tasks
 
 config DEBUG_FUTURES
       bool "Debug Futures"
