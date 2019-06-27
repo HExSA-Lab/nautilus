@@ -33,6 +33,8 @@
 #include <nautilus/irq.h>
 #include <nautilus/thread.h>
 #include <nautilus/waitqueue.h>
+#include <nautilus/task.h>
+#include <nautilus/future.h>
 #include <nautilus/group.h>
 #include <nautilus/group_sched.h>
 #include <nautilus/timer.h>
@@ -191,6 +193,8 @@ init (unsigned long mbd, unsigned long magic)
     sysinfo_init(&(naut->sys));
 
     nk_wait_queue_init();
+
+    nk_future_init();
 
     nk_timer_init();
 
