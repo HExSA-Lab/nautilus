@@ -331,8 +331,9 @@ nk_mtrr_set_variable (int num, void *start, void *end, uint8_t type, int valid)
 {
     int count, flags;
     uint64_t sm1, b, m;
-    
+
     if (nk_mtrr_get_features(&count,&flags) || num<-1 || num>=count) {
+	ERROR("Invalid set request count=%d, flags=%x\n", count, flags);
         return -1;
     }
 
