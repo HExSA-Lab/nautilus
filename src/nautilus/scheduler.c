@@ -1961,7 +1961,7 @@ static int pump_sized_tasks(rt_scheduler *scheduler, rt_thread *next)
 	    // and then continue to see if we can fit in another one
 	} else {
 	    // we are out of suitable, easy to find tasks
-	    //DEBUG("Handled %lu sized tasks\n",count);
+	    //TASK_DEBUG("Handled %lu sized tasks\n",count);
 	    return 0;
 	}
     }
@@ -3596,7 +3596,7 @@ struct nk_task *nk_task_produce(int cpu, uint64_t size_ns, void *(*f)(void*), vo
     struct nk_task *t = MALLOC_SPECIFIC(sizeof(struct nk_task),placement_cpu);
 
     if (!t) {
-	ERROR("Failed to allocate a task\n");
+	TASK_ERROR("Failed to allocate a task\n");
 	return 0;
     }
 
@@ -3733,7 +3733,7 @@ int nk_task_complete(struct nk_task *task, void *output)
 static int _nk_task_wait(struct nk_task *task, void **output, struct nk_task_stats *stats, int try)
 {
     if (task->flags & NK_TASK_DETACHED) {
-	ERROR("Cannot wait on detached task; also probable race...\n");
+	TASK_ERROR("Cannot wait on detached task; also probable race...\n");
 	return -1;
     }
 
@@ -3898,7 +3898,7 @@ static int await_task(void *p)
 static void task(void *in, void **out)
 {
     if (nk_thread_name(get_cur_thread(),"(task)")) { 
-	ERROR("Failed to name task thread\n");
+	TASK_ERROR("Failed to name task thread\n");
 	return;
     }
 
@@ -3907,7 +3907,7 @@ static void task(void *in, void **out)
 				      .aperiodic.priority=NAUT_CONFIG_TASK_THREAD_PRIORITY };
     
     if (nk_sched_thread_change_constraints(&c)) { 
-	ERROR("Unable to set constraints for task thread\n");
+	TASK_ERROR("Unable to set constraints for task thread\n");
 	panic("Unable to set constraints for task thread\n");
 	return;
     }
@@ -3944,11 +3944,11 @@ static int start_task_thread_for_this_cpu()
   nk_thread_id_t tid;
   
   if (nk_thread_start(task, 0, 0, 1, TASK_THREAD_STACK_SIZE, &tid, my_cpu_id())) {
-      ERROR("Failed to start task thread\n");
+      TASK_ERROR("Failed to start task thread\n");
       return -1;
   }
 
-  DEBUG("Task thread launched on cpu %d as %p\n", my_cpu_id(), tid);
+  TASK_DEBUG("Task thread launched on cpu %d as %p\n", my_cpu_id(), tid);
 
   return 0;
 
