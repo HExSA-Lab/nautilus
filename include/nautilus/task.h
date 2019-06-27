@@ -24,6 +24,17 @@
 #ifndef __NK_TASK
 #define __NK_TASK
 
+// placed here in case we decide to move more of the
+// task implementation into inline
+#define TASK_INFO(fmt, args...) INFO_PRINT("task: " fmt, ##args)
+#define TASK_ERROR(fmt, args...) ERROR_PRINT("task: " fmt, ##args)
+#ifdef NAUT_CONFIG_DEBUG_TASKS
+#define TASK_DEBUG(fmt, args...) DEBUG_PRINT("task: " fmt, ##args)
+#else
+#define TASK_DEBUG(fmt, args...)
+#endif
+#define TASK_WARN(fmt, args...)  WARN_PRINT("task: " fmt, ##args)
+
 
 struct nk_task_stats {
     uint64_t    size_ns;       // a size of zero means the task has unknown size
