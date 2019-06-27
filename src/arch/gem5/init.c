@@ -35,6 +35,8 @@
 #include <nautilus/irq.h>
 #include <nautilus/thread.h>
 #include <nautilus/waitqueue.h>
+#include <nautilus/task.h>
+#include <nautilus/future.h>
 #include <nautilus/group.h>
 #include <nautilus/group_sched.h>
 #include <nautilus/timer.h>
@@ -387,6 +389,8 @@ init (unsigned long mbd,
 
     nk_wait_queue_init();
 
+    nk_future_init();
+    
     nk_timer_init();
 
     apic_init(naut->sys.cpus[0]);
