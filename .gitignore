@@ -5,3 +5,5 @@ tags
 *.bin
 *.iso
 *.syms
+*.bc
+*.ll
