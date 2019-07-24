@@ -28,7 +28,8 @@ typedef struct symentry{
 uint64_t atob(uint8_t* p){
     uint64_t opt = 0;   //output
     uint64_t buf = 0;   //buffer
-    for(int i = 0;i < 16;i++){
+    int i;
+    for(i = 0;i < 16;i++){
         buf = p[i];
         if(buf <= 0x39){
             buf -= 0x30;

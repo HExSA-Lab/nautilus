@@ -41,6 +41,10 @@
 #endif
 
 struct nk_virtual_console *vc;
+nk_fiber_t *first_l;
+nk_fiber_t *second_l;
+
+/******************* Test Routines *******************/
 
 void fiber_inner(void *i, void **o)
 {
@@ -60,7 +64,10 @@ void fiber_outer(void *i, void **o)
   while(a < 3){
     nk_vc_printf("Fiber outer a = %d\n", a++);
     nk_fiber_t *f_inner;
-    nk_fiber_start(fiber_inner, 0, 0, 0, 1, &f_inner);
+    if (nk_fiber_start(fiber_inner, 0, 0, 0, F_RAND_CPU, &f_inner) < 0) {
+      nk_vc_printf("fiber_outer() : ERROR: Failed to start fiber. Routine not aborted.\n");
+      return;
+    }
     nk_fiber_yield();
   }
   nk_vc_printf("Fiber outer is finished, a = %d\n", a);
@@ -84,7 +91,10 @@ void fiber_outer_join(void *i, void **o)
   while(a < 3){
     nk_vc_printf("Fiber outer a = %d\n", a++);
     nk_fiber_t *f_inner_join;
-    nk_fiber_start(fiber_inner_join, 0, 0, 0, 1, &f_inner_join);
+    if (nk_fiber_start(fiber_inner_join, 0, 0, 0, F_CURR_CPU, &f_inner_join) < 0) {
+      nk_vc_printf("fiber_outer_join() : ERROR: Failed to start fiber. Routine aborted.\n");
+      return;
+    }
     nk_fiber_join(f_inner_join);
     nk_fiber_yield();
   }
@@ -115,7 +125,9 @@ void fiber3(void *i, void **o)
   }
   nk_vc_printf("Fiber 3 is finished, a = %d\n", a);
   nk_fiber_t *f4;
-  nk_fiber_start(fiber4, 0, 0, 0, 1, &f4);
+  if (nk_fiber_start(fiber4, 0, 0, 0, F_RAND_CPU, &f4) < 0) {
+    nk_vc_printf("fiber3() : ERROR: Failed to start fiber. Routine not aborted.\n");
+  }
 }
 
 void fiber1(void *i, void **o)
@@ -128,7 +140,9 @@ void fiber1(void *i, void **o)
   }
   nk_vc_printf("Fiber 1 is finished, a = %d\n", a);
   nk_fiber_t *f3;
-  nk_fiber_start(fiber3, 0, 0, 0, 1, &f3);
+  if (nk_fiber_start(fiber3, 0, 0, 0, F_RAND_CPU, &f3) < 0) {
+    nk_vc_printf("fiber1() : ERROR: Failed to start fiber. Routine not aborted.\n");
+  }
 }
 
 
@@ -142,7 +156,9 @@ void fiber2(void *i, void **o)
   }
   nk_vc_printf("Fiber 2 is finished, a = %d\n", a);
   nk_fiber_t *f4;
-  nk_fiber_start(fiber4, 0, 0, 0, 1, &f4);
+  if (nk_fiber_start(fiber4, 0, 0, 0, F_RAND_CPU, &f4) < 0) {
+    nk_vc_printf("fiber2() : ERROR: Failed to start fiber. Routine not aborted.\n");
+  }
 }
 
 void print_even(void *i, void **o){
@@ -178,7 +194,7 @@ void fiber_first(void *i, void **o)
   nk_fiber_t *f_to = (nk_fiber_t*)i;
   while(a < 5){
     nk_vc_printf("Fiber_first() : a = %d and yielding to fiber_second = %p\n", a++, f_to);
-    nk_fiber_yield_to(f_to);
+    nk_fiber_yield_to(f_to, 0);
   }
   nk_vc_printf("Fiber 1 is finished, a = %d\n", a);
 }
@@ -191,7 +207,7 @@ void fiber_second(void *i, void **o)
   nk_fiber_t *f_to = (nk_fiber_t*)i;
   while(a < 5){
     nk_vc_printf("Fiber_second() : a = %d and yielding to fiber_third = %p\n", a++, f_to);
-    nk_fiber_yield_to(f_to);
+    nk_fiber_yield_to(f_to, 0);
   }
   nk_vc_printf("Fiber 2 is finished, a = %d\n", a);
 }
@@ -200,11 +216,10 @@ void fiber_third(void *i, void **o)
 {
   nk_fiber_set_vc(vc);
   int a = 0;
-  //nk_fiber_t **temp = (nk_fiber_t**)i;
   nk_fiber_t *f_to = (nk_fiber_t*)i;
   while(a < 5){
     nk_vc_printf("fiber_third() : a = %d and yielding to fiber_fourth = %p\n", a++, f_to);
-    nk_fiber_yield_to(f_to);
+    nk_fiber_yield_to(f_to, 0);
   }
   nk_vc_printf("fiber 3 is finished, a = %d\n", a);
 }
@@ -213,11 +228,10 @@ void fiber_fourth(void *i, void **o)
 {
   nk_fiber_set_vc(vc);
   int a = 0;
-  //nk_fiber_t **temp = (nk_fiber_t**)i;
   nk_fiber_t *f_to = (nk_fiber_t*)i;
   while(a < 5){
     nk_vc_printf("fiber_fourth() : a = %d and yielding to fiber_first = %p\n", a++, f_to);
-    nk_fiber_yield_to(f_to);
+    nk_fiber_yield_to(f_to, 0);
   }
   nk_vc_printf("fiber 4 is finished, a = %d\n", a);
 }
@@ -228,9 +242,12 @@ void fiber_fork(void *i, void **o)
   int a = 0;
   nk_fiber_t *f_new;
   f_new = nk_fiber_fork();
+  if (f_new < 0) {
+    nk_vc_printf("fiber_fork() : ERROR: Failed to fork fiber. Routine not aborted.\n");
+  }
   while(a < 5){
-    //nk_fiber_t *f_curr = _nk_fiber_current();
-    nk_vc_printf("fiber_fork() : This is the %dth iteration of fiber %p\n"/* and curr_f is %p\n"*/, a++, f_new/*, f_curr*/);
+    nk_fiber_t *f_curr = nk_fiber_current();
+    nk_vc_printf("fiber_fork() : This is iteration %d of fiber %p\n and curr_f is %p\n", a++, f_new, f_curr);
     nk_fiber_yield();
   }
   nk_vc_printf("fiber 4 is finished, a = %d\n", a);
@@ -242,14 +259,17 @@ void fiber_fork_join(void *i, void **o)
   int a = 0;
   nk_fiber_t *f_new;
   f_new = nk_fiber_fork();
-  if(f_new){
+  if (f_new < 0) {
+    nk_vc_printf("fiber_fork_join() : ERROR: Failed to fork fiber. Routine not aborted.\n");
+  }
+
+  if(f_new > 0){
     nk_fiber_join(f_new);
   }
 
-  //nk_fiber_t *f_curr = _nk_fiber_current();
-  nk_fiber_t *f_curr = NULL;
+  nk_fiber_t *f_curr = nk_fiber_current();
   while(a < 5){
-    nk_vc_printf("fiber_fork_join() : This is the %d iteration of fiber %p\n", a++, f_curr);
+    nk_vc_printf("fiber_fork_join() : This is iteration %d of fiber %p\n", a++, f_curr);
     nk_fiber_yield();
   }
   nk_vc_printf("fiber %p is finished, a = %d\n", f_curr, a);
@@ -258,8 +278,7 @@ void fiber_fork_join(void *i, void **o)
 void fiber_routine2(void *i, void **o)
 {
   nk_fiber_set_vc(vc);
-  //nk_vc_printf("fiber_routine2() : Fiber %p created\n", _nk_fiber_current());
-  nk_vc_printf("fiber_routine2() : Fiber created\n");
+  nk_vc_printf("fiber_routine2() : Fiber %p created\n", nk_fiber_current());
 }
 
 
@@ -270,17 +289,20 @@ void fiber_routine1(void *i, void **o)
   nk_fiber_t *f_new;
   while(a < 5){
     f_new = nk_fiber_fork();
-    //nk_fiber_t *curr = _nk_fiber_current();
-    nk_fiber_t *curr = NULL;
-    if(f_new){
+    if (f_new < 0) {
+      nk_vc_printf("fiber_routine1() : ERROR: Failed to fork fiber. Routine not aborted.\n");
+    }
+    nk_fiber_t *curr = nk_fiber_current();
+    if(f_new > 0){
       nk_fiber_t *new;
-      nk_fiber_start(fiber_routine2, 0, 0, 0, 0, &new);
+      if (nk_fiber_start(fiber_routine2, 0, 0, 0, F_RAND_CPU, &new) < 0) {
+        nk_vc_printf("fiber_routine1() : ERROR: Failed to start fiber. Routine not aborted.\n");
+      }
       break;
     }
-    nk_vc_printf("fiber_routine1() : This is the %d iteration of fiber %p\n", a++, curr);
+    nk_vc_printf("fiber_routine1() : This is iteration %d of fiber %p\n", a++, curr);
   }
-  //nk_vc_printf("fiber_routine1() : fiber %p is finished, a = %d\n", _nk_fiber_current(), a);
-  nk_vc_printf("fiber_routine1() : fiber is finished, a = %d\n", a);
+  nk_vc_printf("fiber_routine1() : fiber %p is finished, a = %d\n", nk_fiber_current(), a);
 }
 
 void fiber_routine3(void *i, void **o)
@@ -290,21 +312,23 @@ void fiber_routine3(void *i, void **o)
   nk_fiber_t *f_new;
   while(a < 5){
     f_new = nk_fiber_fork();
-    //nk_fiber_t *curr = _nk_fiber_current();
-    nk_fiber_t *curr = NULL;
-    nk_vc_printf("fiber_routine3() : This is the %d iteration of fiber %p\n", a++, curr);
+    if (f_new < 0) {
+      nk_vc_printf("fiber_routine3() : ERROR: Failed to fork fiber. Routine not aborted.\n");
+    }
+    nk_fiber_t *curr = nk_fiber_current();
+    nk_vc_printf("fiber_routine3() : This is iteration %d of fiber %p\n", a++, curr);
   }
-  //nk_vc_printf("fiber_routine3() : fiber %p is finished, a = %d\n", _nk_fiber_current(), a);
-  nk_vc_printf("fiber_routine3() : fiber is finished, a = %d\n",  a);
+  nk_vc_printf("fiber_routine3() : fiber %p is finished, a = %d\n", nk_fiber_current(), a);
 }
 
-#define N 100000
+#define N 1000000
 void first_timer(void *i, void **o)
 {
   nk_fiber_set_vc(vc);
   int a = 0;
-  uint64_t start = 0;
-  uint64_t end = 0;
+  rdtsc();
+  uint64_t start = rdtsc();
+  uint64_t end = rdtsc();
   while(a < N){
     if (a == 2) {
         start = rdtsc();
@@ -327,13 +351,52 @@ void second_timer(void *i, void **o)
   nk_vc_printf("Second Timer is finished, a = %d\n", a);
 }
 
+extern void _nk_fiber_context_switch(nk_fiber_t *curr, nk_fiber_t *next);
+
+void first_lower(void *i, void **o)
+{
+  nk_fiber_set_vc(vc);
+  int a = 0;
+  uint64_t start = 0;
+  uint64_t end = 0; 
+  while(a < N){
+    if (a == 2) {
+        start = rdtsc();
+    }
+    _nk_fiber_context_switch(first_l, second_l);
+    a++;
+  }
+  end = rdtsc();
+  nk_vc_printf("First Timer is finished, a = %d, cycle count = %d, cycles per iteration = %d\n", a, end-start, (end-start)/N);
+}  
+
+void second_lower(void *i, void **o)
+{
+  nk_fiber_set_vc(vc);
+  int a = 0;
+  while(a < N){
+    _nk_fiber_context_switch(second_l, first_l);
+    a++;
+  }
+  nk_vc_printf("Second Timer is finished, a = %d\n", a);
+}
+
+
+
+/******************* Test Wrappers *******************/
+
 int test_fibers_counter(){
   nk_fiber_t *even;
   nk_fiber_t *odd;
   vc = get_cur_thread()->vc;
-  nk_fiber_start(print_even, 0, 0, 0, 1, &even);
-  nk_fiber_start(print_odd, 0, 0, 0, 1, &odd);
-
+  if (nk_fiber_start(print_even, 0, 0, 0, F_RAND_CPU, &even) < 0) {
+    nk_vc_printf("test_fibers_counter() : Fiber failed to start\n");
+    return -1;
+  } 
+  if (nk_fiber_start(print_odd, 0, 0, 0, F_RAND_CPU, &odd) < 0) {
+    nk_vc_printf("test_fibers_counter() : Fiber failed to start\n");
+    return -1;
+  }
   return 0;
 }
 
@@ -342,7 +405,10 @@ int test_nested_fibers()
   nk_fiber_t *f_outer;
   vc = get_cur_thread()->vc;
   nk_vc_printf("test_nested_fibers() : virtual console %p\n", vc);
-  nk_fiber_start(fiber_outer, 0, 0, 0, 1, &f_outer);
+  if (nk_fiber_start(fiber_outer, 0, 0, 0, F_RAND_CPU, &f_outer) < 0) {
+    nk_vc_printf("test_nested_fibers() : Fiber failed to start\n");
+    return -1;
+  }
   return 0;
 }
 
@@ -353,9 +419,18 @@ int test_fibers()
   nk_fiber_t *f3;
   vc = get_cur_thread()->vc;
   nk_vc_printf("test_fibers() : virtual console %p\n", vc);
-  nk_fiber_start(fiber1, 0, 0, 0, 1, &f1);
-  nk_fiber_start(fiber2, 0, 0, 0, 1, &f2);
-  nk_fiber_start(fiber3, 0, 0, 0, 1, &f3);
+  if (nk_fiber_start(fiber1, 0, 0, 0, F_RAND_CPU, &f1) < 0) {
+    nk_vc_printf("test_fibers() : Fiber failed to start\n");
+    return -1;
+  }
+  if (nk_fiber_start(fiber2, 0, 0, 0, F_RAND_CPU, &f2) < 0) {
+    nk_vc_printf("test_fibers() : Fiber failed to start\n");
+    return -1;
+  }
+  if (nk_fiber_start(fiber3, 0, 0, 0, F_RAND_CPU, &f3) < 0) {
+    nk_vc_printf("test_fibers() : Fiber failed to start\n");
+    return -1;
+  }
   return 0;
 }
 
@@ -367,19 +442,45 @@ int test_yield_to()
   nk_fiber_t *f_fourth;
   vc = get_cur_thread()->vc;
   nk_vc_printf("test_yield_to() : virtual console %p\n", vc);
-  nk_fiber_create(fiber_fourth, 0, 0, 0, &f_fourth);
-  nk_fiber_create(fiber_first, 0, 0, 0, &f_first);
-  nk_fiber_create(fiber_third, 0, 0, 0, &f_third);
-  nk_fiber_create(fiber_second, 0, 0, 0, &f_second);
+  if (nk_fiber_create(fiber_fourth, 0, 0, 0, &f_fourth) < 0) {
+    nk_vc_printf("test_yield_to() : Failed to create fiber\n");
+    return -1;
+  }
+  if (nk_fiber_create(fiber_first, 0, 0, 0, &f_first) < 0) {
+    nk_vc_printf("test_yield_to() : Failed to create fiber\n");
+    return -1;
+  }
+  if (nk_fiber_create(fiber_third, 0, 0, 0, &f_third) < 0) {
+    nk_vc_printf("test_yield_to() : Failed to create fiber\n");
+    return -1;
+  }
+  if (nk_fiber_create(fiber_second, 0, 0, 0, &f_second) < 0) {
+    nk_vc_printf("test_yield_to() : Failed to create fiber\n");
+    return -1;
+  }
   //void *input[4] = {&f_first, &f_second, &f_third, &f_fourth};
   f_first->input = f_second;
   f_second->input = f_third;
   f_third->input = f_fourth;
   f_fourth->input = f_first;
-  nk_fiber_run(f_fourth, 1);
-  nk_fiber_run(f_first, 1);
-  nk_fiber_run(f_third, 1);
-  nk_fiber_run(f_second, 1);
+
+  if (nk_fiber_run(f_fourth, F_CURR_CPU) < 0) {
+    nk_vc_printf("test_yield_to() : Failed to run fiber. Test aborted.\n");
+    return -2;
+  }
+  if (nk_fiber_run(f_first, F_CURR_CPU) < 0) {
+    nk_vc_printf("test_yield_to() : Failed to run fiber. Test aborted.\n");
+    return -2;
+  }
+  if (nk_fiber_run(f_third, F_CURR_CPU) < 0) {
+    nk_vc_printf("test_yield_to() : Failed to run fiber. Test aborted.\n");
+    return -2;
+  }
+  if (nk_fiber_run(f_second, F_CURR_CPU) < 0) {
+    nk_vc_printf("test_yield_to() : Failed to run fiber. Test aborted.\n");
+    return -2;
+  }
+  
   return 0;
 }
 
@@ -388,7 +489,10 @@ int test_fiber_join()
   nk_fiber_t *f_outer_join;
   vc = get_cur_thread()->vc;
   nk_vc_printf("test_fiber_join() : virtual console %p\n", vc);
-  nk_fiber_start(fiber_outer_join, 0, 0, 0, 1, &f_outer_join);
+  if (nk_fiber_start(fiber_outer_join, 0, 0, 0, F_RAND_CPU, &f_outer_join) < 0) {
+    nk_vc_printf("test_fiber_join() : Failed to start fiber\n");
+    return -1;
+  }
   return 0;
 }
 
@@ -397,7 +501,10 @@ int test_fiber_fork()
   nk_fiber_t *f_orig;
   vc = get_cur_thread()->vc;
   nk_vc_printf("test_fiber_fork() : virtual console %p\n", vc);
-  nk_fiber_start(fiber_fork, 0, 0, 0, 1, &f_orig);
+  if (nk_fiber_start(fiber_fork, 0, 0, 0, F_RAND_CPU, &f_orig) < 0) {
+    nk_vc_printf("test_fiber_fork() : Failed to start fiber\n");
+    return -1;
+  }
   return 0;
 }
 
@@ -406,7 +513,10 @@ int test_fiber_fork_join()
   nk_fiber_t *f_orig;
   vc = get_cur_thread()->vc;
   nk_vc_printf("test_fiber_fork_join() : virtual console %p\n", vc);
-  nk_fiber_start(fiber_fork_join, 0, 0, 0, 1, &f_orig);
+  if (nk_fiber_start(fiber_fork_join, 0, 0, 0, F_RAND_CPU, &f_orig) < 0) {
+    nk_vc_printf("test_fiber_fork_join() : Failed to start fiber\n");
+    return -1;
+  }
   return 0;
 }
 
@@ -415,7 +525,10 @@ int test_fiber_routine()
   nk_fiber_t *f_orig;
   vc = get_cur_thread()->vc;
   nk_vc_printf("test_fiber_routine() : virtual console %p\n", vc);
-  nk_fiber_start(fiber_routine1, 0, 0, 0, 1, &f_orig);
+  if (nk_fiber_start(fiber_routine1, 0, 0, 0, F_RAND_CPU, &f_orig) < 0) {
+    nk_vc_printf("test_fiber_routine() : Failed to start fiber\n");
+    return -1;
+  }
   return 0;
 }
 
@@ -424,7 +537,10 @@ int test_fiber_routine_2()
   nk_fiber_t *f_orig;
   vc = get_cur_thread()->vc;
   nk_vc_printf("test_fiber_routine_2() : virtual console %p\n", vc);
-  nk_fiber_start(fiber_routine3, 0, 0, 0, 1, &f_orig);
+  if (nk_fiber_start(fiber_routine3, 0, 0, 0, F_RAND_CPU, &f_orig) < 0) {
+    nk_vc_printf("test_fiber_routine_2() : Failed to start fiber\n");
+    return -1;
+  }
   return 0;
 }
 
@@ -432,16 +548,27 @@ int test_fiber_timing(){
   nk_fiber_t *first;
   nk_fiber_t *second;
   vc = get_cur_thread()->vc;
-  
-  nk_fiber_start(first_timer, 0, 0, 0, 1, &first);
-  nk_fiber_start(second_timer, 0, 0, 0, 1, &second);
-
+  // NO ERROR CHECKING (SO TIMING RESULTS ARE NOT SKEWED) 
+  nk_fiber_start(first_timer, 0, 0, 0, F_RAND_CPU, &first);
+  nk_fiber_start(second_timer, 0, 0, 0, F_RAND_CPU, &second);
   return 0;
 }
 
 
+int test_fiber_lower(){
+  vc = get_cur_thread()->vc;
+  nk_fiber_set_vc(vc);
+  nk_fiber_create(second_lower, 0, 0, 0, &second_l);
+  nk_fiber_start(first_lower, 0, 0, 0, F_CURR_CPU, &first_l);
+  return 0;
+}
+    
+
+
+/******************* Test Handlers *******************/
+
 static int
-handle_fibers (char * buf, void * priv)
+handle_fibers1 (char * buf, void * priv)
 {
   test_fibers();
 
@@ -514,11 +641,66 @@ handle_fibers10 (char * buf, void * priv)
   return 0;
 }
 
+static int handle_fibers11 (char *buf, void *priv)
+{
+  test_fiber_lower();
+  return 0;
+}
 
-static struct shell_cmd_impl fibers_impl = {
+static int handle_fibers (char *buf, void *priv)
+{
+  test_fibers();
+  test_nested_fibers();
+  test_fibers_counter(); 
+  test_fiber_join();
+  test_fiber_fork();
+  test_fiber_fork_join();
+  test_fiber_routine();
+  test_fiber_routine_2();
+  test_yield_to();
+  return 0;
+}
+
+static int handle_fibers_all (char *buf, void *priv)
+{
+  int i = 0;
+  for (i = 0; i < 20; i++) {
+    test_fibers();
+    test_nested_fibers();
+    test_fibers_counter(); 
+    test_fiber_join();
+    test_fiber_fork();
+    test_fiber_fork_join();
+    test_fiber_routine();
+    test_fiber_routine_2();
+    test_yield_to();
+  }
+  return 0;
+}
+ 
+static int handle_fibers_all_1 (char *buf, void *priv)
+{
+  int i = 0;
+  for (i = 0; i < 100; i++) {
+    test_fibers();
+    test_nested_fibers();
+    test_fibers_counter(); 
+    test_fiber_join();
+    test_yield_to();
+    test_fiber_fork();
+    test_fiber_fork_join();
+    test_fiber_routine();
+    test_fiber_routine_2();
+  }
+  return 0;
+}
+  
+/******************* Shell Structs ********************/
+
+static struct shell_cmd_impl fibers_impl1 = {
   .cmd      = "fibertest",
   .help_str = "fibertest",
-  .handler  = handle_fibers,
+  .handler  = handle_fibers1,
 };
 
 static struct shell_cmd_impl fibers_impl2 = {
@@ -575,8 +757,34 @@ static struct shell_cmd_impl fibers_impl10 = {
   .handler  = handle_fibers10,
 };
 
+static struct shell_cmd_impl fibers_impl11 = {
+  .cmd      = "fibertime2",
+  .help_str = "fibertime2",
+  .handler  = handle_fibers11,
+};
 
-nk_register_shell_cmd(fibers_impl);
+static struct shell_cmd_impl fibers_impl_all = {
+  .cmd      = "fiberall",
+  .help_str = "run all fiber tests",
+  .handler  = handle_fibers,
+};
+
+static struct shell_cmd_impl fibers_impl_all_1 = {
+  .cmd      = "fiberall1",
+  .help_str = "run all fiber tests in loop",
+  .handler  = handle_fibers_all,
+};
+
+static struct shell_cmd_impl fibers_impl_all_2 = {
+  .cmd      = "fiberall2",
+  .help_str = "run all fiber tests in loop",
+  .handler  = handle_fibers_all_1,
+};
+
+
+/******************* Shell Commands *******************/
+
+nk_register_shell_cmd(fibers_impl1);
 nk_register_shell_cmd(fibers_impl2);
 nk_register_shell_cmd(fibers_impl3);
 nk_register_shell_cmd(fibers_impl4);
@@ -586,3 +794,7 @@ nk_register_shell_cmd(fibers_impl7);
 nk_register_shell_cmd(fibers_impl8);
 nk_register_shell_cmd(fibers_impl9);
 nk_register_shell_cmd(fibers_impl10);
+nk_register_shell_cmd(fibers_impl11);
+nk_register_shell_cmd(fibers_impl_all);
+nk_register_shell_cmd(fibers_impl_all_1);
+nk_register_shell_cmd(fibers_impl_all_2);
