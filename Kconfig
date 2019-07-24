@@ -431,6 +431,13 @@ config VIRTUAL_CONSOLE_SERIAL_MIRROR_ALL
 	  When enabled, each cpu has a thread that consumes fibers.
 	  The thread can run at an arbitrary aperiodic priority.
 
+    config FIBER_THREAD_STACK_SIZE
+       depends on FIBER_THREAD
+       int "Stack size for fiber threads"
+       default 2097152
+       help 
+          Controls the size of the stack for fiber threads.  The default here is 2 MB.
+ 
     config FIBER_THREAD_PRIORITY
        depends on FIBER_THREAD
        int "Aperiodic priority for fiber threads"
@@ -472,7 +479,7 @@ config VIRTUAL_CONSOLE_SERIAL_MIRROR_ALL
     config FIBER_THREAD_SLEEP_TIME
          int "sleep time for fiber threads"
          depends on ENABLE_SLEEP
-         default 10000000
+         default 100000000
          help
            The amount of time the fiber thread will sleep for when
            there are no fibers on the fiber queue.

@@ -162,13 +162,13 @@ int nk_tls_set(nk_tls_key_t key, const void * val);
 #define TLS_KEY_USABLE(x) ((unsigned long)(x) < (unsigned long)((x)+2))
 
 
-/* thread status */ // ENRICO: State of a thread independent from the scheduler
+/* thread status */ 
 typedef enum {
-    NK_THR_INIT=0, // ENRICO: thread just created
-    NK_THR_RUNNING, // ENRICO:  scheduler knows about it, it is running now
-    NK_THR_WAITING, // ENRICO: thread on a wait queue, scheduler cannot run it
-    NK_THR_SUSPENDED, // ENRICO: scheduler knows about it, it is NOT running now
-    NK_THR_EXITED, // ENRICO: thread is done, it can be reused
+    NK_THR_INIT=0, 
+    NK_THR_RUNNING, 
+    NK_THR_WAITING, 
+    NK_THR_SUSPENDED, 
+    NK_THR_EXITED, 
 } nk_thread_status_t;
 
 
