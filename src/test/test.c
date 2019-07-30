@@ -226,8 +226,8 @@ out_err:
 
 
 #define ARGMAX 80
-#define ARG_OPEN '['
-#define ARG_CLOSE ']'
+#define ARG_OPEN '"'
+#define ARG_CLOSE '"'
 
 /*
  * format is -test testname "arg1 arg2 -f arg3"
