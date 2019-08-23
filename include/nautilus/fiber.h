@@ -166,6 +166,12 @@ int nk_fiber_init_ap();
 
 void nk_fiber_startup();
 
+/******* Experimental Yield *******/
+
+void new_nk_fiber_yield();
+
+void new_nk_fiber_yield_to(nk_fiber_t* f_to, int earlyRetFlag);
+
 /********** WRAPPER NK FIBER YIELD **********/
 
 int wrapper_nk_fiber_yield();

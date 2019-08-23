@@ -106,6 +106,29 @@ ENTRY(_nk_fiber_fork_exit)
     //FIBER_RESTORE_GPRS()
     retq
 
+/******* New ASM stubs *******/
+
+ENTRY(new_nk_fiber_yield)
+    FIBER_SAVE_GPRS()
+    movq %rsp, %rdi
+    callq __nk_fiber_yield 
+
+ENTRY(__nk_fiber_context_switch)
+    movq 0x0(%rdi), %rsp 
+    // Restores registers from new stack
+    FIBER_RESTORE_GPRS()
+    retq
+
+ENTRY(new_nk_fiber_yield_to)
+    FIBER_SAVE_GPRS()
+    movq %rsp, %rdx
+    callq _new_nk_fiber_yield_to
+
+ENTRY(_new_nk_fiber_join_yield)
+    FIBER_SAVE_GPRS()
+    movq %rsp, %rdi
+    callq __new_nk_fiber_join_yield
+
 /*
 ENTRY(_nk_fiber_context_switch)
     // Saves GPRs without modifying %rsp
