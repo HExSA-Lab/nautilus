@@ -52,7 +52,7 @@ void fiber_inner(void *i, void **o)
   int a = 0;
   while(a < 10){
     nk_vc_printf("Fiber inner a = %d\n", a++);
-    nk_fiber_yield();
+    new_nk_fiber_yield();
   }
   nk_vc_printf("Fiber inner is finished, a = %d\n", a);
 }
@@ -68,7 +68,7 @@ void fiber_outer(void *i, void **o)
       nk_vc_printf("fiber_outer() : ERROR: Failed to start fiber. Routine not aborted.\n");
       return;
     }
-    nk_fiber_yield();
+    new_nk_fiber_yield();
   }
   nk_vc_printf("Fiber outer is finished, a = %d\n", a);
 }
@@ -79,7 +79,7 @@ void fiber_inner_join(void *i, void **o)
   int a = 0;
   while(a < 10){
     nk_vc_printf("Fiber inner a = %d\n", a++);
-    nk_fiber_yield();
+    new_nk_fiber_yield();
   }
   nk_vc_printf("Fiber inner is finished, a = %d\n", a);
 }
@@ -96,7 +96,7 @@ void fiber_outer_join(void *i, void **o)
       return;
     }
     nk_fiber_join(f_inner_join);
-    nk_fiber_yield();
+    new_nk_fiber_yield();
   }
   nk_vc_printf("Fiber outer is finished, a = %d\n", a);
 }
@@ -109,7 +109,7 @@ void fiber4(void *i, void **o)
   int a = 0;
   while(a < 10){
     nk_vc_printf("Fiber 4 a = %d\n", a++);
-    nk_fiber_yield();
+    new_nk_fiber_yield();
   }
   nk_vc_printf("Fiber 4 is finished, a = %d\n", a);
 }
@@ -121,7 +121,7 @@ void fiber3(void *i, void **o)
   int a = 0;
   while(a < 2){
     nk_vc_printf("Fiber 3 a = %d\n", a++);
-    nk_fiber_yield();
+    new_nk_fiber_yield();
   }
   nk_vc_printf("Fiber 3 is finished, a = %d\n", a);
   nk_fiber_t *f4;
@@ -136,7 +136,7 @@ void fiber1(void *i, void **o)
   int a = 0;
   while(a < 5){
     nk_vc_printf("Fiber 1 a = %d\n", a++);
-    nk_fiber_yield();
+    new_nk_fiber_yield();
   }
   nk_vc_printf("Fiber 1 is finished, a = %d\n", a);
   nk_fiber_t *f3;
@@ -152,7 +152,7 @@ void fiber2(void *i, void **o)
   int a = 0;
   while(a < 10){
     nk_vc_printf("Fiber 2 a = %d\n", a++);
-    nk_fiber_yield();
+    new_nk_fiber_yield();
   }
   nk_vc_printf("Fiber 2 is finished, a = %d\n", a);
   nk_fiber_t *f4;
@@ -166,7 +166,7 @@ void print_even(void *i, void **o){
   for (int i = 0; i < 10; ++i){
     if ((i % 2) == 0){
       nk_vc_printf("Fiber even, counter = %d\n", i);
-      nk_fiber_yield();
+      new_nk_fiber_yield();
     }
   }
   nk_vc_printf("Fiber even is finished\n");
@@ -179,7 +179,7 @@ void print_odd(void *i, void **o){
   for (int i = 0; i < 10; ++i){
     if ((i % 2) != 0){
       nk_vc_printf("Fiber odd, counter = %d\n", i);
-      nk_fiber_yield();
+      new_nk_fiber_yield();
     }
   }
   nk_vc_printf("Fiber odd is finished\n");
@@ -194,7 +194,7 @@ void fiber_first(void *i, void **o)
   nk_fiber_t *f_to = (nk_fiber_t*)i;
   while(a < 5){
     nk_vc_printf("Fiber_first() : a = %d and yielding to fiber_second = %p\n", a++, f_to);
-    nk_fiber_yield_to(f_to, 0);
+    new_nk_fiber_yield_to(f_to, 0);
   }
   nk_vc_printf("Fiber 1 is finished, a = %d\n", a);
 }
@@ -207,7 +207,7 @@ void fiber_second(void *i, void **o)
   nk_fiber_t *f_to = (nk_fiber_t*)i;
   while(a < 5){
     nk_vc_printf("Fiber_second() : a = %d and yielding to fiber_third = %p\n", a++, f_to);
-    nk_fiber_yield_to(f_to, 0);
+    new_nk_fiber_yield_to(f_to, 0);
   }
   nk_vc_printf("Fiber 2 is finished, a = %d\n", a);
 }
@@ -219,7 +219,7 @@ void fiber_third(void *i, void **o)
   nk_fiber_t *f_to = (nk_fiber_t*)i;
   while(a < 5){
     nk_vc_printf("fiber_third() : a = %d and yielding to fiber_fourth = %p\n", a++, f_to);
-    nk_fiber_yield_to(f_to, 0);
+    new_nk_fiber_yield_to(f_to, 0);
   }
   nk_vc_printf("fiber 3 is finished, a = %d\n", a);
 }
@@ -231,7 +231,7 @@ void fiber_fourth(void *i, void **o)
   nk_fiber_t *f_to = (nk_fiber_t*)i;
   while(a < 5){
     nk_vc_printf("fiber_fourth() : a = %d and yielding to fiber_first = %p\n", a++, f_to);
-    nk_fiber_yield_to(f_to, 0);
+    new_nk_fiber_yield_to(f_to, 0);
   }
   nk_vc_printf("fiber 4 is finished, a = %d\n", a);
 }
@@ -248,7 +248,7 @@ void fiber_fork(void *i, void **o)
   while(a < 5){
     nk_fiber_t *f_curr = nk_fiber_current();
     nk_vc_printf("fiber_fork() : This is iteration %d of fiber %p\n and curr_f is %p\n", a++, f_new, f_curr);
-    nk_fiber_yield();
+    new_nk_fiber_yield();
   }
   nk_vc_printf("fiber 4 is finished, a = %d\n", a);
 }
@@ -270,7 +270,7 @@ void fiber_fork_join(void *i, void **o)
   nk_fiber_t *f_curr = nk_fiber_current();
   while(a < 5){
     nk_vc_printf("fiber_fork_join() : This is iteration %d of fiber %p\n", a++, f_curr);
-    nk_fiber_yield();
+    new_nk_fiber_yield();
   }
   nk_vc_printf("fiber %p is finished, a = %d\n", f_curr, a);
 }
@@ -333,7 +333,7 @@ void first_timer(void *i, void **o)
     if (a == 2) {
         start = rdtsc();
     }
-    nk_fiber_yield();
+    new_nk_fiber_yield();
     a++;
   }
   end = rdtsc();
@@ -345,7 +345,7 @@ void second_timer(void *i, void **o)
   nk_fiber_set_vc(vc);
   int a = 0;
   while(a < N){
-    nk_fiber_yield();
+    new_nk_fiber_yield();
     a++;
   }
   nk_vc_printf("Second Timer is finished, a = %d\n", a);
@@ -381,6 +381,29 @@ void second_lower(void *i, void **o)
   nk_vc_printf("Second Timer is finished, a = %d\n", a);
 }
 
+void new_yield_1(void *i, void **o)
+{
+  nk_fiber_set_vc(vc);
+  int a = 0;
+  while (a < 5) {
+    nk_vc_printf("new_yield_1 switched to. Iteration %d.\n", a);
+    new_nk_fiber_yield();
+    a++;
+  }
+  nk_vc_printf("new_yield_1 finished.\n");
+}
+
+void new_yield_2(void *i, void **o)
+{
+  nk_fiber_set_vc(vc);
+  int a = 0;
+  while (a < 5) {
+    nk_vc_printf("new_yield_2 switched to. Iteration %d.\n", a);
+    new_nk_fiber_yield();
+    a++;
+  }
+  nk_vc_printf("new_yield_2 finished.\n");
+}
 
 
 /******************* Test Wrappers *******************/
@@ -563,6 +586,20 @@ int test_fiber_lower(){
   return 0;
 }
     
+int test_new_yield(){
+  nk_fiber_t *one;
+  nk_fiber_t *two;
+  vc = get_cur_thread()->vc;
+  if (nk_fiber_start(new_yield_1, 0, 0, 0, F_CURR_CPU, &one) < 0) {
+    nk_vc_printf("test_fibers_counter() : Fiber failed to start\n");
+    return -1;
+  } 
+  if (nk_fiber_start(new_yield_2, 0, 0, 0, F_CURR_CPU, &two) < 0) {
+    nk_vc_printf("test_fibers_counter() : Fiber failed to start\n");
+    return -1;
+  }
+  return 0;
+}
 
 
 /******************* Test Handlers *******************/
@@ -694,6 +731,13 @@ static int handle_fibers_all_1 (char *buf, void *priv)
   }
   return 0;
 }
+
+static int handle_fibers12 (char *buf, void *priv)
+{
+  test_new_yield();
+  return 0;
+}
+
   
 /******************* Shell Structs ********************/
 
@@ -781,6 +825,11 @@ static struct shell_cmd_impl fibers_impl_all_2 = {
   .handler  = handle_fibers_all_1,
 };
 
+static struct shell_cmd_impl fibers_impl_new_yield = {
+  .cmd      = "fiberyield",
+  .help_str = "test new yield function",
+  .handler  = handle_fibers12,
+};
 
 /******************* Shell Commands *******************/
 
@@ -798,3 +847,4 @@ nk_register_shell_cmd(fibers_impl11);
 nk_register_shell_cmd(fibers_impl_all);
 nk_register_shell_cmd(fibers_impl_all_1);
 nk_register_shell_cmd(fibers_impl_all_2);
+nk_register_shell_cmd(fibers_impl_new_yield);
