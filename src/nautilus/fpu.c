@@ -62,9 +62,19 @@
      f.val = ret.r; \
      f.feat; \
      })
+
+#define _INTEL_FPU_EXT_FEAT_QUERY(r, feat)  \
+    ({ \
+     cpuid_ret_t ret; \
+     struct cpuid_ext_feat_flags_e ## r ## x f; \
+     cpuid_sub(CPUID_EXT_FEATURE_INFO, CPUID_EXT_FEATURE_SUB_INFO, &ret); \
+     f.val = ret.r; \
+     f.feat; \
+     })
      
 #define FPU_ECX_FEAT_QUERY(feat) _INTEL_FPU_FEAT_QUERY(c, feat)
 #define FPU_EDX_FEAT_QUERY(feat) _INTEL_FPU_FEAT_QUERY(d, feat)
+#define FPU_EBX_EXT_FEAT_QUERY(feat) _INTEL_FPU_EXT_FEAT_QUERY(b, feat)
 
 #define AMD_FPU_ECX_FEAT_QUERY(feat) _AMD_FPU_FEAT_QUERY(c, feat)
 #define AMD_FPU_EDX_FEAT_QUERY(feat) _AMD_FPU_FEAT_QUERY(d, feat)
@@ -268,7 +278,6 @@ enable_sse (void)
     asm volatile ("ldmxcsr %[_m]" :: [_m] "m" (m) : "memory");
 }
 
-
 static uint8_t
 has_fma4 (void)
 {
@@ -300,6 +309,17 @@ has_avx (void)
     return FPU_ECX_FEAT_QUERY(avx);
 }
 
+static uint8_t
+has_avx2 (void)
+{
+    return FPU_EBX_EXT_FEAT_QUERY(avx2);
+}
+
+static uint8_t
+has_avx512f (void)
+{
+    return FPU_EBX_EXT_FEAT_QUERY(avx512f);
+}
 
 static uint8_t
 has_fxsr (void)
@@ -318,7 +338,7 @@ static uint32_t
 get_xsave_features (void)
 {
     cpuid_ret_t r;
-    cpuid_sub(0, 1, &r);
+    cpuid_sub(0x0d, 0, &r);
     return r.a;
 }
 
@@ -328,6 +348,16 @@ set_osxsave (void)
     ulong_t r = read_cr4();
     r |= CR4_OSXSAVE;
     write_cr4(r);
+}
+
+static void
+enable_xsave (void)
+{
+    /* Enables XSAVE features by reading CR4 and writing OSXSAVE bit */
+    set_osxsave();
+
+    /* XSAVE feature setup done later after we figure out support of AVX, AVX512f and SSE */
+     
 }
 
 static void 
@@ -358,6 +388,11 @@ fpu_init_common (struct naut_info * naut)
 {
     uint8_t x87_ready = 0;
     uint8_t sse_ready = 0;
+    uint8_t xsave_ready = 0;
+    uint8_t avx_ready = 0;
+    uint8_t avx2_ready = 0;
+    uint8_t avx512f_ready = 0;
+    uint32_t xsave_support = 0;
 
     if (has_x87()) {
         FPU_DEBUG("\t[x87]\n");
@@ -384,11 +419,29 @@ fpu_init_common (struct naut_info * naut)
         panic("No FXSAVE/RESTORE support. Thread switching will be broken\n");
     }
 
-    DEFAULT_FUN_CHECK(has_xsave, XSAVE/RESTORE)
+    if (has_xsave()) {
+        ++xsave_ready;
+        FPU_DEBUG("\t[XSAVE/RESTORE]\n");
+    }
+
+    if (has_avx()) {
+        ++avx_ready;
+        FPU_DEBUG("\t[AVX]\n");
+    }
+
+    if (has_avx2()) {
+        ++avx2_ready;
+        FPU_DEBUG("\t[AVX2]\n");
+    }
+
+    if (has_avx512f()) {
+        ++avx512f_ready;
+        FPU_DEBUG("\t[AVX512]\n");
+    }
+
     DEFAULT_FUN_CHECK(has_sse4d1, SSE4.1)
     DEFAULT_FUN_CHECK(has_sse4d2, SSE4.2)
     DEFAULT_FUN_CHECK(has_mmx, MMX)
-    DEFAULT_FUN_CHECK(has_avx, AVX)
 
     /* should we turn on x87? */
     if (x87_ready) {
@@ -396,11 +449,65 @@ fpu_init_common (struct naut_info * naut)
         enable_x87();
     }
 
+    /* does processor have xsave instructions? */
+    #ifdef NAUT_CONFIG_XSAVE
+    if (xsave_ready) {
+        FPU_DEBUG("\tInitializing XSAVE instructions\n");
+        enable_xsave();
+        xsave_support |= 0x1;
+    }
+    #endif
+
     /* did we meet SSE requirements? */
     if (sse_ready >= 3) {
         FPU_DEBUG("\tInitializing SSE extensions\n");
         enable_sse();
+        /* If we want XSAVE to save SSE registers, add it to bit mask */
+        #ifdef NAUT_CONFIG_SSE_SUPPORT
+        if (xsave_support >= 1) {
+            xsave_support |= 0x2;
+        }
+        #endif
     }
+
+    #ifdef NAUT_CONFIG_AVX_SUPPORT
+    /* Does processor have AVX registers? */
+    if (avx_ready) {
+        /* Can only enable XSAVE AVX support if processor has SSE support */
+        if (xsave_support >= 3) {
+            FPU_DEBUG("\tInitializing XSAVE AVX support\n");
+            xsave_support |= 0x4;
+        }
+    }
+    #endif
+
+    // MAC TODO: Find out if avx2 "enable" is necessary
+    
+    /* Does processor have AVX2 registers? */
+    if (avx2_ready) {
+        FPU_DEBUG("\tInitializing AVX2 support\n");
+    }
+
+    #ifdef NAUT_CONFIG_AVX512F_SUPPORT
+    // Does processor have AVX512f registers?
+    if (avx512f_ready) {
+        /* Can only enable AVX512f if processor has SSE and AVX support */
+        if (xsave_support >= 7 && avx_ready) {
+            FPU_DEBUG("\tInitializing AVX512f support\n");
+            xsave_support |= 0xe0;
+        }
+    }
+    #endif
+    
+    #ifdef NAUT_CONFIG_XSAVE
+    /* Configure XSAVE Support */
+    if(xsave_ready) {
+    xsave_support &= get_xsave_features();
+    asm volatile ("xor %%rcx, %%rcx ;"
+                "xsetbv ;"
+                 : : "a"(xsave_support) : "rcx", "memory");
+    }
+    #endif
 }
 
 /* 

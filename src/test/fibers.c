@@ -163,10 +163,11 @@ void fiber2(void *i, void **o)
 
 void print_even(void *i, void **o){
   nk_fiber_set_vc(vc);
+  int j = 0;
   for (int i = 0; i < 10; ++i){
     if ((i % 2) == 0){
-      nk_vc_printf("Fiber even, counter = %d\n", i);
-      new_nk_fiber_yield();
+      nk_vc_printf("Fiber even, counter = %d and j = %d\n", i, j);
+      j = new_nk_fiber_yield();
     }
   }
   nk_vc_printf("Fiber even is finished\n");
@@ -571,9 +572,18 @@ int test_fiber_timing(){
   nk_fiber_t *first;
   nk_fiber_t *second;
   vc = get_cur_thread()->vc;
+  nk_vc_printf("test_fiber_timing() : virtual console %p\n", vc);
+  if (nk_fiber_create(first_timer, 0, 0, 0, &first)) {
+    nk_vc_printf("test_fiber_timing() : Failed to start fiber\n");
+    return -1;
+  }
+  if (nk_fiber_create(second_timer, 0, 0, 0, &second)) {
+    nk_vc_printf("test_fiber_timing() : Failed to start fiber\n");
+    return  -1;
+  }
   // NO ERROR CHECKING (SO TIMING RESULTS ARE NOT SKEWED) 
-  nk_fiber_start(first_timer, 0, 0, 0, F_RAND_CPU, &first);
-  nk_fiber_start(second_timer, 0, 0, 0, F_RAND_CPU, &second);
+  nk_fiber_run(first, F_CURR_CPU);
+  nk_fiber_run(second, F_CURR_CPU);
   return 0;
 }
 

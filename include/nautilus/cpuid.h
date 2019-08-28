@@ -32,11 +32,13 @@ uint8_t cpuid_get_model(void);
 uint8_t cpuid_get_step(void);
 void detect_cpu(void);
 
-#define CPUID_BASIC_INFO         0x0
-#define CPUID_FEATURE_INFO       0x1
-#define CPUID_AMD_BASIC_INFO     0x80000000
-#define CPUID_AMD_FEATURE_INFO   0x80000001
-#define CPUID_AMD_EXT_INFO       0x80000008
+#define CPUID_BASIC_INFO            0x0
+#define CPUID_FEATURE_INFO          0x1
+#define CPUID_EXT_FEATURE_INFO      0x7
+#define CPUID_EXT_FEATURE_SUB_INFO  0x7
+#define CPUID_AMD_BASIC_INFO        0x80000000
+#define CPUID_AMD_FEATURE_INFO      0x80000001
+#define CPUID_AMD_EXT_INFO          0x80000008
 
 #define CPUID_GET_BASE_FAM(x)   (((x) >> 8) & 0xfu)
 #define CPUID_GET_BASE_MOD(x)   (((x) >> 4) & 0xfu)
@@ -228,23 +230,44 @@ struct cpuid_amd_edx_flags {
 } __packed;
 
 
+/* Structured Extended Feature Flags Main Enumeration Leaf */
+/* Last updated: 2019-08-28 according to Intel Arch. Instruction Set Extensions Programming Reference pg. 2-16*/
 struct cpuid_ext_feat_flags_ebx {
     union {
         uint32_t val;
         struct {
-            uint8_t fsgsbase            : 1;
-            uint8_t rsvd0               : 2;
-            uint8_t bmi1                : 1;
-            uint8_t hle                 : 1;
-            uint8_t avx2                : 1;
-            uint8_t smep                : 1; 
-            uint8_t rsvd1               : 1;
-            uint8_t bmi2                : 1;
-            uint8_t erms                : 1;
-            uint8_t invpcid             : 1;
-            uint8_t rtm                 : 1;
-            uint8_t rsvd2               : 4;
-            uint16_t rsvd3;
+            uint8_t fsgsbase            : 1; /* Access to base of %fs and %gs */
+            uint8_t ia32_tsc_adjust     : 1; 
+            uint8_t sgx                 : 1; /* software guard extensions */
+            uint8_t bmi1                : 1; /* bit manipulation instruction set 1 */
+            uint8_t hle                 : 1; /* transactional synchronization extensions */
+            uint8_t avx2                : 1; /* advanced vector extensions 2 */
+            uint8_t rsvd1               : 1; /* reserved */
+            uint8_t smep                : 1; /* supervisor mode execution protection */
+            uint8_t bmi2                : 1; /* bit manipulation instruction set 2 */
+            uint8_t erms                : 1; /* enhanced REP MOVSB/STOSB */
+            uint8_t invpcid             : 1; /* INVPCID instruction */
+            uint8_t rtm                 : 1; /* transactional synchronization extensions */
+            uint8_t pqm                 : 1; /* Platform quality of service monitoring */
+            uint8_t deprecate_fpu       : 1; /*deprecates FPU CS and FPU DS values */
+            uint8_t intel_mem_prot_ext  : 1; /* memory protection extensions */
+            uint8_t pqe                 : 1; /* platform quality of service enforcement */
+            uint8_t avx512f             : 1; /* AVX512 Foundation (core extension) */
+            uint8_t avx512dq            : 1; /* AVX512 Doubleword and Quadword Extensions */
+            uint8_t rdseed              : 1; /* RDSEED instruction */
+            uint8_t adx                 : 1; /* ADX (multi-precision add-carry instruction extensions */
+            uint8_t smap                : 1; /* Supervisor mode access prevention */
+            uint8_t avx512ifma          : 1; /* AVX512 Integer fused multiply-add instructions */
+            uint8_t pcommit             : 1; /* PCOMMIT instruction */
+            uint8_t clflushopt          : 1; /* CLFLUSHOPT instruction */
+            uint8_t clwb                : 1; /* CLWB Instruction */
+            uint8_t ipt                 : 1; /* intel processor trace */
+            uint8_t avx512pf            : 1; /* AVX512 Prefetch Instructions */
+            uint8_t avx512er            : 1; /* AVX512 Exponential and Reciprocal Instructions */
+            uint8_t avx512cd            : 1; /* AVX512 Conflict Detection Instructions */
+            uint8_t sha                 : 1; /* Intel SHA extensions */
+            uint8_t avx512bw            : 1; /* AVX512 Byte and Word Instructions */
+            uint8_t avx512vl            : 1; /* AVX512 Vector Length Extensions */
         } __packed;
     } __packed;
 } __packed;
