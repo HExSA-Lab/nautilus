@@ -46,11 +46,19 @@ typedef struct nk_thread nk_thread_t;
 #define F_CURR_CPU -1
 #define YIELD_TO_EARLY_RET 1
 
-/* common thread stack sizes */
+/* common fiber stack sizes */
 #define FSTACK_DEFAULT 0 // will be 4K
 #define FSTACK_4KB 0x001000
+#define FSTACK_16KB 0x004000
 #define FSTACK_1MB 0x100000
 #define FSTACK_2MB 0x200000
+
+/* Register save size */
+#if NAUT_CONFIG_FIBER_FSAVE
+#define FIBER_FPR_SAVE_SIZE 0x1000
+#else
+#define FIBER_FPR_SAVE_SIZE 0x0
+#endif
 
 /********** EXTERNAL INTERFACE **********/
 
@@ -69,7 +77,7 @@ typedef enum {  INIT,               // Being initialized
 typedef struct nk_fiber {
   uint64_t rsp;                /* +0  SHOULD NOT CHANGE POSITION */
   void *stack;                 /* +8  SHOULD NOT CHANGE POSITION */
-  uint16_t fpu_state_offset;   /* +16 SHOULD NOT CHANGE POSITION */
+  uint64_t fpu_state_offset;   /* +16 SHOULD NOT CHANGE POSITION */
   
   nk_stack_size_t stack_size;
     
@@ -168,9 +176,9 @@ void nk_fiber_startup();
 
 /******* Experimental Yield *******/
 
-void new_nk_fiber_yield();
+int new_nk_fiber_yield();
 
-void new_nk_fiber_yield_to(nk_fiber_t* f_to, int earlyRetFlag);
+int new_nk_fiber_yield_to(nk_fiber_t* f_to, int earlyRetFlag);
 
 /********** WRAPPER NK FIBER YIELD **********/
 
@@ -183,22 +191,22 @@ void print_data();
 
 
 #define FIBER_SAVE_GPRS() \
-    movq %rax, -8(%rsp); \
-    movq %rbx, -16(%rsp); \
-    movq %rcx, -24(%rsp); \
-    movq %rdx, -32(%rsp); \
-    movq %rsi, -40(%rsp); \
-    movq %rdi, -48(%rsp); \
-    movq %rbp, -56(%rsp); \
-    movq %r8,  -64(%rsp); \
-    movq %r9,  -72(%rsp); \
-    movq %r10, -80(%rsp); \
-    movq %r11, -88(%rsp); \
-    movq %r12, -96(%rsp); \
-    movq %r13, -104(%rsp); \
-    movq %r14, -112(%rsp); \
-    movq %r15, -120(%rsp); \
-    subq $120, %rsp; 
+    subq $120, %rsp;    \
+    movq %rax, 112(%rsp); \
+    movq %rbx, 104(%rsp); \
+    movq %rcx, 96(%rsp); \
+    movq %rdx, 88(%rsp); \
+    movq %rsi, 80(%rsp); \
+    movq %rdi, 72(%rsp); \
+    movq %rbp, 64(%rsp); \
+    movq %r8,  56(%rsp); \
+    movq %r9,  48(%rsp); \
+    movq %r10, 40(%rsp); \
+    movq %r11, 32(%rsp); \
+    movq %r12, 24(%rsp); \
+    movq %r13, 16(%rsp); \
+    movq %r14, 8(%rsp); \
+    movq %r15, 0(%rsp); \
 
 #define FIBER_RESTORE_GPRS() \
     movq (%rsp), %r15; \
@@ -218,6 +226,19 @@ void print_data();
     movq 112(%rsp), %rax; \
     addq $120, %rsp;
 
+/* Only restores callee saved registers since yield did not occur*/
+#define FIBER_RESTORE_GPRS_EARLY() \
+    movq (%rsp), %r15; \
+    movq 8(%rsp), %r14; \
+    movq 16(%rsp), %r13; \
+    movq 24(%rsp), %r12; \
+    movq 64(%rsp), %rbp; \
+    movq 72(%rsp), %rdi; \
+    movq 80(%rsp), %rsi; \
+    movq 104(%rsp), %rbx; \
+    movq 112(%rsp), %rax; \
+    addq $120, %rsp;
+
 #define FIBER_RESTORE_GPRS_NOT_RAX() \
     movq (%rsp), %r15; \
     movq 8(%rsp), %r14; \
@@ -233,7 +254,7 @@ void print_data();
     movq 88(%rsp), %rdx; \
     movq 96(%rsp), %rcx; \
     movq 104(%rsp), %rbx; \
-    addq $120, %rsp; 
+    addq $120, %rsp;
 
 /******* Experimental way to context switch *******/
 
