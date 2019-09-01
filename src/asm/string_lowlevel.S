@@ -48,3 +48,4 @@ memcpy_loop:
 memcpy_out:
 	popq %rax
 	rep ; retq
+

@@ -319,7 +319,7 @@ default_init (unsigned long mbd,
     nk_low_level_memset(naut, 0, sizeof(struct naut_info));
 
     fpu_init(naut, FPU_BSP_INIT);
-
+ 
     // Now we are safe to use optimized code that relies
     // on SSE
     
