@@ -203,6 +203,7 @@ char * strtok(char *s, const char *delim);
 // integer code is used regardless of the compiler's feelings
 void *nk_low_level_memset(void *dest, char data, size_t count);
 void *nk_low_level_memset_word(void *dest, short data, size_t count);
+void *nk_low_level_memcpy(void *dest, char *src, size_t count);
 
 			  
 #ifdef __cplusplus

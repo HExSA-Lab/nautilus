@@ -30,3 +30,21 @@ memset_word_out:
 	rep ; retq
 	
 
+/*
+	rax = nk_low_level_memcpy(rdi=dest, rsi=src, rdx=count)
+*/
+.global nk_low_level_memcpy
+nk_low_level_memcpy:
+	push %rdi  // keep for later return
+	testq %rdx, %rdx
+	jz memcpy_out			
+memcpy_loop:
+	movb (%rsi), %al
+	movb %al, (%rdi)
+	incq %rdi
+	incq %rsi
+	decq %rdx
+	jnz memcpy_loop
+memcpy_out:
+	popq %rax
+	rep ; retq
