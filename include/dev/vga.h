@@ -69,10 +69,7 @@ static inline void vga_write_screen(uint8_t x, uint8_t y, uint16_t val)
 
 static inline void vga_clear_screen(uint16_t val)
 {
-  int i;
-  for (i=0;i<VGA_WIDTH*VGA_HEIGHT;i++) { 
-    *(((uint16_t *)VGA_BASE_ADDR)+i) = val;
-  }
+  nk_low_level_memset_word((void*)VGA_BASE_ADDR,val,VGA_WIDTH*VGA_HEIGHT*2);
 }
 
 void vga_scrollup(void);
@@ -82,12 +79,12 @@ void vga_puts(char *buf);
 
 static inline void vga_copy_out(void *dest, uint32_t n)
 {
-  memcpy((void *)dest,(void*)VGA_BASE_ADDR,n);
+  nk_low_level_memcpy((void *)dest,(void*)VGA_BASE_ADDR,n);
 }
 
 static inline void vga_copy_in(void *src, uint32_t n)
 {
-  memcpy((void*)VGA_BASE_ADDR, src, n);
+  nk_low_level_memcpy((void*)VGA_BASE_ADDR, src, n);
 }
 
 
