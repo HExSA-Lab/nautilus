@@ -98,6 +98,9 @@ typedef enum {
     NK_FUTURE_WAIT_BLOCK
 } nk_future_wait_t;
 
+// user should just call nk_future_wait (below)
+int nk_future_wait_block(nk_future_t *f, void **result);
+
 static inline int nk_future_wait(nk_future_t *f, nk_future_wait_t wtype, void **result)
 {
     if (wtype==NK_FUTURE_WAIT_SPIN) {
@@ -109,7 +112,6 @@ static inline int nk_future_wait(nk_future_t *f, nk_future_wait_t wtype, void **
 	FU_DEBUG("spinning wait on %p done rc = %d result = %p\n",f, rc, *result);
 	return rc ? -1 : 0;
     } else {
-	int nk_future_wait_block(nk_future_t *f, void **result);
 	return nk_future_wait_block(f,result);
     }
 }
