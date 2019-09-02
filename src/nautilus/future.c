@@ -47,7 +47,7 @@ static nk_future_t * _nk_future_alloc()
 {
     char buf[NK_WAIT_QUEUE_NAME_LEN];
 
-    snprintf(buf,NK_WAIT_QUEUE_NAME_LEN,"future%d",future_num++);
+    snprintf(buf,NK_WAIT_QUEUE_NAME_LEN,"future%lu",future_num++);
 
     FU_DEBUG("base alloc wq name %s\n",buf);
     
