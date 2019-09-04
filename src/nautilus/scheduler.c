@@ -53,7 +53,6 @@
 #include <nautilus/thread.h>
 #include <nautilus/waitqueue.h>
 #include <nautilus/task.h>
-#include <nautilus/fiber.h>
 #include <nautilus/timer.h>
 #include <nautilus/scheduler.h>
 #include <nautilus/irq.h>
@@ -1882,7 +1881,7 @@ static inline void set_interrupt_priority(rt_thread *t)
 #endif
 }
 
-#if STACK_CHECKS || defined(NAUT_CONFIG_ENABLE_STACK_CHECK)	
+#if defined(STACK_CHECKS) || defined(NAUT_CONFIG_ENABLE_STACK_CHECK)	
 #define stack_check(rt,p)						\
 {									\
     struct nk_thread *t = rt->thread;					\
@@ -3097,7 +3096,7 @@ static void handle_special_switch(rt_status what, int have_lock, uint8_t flags, 
     // when we switch away, we will leave rflags.if=0 on
     // the stack and preemption enabled
     nk_thread_switch(n);
-
+    
     DEBUG("After return from switch (back in %llu \"%s\")\n", c->tid, c->name);
 
  out_good:
