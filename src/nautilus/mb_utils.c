@@ -136,7 +136,6 @@ multiboot_get_modules_end (ulong_t mbd)
 
     while (tag->type != MULTIBOOT_TAG_TYPE_END) {
 
-        tag = (struct multiboot_tag*)((multiboot_uint8_t*)tag + ((tag->size+7)&~7));
 
         if (tag->type == MULTIBOOT_TAG_TYPE_MODULE) {
 
@@ -146,6 +145,9 @@ multiboot_get_modules_end (ulong_t mbd)
                 DEBUG_PRINT("Increasing kern end to %p\n", (void*)addr);
             }
         }
+
+        tag = (struct multiboot_tag*)((multiboot_uint8_t*)tag + ((tag->size+7)&~7));
+	
     }
 
     return addr;
