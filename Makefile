@@ -349,12 +349,15 @@ COMMON_FLAGS :=-fno-omit-frame-pointer \
 			   -fno-strict-aliasing \
                            -fno-strict-overflow \
 			   -mno-red-zone \
-			   -mcmodel=large 
+			   -mcmodel=large
 
 
 
 ifdef NAUT_CONFIG_USE_GCC
-  COMMON_FLAGS += -O2  -fno-delete-null-pointer-checks
+  COMMON_FLAGS += -O2  -fno-delete-null-pointer-checks  \
+                       -no-pie -fno-pic -fno-PIC -fno-PIE
+# recent versions of gcc (6+) have position independence
+# as a default, and this breaks us
 endif
 
 ifdef NAUT_CONFIG_USE_CLANG
