@@ -40,6 +40,10 @@
 #include <dev/ioapic.h>
 #include <dev/apic.h>
 
+#ifdef NAUT_CONFIG_FIBER_ENABLE
+#include <nautilus/fiber.h>
+#endif
+
 #ifdef NAUT_CONFIG_ENABLE_REMOTE_DEBUGGING 
 #include <nautilus/gdb-stub.h>
 #endif
@@ -338,7 +342,7 @@ smp_ap_setup (struct cpu * core)
         return -1;
     }
 
-#ifdef NAUT_CONFIG_FIBER_THREAD
+#ifdef NAUT_CONFIG_FIBER_ENABLE
     if (nk_fiber_init_ap() != 0) {
         ERROR_PRINT("Could not setup fiber thread for core %u\n", core->id);
         return -1;
@@ -376,7 +380,7 @@ smp_ap_finish (struct cpu * core)
 
     nk_sched_start();
 
-#ifdef NAUT_CONFIG_FIBER_THREAD
+#ifdef NAUT_CONFIG_FIBER_ENABLE
     nk_fiber_startup();
 #endif
 

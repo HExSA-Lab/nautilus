@@ -40,8 +40,6 @@ extern "C" {
 typedef uint64_t nk_stack_size_t;
     
 #include <nautilus/scheduler.h>
-#include <nautilus/queue.h>
-#include <nautilus/fiber.h>
 
 #define CPU_ANY       -1
 
@@ -162,18 +160,17 @@ int nk_tls_set(nk_tls_key_t key, const void * val);
 #define TLS_KEY_USABLE(x) ((unsigned long)(x) < (unsigned long)((x)+2))
 
 
-/* thread status */ 
+/* thread status */
 typedef enum {
-    NK_THR_INIT=0, 
+    NK_THR_INIT=0,
     NK_THR_RUNNING, 
-    NK_THR_WAITING, 
+    NK_THR_WAITING,
     NK_THR_SUSPENDED, 
-    NK_THR_EXITED, 
+    NK_THR_EXITED,
 } nk_thread_status_t;
 
 
 typedef struct nk_wait_queue nk_wait_queue_t;
-typedef struct nk_queue nk_queue_t;
 
 struct nk_thread {
     uint64_t rsp;                /* +0  SHOULD NOT CHANGE POSITION */

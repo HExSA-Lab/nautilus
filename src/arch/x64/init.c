@@ -448,7 +448,7 @@ init (unsigned long mbd,
 
     nk_sched_start();
     
-#ifdef NAUT_CONFIG_FIBER_THREAD
+#ifdef NAUT_CONFIG_FIBER_ENABLE
     nk_fiber_init();
     nk_fiber_startup();
 #endif

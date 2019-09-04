@@ -450,10 +450,11 @@ fpu_init_common (struct naut_info * naut)
     }
 
     /* does processor have xsave instructions? */
-    #ifdef NAUT_CONFIG_XSAVE
+    #ifdef NAUT_CONFIG_XSAVE_SUPPORT
     if (xsave_ready) {
         FPU_DEBUG("\tInitializing XSAVE instructions\n");
         enable_xsave();
+        /* x87 support is non-optional if xsave enabled */
         xsave_support |= 0x1;
     }
     #endif
@@ -463,14 +464,14 @@ fpu_init_common (struct naut_info * naut)
         FPU_DEBUG("\tInitializing SSE extensions\n");
         enable_sse();
         /* If we want XSAVE to save SSE registers, add it to bit mask */
-        #ifdef NAUT_CONFIG_SSE_SUPPORT
+        #ifdef NAUT_CONFIG_XSAVE_SSE_SUPPORT
         if (xsave_support >= 1) {
             xsave_support |= 0x2;
         }
         #endif
     }
 
-    #ifdef NAUT_CONFIG_AVX_SUPPORT
+    #ifdef NAUT_CONFIG_XSAVE_AVX_SUPPORT
     /* Does processor have AVX registers? */
     if (avx_ready) {
         /* Can only enable XSAVE AVX support if processor has SSE support */
@@ -481,31 +482,30 @@ fpu_init_common (struct naut_info * naut)
     }
     #endif
 
-    // MAC TODO: Find out if avx2 "enable" is necessary
-    
     /* Does processor have AVX2 registers? */
     if (avx2_ready) {
         FPU_DEBUG("\tInitializing AVX2 support\n");
     }
 
-    #ifdef NAUT_CONFIG_AVX512F_SUPPORT
+    #ifdef NAUT_CONFIG_XSAVE_AVX512F_SUPPORT
     // Does processor have AVX512f registers?
     if (avx512f_ready) {
         /* Can only enable AVX512f if processor has SSE and AVX support */
         if (xsave_support >= 7 && avx_ready) {
             FPU_DEBUG("\tInitializing AVX512f support\n");
+            /* Bits correspond to AVX512 opmasks, top half of lower ZMM regs, and upper ZMM regs */
             xsave_support |= 0xe0;
         }
     }
     #endif
     
-    #ifdef NAUT_CONFIG_XSAVE
+    #ifdef NAUT_CONFIG_XSAVE_SUPPORT
     /* Configure XSAVE Support */
-    if(xsave_ready) {
-    xsave_support &= get_xsave_features();
-    asm volatile ("xor %%rcx, %%rcx ;"
-                "xsetbv ;"
-                 : : "a"(xsave_support) : "rcx", "memory");
+    if (xsave_ready) {
+        xsave_support &= get_xsave_features();
+        asm volatile ("xor %%rcx, %%rcx ;"
+                      "xsetbv ;"
+                      : : "a"(xsave_support) : "rcx", "memory");
     }
     #endif
 }

@@ -85,7 +85,7 @@ struct cpu {
     uint64_t interrupt_count;                  /* +16 PAD: DO NOT MOVE */
     uint64_t exception_count;                  /* +24 PAD: DO NOT MOVE */
 
-    #if NAUT_CONFIG_FIBER_THREAD
+    #if NAUT_CONFIG_FIBER_ENABLE
     struct nk_fiber_percpu_state *f_state; /* Fiber state for each CPU */
     #endif
 

@@ -59,7 +59,7 @@ static unsigned long next_tid = 0;
 
 extern addr_t boot_stack_start;
 extern void nk_thread_switch(nk_thread_t*);
-extern void nk_thread_entry(void *); 
+extern void nk_thread_entry(void *);
 static struct nk_tls tls_keys[TLS_MAX_KEYS];
 
 
@@ -245,7 +245,7 @@ thread_setup_init_stack (nk_thread_t * t, nk_thread_fun_t fun, void * arg)
      * in _thread_fork(). There is no function!
      */
     if (fun) {
-        thread_push(t, (uint64_t)&thread_cleanup); 
+        thread_push(t, (uint64_t)&thread_cleanup);
         thread_push(t, (uint64_t)fun);
     }
 
@@ -764,6 +764,9 @@ nk_join (nk_thread_id_t t, void ** retval)
     return 0;
 }
     
+
+
+
 
 /* 
  * nk_join_all_children

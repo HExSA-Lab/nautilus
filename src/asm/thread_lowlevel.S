@@ -63,7 +63,7 @@ ENTRY(nk_thread_switch)
     pushq $0             /* push fake intr number */
 
     SAVE_GPRS()
- 
+
     incw %gs:8           // increment interrupt nesting level
 	                 // pretend we are doing an interrupt-driven switch
 	                 // to make the sums work out
@@ -211,7 +211,7 @@ ENTRY(nk_thread_entry)
 #endif
 
     sti
-    retq 
+    retq
 
 #ifdef NAUT_CONFIG_ENABLE_STACK_CHECK
 bad:
