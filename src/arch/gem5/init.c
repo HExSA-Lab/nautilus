@@ -295,19 +295,17 @@ init (unsigned long mbd,
     
     nk_low_level_memset(naut, 0, sizeof(struct naut_info));
 
+    //no vga
+    //vga_early_init();
+
     fpu_init(naut, FPU_BSP_INIT);
 
     // Now we are safe to use optimized code that relies
     // on SSE
 
-
-    //no vga
-    //vga_early_init();
-
     spinlock_init(&printk_lock);
 
     setup_idt();
-
 
     nk_int_init(&(naut->sys));
 

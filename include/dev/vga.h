@@ -64,12 +64,13 @@ void     vga_init_screen();
 
 static inline void vga_write_screen(uint8_t x, uint8_t y, uint16_t val)
 {
-  *(((uint16_t *)VGA_BASE_ADDR)+y*VGA_WIDTH+x) = val;
+    uint16_t *addr = ((uint16_t *)VGA_BASE_ADDR)+y*VGA_WIDTH+x;
+    __asm__ __volatile__ (" movw %0, (%1) " : : "r"(val),"r"(addr) : );
 }
 
 static inline void vga_clear_screen(uint16_t val)
 {
-  nk_low_level_memset_word((void*)VGA_BASE_ADDR,val,VGA_WIDTH*VGA_HEIGHT*2);
+  nk_low_level_memset_word((void*)VGA_BASE_ADDR,val,VGA_WIDTH*VGA_HEIGHT);
 }
 
 void vga_scrollup(void);
