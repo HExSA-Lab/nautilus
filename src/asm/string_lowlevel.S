@@ -48,3 +48,20 @@ memcpy_loop:
 memcpy_out:
 	popq %rax
 	rep ; retq
+
+.global nk_low_level_memcpy_word
+nk_low_level_memcpy_word:
+	push %rdi  // keep for later return
+	testq %rdx, %rdx
+	jz memcpy_out_word			
+memcpy_loop_word:
+	movw (%rsi), %ax
+	movw %ax, (%rdi)
+	addq $2,%rdi
+	addq $2,%rsi
+	decq %rdx
+	jnz memcpy_loop_word
+memcpy_out_word:
+	popq %rax
+	rep ; retq
+	

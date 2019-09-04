@@ -281,12 +281,14 @@ init (unsigned long mbd,
     
     nk_low_level_memset(naut, 0, sizeof(struct naut_info));
 
+    vga_early_init();
+
+    // At this point we have VGA output only
+    
     fpu_init(naut, FPU_BSP_INIT);
 
     // Now we are safe to use optimized code that relies
     // on SSE
-
-    vga_early_init();
 
     spinlock_init(&printk_lock);
 
@@ -313,7 +315,6 @@ init (unsigned long mbd,
     nk_char_dev_init();
     nk_block_dev_init();
     nk_net_dev_init();
-
 
     nk_vc_print(NAUT_WELCOME);
     

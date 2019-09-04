@@ -138,20 +138,11 @@ void vga_init()
 
 void vga_scrollup (void) 
 {
-  int i;
   uint16_t *buf = (uint16_t*) VGA_BASE_ADDR;
 
-  for (i=0;
-       i<VGA_WIDTH*(VGA_HEIGHT-1);
-       i++) {
-    buf[i] = buf[i+VGA_WIDTH];
-  }
+  nk_low_level_memcpy_word(buf,buf+VGA_WIDTH,VGA_WIDTH*(VGA_HEIGHT-1));
 
-  for (i = VGA_WIDTH*(VGA_HEIGHT-1);
-       i < VGA_WIDTH*VGA_HEIGHT; 
-       i++) {
-    buf[i] = vga_make_entry(' ', vga_attr);
-  }
+  nk_low_level_memset_word(buf+VGA_WIDTH*(VGA_HEIGHT-1),vga_make_entry(' ', vga_attr),VGA_WIDTH);
  
 }
 

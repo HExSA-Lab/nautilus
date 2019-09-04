@@ -201,9 +201,11 @@ char * strtok(char *s, const char *delim);
 // low level assembly versions for use early in the boot process
 // or elsewhere where we want to guarantee that only generic 64 bit
 // integer code is used regardless of the compiler's feelings
+// word versions assume count in *words*, etc
 void *nk_low_level_memset(void *dest, char data, size_t count);
 void *nk_low_level_memset_word(void *dest, short data, size_t count);
 void *nk_low_level_memcpy(void *dest, char *src, size_t count);
+void *nk_low_level_memcpy_word(void *dest, short *src, size_t count);
 
 			  
 #ifdef __cplusplus
