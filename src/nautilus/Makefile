@@ -70,4 +70,4 @@ obj-$(NAUT_CONFIG_ENABLE_REMOTE_DEBUGGING) += gdb-stub.o
 
 obj-$(NAUT_CONFIG_CACHEPART) +=	cachepart.o
 
-obj-$(NAUT_CONFIG_FIBER_THREAD) += fiber.o
+obj-$(NAUT_CONFIG_FIBER_ENABLE) += fiber.o
