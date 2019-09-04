@@ -473,6 +473,12 @@ int nk_thread_run(nk_thread_id_t t)
 
   THREAD_DEBUG("Run thread initialized: %p (tid=%lu) stack=%p size=%lu rsp=%p\n",newthread,newthread->tid,newthread->stack,newthread->stack_size,newthread->rsp);
 
+#ifdef NAUT_CONFIG_FPU_SAVE
+    // clone the floating point state
+    extern void nk_fp_save(void *dest);
+    nk_fp_save(newthread->fpu_state);
+#endif
+
   if (nk_sched_make_runnable(newthread, newthread->current_cpu,1)) { 
       THREAD_ERROR("Scheduler failed to run thread (%p, tid=%u) on cpu %u\n",
 		  newthread, newthread->tid, newthread->current_cpu);
