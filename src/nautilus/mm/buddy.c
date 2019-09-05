@@ -349,7 +349,10 @@ buddy_free(
 {
     ASSERT(mp);
     ASSERT(order <= mp->pool_order);
-    ASSERT(!((uint64_t)addr % (1ULL<<order)));  // aligned to own size only
+    ASSERT(// cannot be aligned to own size if pool start is not multiple of alignment
+	   (mp->base_addr && (order > __builtin_ctzl(mp->base_addr)))
+	   // otherwise must be aligned to own size
+	   || !((uint64_t)addr % (1ULL<<order)));
 
     BUDDY_DEBUG("BUDDY FREE on memory pool: %p addr=%p base=%p order=%lu\n",mp,addr,mp->base_addr, order);
 
