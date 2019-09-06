@@ -32,6 +32,7 @@
 #include <nautilus/smp.h>
 #include <nautilus/irq.h>
 #include <nautilus/thread.h>
+#include <nautilus/fiber.h>
 #include <nautilus/waitqueue.h>
 #include <nautilus/task.h>
 #include <nautilus/future.h>
@@ -230,6 +231,11 @@ init (unsigned long mbd, unsigned long magic)
 #endif 
 
     nk_sched_start();
+
+#ifdef NAUT_CONFIG_FIBER_ENABLE
+    nk_fiber_init();
+    nk_fiber_startup();
+#endif
 
     sti();
 

@@ -500,7 +500,6 @@ config VIRTUAL_CONSOLE_SERIAL_MIRROR_ALL
 
     config FIBER_ENABLE
         bool "Enable fibers in the kernel"
-        select ENABLE_STACK_CHECK
         default true
 	    help
 	      Enables fibers in the kernel. Each cpu has a thread that consumes fibers.
@@ -864,10 +863,13 @@ menu Debugging
     config ENABLE_STACK_CHECK
     bool "Enable Runtime Stack Overrun Checking"
     default n
+    depends on !FIBER_ENABLE
     help
       This checks the stack pointer on every thread switch to
       make sure that a thread hasn't overrun its allocated 
-      stack
+      stack.   Note that enabling fibers must disable
+      this debugging feature, since fibers context switch
+      stacks within a thread
 
    config ENABLE_REMOTE_DEBUGGING
     depends on !HVM_HRT

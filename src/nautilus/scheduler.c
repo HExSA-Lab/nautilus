@@ -1881,7 +1881,7 @@ static inline void set_interrupt_priority(rt_thread *t)
 #endif
 }
 
-#if defined(STACK_CHECKS) || defined(NAUT_CONFIG_ENABLE_STACK_CHECK)	
+#if STACK_CHECKS || defined(NAUT_CONFIG_ENABLE_STACK_CHECK)	
 #define stack_check(rt,p)						\
 {									\
     struct nk_thread *t = rt->thread;					\
