@@ -363,8 +363,12 @@ COMMON_FLAGS :=-fno-omit-frame-pointer \
 
 
 ifdef NAUT_CONFIG_USE_GCC
-  COMMON_FLAGS += -O2  -fno-delete-null-pointer-checks  \
-                       -no-pie -fno-pic -fno-PIC -fno-PIE
+  COMMON_FLAGS += -O2  -fno-delete-null-pointer-checks
+  GCCVERSIONGTE6 := $(shell expr `$(CC) -dumpversion | cut -f1 -d.` \>= 6)
+  ifeq "$(GCCVERSIONGTE6)" "1"
+    COMMON_FLAGS += -no-pie -fno-pic -fno-PIC -fno-PIE
+  endif
+
 # recent versions of gcc (6+) have position independence
 # as a default, and this breaks us
 endif
