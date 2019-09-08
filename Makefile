@@ -8,7 +8,8 @@ NAME=Nautilus
 ISO_NAME:=nautilus.iso
 BIN_NAME:=nautilus.bin
 SYM_NAME:=nautilus.syms
-
+BC_NAME:=nautilus.bc
+LL_NAME:=nautilus.ll
 
 
 
@@ -314,6 +315,7 @@ CPPFLAGS        := $(NAUT_INCLUDE) -D__NAUTILUS__
 ifeq (,$(wildcard .config))
    NAUT_CONFIG_USE_GCC=1
    NAUT_CONFIG_USE_CLANG=0
+   NAUT_CONFIG_USE_WLLVM=0
    NAUT_CONFIG_COMPILER_PREFIX=
    NAUT_CONFIG_COMPILER_SUFFIX=
 else
@@ -332,6 +334,13 @@ ifdef NAUT_CONFIG_USE_CLANG
   LD		= $(CROSS_COMPILE)ld
   CC		= $(CROSS_COMPILE)$(COMPILER_PREFIX)clang$(COMPILER_SUFFIX)
   CXX           = $(CROSS_COMPILE)$(COMPILER_PREFIX)clang++$(COMPILER_SUFFIX)
+endif
+
+ifdef NAUT_CONFIG_USE_WLLVM
+  AS		= $(CROSS_COMPILE)$(COMPILER_PREFIX)llvm-as$(COMPILER_SUFFIX)
+  LD		= $(CROSS_COMPILE)ld
+  CC		= $(CROSS_COMPILE)$(COMPILER_PREFIX)wllvm$(COMPILER_SUFFIX)
+  CXX           = $(CROSS_COMPILE)$(COMPILER_PREFIX)wllvm++$(COMPILER_SUFFIX)
 endif
 
 ifdef NAUT_CONFIG_USE_GCC
@@ -365,6 +374,11 @@ ifdef NAUT_CONFIG_USE_GCC
 endif
 
 ifdef NAUT_CONFIG_USE_CLANG
+  COMMON_FLAGS += -O2  # -fno-delete-null-pointer-checks
+   # -O3 will also work - PAD
+endif
+
+ifdef NAUT_CONFIG_USE_WLLVM
   COMMON_FLAGS += -O2  # -fno-delete-null-pointer-checks
    # -O3 will also work - PAD
 endif
@@ -425,11 +439,10 @@ AFLAGS		:=
 export	VERSION PATCHLEVEL SUBLEVEL KERNELRELEASE KERNELVERSION \
 	ARCH CONFIG_SHELL HOSTCC HOSTCFLAGS CROSS_COMPILE AS LD CC CXX\
 	CPP AR NM STRIP OBJCOPY OBJDUMP MAKE AWK GENKSYMS PERL UTS_MACHINE \
-	HOSTCXX HOSTCXXFLAGS CHECK
-
-export CPPFLAGS NOSTDINC_FLAGS NAUT_INCLUDE OBJCOPYFLAGS LDFLAGS
-export CFLAGS CXXFLAGS CFLAGS_KERNEL 
-export AFLAGS AFLAGS_KERNEL
+	HOSTCXX HOSTCXXFLAGS CHECK \
+export CPPFLAGS NOSTDINC_FLAGS NAUT_INCLUDE OBJCOPYFLAGS LDFLAGS \
+export CFLAGS CXXFLAGS CFLAGS_KERNEL \
+export AFLAGS AFLAGS_KERNEL \
 
 # When compiling out-of-tree modules, put MODVERDIR in the module
 # tree rather than in the kernel tree. The kernel tree might
@@ -707,7 +720,7 @@ quiet_cmd_nautilus_version = GEN     .version
 	if [ ! -r .version ]; then			\
 	  rm -f .version;				\
 	  echo 1 >.version;				\
-	else						\
+        else						\
 	  mv .version .old_version;			\
 	  expr 0$$(cat .old_version) + 1 >.version;	\
 	fi;					
@@ -777,6 +790,21 @@ endif
 nautilus.asm: $(BIN_NAME)
 	$(OBJDUMP) --disassemble $< > $@
 
+ifdef NAUT_CONFIG_USE_WLLVM
+bitcode: $(BIN_NAME)
+	extract-bc $(BIN_NAME) -o $(BC_NAME)
+	llvm-dis $(BC_NAME) -o $(LL_NAME)
+
+ifdef NAUT_CONFIG_USE_WLLVM_WHOLE_OPT
+whole_opt: $(BIN_NAME)  
+	extract-bc $(BIN_NAME) -o $(BC_NAME)
+	opt -strip-debug $(BC_NAME)
+	clang $(CFLAGS) -c $(BC_NAME) -o .nautilus.o
+	$(LD) $(LDFLAGS) $(LDFLAGS_vmlinux) -o $(BIN_NAME) -T $(LD_SCRIPT) .nautilus.o `scripts/findasm.pl`
+	rm .nautilus.o
+endif
+
+endif
 # The actual objects are generated when descending, 
 # make sure no implicit rule kicks in
 $(sort  $(nautilus)) : $(nautilus-dirs) ;

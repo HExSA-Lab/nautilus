@@ -177,12 +177,24 @@ menu "Build"
           Chose whether to use GCC or CLang to build Nautilus
           Currently, GCC is by far the most tested option
 	  No guarantees that Clang will be able to build everything
+	  Clang/WLLVM will generate a bitcode file for the entire kernel
      config USE_GCC
        bool "GCC"
      config USE_CLANG
        bool "Clang/LLVM"
+     config USE_WLLVM
+       bool "Clang/WLLVM (generates top level bitcode file)" 
     endchoice
-
+    config USE_WLLVM_WHOLE_OPT
+       bool "Whole kernel optimization"
+       default false
+       depends on USE_WLLVM
+       help
+	   Re-optimizes entire kernel as a single unit
+           USAGE: 
+		make 
+		make whole_opt
+		make isoimage
     config COMPILER_PREFIX
        string "Prefix for compiler toolchain commands"
        default ""
