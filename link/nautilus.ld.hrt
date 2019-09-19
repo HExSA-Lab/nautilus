@@ -45,15 +45,24 @@ SECTIONS
         *(.gcc_except_table*)
         *(.gnu.linkonce.gcc_except*)
     }
-
-    _data_start = .;
-
     .data ALIGN(0x1000) : AT(ADDR(.gcc_except_table) + SIZEOF(.gcc_except_table))
     {
         *(.data*)
         *(.gnu.linkonce.d*)
     }
-    .rodata ALIGN(0x1000) : AT(ADDR(.data) + SIZEOF(.data))
+    .tests ALIGN(0x1000) : AT(ADDR(.data) + SIZEOF(.data))
+    {
+        __start_tests = .;
+        *(.tests*);
+        __stop_tests = .;
+    }
+    .cmdline_flags ALIGN(0x1000) : AT(ADDR(.tests) + SIZEOF(.tests))
+    {
+        __start_flags = .;
+        *(.cmdline_flags*);
+        __stop_flags = .;
+    }
+    .rodata ALIGN(0x1000) : AT(ADDR(.cmdline_flags) + SIZEOF(.cmdline_flags))
     {
         *(.rodata*)
         *(.gnu.linkonce.r*)
@@ -63,17 +72,20 @@ SECTIONS
         *(.got*)
         *(.gnu.linkconce.got*)
     }
+    .shell_cmds ALIGN(0x1000) : AT(ADDR(.got)+SIZEOF(.got))
+    {
+        __start_shell_cmds = .;
+        *(.shell_cmds*);
+        __stop_shell_cmds = .;
+    }
     _loadEnd = .;
-    .bss ALIGN(0x1000) : AT(ADDR(.got)+SIZEOF(.got))
+    .bss ALIGN(0x1000) : AT(ADDR(.shell_cmds)+SIZEOF(.shell_cmds))
     {
         *(COMMON)
         *(.bss*)
         *(.gnu.linkonce.b*)
     }
     _bssEnd = .;
-
-    _data_end = .;
-
     /DISCARD/ :
     {
         *(.comment)

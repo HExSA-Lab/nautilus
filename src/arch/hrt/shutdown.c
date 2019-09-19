@@ -150,6 +150,39 @@ get_s5 (struct shutdown_info * s)
     return 0;
 }
 
+/* 
+ * NOTE: this requires that QEMU was passed the flag
+ * -device isa-debug-exit 
+ */
+static inline void  __attribute__((noreturn))
+qemu_isa_debug_exit (uint16_t code)
+{
+    outb(code, 0x501);
+
+    while (1) halt();
+}
+
+
+/*
+ * QEMU's ISA debug device can be used to
+ * shut it down. You must run QEMU with the
+ * -device isa-debug-exit flag. It will take
+ *  the value written to the port and use it
+ *  to derive the exit code that QEMU produces:
+ *     exit( (val << 1) | 1);
+ */
+void
+qemu_shutdown (void)
+{
+    qemu_isa_debug_exit(0x32);
+}
+
+void
+qemu_shutdown_with_code (uint16_t code)
+{
+    qemu_isa_debug_exit(code);
+}
+
         
 
 /* TODO: fix this */
