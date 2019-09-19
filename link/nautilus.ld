@@ -100,7 +100,7 @@ SECTIONS
 
     _loadEnd = .; 
     
-    .bss ALIGN(0x1000) : AT(ADDR(.got)+SIZEOF(.got))
+    .bss ALIGN(0x1000) : AT(ADDR(.shell_cmds)+SIZEOF(.shell_cmds))
     {
         *(COMMON)
         *(.bss*)
