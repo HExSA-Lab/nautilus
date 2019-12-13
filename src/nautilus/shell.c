@@ -102,6 +102,7 @@ iter_push_entry (struct shell_rtree_iter * iter,
         ERROR("Could not allocate iter stack entry\n");
         return;
     }
+    memset(ent,0,sizeof(*ent));
 
     ent->node = node;
     ent->idx  = idx;
@@ -487,7 +488,7 @@ shell_add_cmd_to_hist (struct shell_cmd_state * state, char * buf)
 
     hist = malloc(end + 1);
     strncpy(hist, buf, end + 1);
-    hist[end+1] = 0;
+    hist[end] = 0;
 
     cmd = shell_rtree_lookup(state->hist_root, hist);
 
