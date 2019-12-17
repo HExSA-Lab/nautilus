@@ -36,6 +36,7 @@ extern "C" {
 
 // Always included so we get the necessary type
 #include <nautilus/cachepart.h>
+#include <nautilus/aspace.h>
 
 typedef uint64_t nk_stack_size_t;
     
@@ -178,6 +179,8 @@ struct nk_thread {
     uint16_t fpu_state_offset;   /* +16 SHOULD NOT CHANGE POSITION */
     nk_cache_part_thread_state_t /* +18 SHOULD NOT CHANGE POSITION */
              cache_part_state;   /* Always included to reserve this "slot" for asm code */
+    nk_aspace_t      *aspace;    /* +24 SHOULD NOT CHANGE POSITION */
+                                 /* Always included to reserve this "slot" for asm code */
 
     nk_stack_size_t stack_size;
     unsigned long tid;
@@ -189,7 +192,7 @@ struct nk_thread {
     struct list_head children;
     struct list_head child_node;
     unsigned long refcount;
-
+    
     nk_wait_queue_t * waitq;             // wait queue for threads waiting on this thread
     
     int               num_wait;          // how many wait queues this thread is currently on

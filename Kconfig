@@ -1167,6 +1167,70 @@ config DEBUG_PMC
 
 endmenu
 
+menu "Address Spaces"
+        config ASPACES
+	  bool "Enable Address Spaces"
+	  default n
+	  depends on X86_64_HOST
+	  select ASPACE_BASE
+	  help
+	     Enable address space abstractions plus address space
+	     switching on thread context switches
+	     
+	config DEBUG_ASPACES
+	  bool "Debug address space core"
+	  depends on ASPACES
+	  default n
+	  help
+	     Turn on debugging prints for the address space core
+	     
+	config ASPACE_BASE
+	  bool "Base abstraction"
+	  depends on ASPACES
+	  default y
+	  help
+	     This is the base address space abstraction
+	     which is the single, identity-mapped address space
+	     but now it has a name.   This must always be available
+
+	config DEBUG_ASPACE_BASE
+	  bool "Debug the base address space abstraction"
+	  depends on ASPACE_BASE
+	  default n
+	  help
+	     Turn on debugging prints for the paging address space abstraction
+
+        config ASPACE_PAGING
+	  bool "Paging abstraction"
+	  depends on ASPACES
+	  default y
+	  help
+	     This is the paging address space abstraction.
+	     It does lazy build of identity-mapped page tables, plus
+	     it allows creation of non-identity-mapped addresses
+
+	config DEBUG_ASPACE_PAGING
+	  bool "Debug the paging address space abstraction"
+	  depends on ASPACE_PAGING
+	  default n
+	  help
+	     Turn on debugging prints for the paging address space abstraction
+
+        config ASPACE_CARAT
+	  bool "CARAT  abstraction"
+	  depends on ASPACES
+	  default y
+	  help
+	     This is the CARAT address space abstraction.
+	     
+	config DEBUG_ASPACE_CARAT
+	  bool "Debug the CARAT address space abstraction"
+	  depends on ASPACE_CARAT
+	  default n
+	  help
+	     Turn on debugging prints for the CARAT address space abstraction
+
+endmenu
 
 menu "Runtimes"
 

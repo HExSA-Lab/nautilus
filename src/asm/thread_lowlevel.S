@@ -140,6 +140,13 @@ skip_cat:
 continue_context_switch:
 
 #endif
+
+#ifdef NAUT_CONFIG_ASPACES
+    push %rax
+    movq 24(%rax), %rdi
+    call nk_aspace_switch
+    pop %rax
+#endif
 	
     movq %rax, %gs:0x0  /* make it the new current thread */
     movq (%rax), %rsp   /* load its stack pointer */

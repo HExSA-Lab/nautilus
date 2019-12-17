@@ -98,9 +98,16 @@ SECTIONS
         __stop_shell_cmds = .;
     }
 
+    .aspace_impls ALIGN(0x1000) : AT(ADDR(.shell_cmds)+SIZEOF(.shell_cmds))
+    {
+        __start_aspace_impls = .;
+        *(.aspace_impls*);
+        __stop_aspace_impls = .;
+    }
+
     _loadEnd = .; 
     
-    .bss ALIGN(0x1000) : AT(ADDR(.got)+SIZEOF(.got))
+    .bss ALIGN(0x1000) : AT(ADDR(.aspace_impls)+SIZEOF(.aspace_impls))
     {
         *(COMMON)
         *(.bss*)
