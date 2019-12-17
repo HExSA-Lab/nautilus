@@ -50,7 +50,7 @@
 #define HACKED_LEGACY_IRQ    (HACKED_LEGACY_VECTOR - 32)
 
 
-#define VIRTIO_BLK_OFF_CONFIG(v)     (virtio_pci_device_regs_start(v) + 0)
+#define VIRTIO_BLK_OFF_CONFIG(v)     (virtio_pci_device_regs_start_legacy(v) + 0)
 
 #define VIRTIO_BLK_REQUEST_QUEUE  0 // virtqueue index 
 
@@ -350,7 +350,7 @@ static int handler(excp_entry_t *exp, excp_vec_t vec, void *priv_data)
     struct virtio_blk_dev *dev = (struct virtio_blk_dev *) priv_data;
     
     // only for legacy style interrupt
-    if (dev->virtio_dev->itype == VIRTIO_PCI_LEGACY) {
+    if (dev->virtio_dev->itype == VIRTIO_PCI_LEGACY_INTERRUPT) {
         DEBUG("using legacy style interrupt\n");
         // read the interrupt status register, which will reset it to zero
         uint8_t isr = virtio_pci_read_regb(dev->virtio_dev, ISR_STATUS);
@@ -473,9 +473,9 @@ static int test_write(struct virtio_blk_dev *dev)
 /************************************************************
  ****************** device initialization *******************
  ************************************************************/
-uint32_t select_features(uint32_t features) 
+uint64_t select_features(uint64_t features) 
 {
-    DEBUG("device features: 0x%0x\n",features);
+    DEBUG("device features: 0x%0lx\n",features);
     DEBUG_FBIT(features, VIRTIO_BLK_F_SIZE_MAX);
     DEBUG_FBIT(features, VIRTIO_BLK_F_SEG_MAX);
     DEBUG_FBIT(features, VIRTIO_BLK_F_GEOMETRY);
@@ -492,7 +492,7 @@ uint32_t select_features(uint32_t features)
     DEBUG_FBIT(features, VIRTIO_F_EVENT_IDX);
 
     // choose accepted features
-    uint32_t accepted = 0;
+    uint64_t accepted = 0;
 
     FBIT_SETIF(accepted,features,VIRTIO_BLK_F_SIZE_MAX);
     FBIT_SETIF(accepted,features,VIRTIO_BLK_F_SEG_MAX);
@@ -500,7 +500,7 @@ uint32_t select_features(uint32_t features)
     FBIT_SETIF(accepted,features,VIRTIO_BLK_F_RO);
     FBIT_SETIF(accepted,features,VIRTIO_BLK_F_BLK_SIZE);
     
-    DEBUG("features accepted: 0x%0x\n", accepted);
+    DEBUG("features accepted: 0x%0lx\n", accepted);
     return accepted;
 }
 
@@ -542,6 +542,11 @@ static void parse_config(struct virtio_blk_dev *d)
 int virtio_blk_init(struct virtio_pci_dev *dev)
 {
     char buf[DEV_NAME_LEN];
+
+    if (!dev->model==VIRTIO_PCI_LEGACY_MODEL) {
+	ERROR("currently only supported with legacy model\n");
+	return -1;
+    }
     
     DEBUG("initialize device\n");
     
@@ -632,7 +637,7 @@ int virtio_blk_init(struct virtio_pci_dev *dev)
     uint8_t i;
     ulong_t vec;
     
-    if (dev->itype==VIRTIO_PCI_MSI_X) {
+    if (dev->itype==VIRTIO_PCI_MSI_X_INTERRUPT) {
 	// we assume MSI-X has been enabled on the device
 	// already, that virtqueue setup is done, and
 	// that queue i has been mapped to MSI-X table entry i
