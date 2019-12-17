@@ -4780,7 +4780,7 @@ reg_eq_irq (struct mlx3_ib * mlx, struct mlx3_eq * eq) {
 
     eq->inta_pin = mlx->query_adapter->intapin;
 
-    uint64_t clr_base = pci_get_bar_addr(mlx->dev,
+    uint64_t clr_base = pci_dev_get_bar_addr(mlx->dev,
             mlx->fw_info->clr_int_bar) +
         mlx->fw_info->clr_base;
 
@@ -5537,10 +5537,10 @@ mlx3_init (struct naut_info * naut)
     mlx->dev      = idev;
     mlx->pci_intr = idev->cfg.dev_cfg.intr_pin;
 
-    mlx->mmio_start = pci_get_bar_addr(idev, 0);
-    mlx->mmio_sz    = pci_get_mmio_size(idev, 0);
+    mlx->mmio_start = pci_dev_get_bar_addr(idev, 0);
+    mlx->mmio_sz    = pci_dev_get_bar_size(idev, 0);
 
-    mlx->uar_start  = pci_get_bar_addr(idev, 2);
+    mlx->uar_start  = pci_dev_get_bar_addr(idev, 2);
     mlx->netdev     = nk_net_dev_register("mlx3-ib", 0, &mlx3_ops, (void*)mlx);
 
     if (!mlx->netdev) {
