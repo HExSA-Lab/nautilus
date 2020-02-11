@@ -910,6 +910,13 @@ menu Debugging
      help
         Turn on debug prints for the remote debugger subsystem
 
+    config ENABLE_MONITOR
+      depends on !HVM_HRT
+      bool "Enable Monitor"
+      default n
+      help
+        This adds a built in monitor to Nautilus.
+
     config DEBUG_PAGING
       bool "Debug Paging"
       depends on DEBUG_PRINTS

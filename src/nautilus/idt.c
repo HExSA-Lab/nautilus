@@ -89,6 +89,14 @@ null_excp_handler (excp_entry_t * excp,
                    addr_t fault_addr,
 		   void *state)
 {
+#ifdef NAUT_CONFIG_ENABLE_MONITOR
+    int nk_monitor_excp_entry(excp_entry_t * excp,
+			      excp_vec_t vector,
+			      void *state);
+    nk_monitor_excp_entry (excp,
+			   vector,
+			   state);
+#endif
     cpu_id_t cpu_id = cpu_info_ready ? my_cpu_id() : 0xffffffff;
     /* TODO: this should be based on scheduler initialization, not CPU */
     unsigned tid = cpu_info_ready ? get_cur_thread()->tid : 0xffffffff;
@@ -112,7 +120,7 @@ null_excp_handler (excp_entry_t * excp,
 
     struct nk_regs * r = (struct nk_regs*)((char*)excp - 128);
     nk_print_regs(r);
-    backtrace(r->rbp);
+    backtrace(r->rbp); // steal this
 
     panic("+++ HALTING +++\n");
 
@@ -125,6 +133,10 @@ null_irq_handler (excp_entry_t * excp,
                   excp_vec_t vector,
 		  void       *state)
 {
+#ifdef NAUT_CONFIG_ENABLE_MONITOR
+    int nk_monitor_irq_entry ();
+    nk_monitor_irq_entry ();
+#endif
     printk("[Unhandled IRQ] (vector=0x%x)\n    RIP=(%p)     (core=%u)\n", 
             vector,
             (void*)excp->rip,

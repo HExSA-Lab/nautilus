@@ -120,6 +120,10 @@ vprintk (const char * fmt, va_list args)
 void 
 panic (const char * fmt, ...)
 {
+#ifdef NAUT_CONFIG_ENABLE_MONITOR
+	int nk_monitor_entry();
+	nk_monitor_entry();
+#endif
     va_list arg;
 
     va_start(arg, fmt);
