@@ -151,6 +151,24 @@ null_irq_handler (excp_entry_t * excp,
     return 0;
 }
 
+int 
+debug_excp_handler (excp_entry_t * excp,
+                   excp_vec_t vector,
+		   void *state)
+{
+#ifdef NAUT_CONFIG_ENABLE_MONITOR
+    int nk_monitor_debug_entry(excp_entry_t * excp,
+                    excp_vec_t vector,
+		            void *state);
+    nk_monitor_debug_entry (excp,
+                    vector,
+		            state);
+#endif
+    return 0;
+}
+
+
+
 int
 reserved_irq_handler (excp_entry_t * excp,
 		      excp_vec_t vector,
@@ -304,6 +322,14 @@ setup_idt (void)
         ERROR_PRINT("Couldn't assign PIC spur int handler\n");
         return -1;
     }
+
+    #ifdef NAUT_CONFIG_ENABLE_MONITOR
+    if (idt_assign_entry(DB_EXCP, (ulong_t)debug_excp_handler, 0) < 0) {
+        ERROR_PRINT("Couldn't assign debug excp handler\n");
+        return -1;
+    }
+    #endif
+
 
     lidt(&idt_descriptor);
 

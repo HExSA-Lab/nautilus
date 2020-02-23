@@ -146,17 +146,83 @@ static inline void write_dr7(uint64_t data)
 // The following is a gruesome hack to track a single
 // address (for long word), looking for a write to it
 
-static inline void trap_writes_to_addr(uint64_t addr)
+static inline void set_watchpoint(uint64_t addr)
+{
+    // we will force it into dr1
+    write_dr1(addr);
+
+    // global+local enable, 8 bytes
+	// 0x0009030C
+
+    // 00 00 00 00 10 01 00 00 00 0 00 0 1 1 00 00 00 00 
+	// 
+
+	// 0x980300
+	// 0x900300
+
+	dr7_t t;
+
+	t.val = read_dr7();
+	uint8_t l0 = t.local0;
+	uint8_t g0 = t.global0;
+
+	t.val = 0x900300;
+	t.local0 = l0;
+	t.global0 = g0;
+	t.local1 = 1;
+	t.global1 = 1;
+
+    write_dr7(t.val);
+	DS("dr7 is now: ");
+    DHQ(t.val);
+	DS("\n");
+
+    // breakpoint is now armed and will cause a debug
+    // exception on a write that overlaps [addr,addr+8)
+}
+
+// The following is a gruesome hack to track a single
+// address (for long word), looking for a read or write to it
+
+
+static inline void set_breakpoint(uint64_t addr)
 {
     // we will force it into dr0
     write_dr0(addr);
 
-    // global+local enable, 8 bytes
+	// 00 00 00 00 10 01 00 00 00 0 00 0 1 1 00 00 00 11 
+	dr7_t t;
+	t.val = read_dr7();
+	uint8_t l1 = t.local1;
+	uint8_t g1 = t.global1;
 
-    // 00 00 00 00 00 00 10 01 00 0 00 0 1 1 00 00 00 11 
-    // 0x00090303
+	t.val = 0x900300;
+	t.local1 = l1;
+	t.global1 = g1;
+	t.local0 = 1;
+	t.global0 = 1;
+
+    write_dr7(t.val);
+	DS("dr7 is now: ");
+    DHQ(t.val);
+	DS("\n");
+
+    // breakpoint is now armed and will cause a debug
+    // exception on a write that overlaps [addr,addr+8)
+}
+
+
+static inline void disable_breakpoints()
+{
     
-    write_dr7(0x90303);
+	dr7_t t; 
+	t.val = read_dr7();
+   	t.local0 = 0;   // local enable dr0 bp (this task)
+	t.global0 = 0;  // global enable dr0 bp (any task)
+    write_dr7(t.val);
+	DS("dr7 is now: ");
+    DHQ(t.val);
+	DS("\n");
 
     // breakpoint is now armed and will cause a debug
     // exception on a write that overlaps [addr,addr+8)

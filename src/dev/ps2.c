@@ -500,8 +500,8 @@ kbd_handler (excp_entry_t * excp, excp_vec_t vec, void *state)
 #ifdef NAUT_CONFIG_ENABLE_MONITOR
     if (scan == 0xc3) {
       // F9 up - stop
-        //nk_monitor_entry();
-        asm("int $1");
+      nk_monitor_entry();
+      //asm("int $1");
 
       // now ignore the key
       goto out;

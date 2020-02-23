@@ -13,7 +13,7 @@
 
 #include <nautilus/shell.h>
 #include <nautilus/monitor.h>
-#include <nautilus/dr.h>
+
 
 // Graphics stuff
 
@@ -171,7 +171,9 @@ static inline void vga_copy_in(void *src, uint32_t n)
 #define DHW(x) DHB(x >> 8) ; DHB(x);
 #define DHL(x) DHW(x >> 16) ; DHW(x);
 #define DHQ(x) DHL(x >> 32) ; DHL(x);
-#define DS(x) { char *__curr = x; while(*__curr) { DB(*__curr); *__curr++; } }
+#define DS(x) { char *__curr = x; while(*__curr) { DB(*__curr); __curr++; } }
+
+#include <nautilus/dr.h>
 
 static char screen_saved[VGA_HEIGHT*VGA_WIDTH*2];
 static uint8_t cursor_saved_x;
@@ -754,13 +756,13 @@ int execute_watch(char command[]) {
     vga_puts("watchpoint set at address:");
     vga_puts(potential_addr);
     uint64_t addr = get_hex_addr(potential_addr);
-    trap_writes_to_addr(addr);
+    set_watchpoint(addr);
   } else if(is_dec_addr(potential_addr)) {
     vga_puts("watchpoint set at address:");
     vga_puts(potential_addr);
     uint64_t addr = get_dec_addr(potential_addr);
     printk("%d", addr);
-    trap_writes_to_addr(addr);
+    set_watchpoint(addr);
   } else {
     vga_puts("invalid arguments for watch, expected address in hexidecimal format");
   }
@@ -768,43 +770,57 @@ int execute_watch(char command[]) {
   return 0;
 }
 
-static void __attribute__((noinline))
-do_backtrace (void ** fp, unsigned depth)
-{
-    if (!fp || fp >= 0x100000000UL) {//(void**)nk_get_nautilus_info()->sys.mem.phys_mem_avail) {
-        return;
-    }
-    
-    DHQ((uint64_t) *(fp+1));
-    DS(" ");
-    DHQ((uint64_t) *fp);
-    DS("\n");
-    //"[%2u] RIP: %p RBP: %p\n", depth, *(fp+1), *fp);
+static enum{
+  AWAIT_BREAKPOINT = 0,
+  AWAIT_SINGLESTEP
+} breakpoint_state;
 
-    do_backtrace(*fp, depth+1);
-}
+static void* breakpoint_addr;
+
 
 int execute_break(char command[]) {
-  // char* potential_addr = get_next_word(NULL);
-  // char* next_word = get_next_word(NULL);
+  char* potential_addr = get_next_word(NULL);
+  char* next_word = get_next_word(NULL);
 
-  // if(next_word) {
-  //   vga_puts("too many arguments for break, expected address in hexidecimal format");
-  //   return 0;
-  // }
+  if(!potential_addr) {
+    vga_puts("too few arguments for break, expected address");
+    return 0;
+  }
 
-  // if(potential_addr && is_valid_addr(potential_addr)) {
-  //   vga_puts("breakpoint set at address:");
-  //   vga_puts(potential_addr);
-  //   uint64_t addr = get_addr(potential_addr);
-  //   //vga_puts("hey");
-  //   trap_writes_to_addr(addr);
-  // } else {
-  //   vga_puts("invalid arguments for break, expected address in hexidecimal format");
-  // }
+  if(next_word) {
+    vga_puts("too many arguments for break, expected address");
+    return 0;
+  }
+
+
+  if(is_hex_addr(potential_addr)) {
+    vga_puts("breakpoint set at address:");
+    vga_puts(potential_addr);
+    uint64_t addr = get_hex_addr(potential_addr);
+    set_breakpoint(addr);
+    breakpoint_state = AWAIT_BREAKPOINT;
+    breakpoint_addr = addr;
+  } else if(is_dec_addr(potential_addr)) {
+    vga_puts("breakpoint set at address:");
+    vga_puts(potential_addr);
+    uint64_t addr = get_dec_addr(potential_addr);
+    printk("%d", addr);
+    set_breakpoint(addr);
+    breakpoint_state = AWAIT_BREAKPOINT;
+    breakpoint_addr = addr;
+  } else {
+    vga_puts("invalid arguments for break, expected address in hexidecimal format");
+  }
 
   return 0;
 
+}
+
+int execute_disable(char command[]) {
+  vga_puts("disable breakpoints executed");
+  disable_breakpoints();
+
+  return 0;
 }
 
 int execute_potential_command(char command[])
@@ -827,6 +843,10 @@ int execute_potential_command(char command[])
   else if (strcmp(word, "break") == 0)
   {
     quit = execute_break(command);
+  }
+  else if (strcmp(word, "disable") == 0)
+  {
+    quit = execute_disable(command);
   }
   else if (strcmp(word, "regprint") == 0)
   {
@@ -853,9 +873,6 @@ int nk_monitor_loop()
 {
   int buffer_size = VGA_WIDTH * 2; 
   char buffer[buffer_size];
-  // int num_words = 5;
-  // int word_size = buffer_size / num_words;
-  // char buffer[num_words][word_size];
 
   // Inner loop is indvidual keystrokes, outer loop handles commands
   int done = 0;
@@ -873,6 +890,23 @@ int nk_monitor_loop()
   return 0;
 }
 
+static void __attribute__((noinline))
+do_backtrace (void ** fp, unsigned depth)
+{
+    if (!fp || fp >= 0x100000000UL) {//(void**)nk_get_nautilus_info()->sys.mem.phys_mem_avail) {
+        return;
+    }
+    
+    DHQ((uint64_t) *(fp+1));
+    DS(" ");
+    DHQ((uint64_t) *fp);
+    DS("\n");
+    //"[%2u] RIP: %p RBP: %p\n", depth, *(fp+1), *fp);
+
+    do_backtrace(*fp, depth+1);
+}
+
+
 int nk_monitor_entry()
 {
   uint8_t flags = irq_disable_save(); // disable interrupts
@@ -888,9 +922,90 @@ int nk_monitor_entry()
   return 0;
 }
 
+static void 
+monitor_print_regs (struct nk_regs * r)
+{
+    int i = 0;
+    ulong_t cr0 = 0ul;
+    ulong_t cr2 = 0ul;
+    ulong_t cr3 = 0ul;
+    ulong_t cr4 = 0ul;
+    ulong_t cr8 = 0ul;
+    ulong_t fs  = 0ul;
+    ulong_t gs  = 0ul;
+    ulong_t sgs = 0ul;
+    uint_t  fsi;
+    uint_t  gsi;
+    uint_t  cs;
+    uint_t  ds;
+    uint_t  es;
+    ulong_t efer;
+
+    #define PRINT(x) DS(#x " = "); DHQ(r->x); DS("\n");
+    #define PRINTCR(x) DS(#x " = "); DHQ(x); DS("\n");
+    
+    DS("[-------------- Register Contents --------------]\n");
+    PRINT(rip);
+    PRINT(rflags);
+    PRINT(rbp);
+    PRINT(rsp);
+    PRINT(rax);
+    PRINT(rbx);
+    PRINT(rcx);
+    PRINT(rdx);
+    PRINT(rdi);
+    PRINT(rsi);
+    PRINT(r8);
+    PRINT(r9);
+    PRINT(r10);
+    PRINT(r11);
+    PRINT(r12);
+    PRINT(r13);
+    PRINT(r14);
+    PRINT(r15);
+    
+    // printk("RIP: %04lx:%016lx\n", r->cs, r->rip);
+    // printk("RSP: %04lx:%016lx RFLAGS: %08lx Vector: %08lx Error: %08lx\n", 
+    //         r->ss, r->rsp, r->rflags, r->vector, r->err_code);
+
+    asm volatile("movl %%cs, %0": "=r" (cs));
+    asm volatile("movl %%ds, %0": "=r" (ds));
+    asm volatile("movl %%es, %0": "=r" (es));
+    asm volatile("movl %%fs, %0": "=r" (fsi));
+    asm volatile("movl %%gs, %0": "=r" (gsi));
+
+    gs  = msr_read(MSR_GS_BASE);
+    fs  = msr_read(MSR_FS_BASE);
+    gsi = msr_read(MSR_KERNEL_GS_BASE);
+    efer = msr_read(IA32_MSR_EFER);
+
+    asm volatile("movq %%cr0, %0": "=r" (cr0));
+    asm volatile("movq %%cr2, %0": "=r" (cr2));
+    asm volatile("movq %%cr3, %0": "=r" (cr3));
+    asm volatile("movq %%cr4, %0": "=r" (cr4));
+    asm volatile("movq %%cr8, %0": "=r" (cr8));
+
+    PRINTCR(cr0);
+    PRINTCR(cr2);
+    PRINTCR(cr3);
+    PRINTCR(cr4);
+    PRINTCR(cr8);
+    // printk("FS: %016lx(%04x) GS: %016lx(%04x) knlGS: %016lx\n", 
+    //         fs, fsi, gs, gsi, sgs);
+    // printk("CS: %04x DS: %04x ES: %04x CR0: %016lx\n", 
+    //         cs, ds, es, cr0);
+    // printk("CR2: %016lx CR3: %016lx CR4: %016lx\n", 
+    //         cr2, cr3, cr4);
+    // printk("CR8: %016lx EFER: %016lx\n", cr8, efer);
+
+   // printk("[-----------------------------------------------]\n");
+}
+
+
 static void dump_entry(excp_entry_t * excp) {
-  struct nk_regs * r = (struct nk_regs*)((char*)excp - 128);
   //nk_print_regs(r);
+  struct nk_regs * r = (struct nk_regs*)((char*)excp - 128);
+  monitor_print_regs(r);
   do_backtrace(r->rbp, 0); 
 }
 
@@ -900,13 +1015,10 @@ int nk_monitor_excp_entry(excp_entry_t * excp,
 {
 
   uint8_t flags = irq_disable_save(); // disable interrupts
-  //cli(); // disable interrupts
 
-  //printk("monitor shell command invoked");
   monitor_init();
   vga_puts("+++ UNHANDLED EXCEPTION +++");
   dump_entry(excp);
-  //vga_clear_screen(vga_make_entry(' ', vga_make_color(COLOR_MAGENTA, COLOR_BLACK)));
   nk_monitor_loop();
   monitor_deinit();
 
@@ -915,13 +1027,47 @@ int nk_monitor_excp_entry(excp_entry_t * excp,
 }
 int nk_monitor_irq_entry()
 {
-  //cli();
+
+  uint8_t flags = irq_disable_save(); // disable interrupts
   monitor_init();
   vga_puts("+++ Unhandled IRQ +++");
   nk_monitor_loop();
-  //sti();
+  monitor_deinit();
+
+  irq_enable_restore(flags); // enable interrupts if they were enabled before the monitor call
   return 0;
 }
+
+
+int nk_monitor_debug_entry(excp_entry_t * excp,
+                    excp_vec_t vector,
+		            void *state)
+{
+
+  uint8_t flags = irq_disable_save(); // disable interrupts
+  // ignoring watchpoint for now
+  if(breakpoint_state == AWAIT_SINGLESTEP) {
+    // set breakpoint back
+    set_breakpoint(breakpoint_addr);
+    breakpoint_state = AWAIT_BREAKPOINT;
+    excp->rflags &= ~0b100000000ul;
+
+  } else {
+
+    monitor_init();
+    vga_puts("+++ Debug Exception Thrown +++");
+    dump_entry(excp);
+    nk_monitor_loop();
+    monitor_deinit();
+    disable_breakpoints();
+    breakpoint_state = AWAIT_SINGLESTEP;
+    excp->rflags |= 0b100000000ul;
+  }
+
+  irq_enable_restore(flags); // enable interrupts if they were enabled before the monitor call
+  return 0;
+}
+
 
 // handle shell command
 static int handle_monitor(char *buf, void *priv)
