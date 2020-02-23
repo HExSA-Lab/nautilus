@@ -329,7 +329,8 @@ config VIRTUAL_CONSOLE_SERIAL_MIRROR_ALL
         Specifies the tick rate for timers and aperiodic
         scheduling.  The reciprical of this number is 
         the scheduling quantum for aperiodic (but not RT)
-        threads.
+        threads. IMPORTANT NOTE: if you are using a watchdog,
+	you should set this to be > 1/(watchdog period)
 
     config INTERRUPT_REINJECTION_DELAY_NS
        int "Interrupt Reinjection Delay (in ns)"
@@ -612,6 +613,44 @@ config REAL_MODE_INTERFACE_SEGMENT
       code and data. The second 32K can be used by
       code invoking real mode interrupts
 
+
+menu "Watchdog Options"
+config WATCHDOG
+   bool "Enable Watchdog Timer"
+   default n
+   help
+       Force an NMI if a dedicated timer expires
+       The dedicated timer is reset during interupt
+       handling.   The primary purpose is to catch
+       deadlocks
+
+config WATCHDOG_HPET
+   bool "Use HPET as the timer instead of i8254 PIT"
+   depends on WATCHDOG
+   default n
+   help
+       Attempt to use the HPET, otherwise use
+       the 8254 PIT.   The 8254 allows a maximum
+       of interval of only 54 ms
+
+config WATCHDOG_DEFAULT_TIME_MS
+   depends on WATCHDOG
+   int "Default time in ms before expiration"
+   default 50
+   help
+       How long we can go without resetting the watchdog timer
+       Note that for the 8254, this is hard limited to its
+       maximum count.
+       IMPORTANT NOTE:  when using the 8254 as the timer
+       you probably will want HZ to be set to be > 1/this
+       
+config DEBUG_WATCHDOG
+   bool "Debug Watchdog Timer"
+   default n
+   depends on WATCHDOG
+   help
+      Adds debugging output for watchdog
+endmenu
 
 config ISOCORE
    bool "Enable Isolated Core Execution"

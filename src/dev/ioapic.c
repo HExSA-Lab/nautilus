@@ -48,7 +48,7 @@ ioapic_read_irq_entry (struct ioapic * ioapic, uint8_t irq)
 
 
 
-static void
+void
 ioapic_write_irq_entry (struct ioapic * ioapic, uint8_t irq, uint64_t val)
 {
     /* first disable it */

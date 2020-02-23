@@ -75,6 +75,13 @@ GLOBAL(early_irq_common)
 
     SAVE_GPRS()
 
+#ifdef NAUT_CONFIG_WATCHDOG
+    // this call can nuke registers, but we don't
+    // care because it is first, and we don't depend on
+    // the register contents yet	
+    call nk_watchdog_pet
+#endif
+	
 #ifdef NAUT_CONFIG_CACHEPART
     // note that we have already saved all GPRs
     // we will also use callee-save registers to maintain state
