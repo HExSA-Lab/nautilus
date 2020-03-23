@@ -1,7 +1,32 @@
+/* 
+ * This file is part of the Nautilus AeroKernel developed
+ * by the Hobbes and V3VEE Projects with funding from the 
+ * United States National  Science Foundation and the Department of Energy.  
+ *
+ * The V3VEE Project is a joint project between Northwestern University
+ * and the University of New Mexico.  The Hobbes Project is a collaboration
+ * led by Sandia National Laboratories that includes several national 
+ * laboratories and universities. You can find out more at:
+ * http://www.v3vee.org  and
+ * http://xstack.sandia.gov/hobbes
+ *
+ * Copyright (c) 2020, Drew Kersnar <drewkersnar2021@u.northwestern.edu>
+ * Copyright (c) 2020, The Interweaving Project <http://interweaving.org>
+ *                     The V3VEE Project  <http://www.v3vee.org> 
+ *                     The Hobbes Project <http://xstack.sandia.gov/hobbes>
+ * All rights reserved.
+ *
+ * Authors: Drew Kersnar <drewkersnar2021@u.northwestern.edu>
+ *          
+ * This is free software.  You are permitted to use,
+ * redistribute, and modify it as specified in the file "LICENSE.txt".
+ */
+
+
 #include <nautilus/nautilus.h>
-//#include <nautilus/naut_types.h>
 #include <nautilus/shell.h>
 #include <nautilus/monitor.h>
+#include <nautilus/dr.h>
 #include <nautilus/smp.h>
 
 
@@ -163,15 +188,13 @@ static inline void vga_copy_in(void *src, uint32_t n)
 #define DHQ(x) DHL(x >> 32) ; DHL(x);
 #define DS(x) { char *__curr = x; while(*__curr) { DB(*__curr); __curr++; } }
 
-#include <nautilus/dr.h>
-
 static char screen_saved[VGA_HEIGHT*VGA_WIDTH*2];
 static uint8_t cursor_saved_x;
 static uint8_t cursor_saved_y;
 
 // Keyboard stuff
 typedef short unsigned int nk_keycode_t;
-#define KB_KEY_RELEASE 0x80
+#define KB_MONITOR_KEY_RELEASE 0x80
 static nk_keycode_t flags = 0;
 
 // Special tags to indicate unavailabilty
@@ -180,159 +203,159 @@ static nk_keycode_t flags = 0;
 
 // Special flags for a keycode that reflect status of
 // modifiers
-#define KEY_SPECIAL_FLAG 0x0100
-#define KEY_KEYPAD_FLAG 0x0200
-#define KEY_SHIFT_FLAG 0x1000
-#define KEY_ALT_FLAG 0x2000
-#define KEY_CTRL_FLAG 0x4000
-#define KEY_CAPS_FLAG 0x8000
+#define MONITOR_KEY_SPECIAL_FLAG 0x0100
+#define MONITOR_KEY_KEYPAD_FLAG 0x0200
+#define MONITOR_KEY_SHIFT_FLAG 0x1000
+#define MONITOR_KEY_ALT_FLAG 0x2000
+#define MONITOR_KEY_CTRL_FLAG 0x4000
+#define MONITOR_KEY_CAPS_FLAG 0x8000
 
 // Special ascii characters
 #define ASCII_ESC 0x1B
 #define ASCII_BS 0x08
 
 // PC-specific keys
-#define _SPECIAL(num) (KEY_SPECIAL_FLAG | (num))
-#define KEY_UNKNOWN _SPECIAL(0)
-#define KEY_F1 _SPECIAL(1)
-#define KEY_F2 _SPECIAL(2)
-#define KEY_F3 _SPECIAL(3)
-#define KEY_F4 _SPECIAL(4)
-#define KEY_F5 _SPECIAL(5)
-#define KEY_F6 _SPECIAL(6)
-#define KEY_F7 _SPECIAL(7)
-#define KEY_F8 _SPECIAL(8)
-#define KEY_F9 _SPECIAL(9)
-#define KEY_F10 _SPECIAL(10)
-#define KEY_F11 _SPECIAL(11)
-#define KEY_F12 _SPECIAL(12)
-#define KEY_LCTRL _SPECIAL(13)
-#define KEY_RCTRL _SPECIAL(14)
-#define KEY_LSHIFT _SPECIAL(15)
-#define KEY_RSHIFT _SPECIAL(16)
-#define KEY_LALT _SPECIAL(17)
-#define KEY_RALT _SPECIAL(18)
-#define KEY_PRINTSCRN _SPECIAL(19)
-#define KEY_CAPSLOCK _SPECIAL(20)
-#define KEY_NUMLOCK _SPECIAL(21)
-#define KEY_SCRLOCK _SPECIAL(22)
-#define KEY_SYSREQ _SPECIAL(23)
+#define _MONITOR_SPECIAL(num) (MONITOR_KEY_SPECIAL_FLAG | (num))
+#define MONITOR_KEY_UNKNOWN _MONITOR_SPECIAL(0)
+#define MONITOR_KEY_F1 _MONITOR_SPECIAL(1)
+#define MONITOR_KEY_F2 _MONITOR_SPECIAL(2)
+#define MONITOR_KEY_F3 _MONITOR_SPECIAL(3)
+#define MONITOR_KEY_F4 _MONITOR_SPECIAL(4)
+#define MONITOR_KEY_F5 _MONITOR_SPECIAL(5)
+#define MONITOR_KEY_F6 _MONITOR_SPECIAL(6)
+#define MONITOR_KEY_F7 _MONITOR_SPECIAL(7)
+#define MONITOR_KEY_F8 _MONITOR_SPECIAL(8)
+#define MONITOR_KEY_F9 _MONITOR_SPECIAL(9)
+#define MONITOR_KEY_F10 _MONITOR_SPECIAL(10)
+#define MONITOR_KEY_F11 _MONITOR_SPECIAL(11)
+#define MONITOR_KEY_F12 _MONITOR_SPECIAL(12)
+#define MONITOR_KEY_LCTRL _MONITOR_SPECIAL(13)
+#define MONITOR_KEY_RCTRL _MONITOR_SPECIAL(14)
+#define MONITOR_KEY_LSHIFT _MONITOR_SPECIAL(15)
+#define MONITOR_KEY_RSHIFT _MONITOR_SPECIAL(16)
+#define MONITOR_KEY_LALT _MONITOR_SPECIAL(17)
+#define MONITOR_KEY_RALT _MONITOR_SPECIAL(18)
+#define MONITOR_KEY_PRINTSCRN _MONITOR_SPECIAL(19)
+#define MONITOR_KEY_CAPSLOCK _MONITOR_SPECIAL(20)
+#define MONITOR_KEY_NUMLOCK _MONITOR_SPECIAL(21)
+#define MONITOR_KEY_SCRLOCK _MONITOR_SPECIAL(22)
+#define MONITOR_KEY_SYSREQ _MONITOR_SPECIAL(23)
 
 // more pc-specific keys
-#define KEYPAD_START 128
-#define _KEYPAD(num) (KEY_KEYPAD_FLAG | KEY_SPECIAL_FLAG | (num + KEYPAD_START))
-#define KEY_KPHOME _KEYPAD(0) 
-#define KEY_KPUP _KEYPAD(1)
-#define KEY_KPPGUP _KEYPAD(2)
-#define KEY_KPMINUS _KEYPAD(3)
-#define KEY_KPLEFT _KEYPAD(4)
-#define KEY_KPCENTER _KEYPAD(5)
-#define KEY_KPRIGHT _KEYPAD(6)
-#define KEY_KPPLUS _KEYPAD(7)
-#define KEY_KPEND _KEYPAD(8)
-#define KEY_KPDOWN _KEYPAD(9)
-#define KEY_KPPGDN _KEYPAD(10)
-#define KEY_KPINSERT _KEYPAD(11)
-#define KEY_KPDEL _KEYPAD(12)
+#define MONITOR_KEYPAD_START 128
+#define _MONITOR_KEYPAD(num) (MONITOR_KEY_KEYPAD_FLAG | MONITOR_KEY_SPECIAL_FLAG | (num + MONITOR_KEYPAD_START))
+#define MONITOR_KEY_KPHOME _MONITOR_KEYPAD(0) 
+#define MONITOR_KEY_KPUP _MONITOR_KEYPAD(1)
+#define MONITOR_KEY_KPPGUP _MONITOR_KEYPAD(2)
+#define MONITOR_KEY_KPMINUS _MONITOR_KEYPAD(3)
+#define MONITOR_KEY_KPLEFT _MONITOR_KEYPAD(4)
+#define MONITOR_KEY_KPCENTER _MONITOR_KEYPAD(5)
+#define MONITOR_KEY_KPRIGHT _MONITOR_KEYPAD(6)
+#define MONITOR_KEY_KPPLUS _MONITOR_KEYPAD(7)
+#define MONITOR_KEY_KPEND _MONITOR_KEYPAD(8)
+#define MONITOR_KEY_KPDOWN _MONITOR_KEYPAD(9)
+#define MONITOR_KEY_KPPGDN _MONITOR_KEYPAD(10)
+#define MONITOR_KEY_KPINSERT _MONITOR_KEYPAD(11)
+#define MONITOR_KEY_KPDEL _MONITOR_KEYPAD(12)
 
 static const nk_keycode_t NoShiftNoCaps[] = {
-    KEY_UNKNOWN, ASCII_ESC, '1', '2',                  /* 0x00 - 0x03 */
+    MONITOR_KEY_UNKNOWN, ASCII_ESC, '1', '2',                  /* 0x00 - 0x03 */
     '3', '4', '5', '6',                                /* 0x04 - 0x07 */
     '7', '8', '9', '0',                                /* 0x08 - 0x0B */
     '-', '=', ASCII_BS, '\t',                          /* 0x0C - 0x0F */
     'q', 'w', 'e', 'r',                                /* 0x10 - 0x13 */
     't', 'y', 'u', 'i',                                /* 0x14 - 0x17 */
     'o', 'p', '[', ']',                                /* 0x18 - 0x1B */
-    '\r', KEY_LCTRL, 'a', 's',                         /* 0x1C - 0x1F */
+    '\r', MONITOR_KEY_LCTRL, 'a', 's',                         /* 0x1C - 0x1F */
     'd', 'f', 'g', 'h',                                /* 0x20 - 0x23 */
     'j', 'k', 'l', ';',                                /* 0x24 - 0x27 */
-    '\'', '`', KEY_LSHIFT, '\\',                       /* 0x28 - 0x2B */
+    '\'', '`', MONITOR_KEY_LSHIFT, '\\',                       /* 0x28 - 0x2B */
     'z', 'x', 'c', 'v',                                /* 0x2C - 0x2F */
     'b', 'n', 'm', ',',                                /* 0x30 - 0x33 */
-    '.', '/', KEY_RSHIFT, KEY_PRINTSCRN,               /* 0x34 - 0x37 */
-    KEY_LALT, ' ', KEY_CAPSLOCK, KEY_F1,               /* 0x38 - 0x3B */
-    KEY_F2, KEY_F3, KEY_F4, KEY_F5,                    /* 0x3C - 0x3F */
-    KEY_F6, KEY_F7, KEY_F8, KEY_F9,                    /* 0x40 - 0x43 */
-    KEY_F10, KEY_NUMLOCK, KEY_SCRLOCK, KEY_KPHOME,     /* 0x44 - 0x47 */
-    KEY_KPUP, KEY_KPPGUP, KEY_KPMINUS, KEY_KPLEFT,     /* 0x48 - 0x4B */
-    KEY_KPCENTER, KEY_KPRIGHT, KEY_KPPLUS, KEY_KPEND,  /* 0x4C - 0x4F */
-    KEY_KPDOWN, KEY_KPPGDN, KEY_KPINSERT, KEY_KPDEL,   /* 0x50 - 0x53 */
-    KEY_SYSREQ, KEY_UNKNOWN, KEY_UNKNOWN, KEY_UNKNOWN, /* 0x54 - 0x57 */
+    '.', '/', MONITOR_KEY_RSHIFT, MONITOR_KEY_PRINTSCRN,               /* 0x34 - 0x37 */
+    MONITOR_KEY_LALT, ' ', MONITOR_KEY_CAPSLOCK, MONITOR_KEY_F1,               /* 0x38 - 0x3B */
+    MONITOR_KEY_F2, MONITOR_KEY_F3, MONITOR_KEY_F4, MONITOR_KEY_F5,                    /* 0x3C - 0x3F */
+    MONITOR_KEY_F6, MONITOR_KEY_F7, MONITOR_KEY_F8, MONITOR_KEY_F9,                    /* 0x40 - 0x43 */
+    MONITOR_KEY_F10, MONITOR_KEY_NUMLOCK, MONITOR_KEY_SCRLOCK, MONITOR_KEY_KPHOME,     /* 0x44 - 0x47 */
+    MONITOR_KEY_KPUP, MONITOR_KEY_KPPGUP, MONITOR_KEY_KPMINUS, MONITOR_KEY_KPLEFT,     /* 0x48 - 0x4B */
+    MONITOR_KEY_KPCENTER, MONITOR_KEY_KPRIGHT, MONITOR_KEY_KPPLUS, MONITOR_KEY_KPEND,  /* 0x4C - 0x4F */
+    MONITOR_KEY_KPDOWN, MONITOR_KEY_KPPGDN, MONITOR_KEY_KPINSERT, MONITOR_KEY_KPDEL,   /* 0x50 - 0x53 */
+    MONITOR_KEY_SYSREQ, MONITOR_KEY_UNKNOWN, MONITOR_KEY_UNKNOWN, MONITOR_KEY_UNKNOWN, /* 0x54 - 0x57 */
 };
 
 static const nk_keycode_t ShiftNoCaps[] = {
-    KEY_UNKNOWN, ASCII_ESC, '!', '@',                  /* 0x00 - 0x03 */
+    MONITOR_KEY_UNKNOWN, ASCII_ESC, '!', '@',                  /* 0x00 - 0x03 */
     '#', '$', '%', '^',                                /* 0x04 - 0x07 */
     '&', '*', '(', ')',                                /* 0x08 - 0x0B */
     '_', '+', ASCII_BS, '\t',                          /* 0x0C - 0x0F */
     'Q', 'W', 'E', 'R',                                /* 0x10 - 0x13 */
     'T', 'Y', 'U', 'I',                                /* 0x14 - 0x17 */
     'O', 'P', '{', '}',                                /* 0x18 - 0x1B */
-    '\r', KEY_LCTRL, 'A', 'S',                         /* 0x1C - 0x1F */
+    '\r', MONITOR_KEY_LCTRL, 'A', 'S',                         /* 0x1C - 0x1F */
     'D', 'F', 'G', 'H',                                /* 0x20 - 0x23 */
     'J', 'K', 'L', ':',                                /* 0x24 - 0x27 */
-    '"', '~', KEY_LSHIFT, '|',                         /* 0x28 - 0x2B */
+    '"', '~', MONITOR_KEY_LSHIFT, '|',                         /* 0x28 - 0x2B */
     'Z', 'X', 'C', 'V',                                /* 0x2C - 0x2F */
     'B', 'N', 'M', '<',                                /* 0x30 - 0x33 */
-    '>', '?', KEY_RSHIFT, KEY_PRINTSCRN,               /* 0x34 - 0x37 */
-    KEY_LALT, ' ', KEY_CAPSLOCK, KEY_F1,               /* 0x38 - 0x3B */
-    KEY_F2, KEY_F3, KEY_F4, KEY_F5,                    /* 0x3C - 0x3F */
-    KEY_F6, KEY_F7, KEY_F8, KEY_F9,                    /* 0x40 - 0x43 */
-    KEY_F10, KEY_NUMLOCK, KEY_SCRLOCK, KEY_KPHOME,     /* 0x44 - 0x47 */
-    KEY_KPUP, KEY_KPPGUP, KEY_KPMINUS, KEY_KPLEFT,     /* 0x48 - 0x4B */
-    KEY_KPCENTER, KEY_KPRIGHT, KEY_KPPLUS, KEY_KPEND,  /* 0x4C - 0x4F */
-    KEY_KPDOWN, KEY_KPPGDN, KEY_KPINSERT, KEY_KPDEL,   /* 0x50 - 0x53 */
-    KEY_SYSREQ, KEY_UNKNOWN, KEY_UNKNOWN, KEY_UNKNOWN, /* 0x54 - 0x57 */
+    '>', '?', MONITOR_KEY_RSHIFT, MONITOR_KEY_PRINTSCRN,               /* 0x34 - 0x37 */
+    MONITOR_KEY_LALT, ' ', MONITOR_KEY_CAPSLOCK, MONITOR_KEY_F1,               /* 0x38 - 0x3B */
+    MONITOR_KEY_F2, MONITOR_KEY_F3, MONITOR_KEY_F4, MONITOR_KEY_F5,                    /* 0x3C - 0x3F */
+    MONITOR_KEY_F6, MONITOR_KEY_F7, MONITOR_KEY_F8, MONITOR_KEY_F9,                    /* 0x40 - 0x43 */
+    MONITOR_KEY_F10, MONITOR_KEY_NUMLOCK, MONITOR_KEY_SCRLOCK, MONITOR_KEY_KPHOME,     /* 0x44 - 0x47 */
+    MONITOR_KEY_KPUP, MONITOR_KEY_KPPGUP, MONITOR_KEY_KPMINUS, MONITOR_KEY_KPLEFT,     /* 0x48 - 0x4B */
+    MONITOR_KEY_KPCENTER, MONITOR_KEY_KPRIGHT, MONITOR_KEY_KPPLUS, MONITOR_KEY_KPEND,  /* 0x4C - 0x4F */
+    MONITOR_KEY_KPDOWN, MONITOR_KEY_KPPGDN, MONITOR_KEY_KPINSERT, MONITOR_KEY_KPDEL,   /* 0x50 - 0x53 */
+    MONITOR_KEY_SYSREQ, MONITOR_KEY_UNKNOWN, MONITOR_KEY_UNKNOWN, MONITOR_KEY_UNKNOWN, /* 0x54 - 0x57 */
 };
 
 static const nk_keycode_t NoShiftCaps[] = {
-    KEY_UNKNOWN, ASCII_ESC, '1', '2',                  /* 0x00 - 0x03 */
+    MONITOR_KEY_UNKNOWN, ASCII_ESC, '1', '2',                  /* 0x00 - 0x03 */
     '3', '4', '5', '6',                                /* 0x04 - 0x07 */
     '7', '8', '9', '0',                                /* 0x08 - 0x0B */
     '-', '=', ASCII_BS, '\t',                          /* 0x0C - 0x0F */
     'Q', 'W', 'E', 'R',                                /* 0x10 - 0x13 */
     'T', 'Y', 'U', 'I',                                /* 0x14 - 0x17 */
     'O', 'P', '[', ']',                                /* 0x18 - 0x1B */
-    '\r', KEY_LCTRL, 'A', 'S',                         /* 0x1C - 0x1F */
+    '\r', MONITOR_KEY_LCTRL, 'A', 'S',                         /* 0x1C - 0x1F */
     'D', 'F', 'G', 'H',                                /* 0x20 - 0x23 */
     'J', 'K', 'L', ';',                                /* 0x24 - 0x27 */
-    '\'', '`', KEY_LSHIFT, '\\',                       /* 0x28 - 0x2B */
+    '\'', '`', MONITOR_KEY_LSHIFT, '\\',                       /* 0x28 - 0x2B */
     'Z', 'X', 'C', 'V',                                /* 0x2C - 0x2F */
     'B', 'N', 'M', ',',                                /* 0x30 - 0x33 */
-    '.', '/', KEY_RSHIFT, KEY_PRINTSCRN,               /* 0x34 - 0x37 */
-    KEY_LALT, ' ', KEY_CAPSLOCK, KEY_F1,               /* 0x38 - 0x3B */
-    KEY_F2, KEY_F3, KEY_F4, KEY_F5,                    /* 0x3C - 0x3F */
-    KEY_F6, KEY_F7, KEY_F8, KEY_F9,                    /* 0x40 - 0x43 */
-    KEY_F10, KEY_NUMLOCK, KEY_SCRLOCK, KEY_KPHOME,     /* 0x44 - 0x47 */
-    KEY_KPUP, KEY_KPPGUP, KEY_KPMINUS, KEY_KPLEFT,     /* 0x48 - 0x4B */
-    KEY_KPCENTER, KEY_KPRIGHT, KEY_KPPLUS, KEY_KPEND,  /* 0x4C - 0x4F */
-    KEY_KPDOWN, KEY_KPPGDN, KEY_KPINSERT, KEY_KPDEL,   /* 0x50 - 0x53 */
-    KEY_SYSREQ, KEY_UNKNOWN, KEY_UNKNOWN, KEY_UNKNOWN, /* 0x54 - 0x57 */
+    '.', '/', MONITOR_KEY_RSHIFT, MONITOR_KEY_PRINTSCRN,               /* 0x34 - 0x37 */
+    MONITOR_KEY_LALT, ' ', MONITOR_KEY_CAPSLOCK, MONITOR_KEY_F1,               /* 0x38 - 0x3B */
+    MONITOR_KEY_F2, MONITOR_KEY_F3, MONITOR_KEY_F4, MONITOR_KEY_F5,                    /* 0x3C - 0x3F */
+    MONITOR_KEY_F6, MONITOR_KEY_F7, MONITOR_KEY_F8, MONITOR_KEY_F9,                    /* 0x40 - 0x43 */
+    MONITOR_KEY_F10, MONITOR_KEY_NUMLOCK, MONITOR_KEY_SCRLOCK, MONITOR_KEY_KPHOME,     /* 0x44 - 0x47 */
+    MONITOR_KEY_KPUP, MONITOR_KEY_KPPGUP, MONITOR_KEY_KPMINUS, MONITOR_KEY_KPLEFT,     /* 0x48 - 0x4B */
+    MONITOR_KEY_KPCENTER, MONITOR_KEY_KPRIGHT, MONITOR_KEY_KPPLUS, MONITOR_KEY_KPEND,  /* 0x4C - 0x4F */
+    MONITOR_KEY_KPDOWN, MONITOR_KEY_KPPGDN, MONITOR_KEY_KPINSERT, MONITOR_KEY_KPDEL,   /* 0x50 - 0x53 */
+    MONITOR_KEY_SYSREQ, MONITOR_KEY_UNKNOWN, MONITOR_KEY_UNKNOWN, MONITOR_KEY_UNKNOWN, /* 0x54 - 0x57 */
 };
 
 static const nk_keycode_t ShiftCaps[] = {
-    KEY_UNKNOWN, ASCII_ESC, '!', '@',                  /* 0x00 - 0x03 */
+    MONITOR_KEY_UNKNOWN, ASCII_ESC, '!', '@',                  /* 0x00 - 0x03 */
     '#', '$', '%', '^',                                /* 0x04 - 0x07 */
     '&', '*', '(', ')',                                /* 0x08 - 0x0B */
     '_', '+', ASCII_BS, '\t',                          /* 0x0C - 0x0F */
     'q', 'w', 'e', 'r',                                /* 0x10 - 0x13 */
     't', 'y', 'u', 'i',                                /* 0x14 - 0x17 */
     'o', 'p', '{', '}',                                /* 0x18 - 0x1B */
-    '\r', KEY_LCTRL, 'a', 's',                         /* 0x1C - 0x1F */
+    '\r', MONITOR_KEY_LCTRL, 'a', 's',                         /* 0x1C - 0x1F */
     'd', 'f', 'g', 'h',                                /* 0x20 - 0x23 */
     'j', 'k', 'l', ':',                                /* 0x24 - 0x27 */
-    '"', '~', KEY_LSHIFT, '|',                         /* 0x28 - 0x2B */
+    '"', '~', MONITOR_KEY_LSHIFT, '|',                         /* 0x28 - 0x2B */
     'z', 'x', 'c', 'v',                                /* 0x2C - 0x2F */
     'b', 'n', 'm', '<',                                /* 0x30 - 0x33 */
-    '>', '?', KEY_RSHIFT, KEY_PRINTSCRN,               /* 0x34 - 0x37 */
-    KEY_LALT, ' ', KEY_CAPSLOCK, KEY_F1,               /* 0x38 - 0x3B */
-    KEY_F2, KEY_F3, KEY_F4, KEY_F5,                    /* 0x3C - 0x3F */
-    KEY_F6, KEY_F7, KEY_F8, KEY_F9,                    /* 0x40 - 0x43 */
-    KEY_F10, KEY_NUMLOCK, KEY_SCRLOCK, KEY_KPHOME,     /* 0x44 - 0x47 */
-    KEY_KPUP, KEY_KPPGUP, KEY_KPMINUS, KEY_KPLEFT,     /* 0x48 - 0x4B */
-    KEY_KPCENTER, KEY_KPRIGHT, KEY_KPPLUS, KEY_KPEND,  /* 0x4C - 0x4F */
-    KEY_KPDOWN, KEY_KPPGDN, KEY_KPINSERT, KEY_KPDEL,   /* 0x50 - 0x53 */
-    KEY_SYSREQ, KEY_UNKNOWN, KEY_UNKNOWN, KEY_UNKNOWN, /* 0x54 - 0x57 */
+    '>', '?', MONITOR_KEY_RSHIFT, MONITOR_KEY_PRINTSCRN,               /* 0x34 - 0x37 */
+    MONITOR_KEY_LALT, ' ', MONITOR_KEY_CAPSLOCK, MONITOR_KEY_F1,               /* 0x38 - 0x3B */
+    MONITOR_KEY_F2, MONITOR_KEY_F3, MONITOR_KEY_F4, MONITOR_KEY_F5,                    /* 0x3C - 0x3F */
+    MONITOR_KEY_F6, MONITOR_KEY_F7, MONITOR_KEY_F8, MONITOR_KEY_F9,                    /* 0x40 - 0x43 */
+    MONITOR_KEY_F10, MONITOR_KEY_NUMLOCK, MONITOR_KEY_SCRLOCK, MONITOR_KEY_KPHOME,     /* 0x44 - 0x47 */
+    MONITOR_KEY_KPUP, MONITOR_KEY_KPPGUP, MONITOR_KEY_KPMINUS, MONITOR_KEY_KPLEFT,     /* 0x48 - 0x4B */
+    MONITOR_KEY_KPCENTER, MONITOR_KEY_KPRIGHT, MONITOR_KEY_KPPLUS, MONITOR_KEY_KPEND,  /* 0x4C - 0x4F */
+    MONITOR_KEY_KPDOWN, MONITOR_KEY_KPPGDN, MONITOR_KEY_KPINSERT, MONITOR_KEY_KPDEL,   /* 0x50 - 0x53 */
+    MONITOR_KEY_SYSREQ, MONITOR_KEY_UNKNOWN, MONITOR_KEY_UNKNOWN, MONITOR_KEY_UNKNOWN, /* 0x54 - 0x57 */
 };
 
 #define KBD_RELEASE 0x80
@@ -351,12 +374,12 @@ static nk_keycode_t kbd_translate_monitor(nk_scancode_t scan)
 
   // update the flags
 
-  release = scan & KB_KEY_RELEASE;
-  scan &= ~KB_KEY_RELEASE;
+  release = scan & KB_MONITOR_KEY_RELEASE;
+  scan &= ~KB_MONITOR_KEY_RELEASE;
 
-  if (flags & KEY_CAPS_FLAG)
+  if (flags & MONITOR_KEY_CAPS_FLAG)
   {
-    if (flags & KEY_SHIFT_FLAG)
+    if (flags & MONITOR_KEY_SHIFT_FLAG)
     {
       table = ShiftCaps;
     }
@@ -367,7 +390,7 @@ static nk_keycode_t kbd_translate_monitor(nk_scancode_t scan)
   }
   else
   {
-    if (flags & KEY_SHIFT_FLAG)
+    if (flags & MONITOR_KEY_SHIFT_FLAG)
     {
       table = ShiftNoCaps;
     }
@@ -382,12 +405,12 @@ static nk_keycode_t kbd_translate_monitor(nk_scancode_t scan)
   flag = 0;
   switch (cur)
   {
-  case KEY_LSHIFT:
-  case KEY_RSHIFT:
-    flag = KEY_SHIFT_FLAG;
+  case MONITOR_KEY_LSHIFT:
+  case MONITOR_KEY_RSHIFT:
+    flag = MONITOR_KEY_SHIFT_FLAG;
     break;
-  case KEY_CAPSLOCK:
-    flag = KEY_CAPS_FLAG;
+  case MONITOR_KEY_CAPSLOCK:
+    flag = MONITOR_KEY_CAPS_FLAG;
     break;
   default:
     goto do_noflags;
@@ -395,14 +418,14 @@ static nk_keycode_t kbd_translate_monitor(nk_scancode_t scan)
   }
 
   // do_flags:
-  if (flag == KEY_CAPS_FLAG)
+  if (flag == MONITOR_KEY_CAPS_FLAG)
   {
     if (!release)
     {
-      if ((flags & KEY_CAPS_FLAG))
+      if ((flags & MONITOR_KEY_CAPS_FLAG))
       {
         // turn off caps lock on second press
-        flags &= ~KEY_CAPS_FLAG;
+        flags &= ~MONITOR_KEY_CAPS_FLAG;
         flag = 0;
       }
       else
@@ -568,7 +591,7 @@ static uint64_t get_hex_addr(char *addr_as_str) {
       addr += (curr - 'a' + 10)*power_of_16;
     } else {
       // something broken
-      // add ASSERT() later
+      ASSERT(false);
     }
     
     power_of_16*=16;
@@ -609,7 +632,7 @@ static uint64_t get_dec_addr(char *addr_as_str) {
       addr += (curr - '0')*power_of_10;
     } else {
       // something broken
-      // add ASSERT() later
+      ASSERT(false);
     }
     
     power_of_10*=10;
@@ -621,10 +644,6 @@ static uint64_t get_dec_addr(char *addr_as_str) {
 static int is_dr_num(char *addr_as_str) {
   int str_len = strlen(addr_as_str);
 
-  // // 64 bit addresses can't be larger than 16 hex digits, 18 including 0x
-  // if(str_len > 18) {
-  //   return 0;
-  // } 
   // TODO: check if dec_addr too big
 
   for(int i = 0; i < str_len; i++) {
@@ -649,7 +668,7 @@ static uint64_t get_dr_num(char *num_as_str) {
       num += (curr - '0')*power_of_10;
     } else {
       // something broken
-      // add ASSERT() later
+      ASSERT(false);
     }
     
     power_of_10*=10;
@@ -720,6 +739,8 @@ get_next_word(char *s)
 	return strtok_monitor(s, delim);
 }
 
+// Executing user commands
+
 int execute_quit(char command[]) {
   vga_puts("quit executed");
   return 1;
@@ -775,9 +796,6 @@ static int execute_watch(char command[]) {
 
   return 0;
 }
-
-
-
 
 static int execute_break(char command[]) {
   char* potential_num = get_next_word(NULL);
@@ -929,8 +947,6 @@ static void print_drinfo() {
 
 static int execute_drinfo(char command[]) {
   print_drinfo();
-
-
   return 0;
 }
 
@@ -973,7 +989,7 @@ static int execute_potential_command(char command[])
   //   // do something else
   //   vga_puts("memprint executed");
   // }
-  /* more else if clauses */
+  /* more else if clauses for more commands */
   else /* default: */
   {
     vga_puts("command not recognized");
@@ -1005,82 +1021,68 @@ static int nk_monitor_loop()
 static void __attribute__((noinline))
 do_backtrace (void ** fp, unsigned depth)
 {
-    if (!fp || fp >= 0x100000000UL) {//(void**)nk_get_nautilus_info()->sys.mem.phys_mem_avail) {
-        return;
-    }
-    
-    DHQ((uint64_t) *(fp+1));
-    DS(" ");
-    DHQ((uint64_t) *fp);
-    DS("\n");
-    //"[%2u] RIP: %p RBP: %p\n", depth, *(fp+1), *fp);
+  if (!fp || (unsigned long) fp >= 0x100000000UL) {//(void**)nk_get_nautilus_info()->sys.mem.phys_mem_avail) {
+      return;
+  }
+  
+  DHQ((uint64_t) *(fp+1));
+  DS(" ");
+  DHQ((uint64_t) *fp);
+  DS("\n");
 
-    do_backtrace(*fp, depth+1);
+  do_backtrace(*fp, depth+1);
 }
 
 static void 
 monitor_print_regs (struct nk_regs * r)
 {
-    int i = 0;
-    ulong_t cr0 = 0ul;
-    ulong_t cr2 = 0ul;
-    ulong_t cr3 = 0ul;
-    ulong_t cr4 = 0ul;
-    ulong_t cr8 = 0ul;
-    ulong_t fs  = 0ul;
-    ulong_t gs  = 0ul;
-    ulong_t sgs = 0ul;
-    uint_t  fsi;
-    uint_t  gsi;
-    uint_t  cs;
-    uint_t  ds;
-    uint_t  es;
-    ulong_t efer;
+  int i = 0;
+  ulong_t cr0 = 0ul;
+  ulong_t cr2 = 0ul;
+  ulong_t cr3 = 0ul;
+  ulong_t cr4 = 0ul;
+  ulong_t cr8 = 0ul;
+  ulong_t fs  = 0ul;
+  ulong_t gs  = 0ul;
+  ulong_t sgs = 0ul;
+  uint_t  fsi;
+  uint_t  gsi;
+  uint_t  cs;
+  uint_t  ds;
+  uint_t  es;
+  ulong_t efer;
 
-    #define PRINT3(x, x_extra_space, y, y_extra_space, z, z_extra_space) DS(#x x_extra_space" = " ); DHQ(r->x); DS(", " #y y_extra_space" = " ); DHQ(r->y); DS(", " #z z_extra_space" = " ); DHQ(r->z); DS("\n");
-    #define PRINT3CR(x, x_extra_space, y, y_extra_space, z, z_extra_space) DS(#x x_extra_space " = "); DHQ(x); DS(", " #y y_extra_space" = "); DHQ(y); DS(", " #z z_extra_space" = "); DHQ(z); DS("\n");
-    #define PRINT2CR(x, x_extra_space, y, y_extra_space) DS(#x x_extra_space " = "); DHQ(x); DS(", " #y y_extra_space " = "); DHQ(y) DS("\n");
-    
-    DS("[-------------- Register Contents --------------]\n");
-    
-    PRINT3(rip, "   ",  rflags, "", rbp, "   ");
-    PRINT3(rsp, "   ",  rax, "   ", rbx, "   ");
-    PRINT3(rsi, "   ",  r8, "    ", r9, "    ");
-    PRINT3(r10, "   ",  r11, "   ", r12, "   ");
-    PRINT3(r13, "   ",  r14, "   ", r15, "   ");
-    
-    // printk("RIP: %04lx:%016lx\n", r->cs, r->rip);
-    // printk("RSP: %04lx:%016lx RFLAGS: %08lx Vector: %08lx Error: %08lx\n", 
-    //         r->ss, r->rsp, r->rflags, r->vector, r->err_code);
+  #define PRINT3(x, x_extra_space, y, y_extra_space, z, z_extra_space) DS(#x x_extra_space" = " ); DHQ(r->x); DS(", " #y y_extra_space" = " ); DHQ(r->y); DS(", " #z z_extra_space" = " ); DHQ(r->z); DS("\n");
+  #define PRINT3CR(x, x_extra_space, y, y_extra_space, z, z_extra_space) DS(#x x_extra_space " = "); DHQ(x); DS(", " #y y_extra_space" = "); DHQ(y); DS(", " #z z_extra_space" = "); DHQ(z); DS("\n");
+  #define PRINT2CR(x, x_extra_space, y, y_extra_space) DS(#x x_extra_space " = "); DHQ(x); DS(", " #y y_extra_space " = "); DHQ(y) DS("\n");
+  
+  DS("[-------------- Register Contents --------------]\n");
+  
+  PRINT3(rip, "   ",  rflags, "", rbp, "   ");
+  PRINT3(rsp, "   ",  rax, "   ", rbx, "   ");
+  PRINT3(rsi, "   ",  r8, "    ", r9, "    ");
+  PRINT3(r10, "   ",  r11, "   ", r12, "   ");
+  PRINT3(r13, "   ",  r14, "   ", r15, "   ");
 
-    asm volatile("movl %%cs, %0": "=r" (cs));
-    asm volatile("movl %%ds, %0": "=r" (ds));
-    asm volatile("movl %%es, %0": "=r" (es));
-    asm volatile("movl %%fs, %0": "=r" (fsi));
-    asm volatile("movl %%gs, %0": "=r" (gsi));
+  asm volatile("movl %%cs, %0": "=r" (cs));
+  asm volatile("movl %%ds, %0": "=r" (ds));
+  asm volatile("movl %%es, %0": "=r" (es));
+  asm volatile("movl %%fs, %0": "=r" (fsi));
+  asm volatile("movl %%gs, %0": "=r" (gsi));
 
-    gs  = msr_read(MSR_GS_BASE);
-    fs  = msr_read(MSR_FS_BASE);
-    gsi = msr_read(MSR_KERNEL_GS_BASE);
-    efer = msr_read(IA32_MSR_EFER);
+  gs  = msr_read(MSR_GS_BASE);
+  fs  = msr_read(MSR_FS_BASE);
+  gsi = msr_read(MSR_KERNEL_GS_BASE);
+  efer = msr_read(IA32_MSR_EFER);
 
-    asm volatile("movq %%cr0, %0": "=r" (cr0));
-    asm volatile("movq %%cr2, %0": "=r" (cr2));
-    asm volatile("movq %%cr3, %0": "=r" (cr3));
-    asm volatile("movq %%cr4, %0": "=r" (cr4));
-    asm volatile("movq %%cr8, %0": "=r" (cr8));
+  asm volatile("movq %%cr0, %0": "=r" (cr0));
+  asm volatile("movq %%cr2, %0": "=r" (cr2));
+  asm volatile("movq %%cr3, %0": "=r" (cr3));
+  asm volatile("movq %%cr4, %0": "=r" (cr4));
+  asm volatile("movq %%cr8, %0": "=r" (cr8));
 
-    PRINT3CR(cr0, "   ", cr2, "   ", cr3, "   ");
-    PRINT2CR(cr4, "   ", cr8, "   ");
-    // printk("FS: %016lx(%04x) GS: %016lx(%04x) knlGS: %016lx\n", 
-    //         fs, fsi, gs, gsi, sgs);
-    // printk("CS: %04x DS: %04x ES: %04x CR0: %016lx\n", 
-    //         cs, ds, es, cr0);
-    // printk("CR2: %016lx CR3: %016lx CR4: %016lx\n", 
-    //         cr2, cr3, cr4);
-    // printk("CR8: %016lx EFER: %016lx\n", cr8, efer);
-
-   // printk("[-----------------------------------------------]\n");
+  PRINT3CR(cr0, "   ", cr2, "   ", cr3, "   ");
+  PRINT2CR(cr4, "   ", cr8, "   ");
 }
 
 
@@ -1105,16 +1107,18 @@ static uint64_t sync_dr7;
 static uint32_t monitor_entry_flag = 0;
 static nk_counting_barrier_t entry, update, exit;
 
+// bring all other CPUs into the monitor
 static void kick_other_CPUs() {
   int me = my_cpu_id();
   int num_cpus = nk_get_num_cpus();
   for(int i = 0; i < num_cpus; i++) {
     if(i != me) {
-      smp_xcall(i, nk_monitor_sync_entry, 0, 0); // replace with apic interrupt nmi
+      smp_xcall(i, nk_monitor_sync_entry, 0, 0); // TODO: replace with apic interrupt nmi
     }
   }
 }
 
+// update the global state of the debug registers
 static void sync_other_CPUs() {
   sync_dr0 = read_dr0();
   sync_dr1 = read_dr1();
@@ -1123,6 +1127,7 @@ static void sync_other_CPUs() {
   sync_dr7 = read_dr7();
 }
 
+// each CPU calls this to sync its debug registers
 static void sync_my_DRs() {
   write_dr0(sync_dr0);
   write_dr1(sync_dr1);
@@ -1133,19 +1138,14 @@ static void sync_my_DRs() {
 
 // Wait for the main core to be done, then continue
 void nk_monitor_sync_entry (void *arg) { 
-  DS("1");
   // let other cpus know I'm here
   nk_counting_barrier(&entry);
   // nothing to do until the winner updates the state
-  DS("2");
   nk_counting_barrier(&update);
   // update my local state (e.g. debug regs)
   sync_my_DRs();
   // let leader know I'm ready to go
-  DS("3");
   nk_counting_barrier(&exit);
-
-  DS("4");
  
 }
 
@@ -1154,7 +1154,7 @@ void nk_monitor_sync_entry (void *arg) {
 static int monitor_init_lock() {
   while (!__sync_bool_compare_and_swap(&monitor_entry_flag,0,1)) {
     // I lose the entry game to another cpu, so I must process
-    // wait until the leader is done before proceeding  
+    // wait until the leader is done before proceeding. After they are done, I can proceed.
     nk_monitor_sync_entry(0);
 
   }
@@ -1167,6 +1167,8 @@ static int monitor_init_lock() {
   
   return 0; // handle processing...
 }
+
+// Main CPU wraps up its use of the monitor and updates everyone
 static int monitor_deinit_lock() {
   sync_other_CPUs();
   // let other cpus know the state is now ready
@@ -1203,7 +1205,6 @@ static void monitor_deinit()
 
   irq_enable_restore(flags); // enable interrupts if they were enabled before the monitor call
   monitor_deinit_lock();
-  //__sync_fetch_and_or (&sync_done, 1);
   
 
 }
@@ -1218,16 +1219,11 @@ void nk_monitor_init()
 
 }
 
-// called once for each CPU at boot up
-void nk_monitor_init_ap()
-{
-  // todo: init dr registers
+// Entrypoints to the monitor
 
-}
-
+// Entering through the shell command or f9
 int nk_monitor_entry()
 {
-
   monitor_init();
   vga_attr = vga_make_color(COLOR_CYAN, COLOR_BLACK);
   vga_puts("Monitor Entered");
@@ -1237,13 +1233,11 @@ int nk_monitor_entry()
   return 0;
 }
 
-// Entrypoints
-
+// Entering because we had an unhandled exception
 int nk_monitor_excp_entry(excp_entry_t * excp,
                     excp_vec_t vector,
 		            void *state)
 {
-
   monitor_init();
   vga_attr = vga_make_color(COLOR_CYAN, COLOR_BLACK);
 
@@ -1256,6 +1250,7 @@ int nk_monitor_excp_entry(excp_entry_t * excp,
   return 0;
 }
 
+// Entering because we had an unhandled interrupt
 int nk_monitor_irq_entry(excp_entry_t * excp,
                     excp_vec_t vector,
 		            void *state)
@@ -1273,6 +1268,7 @@ int nk_monitor_irq_entry(excp_entry_t * excp,
   return 0;
 }
 
+// Entering because we panicked
 int nk_monitor_panic_entry(excp_entry_t * excp,
                     excp_vec_t vector,
 		            void *state)
@@ -1293,18 +1289,19 @@ int nk_monitor_panic_entry(excp_entry_t * excp,
 static void* breakpoint_addr[NAUT_CONFIG_MAX_CPUS];
 static int breakpoint_drnum[NAUT_CONFIG_MAX_CPUS];
 
+// Entering because we hit a breakpoint or a watchpoint
 int nk_monitor_debug_entry(excp_entry_t * excp,
                     excp_vec_t vector,
 		            void *state)
 {
 
   monitor_init();
-  // ignoring watchpoint for now
   dr6_t dr6;
   dr6.val = read_dr6();
   dr7_t dr7;
   dr7.val = read_dr7();
-  //DHRQ(t.val);
+
+  // if we are in single step mode, we are running one instruction after hitting a breakpoint
   if(dr6.bp_single == 1) {
     // set breakpoint back
     set_breakpoint((uint64_t) breakpoint_addr[my_cpu_id()], breakpoint_drnum[my_cpu_id()]);
@@ -1345,8 +1342,6 @@ int nk_monitor_debug_entry(excp_entry_t * excp,
       disable(3);
       excp->rflags |= 0b100000000ul;
     }
-
-    
     
   } 
   write_dr6(0);

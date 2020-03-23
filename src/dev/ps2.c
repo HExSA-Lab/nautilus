@@ -501,7 +501,6 @@ kbd_handler (excp_entry_t * excp, excp_vec_t vec, void *state)
     if (scan == 0xc3) {
       // F9 up - stop
       nk_monitor_entry();
-      //asm("int $1");
 
       // now ignore the key
       goto out;

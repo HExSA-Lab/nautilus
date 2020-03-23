@@ -142,7 +142,7 @@ null_excp_handler (excp_entry_t * excp,
 
     struct nk_regs * r = (struct nk_regs*)((char*)excp - 128);
     nk_print_regs(r);
-    backtrace(r->rbp); // steal this
+    backtrace(r->rbp);
 
     panic("+++ HALTING +++\n");
 
