@@ -1,8 +1,8 @@
-
 #include <nautilus/nautilus.h>
 //#include <nautilus/naut_types.h>
 #include <nautilus/shell.h>
 #include <nautilus/monitor.h>
+#include <nautilus/smp.h>
 
 
 // Graphics stuff
@@ -776,8 +776,7 @@ static int execute_watch(char command[]) {
   return 0;
 }
 
-static void* breakpoint_addr;
-static int breakpoint_drnum;
+
 
 
 static int execute_break(char command[]) {
@@ -844,6 +843,8 @@ static int execute_disable(char command[]) {
 
   disable(dreg_num);
 
+  vga_puts("register 0 disabled");
+
   return 0;
 }
 
@@ -865,6 +866,12 @@ static void print_drinfo() {
   if(dr6.dr3_detect) {
     DS("dr3 hit\n");
   }
+
+  DS("current cpu: ");
+  uint32_t id = my_cpu_id();
+  DHL(id);
+  DS("\n");
+
 
   dr7_t dr7;
 	dr7.val = read_dr7();
@@ -994,49 +1001,6 @@ static int nk_monitor_loop()
   return 0;
 }
 
-// every entry to the monitor
-static void monitor_init()
-{
-  vga_copy_out(screen_saved, VGA_WIDTH*VGA_HEIGHT*2);
-  vga_get_cursor(&cursor_saved_x, &cursor_saved_y);
-
-  vga_x = vga_y = 0;
-  vga_attr = vga_make_color(COLOR_MAGENTA, COLOR_BLACK);
-  vga_clear_screen(vga_make_entry(' ', vga_attr));
-  vga_set_cursor(vga_x, vga_y);
-}
-
-static void monitor_deinit()
-{
-  vga_copy_in(screen_saved, VGA_WIDTH*VGA_HEIGHT*2);
-  vga_set_cursor(cursor_saved_x, cursor_saved_y);
-
-}
-
-// called once for each CPU at boot up
-static void nk_monitor_init()
-{
-  // todo: maybe init stuff?
-}
-
-
-int nk_monitor_entry()
-{
-  uint8_t flags = irq_disable_save(); // disable interrupts
-  //cli(); // disable interrupts
-
-  //printk("monitor shell command invoked");
-  monitor_init();
-  //vga_clear_screen(vga_make_entry(' ', vga_make_color(COLOR_MAGENTA, COLOR_BLACK)));
-  vga_attr = vga_make_color(COLOR_CYAN, COLOR_BLACK);
-  vga_puts("Monitor Entered");
-  vga_attr = vga_make_color(COLOR_MAGENTA, COLOR_BLACK);
-  nk_monitor_loop();
-  monitor_deinit();
-
-  irq_enable_restore(flags); // enable interrupts if they were enabled before the monitor call
-  return 0;
-}
 
 static void __attribute__((noinline))
 do_backtrace (void ** fp, unsigned depth)
@@ -1053,8 +1017,6 @@ do_backtrace (void ** fp, unsigned depth)
 
     do_backtrace(*fp, depth+1);
 }
-
-
 
 static void 
 monitor_print_regs (struct nk_regs * r)
@@ -1131,12 +1093,156 @@ static void dump_entry(excp_entry_t * excp) {
 }
 
 
+// Global variables to sync dr registers across cores
+static int sync_done = 0;
+static uint64_t sync_dr0;
+static uint64_t sync_dr1;
+static uint64_t sync_dr2;
+static uint64_t sync_dr3;
+static uint64_t sync_dr7;
+
+
+static uint32_t monitor_entry_flag = 0;
+static nk_counting_barrier_t entry, update, exit;
+
+static void kick_other_CPUs() {
+  int me = my_cpu_id();
+  int num_cpus = nk_get_num_cpus();
+  for(int i = 0; i < num_cpus; i++) {
+    if(i != me) {
+      smp_xcall(i, nk_monitor_sync_entry, 0, 0); // replace with apic interrupt nmi
+    }
+  }
+}
+
+static void sync_other_CPUs() {
+  sync_dr0 = read_dr0();
+  sync_dr1 = read_dr1();
+  sync_dr2 = read_dr2();
+  sync_dr3 = read_dr3();
+  sync_dr7 = read_dr7();
+}
+
+static void sync_my_DRs() {
+  write_dr0(sync_dr0);
+  write_dr1(sync_dr1);
+  write_dr2(sync_dr2);
+  write_dr3(sync_dr3);
+  write_dr7(sync_dr7);
+}
+
+// Wait for the main core to be done, then continue
+void nk_monitor_sync_entry (void *arg) { 
+  DS("1");
+  // let other cpus know I'm here
+  nk_counting_barrier(&entry);
+  // nothing to do until the winner updates the state
+  DS("2");
+  nk_counting_barrier(&update);
+  // update my local state (e.g. debug regs)
+  sync_my_DRs();
+  // let leader know I'm ready to go
+  DS("3");
+  nk_counting_barrier(&exit);
+
+  DS("4");
+ 
+}
+
+
+// CPUs that enter take turns being the head CPU, passive CPUs just spin
+static int monitor_init_lock() {
+  while (!__sync_bool_compare_and_swap(&monitor_entry_flag,0,1)) {
+    // I lose the entry game to another cpu, so I must process
+    // wait until the leader is done before proceeding  
+    nk_monitor_sync_entry(0);
+
+  }
+  // My entry into the monitor is the winning one (I am the leader)
+  // set up logic needed by all cpus for this entry
+  // force other cpus to enter the monitor
+  kick_other_CPUs();
+  // wait on other cpus to catch up
+  nk_counting_barrier(&entry);
+  
+  return 0; // handle processing...
+}
+static int monitor_deinit_lock() {
+  sync_other_CPUs();
+  // let other cpus know the state is now ready
+  nk_counting_barrier(&update);
+  // reset the entry flag
+  __sync_fetch_and_and(&monitor_entry_flag,0);
+  // wait on other cpus to use the state
+  nk_counting_barrier(&exit);
+  return 0;
+}
+
+// every entry to the monitor
+static void monitor_init()
+{
+  uint8_t flags = irq_disable_save(); // disable interrupts
+  monitor_init_lock();
+
+  vga_copy_out(screen_saved, VGA_WIDTH*VGA_HEIGHT*2);
+  vga_get_cursor(&cursor_saved_x, &cursor_saved_y);
+
+  vga_x = vga_y = 0;
+  vga_attr = vga_make_color(COLOR_MAGENTA, COLOR_BLACK);
+  vga_clear_screen(vga_make_entry(' ', vga_attr));
+  vga_set_cursor(vga_x, vga_y);
+
+}
+
+// called right before every exit from the monitor
+static void monitor_deinit()
+{
+  vga_copy_in(screen_saved, VGA_WIDTH*VGA_HEIGHT*2);
+  vga_set_cursor(cursor_saved_x, cursor_saved_y);
+
+
+  irq_enable_restore(flags); // enable interrupts if they were enabled before the monitor call
+  monitor_deinit_lock();
+  //__sync_fetch_and_or (&sync_done, 1);
+  
+
+}
+
+// called once at boot up
+void nk_monitor_init()
+{
+  int num_cpus = nk_get_num_cpus();
+  nk_counting_barrier_init(&entry, num_cpus);
+  nk_counting_barrier_init(&update, num_cpus);
+  nk_counting_barrier_init(&exit, num_cpus);
+
+}
+
+// called once for each CPU at boot up
+void nk_monitor_init_ap()
+{
+  // todo: init dr registers
+
+}
+
+int nk_monitor_entry()
+{
+
+  monitor_init();
+  vga_attr = vga_make_color(COLOR_CYAN, COLOR_BLACK);
+  vga_puts("Monitor Entered");
+  vga_attr = vga_make_color(COLOR_MAGENTA, COLOR_BLACK);
+  nk_monitor_loop();
+  monitor_deinit();
+  return 0;
+}
+
+// Entrypoints
+
 int nk_monitor_excp_entry(excp_entry_t * excp,
                     excp_vec_t vector,
 		            void *state)
 {
-
-  uint8_t flags = irq_disable_save(); // disable interrupts
 
   monitor_init();
   vga_attr = vga_make_color(COLOR_CYAN, COLOR_BLACK);
@@ -1147,8 +1253,6 @@ int nk_monitor_excp_entry(excp_entry_t * excp,
 
   nk_monitor_loop();
   monitor_deinit();
-
-  irq_enable_restore(flags); // enable interrupts if they were enabled before the monitor call
   return 0;
 }
 
@@ -1156,8 +1260,6 @@ int nk_monitor_irq_entry(excp_entry_t * excp,
                     excp_vec_t vector,
 		            void *state)
 {
-
-  uint8_t flags = irq_disable_save(); // disable interrupts
 
   monitor_init();
   vga_attr = vga_make_color(COLOR_CYAN, COLOR_BLACK);
@@ -1168,8 +1270,6 @@ int nk_monitor_irq_entry(excp_entry_t * excp,
 
   nk_monitor_loop();
   monitor_deinit();
-
-  irq_enable_restore(flags); // enable interrupts if they were enabled before the monitor call
   return 0;
 }
 
@@ -1177,8 +1277,6 @@ int nk_monitor_panic_entry(excp_entry_t * excp,
                     excp_vec_t vector,
 		            void *state)
 {
-
-  uint8_t flags = irq_disable_save(); // disable interrupts
 
   monitor_init();
   vga_attr = vga_make_color(COLOR_CYAN, COLOR_BLACK);
@@ -1189,18 +1287,18 @@ int nk_monitor_panic_entry(excp_entry_t * excp,
 
   nk_monitor_loop();
   monitor_deinit();
-
-  irq_enable_restore(flags); // enable interrupts if they were enabled before the monitor call
   return 0;
 }
 
+static void* breakpoint_addr[NAUT_CONFIG_MAX_CPUS];
+static int breakpoint_drnum[NAUT_CONFIG_MAX_CPUS];
 
 int nk_monitor_debug_entry(excp_entry_t * excp,
                     excp_vec_t vector,
 		            void *state)
 {
 
-  uint8_t flags = irq_disable_save(); // disable interrupts
+  monitor_init();
   // ignoring watchpoint for now
   dr6_t dr6;
   dr6.val = read_dr6();
@@ -1209,54 +1307,52 @@ int nk_monitor_debug_entry(excp_entry_t * excp,
   //DHRQ(t.val);
   if(dr6.bp_single == 1) {
     // set breakpoint back
-    set_breakpoint((uint64_t) breakpoint_addr, breakpoint_drnum);
+    set_breakpoint((uint64_t) breakpoint_addr[my_cpu_id()], breakpoint_drnum[my_cpu_id()]);
     excp->rflags &= ~0b100000000ul;
 
   } else {
-
-    monitor_init();
     vga_attr = vga_make_color(COLOR_CYAN, COLOR_BLACK);
     vga_puts("+++ Debug Exception Caught by Monitor +++");
     dump_entry(excp);
     vga_attr = vga_make_color(COLOR_MAGENTA, COLOR_BLACK);
     nk_monitor_loop();
-    monitor_deinit();
+    
 
     // track any potential changes in dr7 
     dr7.val = read_dr7();
     // if we hit a breakpoint, disable breakpoint for one step
     if(dr6.dr0_detect && dr7.type0 == 0 && dr7.local0 && dr7.global0) {
-      breakpoint_addr = (void*) read_dr0();
-      breakpoint_drnum = 0;
+      breakpoint_addr[my_cpu_id()] = (void*) read_dr0();
+      breakpoint_drnum[my_cpu_id()] = 0;
       disable(0);
       excp->rflags |= 0b100000000ul;
     }
     if(dr6.dr1_detect && dr7.type1 == 0 && dr7.local1 && dr7.global1) {
-      breakpoint_addr = (void*) read_dr1();
-      breakpoint_drnum = 1;
+      breakpoint_addr[my_cpu_id()] = (void*) read_dr1();
+      breakpoint_drnum[my_cpu_id()] = 1;
       disable(1);
       excp->rflags |= 0b100000000ul;
     }
     if(dr6.dr2_detect && dr7.type2 == 0 && dr7.local2 && dr7.global2) {
-      breakpoint_addr = (void*) read_dr2();
-      breakpoint_drnum = 2;
+      breakpoint_addr[my_cpu_id()] = (void*) read_dr2();
+      breakpoint_drnum[my_cpu_id()] = 2;
       disable(2);
       excp->rflags |= 0b100000000ul;
     }
     if(dr6.dr3_detect && dr7.type3 == 0 && dr7.local3 && dr7.global3) {
-      breakpoint_addr = (void*) read_dr3();
-      breakpoint_drnum = 3;
+      breakpoint_addr[my_cpu_id()] = (void*) read_dr3();
+      breakpoint_drnum[my_cpu_id()] = 3;
       disable(3);
       excp->rflags |= 0b100000000ul;
     }
+
+    
     
   } 
-
-  irq_enable_restore(flags); // enable interrupts if they were enabled before the monitor call
   write_dr6(0);
+  monitor_deinit();
   return 0;
 }
-
 
 // handle shell command
 static int handle_monitor(char *buf, void *priv)
