@@ -134,8 +134,12 @@ null_irq_handler (excp_entry_t * excp,
 		  void       *state)
 {
 #ifdef NAUT_CONFIG_ENABLE_MONITOR
-    int nk_monitor_irq_entry ();
-    nk_monitor_irq_entry ();
+    int nk_monitor_irq_entry(excp_entry_t * excp,
+                    excp_vec_t vector,
+		            void *state);
+    nk_monitor_irq_entry (excp,
+                    vector,
+		            state);
 #endif
     printk("[Unhandled IRQ] (vector=0x%x)\n    RIP=(%p)     (core=%u)\n", 
             vector,

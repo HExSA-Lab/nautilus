@@ -72,8 +72,8 @@ typedef union {
 	uint8_t  bp_single:1;   // we are in bp due to single-step mode
 	uint8_t  bp_ts:1;       // we are in bp due to a task switch
 	uint64_t res3:48;       // reserved must be zero
-    };
-} dr6_t;
+    } __packed;
+} __packed dr6_t;
 
 
 static inline uint64_t read_dr6(void)
@@ -125,8 +125,8 @@ typedef union {
 	uint8_t type3:2;
 	uint8_t len3:2;
 	uint32_t res4:32;       // reserved, must be zero
-    };
-} dr7_t;
+    }__packed;
+}__packed dr7_t;
 
 	
 static inline uint64_t read_dr7(void)
@@ -143,88 +143,148 @@ static inline void write_dr7(uint64_t data)
 }
 
 
-// The following is a gruesome hack to track a single
-// address (for long word), looking for a write to it
+// track a single address (for long word), looking for a write to it
 
-static inline void set_watchpoint(uint64_t addr)
+static inline void set_watchpoint(uint64_t addr, int dreg_num)
 {
-    // we will force it into dr1
-    write_dr1(addr);
-
-    // global+local enable, 8 bytes
-	// 0x0009030C
-
-    // 00 00 00 00 10 01 00 00 00 0 00 0 1 1 00 00 00 00 
-	// 
-
-	// 0x980300
-	// 0x900300
-
 	dr7_t t;
+	switch (dreg_num) {
+		case 0:
+			t.val = read_dr7();
+			t.local0 = 1;
+			t.global0 = 1;
+			t.type0 = 3;
+			t.len0 = 2;
 
-	t.val = read_dr7();
-	uint8_t l0 = t.local0;
-	uint8_t g0 = t.global0;
+			write_dr0(addr);
+			write_dr7(t.val);
+			break;
+		case 1:
+			
+			t.val = read_dr7();
+			t.local1 = 1;
+			t.global1 = 1;
+			t.type1 = 3;
+			t.len1 = 2;
 
-	t.val = 0x900300;
-	t.local0 = l0;
-	t.global0 = g0;
-	t.local1 = 1;
-	t.global1 = 1;
+			write_dr1(addr);
+			write_dr7(t.val);
+			break;
+		case 2:
+			t.val = read_dr7();
+			t.local2 = 1;
+			t.global2 = 1;
+			t.type2 = 3;
+			t.len2 = 2;
 
-    write_dr7(t.val);
-	DS("dr7 is now: ");
-    DHQ(t.val);
-	DS("\n");
+			write_dr2(addr);
+			write_dr7(t.val);
+			break;
+		case 3:
+			t.val = read_dr7();
+			t.local3 = 1;
+			t.global3 = 1;
+			t.type3 = 3;
+			t.len3 = 2;
 
-    // breakpoint is now armed and will cause a debug
-    // exception on a write that overlaps [addr,addr+8)
+			write_dr3(addr);
+			write_dr7(t.val);
+			break;
+		default: 
+			break;
+	}
 }
 
-// The following is a gruesome hack to track a single
-// address (for long word), looking for a read or write to it
+// track a single instruction address, looking for an instruction fetch
 
 
-static inline void set_breakpoint(uint64_t addr)
+static inline void set_breakpoint(uint64_t addr, int dreg_num)
 {
-    // we will force it into dr0
-    write_dr0(addr);
 
-	// 00 00 00 00 10 01 00 00 00 0 00 0 1 1 00 00 00 11 
 	dr7_t t;
-	t.val = read_dr7();
-	uint8_t l1 = t.local1;
-	uint8_t g1 = t.global1;
+	switch (dreg_num) {
+		case 0:
+			t.val = read_dr7();
+			t.local0 = 1;
+			t.global0 = 1;
+			t.type0 = 0;
+			t.len0 = 0;
 
-	t.val = 0x900300;
-	t.local1 = l1;
-	t.global1 = g1;
-	t.local0 = 1;
-	t.global0 = 1;
+			write_dr0(addr);
+			write_dr7(t.val);
+			break;
+		case 1:
+			
+			t.val = read_dr7();
+			t.local1 = 1;
+			t.global1 = 1;
+			t.type1 = 0;
+			t.len1 = 0;
 
-    write_dr7(t.val);
-	DS("dr7 is now: ");
-    DHQ(t.val);
-	DS("\n");
+			write_dr1(addr);
+			write_dr7(t.val);
+			break;
+		case 2:
+			t.val = read_dr7();
+			t.local2 = 1;
+			t.global2 = 1;
+			t.type2 = 0;
+			t.len2 = 0;
 
-    // breakpoint is now armed and will cause a debug
-    // exception on a write that overlaps [addr,addr+8)
+			write_dr2(addr);
+			write_dr7(t.val);
+			break;
+		case 3:
+			t.val = read_dr7();
+			t.local3 = 1;
+			t.global3 = 1;
+			t.type3 = 0;
+			t.len3 = 0;
+
+			write_dr3(addr);
+			write_dr7(t.val);
+			break;
+		default: 
+			break;
+	}
 }
 
 
-static inline void disable_breakpoints()
+static inline void disable(int dreg_num)
 {
-    
-	dr7_t t; 
-	t.val = read_dr7();
-   	t.local0 = 0;   // local enable dr0 bp (this task)
-	t.global0 = 0;  // global enable dr0 bp (any task)
-    write_dr7(t.val);
-	DS("dr7 is now: ");
-    DHQ(t.val);
-	DS("\n");
+	dr7_t t;
+	switch (dreg_num) {
+		case 0:
+			t.val = read_dr7();
+			t.local0 = 0;
+			t.global0 = 0;
+			write_dr0(0); // delete address from register
+			write_dr7(t.val); // disable register
+			break;
+		case 1:
+			t.val = read_dr7();
+			t.local1 = 0;
+			t.global1 = 0;
+			write_dr1(0); // delete address from register
+			write_dr7(t.val); // disable register
+			break;
+		case 2:
+			t.val = read_dr7();
+			t.local2 = 0;
+			t.global2 = 0;
+			write_dr2(0); // delete address from register
+			write_dr7(t.val); // disable register
+			break;
+		case 3:
+			t.val = read_dr7();
+			t.local3 = 0;
+			t.global3 = 0;
+			write_dr3(0); // delete address from register
+			write_dr7(t.val); // disable register
+			break;
+		default: 
+			break;
+	}
 
-    // breakpoint is now armed and will cause a debug
-    // exception on a write that overlaps [addr,addr+8)
 }
     
