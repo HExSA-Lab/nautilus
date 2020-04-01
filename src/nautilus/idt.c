@@ -102,8 +102,8 @@ null_excp_handler (excp_entry_t * excp,
 	    for (i=0; i < num_cpus; i++) {
 		struct cpu *curr_cpu = sys->cpus[i];
 		if (curr_cpu == my_cpu) { continue; }
-		// THIS NEEDS TO BE NMI-DELIVERY - PAD
-		apic_ipi(sys->cpus[i]->apic, sys->cpus[i]->lapic_id, 2);
+		// THIS NEEDS TO BE NMI-DELIVERY, not just NMI vector - PAD
+		apic_ipi(sys->cpus[i]->apic, sys->cpus[i]->lapic_id, APIC_DEL_MODE_NMI);
 	    }
 	}
 	return 0;
@@ -115,6 +115,8 @@ null_excp_handler (excp_entry_t * excp,
     int nk_monitor_excp_entry(excp_entry_t * excp,
 			      excp_vec_t vector,
 			      void *state);
+    // If we decide we don't want to panic, you must call nk_watchdog_reset()
+    // after exiting the monitor
     nk_monitor_excp_entry (excp,
 			   vector,
 			   state);

@@ -29,6 +29,7 @@ void nk_watchdog_pet(void);
 
 int nk_watchdog_init(uint64_t bark_timeout_ns);
 int nk_watchdog_check(void);
+void nk_watchdog_reset(void);
 int nk_watchdog_deinit(void);
 
 

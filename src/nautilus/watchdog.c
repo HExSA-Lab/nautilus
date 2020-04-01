@@ -38,14 +38,14 @@
 #define DEBUG(fmt, args...) DEBUG_PRINT("watchdog: " fmt, ##args)
 #define INFO(fmt, args...) INFO_PRINT("watchdog: " fmt, ##args)
 
-#ifndef CEIL_DIV
 #define CEIL_DIV(x,y)  (((x)/(y)) + !!((x)%(y)))
-#endif
 
 /* quantum is actually 54 ms, but we use 50 ms for simplicity */
 #define I8254_QUANTUM_NS 50000000
 static uint64_t bark_timeout_ns=0;
 static uint64_t timeout_limit=0;
+static uint8_t nk_watchdog_monitor_entry=0;
+
 /*
   Currently, this is a thin wrapper on the i8254 PIT
   and the first IOAPIC.   Both of these devices are
@@ -147,7 +147,10 @@ int nk_watchdog_check(void)
     my_cpu->watchdog_count += 1;
     uint64_t trigger_count = my_cpu->watchdog_count; 
     DEBUG("Checking watchdog timer on CPU %d, count = %lu, limit = %lu\n", my_cpu->id, trigger_count, timeout_limit);
-    if (trigger_count >= timeout_limit) { return 0; }
+    if (trigger_count >= timeout_limit || nk_watchdog_monitor_entry) { 
+        __sync_fetch_and_or(&nk_watchdog_monitor_entry, 1);
+        return 0; 
+    }
 
     if (i8254_set_oneshot(bark_timeout_ns)) {
 	ERROR("Failed to set i8254 timer\n");
@@ -155,6 +158,23 @@ int nk_watchdog_check(void)
     }
     return 1;
 }
+
+void nk_watchdog_reset(void)
+{
+    __sync_fetch_and_and(&nk_watchdog_monitor_entry, 0);
+    
+    // this assumes we want to reset the watchdog count on every CPU
+    // We may not want to do this all the time. We could have this 
+    // function take an int that indicates whether or not we should
+    // reset all watchdog counts 
+    struct sys_info *sys = per_cpu_get(system);
+    int num_cpus = sys->num_cpus;
+    int i;
+    for (i=0; i < num_cpus; i++) {
+        sys->cpus[i]->watchdog_count = 0;
+    }
+}
+
 
 void nk_watchdog_deinit(void)
 {
