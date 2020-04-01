@@ -250,6 +250,12 @@ config USE_TICKETLOCKS
       Uses ticketlocks (similar to Linux impl.) instead of
       default spinlocks
 
+config PARTITION_SUPPORT
+    bool "Enable support for device partitioning"
+    default n
+    help
+      Enable disk/device partitioning
+
 config VIRTUAL_CONSOLE_DISPLAY_NAME
    bool "Display name of current virtual console"
    default y
@@ -1136,6 +1142,12 @@ config DEBUG_GROUP
       default n
       help
         Turn on debug output for network device interface
+    config DEBUG_PARTITION
+      bool "Debug Partitioning"
+      depends on PARTITION_SUPPORT && DEBUG_DEV
+      default n
+      help
+        Turn on debug output for partitioning
 
 config DEBUG_FILESYSTEM
         bool "Debug Base Filesystem Interface"
