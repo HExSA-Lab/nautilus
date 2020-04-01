@@ -158,6 +158,10 @@
 #include <rt/nesl/nesl.h>
 #endif
 
+#ifdef NAUT_CONFIG_ENABLE_MONITOR
+#include <nautilus/monitor.h>
+#endif
+
 
 extern spinlock_t printk_lock;
 

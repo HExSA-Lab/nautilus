@@ -30,6 +30,9 @@
 #include <nautilus/thread.h>
 #include <nautilus/irq.h>
 #include <nautilus/backtrace.h>
+#ifdef NAUT_CONFIG_WATCHDOG
+#include <nautilus/watchdog.h>
+#endif
 
 extern ulong_t idt_handler_table[NUM_IDT_ENTRIES];
 extern ulong_t idt_state_table[NUM_IDT_ENTRIES]; 
@@ -89,6 +92,25 @@ null_excp_handler (excp_entry_t * excp,
                    addr_t fault_addr,
 		   void *state)
 {
+#ifdef NAUT_CONFIG_WATCHDOG
+    if (vector == 2 && nk_watchdog_check()){
+	int i;
+	struct cpu *my_cpu = get_cpu();
+	if (my_cpu->id == 0) {
+	    struct sys_info *sys = per_cpu_get(system);
+	    int num_cpus = sys->num_cpus;
+	    for (i=0; i < num_cpus; i++) {
+		struct cpu *curr_cpu = sys->cpus[i];
+		if (curr_cpu == my_cpu) { continue; }
+		// THIS NEEDS TO BE NMI-DELIVERY - PAD
+		apic_ipi(sys->cpus[i]->apic, sys->cpus[i]->lapic_id, 2);
+	    }
+	}
+	return 0;
+    }
+#endif
+
+
 #ifdef NAUT_CONFIG_ENABLE_MONITOR
     int nk_monitor_excp_entry(excp_entry_t * excp,
 			      excp_vec_t vector,
