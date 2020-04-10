@@ -55,6 +55,9 @@
 #include <nautilus/barrier.h>
 #include <nautilus/vc.h>
 #include <nautilus/dev.h>
+#ifdef NAUT_CONFIG_PARTITION_SUPPORT
+#include <nautilus/partition.h>
+#endif
 #include <nautilus/chardev.h>
 #include <nautilus/blkdev.h>
 #include <nautilus/netdev.h>
@@ -473,6 +476,11 @@ init (unsigned long mbd,
     
 #ifdef NAUT_CONFIG_VIRTUAL_CONSOLE_CHARDEV_CONSOLE
     nk_vc_start_chardev_console(NAUT_CONFIG_VIRTUAL_CONSOLE_CHARDEV_CONSOLE_NAME);
+#endif
+
+
+#ifdef NAUT_CONFIG_PARTITION_SUPPORT
+    nk_partition_init(naut);
 #endif
 
 #ifdef NAUT_CONFIG_RAMDISK

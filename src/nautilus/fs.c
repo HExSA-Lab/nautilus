@@ -709,6 +709,7 @@ void test_fs() {
 	run_all();
 	DEBUG("Done");
 }
+#endif
 
 static int
 handle_fses (char * buf, void * priv)
@@ -782,4 +783,3 @@ static struct shell_cmd_impl cat_impl = {
 };
 nk_register_shell_cmd(cat_impl);
 
-#endif
