@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
@@ -842,11 +842,15 @@ apic_init (struct cpu * core)
 	// the logical id from the physical id
         val = apic_read(apic,APIC_REG_LDR);
         APIC_DEBUG("X2APIC LDR=0x%x (cluster 0x%x, logical id 0x%x)\n", 
-	val, APIC_LDR_X2APIC_CLUSTER(val), APIC_LDR_X2APIC_LOGID(val));
+		   val, APIC_LDR_X2APIC_CLUSTER(val), APIC_LDR_X2APIC_LOGID(val));
+	
     } else {
         val = apic_read(apic, APIC_REG_LDR) & ~APIC_LDR_MASK;
-	val |= SET_APIC_LOGICAL_ID(0);
+	// flat group 1 is for watchdog NMIs.
+	// At least one bit must be set in a group	
+	val |= SET_APIC_LOGICAL_ID(1);   
 	apic_write(apic, APIC_REG_LDR, val);
+	apic_write(apic, APIC_REG_DFR, APIC_DFR_FLAT);
     }
 
     apic_write(apic, APIC_REG_TPR, apic_read(apic, APIC_REG_TPR) & 0xffffff00);                       // accept all interrupts

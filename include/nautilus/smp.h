@@ -92,6 +92,10 @@ struct cpu {
     struct nk_fiber_percpu_state *f_state; /* Fiber state for each CPU */
     #endif
 
+    #ifdef NAUT_CONFIG_WATCHDOG
+    uint64_t watchdog_count; /* Number of times the watchdog timer has been triggered */
+    #endif
+
     cpu_id_t id;
     uint32_t lapic_id;   
     uint8_t enabled;

@@ -147,5 +147,6 @@ ioapic_read_reg (struct ioapic * ioapic,
     return *(volatile uint32_t *)(ioapic->base + IOWIN_REG);
 }
 
+void ioapic_write_irq_entry (struct ioapic * ioapic, uint8_t irq, uint64_t val);
 
 #endif

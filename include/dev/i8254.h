@@ -32,6 +32,8 @@ struct naut_info;
 ulong_t i8254_calib_tsc(void);
 int i8254_init(struct naut_info * naut);
 
+int i8254_set_oneshot(uint64_t time_ns);
+    
 #define PIT_TIMER_IRQ 0
 
 /* for configuring the PC speaker ports */

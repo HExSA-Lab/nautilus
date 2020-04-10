@@ -793,8 +793,8 @@ handle_shell (char * buf, void * priv)
     if (sscanf(buf, "shell %s", name) == 1) { 
         nk_launch_shell(name, -1, 0, 0); // simple interactive shell
         return 0;
-    }
-
+    } 
+    
     nk_vc_printf("invalid shell command\n");
 
     return 0;

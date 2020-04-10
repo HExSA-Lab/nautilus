@@ -74,6 +74,10 @@
 #include <nautilus/aspace.h>
 #endif
 
+#ifdef NAUT_CONFIG_WATCHDOG
+#include <nautilus/watchdog.h>
+#endif
+
 #ifdef NAUT_CONFIG_ENABLE_REMOTE_DEBUGGING 
 #include <nautilus/gdb-stub.h>
 #endif
@@ -159,6 +163,10 @@
 
 #ifdef NAUT_CONFIG_NESL_RT
 #include <rt/nesl/nesl.h>
+#endif
+
+#ifdef NAUT_CONFIG_ENABLE_MONITOR
+#include <nautilus/monitor.h>
 #endif
 
 
@@ -442,6 +450,10 @@ init (unsigned long mbd,
 
     smp_bringup_aps(naut);
 
+#ifdef NAUT_CONFIG_ENABLE_MONITOR
+    nk_monitor_init();
+#endif
+
     extern void nk_mwait_init(void);
     nk_mwait_init();
 
@@ -549,6 +561,10 @@ init (unsigned long mbd,
     nk_run_tests(naut);
 #endif
 
+#ifdef NAUT_CONFIG_WATCHDOG
+    nk_watchdog_init(NAUT_CONFIG_WATCHDOG_DEFAULT_TIME_MS * 1000000UL);
+#endif
+    
     nk_launch_shell("root-shell",0,0,0);
 
     runtime_init();
