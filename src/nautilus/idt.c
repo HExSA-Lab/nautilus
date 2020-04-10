@@ -86,7 +86,6 @@ struct idt_desc idt_descriptor =
 int 
 null_excp_handler (excp_entry_t * excp,
                    excp_vec_t vector,
-                   addr_t fault_addr,
 		   void *state)
 {
     cpu_id_t cpu_id = cpu_info_ready ? my_cpu_id() : 0xffffffff;
@@ -280,6 +279,11 @@ setup_idt (void)
 
     if (idt_assign_entry(PF_EXCP, (ulong_t)nk_pf_handler, 0) < 0) {
         ERROR_PRINT("Couldn't assign page fault handler\n");
+        return -1;
+    }
+
+    if (idt_assign_entry(GP_EXCP, (ulong_t)nk_gpf_handler, 0) < 0) {
+        ERROR_PRINT("Couldn't assign general protection fault handler\n");
         return -1;
     }
 

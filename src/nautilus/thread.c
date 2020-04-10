@@ -364,6 +364,9 @@ nk_thread_create (nk_thread_fun_t fun,
     }
 
     t->status = NK_THR_INIT;
+
+    // a thread joins its creator's address space 
+    t->aspace = get_cur_thread()->aspace;
     
     t->fun = fun;
     t->input = input;

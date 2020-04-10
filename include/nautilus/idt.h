@@ -90,6 +90,7 @@ struct excp_entry_state {
 
 typedef struct excp_entry_state excp_entry_t;
 typedef ulong_t excp_vec_t;
+typedef ulong_t excp_err_t;
 
 struct gate_desc64 {
     union {
@@ -127,7 +128,7 @@ int idt_get_entry(ulong_t entry, ulong_t *handler_addr, ulong_t *state_addr);
 
 int idt_find_and_reserve_range(ulong_t numentries, int aligned, ulong_t *first);
 
-int null_excp_handler(excp_entry_t * excp, excp_vec_t vec, addr_t fault_addr, void * state_addr);
+int null_excp_handler(excp_entry_t * excp, excp_vec_t vec, void * state_addr);
 int null_irq_handler(excp_entry_t * excp, excp_vec_t vector, void * state_addr);
 
 static inline void

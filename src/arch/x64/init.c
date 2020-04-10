@@ -67,6 +67,10 @@
 #include <nautilus/cmdline.h>
 #include <test/test.h>
 
+#ifdef NAUT_CONFIG_ASPACES
+#include <nautilus/aspace.h>
+#endif
+
 #ifdef NAUT_CONFIG_ENABLE_REMOTE_DEBUGGING 
 #include <nautilus/gdb-stub.h>
 #endif
@@ -351,6 +355,10 @@ init (unsigned long mbd,
      * allocated in the boot mem allocator are kept reserved */
     mm_boot_kmem_init();
 
+#ifdef NAUT_CONFIG_ASPACES
+    nk_aspace_init();
+#endif
+
 #ifdef NAUT_CONFIG_ENABLE_BDWGC
     // Bring up the BDWGC garbage collector if enabled
     nk_gc_bdwgc_init();
@@ -388,7 +396,6 @@ init (unsigned long mbd,
     ps2_init(naut);
 
     pci_init(naut);
-
 
     nk_sched_init(&sched_cfg);
 

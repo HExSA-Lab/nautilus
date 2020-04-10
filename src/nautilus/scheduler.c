@@ -598,13 +598,15 @@ static void print_thread(rt_thread *r, void *priv)
 	    nk_vc_printf(" periodic(%utp, %llu,%llu)", r->constraints.interrupt_priority_class,CO(r->constraints.periodic.period), CO(r->constraints.periodic.slice));
 	    break;
 	}
-	
+
 	nk_vc_printf(" stats: %llua %llure %llurl %llusw %llum",
 		     r->arrival_count,
 		     r->resched_count,
 		     r->resched_long_count,
 		     r->switch_in_count,
 		     r->miss_count);
+
+	nk_vc_printf(" [%s]", r->thread->aspace ? r->thread->aspace->name : "default");
 	
 	nk_vc_printf("\n");
 
@@ -655,10 +657,11 @@ void nk_sched_dump_cores(int cpu_arg)
 	if (cpu_arg<0 || cpu_arg==cpu) {
 	    char buf[256];
 	    struct apic_dev *apic = sys->cpus[cpu]->apic;
+	    struct nk_aspace *aspace = sys->cpus[cpu]->cur_aspace;
 
 	    s = sys->cpus[cpu]->sched_state;
 	    LOCAL_LOCK(s);
-	    snprintf(buf,256,"%dc %s %unl %luin %luex %luri %lut %s %utp %lup %lur %lua %lum (%s) (%luul %lusp %luap %luaq %luadp) (%luste %lustd %luute %luutd) (%luapic)\n",
+	    snprintf(buf,256,"%dc %s %unl %luin %luex %luri %lut %s %utp %lup %lur %lua %lum (%s) (%luul %lusp %luap %luaq %luadp) (%luste %lustd %luute %luutd) (%luapic) [%s]\n",
 		     cpu, 
 		     intr_model,
 		     sys->cpus[cpu]->interrupt_nesting_level,
@@ -691,7 +694,8 @@ void nk_sched_dump_cores(int cpu_arg)
 		     s->cfg.aperiodic_quantum, s->cfg.aperiodic_default_priority,
 		     s->tasks.sized_enqueued, s->tasks.sized_dequeued,
 		     s->tasks.unsized_enqueued, s->tasks.unsized_dequeued,
-		     apic->timer_count);
+		     apic->timer_count,
+		     aspace ? aspace->name : "default");
 #if INSTRUMENT
 	    char buf2[256];
             INST_DUMP(s,buf2,256);
