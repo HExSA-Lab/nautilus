@@ -25,11 +25,28 @@
 #ifndef __WATCHDOG
 #define __WATCHDOG
 
-void nk_watchdog_pet(void);
+// Pet the watchdog periodically when things are going OK
+// returns nonzero if the watchdog is barking on any CPU
+int nk_watchdog_pet(void);
 
-int nk_watchdog_init(uint64_t bark_timeout_ns);
-int nk_watchdog_check(void);
+// Always invoke on an NMI coming from the watchdog
+// on this cpu
+void nk_watchdog_nmi(void);
+
+//  <0 => error
+// ==0 => OK, watchdog is not barking
+//  >0 => OK, watchdog is barking (time's up)
+int  nk_watchdog_check_this_cpu(void);
+int  nk_watchdog_check_any_cpu(void);
+
+
+// reset watchdog after it has barked
+// this will reset every CPU's view
+// should be done just on CPU 0
 void nk_watchdog_reset(void);
+
+// timeout is how long between pets will be tolerated
+int nk_watchdog_init(uint64_t bark_timeout_ns);
 int nk_watchdog_deinit(void);
 
 

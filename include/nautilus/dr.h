@@ -24,7 +24,7 @@
  * redistribute, and modify it as specified in the file "LICENSE.txt".
  */
 
-/* General access routine for the debug registers */
+/* General access routines for the debug registers */
 
 // %dr0 through %dr3 are addresses to fault on
 
@@ -91,7 +91,7 @@ typedef union {
 	uint8_t  dr1_detect:1;
 	uint8_t  dr2_detect:1;
 	uint8_t  dr3_detect:1;
-	uint8_t  res1:8;        // reserved, read as 1s
+	uint16_t res1:8;        // reserved, read as 1s
 	uint8_t  res2:1;        // reserved, read as 0s
 	uint8_t  bp_debug_acc:1;// we are in bp due to touching a dr
 	uint8_t  bp_single:1;   // we are in bp due to single-step mode

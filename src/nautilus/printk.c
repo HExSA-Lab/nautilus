@@ -121,9 +121,18 @@ void
 panic (const char * fmt, ...)
 {
 #ifdef NAUT_CONFIG_ENABLE_MONITOR
-	int nk_monitor_panic_entry();
-	nk_monitor_panic_entry();
+    int nk_monitor_panic_entry(char*);
+    char buf[256];
+    va_list mon_arg;
+
+    va_start(mon_arg, fmt);
+    vsprintf(buf,fmt, mon_arg);
+    va_end(mon_arg);
+    
+    nk_monitor_panic_entry(buf);
+    
 #endif
+
     va_list arg;
 
     va_start(arg, fmt);

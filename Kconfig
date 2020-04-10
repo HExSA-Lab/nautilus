@@ -622,27 +622,14 @@ config WATCHDOG
        Force an NMI if a dedicated timer expires
        The dedicated timer is reset during interupt
        handling.   The primary purpose is to catch
-       deadlocks
-
-config WATCHDOG_HPET
-   bool "Use HPET as the timer instead of i8254 PIT"
-   depends on WATCHDOG
-   default n
-   help
-       Attempt to use the HPET, otherwise use
-       the 8254 PIT.   The 8254 allows a maximum
-       of interval of only 54 ms
+       deadlocks, including with the monitor
 
 config WATCHDOG_DEFAULT_TIME_MS
    depends on WATCHDOG
    int "Default time in ms before expiration"
-   default 50
+   default 1000
    help
        How long we can go without resetting the watchdog timer
-       Note that for the 8254, this is hard limited to its
-       maximum count.
-       IMPORTANT NOTE:  when using the 8254 as the timer
-       you probably will want HZ to be set to be > 1/this
        
 config DEBUG_WATCHDOG
    bool "Debug Watchdog Timer"
@@ -650,12 +637,13 @@ config DEBUG_WATCHDOG
    depends on WATCHDOG
    help
       Adds debugging output for watchdog
+      NOTE:  THIS IS USUALLY A BAD IDEA THAT CAN LEAD TO DEADLOCK
 endmenu
 
 config ISOCORE
    bool "Enable Isolated Core Execution"
    default n
-   help
+   help 
       Allows us to dedicate a core to the
       execution of a function without any
       interference from other cores
@@ -950,11 +938,11 @@ menu Debugging
         Turn on debug prints for the remote debugger subsystem
 
     config ENABLE_MONITOR
-      depends on !HVM_HRT
+      depends on !HVM_HRT 
       bool "Enable Monitor"
       default n
       help
-        This adds a built in monitor to Nautilus.
+        This adds a built in monitor to Nautilus.  You probably also want to enable the watchdog
 
     config DEBUG_PAGING
       bool "Debug Paging"

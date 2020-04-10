@@ -78,6 +78,8 @@ inline void vga_get_cursor(uint8_t *x, uint8_t *y)
   *y = vga_y;
 }
 
+// force attributes to be interpreted as colors instead
+// of blink/bold/italic/underline/etc
 static void disable_blink()
 {
   uint8_t val;
@@ -115,6 +117,9 @@ static void disable_blink()
 void vga_init_screen()
 {
   disable_blink();
+  //enable cursor as a block
+  outb(0x0a,CRTC_ADDR); outb((inb(CRTC_DATA) & 0xc0) | 0, CRTC_DATA);
+  outb(0x0b,CRTC_ADDR); outb((inb(CRTC_DATA) & 0xe0) | 15, CRTC_DATA);
 }
 
 

@@ -78,7 +78,7 @@ GLOBAL(early_irq_common)
 #ifdef NAUT_CONFIG_WATCHDOG
     // this call can nuke registers, but we don't
     // care because it is first, and we don't depend on
-    // the register contents yet	
+    // the register contents yet	 
     call nk_watchdog_pet
 #endif
 	
