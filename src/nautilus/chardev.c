@@ -24,6 +24,7 @@
 #include <nautilus/nautilus.h>
 #include <nautilus/dev.h>
 #include <nautilus/chardev.h>
+#include <nautilus/shell.h>
 
 #ifndef NAUT_CONFIG_DEBUG_CHARDEV
 #undef DEBUG_PRINT
@@ -197,3 +198,80 @@ int nk_char_dev_status(struct nk_char_dev *dev)
 	return NK_CHARDEV_READABLE | NK_CHARDEV_WRITEABLE;
     }
 }
+
+
+static int handle_chartest (char * buf, void * priv)
+{
+    char name[32], rw[16];
+    uint64_t start, count;
+    struct nk_char_dev *d;
+    struct nk_char_dev_characteristics c;
+
+    if ((sscanf(buf,"chartest %s %s %lu",name,rw,&count)!=3)
+	|| (*rw!='r' && *rw!='w') ) { 
+        nk_vc_printf("Don't understand %s\n",buf);
+        return -1;
+    }
+
+    if (!(d=nk_char_dev_find(name))) { 
+        nk_vc_printf("Can't find %s\n",name);
+        return -1;
+    }
+
+    if (nk_char_dev_get_characteristics(d,&c)) { 
+        nk_vc_printf("Can't get characteristics of %s\n",name);
+        return -1;
+    }
+    
+    char data[count+1];
+    uint64_t i;
+    uint64_t curpos,cur;
+
+    if (*rw == 'w') {
+	for (i=0;i<count;i++) {
+	    data[i] = "abcdefghijklmnopqrstuvwxyz0123456789"[i%36];
+	}
+
+	curpos=0;
+
+	while (curpos<count) { 
+	    cur = nk_char_dev_write(d,count,data+curpos,NK_DEV_REQ_BLOCKING);
+	    if (cur<0) { 
+		nk_vc_printf("Failed to write data (error)\n");
+		return -1;
+	    } else if (cur==0) {
+		nk_vc_printf("Failed to write data (eof)\n");
+		return -1;
+	    } else {
+		curpos+=cur;
+	    }
+	}
+    } else if (*rw == 'r') {
+	
+	curpos=0;
+	
+	while (curpos<count) { 
+	    cur = nk_char_dev_read(d,count,data+curpos,NK_DEV_REQ_BLOCKING);
+	    if (cur<0) { 
+		nk_vc_printf("Failed to read data (error)\n");
+		return -1;
+	    } else if (cur==0) {
+		nk_vc_printf("Failed to read data (eof)\n");
+		return -1;
+	    } else {
+		curpos+=cur;
+	    }
+	}
+	data[count] = 0;
+	nk_vc_printf("%s\n",data);
+    }
+    return 0;
+}
+
+
+static struct shell_cmd_impl chartest_impl = {
+    .cmd      = "chartest",
+    .help_str = "chartest dev r|w count",
+    .handler  = handle_chartest,
+};
+nk_register_shell_cmd(chartest_impl);

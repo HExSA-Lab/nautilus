@@ -34,6 +34,11 @@
 #define MAX_VIRTQS 4
 #define VIRTIO_MSI_NO_VECTOR 0xffff
 
+enum virtio_pci_dev_model {
+    VIRTIO_PCI_LEGACY_MODEL = 0,  // 0.9 spec + "transitional" in 1.0/1.1
+    VIRTIO_PCI_MODERN_MODEL       // 1.1 spec
+} ;
+
 // Virtio spec as of 4/18
 enum virtio_pci_dev_type {
     VIRTIO_PCI_UNKNOWN = -1,
@@ -57,8 +62,8 @@ enum virtio_pci_dev_type {
 };
 
 enum virtio_pci_int_type {
-    VIRTIO_PCI_LEGACY = 0,
-    VIRTIO_PCI_MSI_X
+    VIRTIO_PCI_LEGACY_INTERRUPT = 0,
+    VIRTIO_PCI_MSI_X_INTERRUPT
 };
 
 enum virtio_pci_register_access_method_type { NONE=-1, MEMORY=0, IO};
@@ -87,9 +92,9 @@ struct virtio_pci_virtq {
 
 // Generic info for a PCI_device
 struct virtio_pci_dev {
-    // our type
-    enum virtio_pci_dev_type type;
-    enum virtio_pci_int_type itype;
+    enum virtio_pci_dev_model model;
+    enum virtio_pci_dev_type  type;
+    enum virtio_pci_int_type  itype;
     
     // our internal state, set by specific driver
     void      *state;
@@ -103,6 +108,17 @@ struct virtio_pci_dev {
     // we will be put on a list of all virtio devices
     struct list_head virtio_node;
 
+    // Feature bits (offered and accepted)
+    // lower 32 bits only for legacy
+    uint64_t feat_offered;
+    uint64_t feat_accepted;
+    
+    /******************************************************************
+      LEGACY/TRANSITIONAL INTERFACE TO DEVICE REGISTERS
+       - SINGLE BLOCK OF REGISTERS WITH SPECIFIC OFFSETS
+       - Can be Memory or IO port mapped
+       - Interrupts via PCI legacy or by PCI MSI-X                      
+    *****************************************************************/
     // the following is for legacy interrupts
     // we will try to use MSI-X first
     uint8_t   pci_intr;  // number on bus
@@ -120,13 +136,27 @@ struct virtio_pci_dev {
     uint64_t  mem_start;
     uint64_t  mem_end;
 
-    // Virtqs
+    /******************************************************************
+      MODERN INTERFACE TO DEVICE REGISTERS
+       - Multiple blocks of registers, layed out via structure 
+         definitions (given below).
+       - Memory mapped access, must do atomic ops up to 4 bytes
+       - Interrupts via MSI-X, possibly configured via this interface
+       - following pointers go directly to where the thing is
+          memory-mapped
+    *****************************************************************/
+    struct virtio_pci_common_cfg *common;                // pointed to by the common cap
+    uint32_t                      notify_off_multiplier; // from the notify cap
+    uint32_t			  *notify_base_addr;	 // from the notify cap
+    uint8_t                       *device_specific;       // dev specific cap
+    // we use MSI-X, so we do not capture the ISR status cap
+    // we will not use the alernative pci config and so don't capture the pci config access cap
+    //
+    
+    // Virtqs, common across legacy and modern, if there is a god
     uint8_t num_virtqs;
     struct virtio_pci_virtq virtq[MAX_VIRTQS];
 
-    // Feature bits (offered and accepted)
-    uint32_t feat_offered;
-    uint32_t feat_accepted;
 };
 
 
@@ -138,7 +168,7 @@ int virtio_pci_virtqueue_deinit(struct virtio_pci_dev *dev);
 
 int virtio_pci_ack_device(struct virtio_pci_dev *dev);
 int virtio_pci_read_features(struct virtio_pci_dev *dev);
-int virtio_pci_write_features(struct virtio_pci_dev *dev, uint32_t features);
+int virtio_pci_write_features(struct virtio_pci_dev *dev, uint64_t features);
 int virtio_pci_start_device(struct virtio_pci_dev *dev);
 
 // allocate a single descriptor
@@ -150,73 +180,12 @@ int virtio_pci_desc_chain_alloc(struct virtio_pci_dev *dev, uint16_t qidx, uint1
 int virtio_pci_desc_free(struct virtio_pci_dev *dev, uint16_t qidx, uint16_t desc_idx);
 // free a chain descriptor starting with the given descriptor
 int virtio_pci_desc_chain_free(struct virtio_pci_dev *dev, uint16_t qidx, uint16_t desc_idx);
+// notify a device's virtqueue
+int virtio_pci_virtqueue_notify(struct virtio_pci_dev *dev, uint16_t qidx);
 
-static inline uint32_t virtio_pci_read_regl(struct virtio_pci_dev *dev, uint32_t offset)
-{
-    uint32_t result;
-    if (dev->method==MEMORY) {
-        uint64_t addr = dev->mem_start + offset;
-        __asm__ __volatile__ ("movl (%1), %0" : "=r"(result) : "r"(addr) : "memory");
-    } else {
-        result = inl(dev->ioport_start+offset);
-    }
-    return result;
-}
-
-static inline uint16_t virtio_pci_read_regw(struct virtio_pci_dev *dev, uint32_t offset)
-{
-    uint16_t result;
-    if (dev->method==MEMORY) {
-        uint64_t addr = dev->mem_start + offset;
-        __asm__ __volatile__ ("movw (%1), %0" : "=r"(result) : "r"(addr) : "memory");
-    } else {
-        result = inw(dev->ioport_start+offset);
-    }
-    return result;
-}
-
-static inline uint8_t virtio_pci_read_regb(struct virtio_pci_dev *dev, uint32_t offset)
-{
-    uint8_t result;
-    if (dev->method==MEMORY) {
-        uint64_t addr = dev->mem_start + offset;
-        __asm__ __volatile__ ("movb (%1), %0" : "=r"(result) : "r"(addr) : "memory");
-    } else {
-        result = inb(dev->ioport_start+offset);
-    }
-    return result;
-}
-
-static inline void virtio_pci_write_regl(struct virtio_pci_dev *dev, uint32_t offset, uint32_t data)
-{
-    if (dev->method==MEMORY) { 
-        uint64_t addr = dev->mem_start + offset;
-        __asm__ __volatile__ ("movl %1, (%0)" : "=r"(addr): "r"(data) : "memory");
-    } else {
-        outl(data,dev->ioport_start+offset);
-    }
-}
-
-static inline void virtio_pci_write_regw(struct virtio_pci_dev *dev, uint32_t offset, uint16_t data)
-{
-    if (dev->method==MEMORY) { 
-        uint64_t addr = dev->mem_start + offset;
-        __asm__ __volatile__ ("movw %1, (%0)" : "=r"(addr): "r"(data) : "memory");
-    } else {
-        outw(data,dev->ioport_start+offset);
-    }
-}
-
-static inline void virtio_pci_write_regb(struct virtio_pci_dev *dev, uint32_t offset, uint8_t data)
-{
-    if (dev->method==MEMORY) { 
-        uint64_t addr = dev->mem_start + offset;
-        __asm__ __volatile__ ("movb %1, (%0)" : "=r"(addr): "r"(data) : "memory");
-    } else {
-        outb(data,dev->ioport_start+offset);
-    }
-}
-
+/******************************************************************
+      LEGACY/TRANSITIONAL INTERFACE TO DEVICE REGISTERS
+ *****************************************************************/
 
 // common register offsets for legacy interface
 #define DEVICE_FEATURES 0x0    // 4 byte
@@ -232,11 +201,64 @@ static inline void virtio_pci_write_regb(struct virtio_pci_dev *dev, uint32_t of
 #define QUEUE_VEC       0x16   // 2 byte  if MSI-X
 #define DEVICE_REGS_START_MSI_X    0x18   // device registers start if MSI-X
 
+// used to find the offset to device registers given MSI-X is enabled
+// which offsets where they are in the legacy model
+#define virtio_pci_device_regs_start_legacy(v) ((v)->itype==VIRTIO_PCI_MSI_X_INTERRUPT ? DEVICE_REGS_START_MSI_X : DEVICE_REGS_START_LEGACY)
 
-static inline uint32_t virtio_pci_device_regs_start(struct virtio_pci_dev *v)
-{
-    return v->itype==VIRTIO_PCI_MSI_X ? DEVICE_REGS_START_MSI_X : DEVICE_REGS_START_LEGACY;
-}
+// Legacy register access via these functions
+uint32_t virtio_pci_read_regl(struct virtio_pci_dev *dev, uint32_t offset);
+uint16_t virtio_pci_read_regw(struct virtio_pci_dev *dev, uint32_t offset);
+uint8_t  virtio_pci_read_regb(struct virtio_pci_dev *dev, uint32_t offset);
+void     virtio_pci_write_regl(struct virtio_pci_dev *dev, uint32_t offset, uint32_t data);
+void     virtio_pci_write_regw(struct virtio_pci_dev *dev, uint32_t offset, uint16_t data);
+void     virtio_pci_write_regb(struct virtio_pci_dev *dev, uint32_t offset, uint8_t data);
+
+/******************************************************************
+  MODERN INTERFACE TO DEVICE REGISTERS
+  Use the pointers in the device structure to find the following
+  structures.  Then access the fields in the structure using atomics.
+ *****************************************************************/
+
+#if __GNUC__ < 5
+#define __ATOMIC_SEQ_CST 0
+#define __atomic_load_n(srcptr,   cmodel)         __sync_fetch_and_or(srcptr,0)
+#define __atomic_store_n(destptr, value, cmodel)  ({ *(destptr) = value; __sync_synchronize(); })
+#endif
+
+// atomic load from pointer with sequential consistency
+#define virtio_pci_atomic_load(srcptr)         __atomic_load_n(srcptr,__ATOMIC_SEQ_CST)
+
+// atomic store to pointer with sequenial consistency
+#define virtio_pci_atomic_store(destptr,value) __atomic_store_n(destptr,value,__ATOMIC_SEQ_CST)
+
+
+#define le64 uint64_t
+#define le32 uint32_t
+#define le16 uint16_t
+#define u8   uint8_t
+
+struct virtio_pci_common_cfg { 
+    /* About the whole device. */ 
+    le32 device_feature_select;     /* read-write */ 
+    le32 device_feature;            /* read-only for driver */ 
+    le32 driver_feature_select;     /* read-write */ 
+    le32 driver_feature;            /* read-write */ 
+    le16 msix_config;               /* read-write */ 
+    le16 num_queues;                /* read-only for driver */ 
+    u8 device_status;               /* read-write */ 
+    u8 config_generation;           /* read-only for driver */ 
+    
+    /* About a specific virtqueue. */ 
+    le16 queue_select;              /* read-write */ 
+    le16 queue_size;                /* read-write */ 
+    le16 queue_msix_vector;         /* read-write */ 
+    le16 queue_enable;              /* read-write */ 
+    le16 queue_notify_off;          /* read-only for driver */ 
+    le64 queue_desc;                /* read-write */ 
+    le64 queue_driver;              /* read-write */ 
+    le64 queue_device;              /* read-write */ 
+};
+
 
 
 #endif

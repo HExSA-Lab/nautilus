@@ -184,7 +184,6 @@ struct pci_cfg_space {
 
 
 typedef enum {PCI_BAR_NONE=0, PCI_BAR_MEM, PCI_BAR_IO} pci_bar_type_t;
-
 typedef enum {PCI_MSI_NONE=0, PCI_MSI_32, PCI_MSI_64, PCI_MSI_32_PER_VEC, PCI_MSI_64_PER_VEC } pci_msi_type_t;
 
 
@@ -279,9 +278,11 @@ uint32_t pci_dev_cfg_readl(struct pci_dev *dev, uint8_t off);
 void     pci_dev_cfg_writew(struct pci_dev *dev, uint8_t off, uint16_t val);
 void     pci_dev_cfg_writel(struct pci_dev *dev, uint8_t off, uint32_t val);
 
-uint64_t pci_get_bar_addr(struct pci_dev * dev, uint8_t barnum);
-uint64_t pci_get_mmio_size(struct pci_dev * dev, uint8_t barnum);
-pci_bar_type_t pci_get_bar_type (struct pci_dev * dev, uint8_t barnum);
+uint64_t pci_dev_get_bar_addr(struct pci_dev * dev, uint8_t barnum);
+uint64_t pci_dev_get_bar_size(struct pci_dev * dev, uint8_t barnum);
+// if return is same as curbar, then there is no next bar
+uint8_t  pci_dev_get_bar_next(struct pci_dev * dev, uint8_t curbar);
+pci_bar_type_t pci_dev_get_bar_type(struct pci_dev * dev, uint8_t barnum);
 
 /* command register manipulation */
 void pci_dev_disable_io(struct pci_dev * d);
@@ -298,6 +299,13 @@ void pci_dev_disable_master(struct pci_dev * d);
 // returns the offset in the config space of the capability
 // or zero if the capability does not exist
 uint8_t  pci_dev_get_capability(struct pci_dev *dev, uint8_t cap_id);
+
+// scan capabilities, applying the function to each one
+// data points to the current capability
+int      pci_dev_scan_capabilities(struct pci_dev *dev,
+				   void (*func)(void *state, void *data),
+				   void *state);
+
 
 // target cpu must currently be a single, physical cpu
 // after enabling, msi is *off* and the mask bits (if available)
