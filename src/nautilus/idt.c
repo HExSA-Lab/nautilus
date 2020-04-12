@@ -311,7 +311,10 @@ int nmi_handler (excp_entry_t * excp,
 #endif
     
 #if !defined(NAUT_CONFIG_WATCHDOG) && defined(NAUT_CONFIG_ENABLE_MONITOR)
-    if (nk_monitor_check()) {
+
+    int cpu;
+    
+    if (nk_monitor_check(&cpu)) {
 	// we are in the monitor on some cpu
 	// so this NMI must be coming from the monitor
 	return nk_monitor_sync_entry();

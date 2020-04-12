@@ -344,6 +344,14 @@ nk_pf_handler (excp_entry_t * excp,
     }
 #endif
 
+#ifdef NAUT_CONFIG_ENABLE_MONITOR
+    int nk_monitor_excp_entry(excp_entry_t * excp,
+			      excp_vec_t vector,
+			      void *state);
+
+    return nk_monitor_excp_entry(excp, vector, state);
+#endif
+
     printk("\n+++ Page Fault +++\n"
             "RIP: %p    Fault Address: 0x%llx \n"
             "Error Code: 0x%x    (core=%u)\n", 
@@ -381,6 +389,8 @@ nk_gpf_handler (excp_entry_t * excp,
     }
 #endif
 
+    // if monitor is active, we will fall through to it
+    // by calling null_excp_handler
     return null_excp_handler(excp,vector,state);
 }
 
