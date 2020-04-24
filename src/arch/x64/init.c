@@ -55,6 +55,9 @@
 #include <nautilus/barrier.h>
 #include <nautilus/vc.h>
 #include <nautilus/dev.h>
+#ifdef NAUT_CONFIG_PARTITION_SUPPORT
+#include <nautilus/partition.h>
+#endif
 #include <nautilus/chardev.h>
 #include <nautilus/blkdev.h>
 #include <nautilus/netdev.h>
@@ -66,6 +69,14 @@
 #include <nautilus/prog.h>
 #include <nautilus/cmdline.h>
 #include <test/test.h>
+
+#ifdef NAUT_CONFIG_ASPACES
+#include <nautilus/aspace.h>
+#endif
+
+#ifdef NAUT_CONFIG_WATCHDOG
+#include <nautilus/watchdog.h>
+#endif
 
 #ifdef NAUT_CONFIG_ENABLE_REMOTE_DEBUGGING 
 #include <nautilus/gdb-stub.h>
@@ -152,6 +163,10 @@
 
 #ifdef NAUT_CONFIG_NESL_RT
 #include <rt/nesl/nesl.h>
+#endif
+
+#ifdef NAUT_CONFIG_ENABLE_MONITOR
+#include <nautilus/monitor.h>
 #endif
 
 
@@ -351,6 +366,10 @@ init (unsigned long mbd,
      * allocated in the boot mem allocator are kept reserved */
     mm_boot_kmem_init();
 
+#ifdef NAUT_CONFIG_ASPACES
+    nk_aspace_init();
+#endif
+
 #ifdef NAUT_CONFIG_ENABLE_BDWGC
     // Bring up the BDWGC garbage collector if enabled
     nk_gc_bdwgc_init();
@@ -388,7 +407,6 @@ init (unsigned long mbd,
     ps2_init(naut);
 
     pci_init(naut);
-
 
     nk_sched_init(&sched_cfg);
 
@@ -432,6 +450,10 @@ init (unsigned long mbd,
 
     smp_bringup_aps(naut);
 
+#ifdef NAUT_CONFIG_ENABLE_MONITOR
+    nk_monitor_init();
+#endif
+
     extern void nk_mwait_init(void);
     nk_mwait_init();
 
@@ -466,6 +488,11 @@ init (unsigned long mbd,
     
 #ifdef NAUT_CONFIG_VIRTUAL_CONSOLE_CHARDEV_CONSOLE
     nk_vc_start_chardev_console(NAUT_CONFIG_VIRTUAL_CONSOLE_CHARDEV_CONSOLE_NAME);
+#endif
+
+
+#ifdef NAUT_CONFIG_PARTITION_SUPPORT
+    nk_partition_init(naut);
 #endif
 
 #ifdef NAUT_CONFIG_RAMDISK
@@ -534,6 +561,10 @@ init (unsigned long mbd,
     nk_run_tests(naut);
 #endif
 
+#ifdef NAUT_CONFIG_WATCHDOG
+    nk_watchdog_init(NAUT_CONFIG_WATCHDOG_DEFAULT_TIME_MS * 1000000UL);
+#endif
+    
     nk_launch_shell("root-shell",0,0,0);
 
     runtime_init();

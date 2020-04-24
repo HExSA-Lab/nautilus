@@ -120,6 +120,47 @@ static struct nk_dev_int ops = {
     .close=0,
 };
 
+// Added to allow using channel 0 as a (bad) watchdog timer
+int i8254_set_oneshot(uint64_t time_ns)
+{
+    uint16_t cycles;
+
+    uint64_t secs_recip = 1000000000UL/time_ns;
+    uint64_t ticks = 1193180UL/secs_recip;
+    
+
+    if (ticks>65536) {
+	ERROR_PRINT("Impossible PIT request %lu ns, %lu ticks\n",time_ns,ticks);
+	return -1;
+    } else {
+	if (ticks==65536) {
+	    cycles = 0;
+	} else {
+	    cycles = (uint16_t) ticks;
+	}
+    }
+
+    //
+    // configure PIT channel 0 for terminal count in binary
+    //
+    // 00 11 000 0 (mode 0) 
+
+    uint8_t ctrl =
+	PIT_CHAN(PIT_CHAN_SEL_0) |
+	PIT_ACC_MODE(PIT_ACC_MODE_BOTH) |
+	PIT_MODE(PIT_MODE_TERMINAL_COUNT) ;
+
+    outb(ctrl,PIT_CMD_REG);
+
+    outb(cycles & 0xff, PIT_CHAN0_DATA);
+    outb((cycles>>8) & 0xff, PIT_CHAN0_DATA);
+
+    // timer now set
+    return 0;
+    
+}
+
+
 int 
 i8254_init (struct naut_info * naut)
 {

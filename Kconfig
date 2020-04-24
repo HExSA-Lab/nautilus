@@ -250,6 +250,12 @@ config USE_TICKETLOCKS
       Uses ticketlocks (similar to Linux impl.) instead of
       default spinlocks
 
+config PARTITION_SUPPORT
+    bool "Enable support for device partitioning"
+    default n
+    help
+      Enable disk/device partitioning
+
 config VIRTUAL_CONSOLE_DISPLAY_NAME
    bool "Display name of current virtual console"
    default y
@@ -329,7 +335,8 @@ config VIRTUAL_CONSOLE_SERIAL_MIRROR_ALL
         Specifies the tick rate for timers and aperiodic
         scheduling.  The reciprical of this number is 
         the scheduling quantum for aperiodic (but not RT)
-        threads.
+        threads. IMPORTANT NOTE: if you are using a watchdog,
+	you should set this to be > 1/(watchdog period)
 
     config INTERRUPT_REINJECTION_DELAY_NS
        int "Interrupt Reinjection Delay (in ns)"
@@ -613,10 +620,36 @@ config REAL_MODE_INTERFACE_SEGMENT
       code invoking real mode interrupts
 
 
+menu "Watchdog Options"
+config WATCHDOG
+   bool "Enable Watchdog Timer"
+   default n
+   help
+       Force an NMI if a dedicated timer expires
+       The dedicated timer is reset during interupt
+       handling.   The primary purpose is to catch
+       deadlocks, including with the monitor
+
+config WATCHDOG_DEFAULT_TIME_MS
+   depends on WATCHDOG
+   int "Default time in ms before expiration"
+   default 1000
+   help
+       How long we can go without resetting the watchdog timer
+       
+config DEBUG_WATCHDOG
+   bool "Debug Watchdog Timer"
+   default n
+   depends on WATCHDOG
+   help
+      Adds debugging output for watchdog
+      NOTE:  THIS IS USUALLY A BAD IDEA THAT CAN LEAD TO DEADLOCK
+endmenu
+
 config ISOCORE
    bool "Enable Isolated Core Execution"
    default n
-   help
+   help 
       Allows us to dedicate a core to the
       execution of a function without any
       interference from other cores
@@ -910,6 +943,13 @@ menu Debugging
      help
         Turn on debug prints for the remote debugger subsystem
 
+    config ENABLE_MONITOR
+      depends on !HVM_HRT 
+      bool "Enable Monitor"
+      default n
+      help
+        This adds a built in monitor to Nautilus.  You probably also want to enable the watchdog
+
     config DEBUG_PAGING
       bool "Debug Paging"
       depends on DEBUG_PRINTS
@@ -1136,6 +1176,12 @@ config DEBUG_GROUP
       default n
       help
         Turn on debug output for network device interface
+    config DEBUG_PARTITION
+      bool "Debug Partitioning"
+      depends on PARTITION_SUPPORT && DEBUG_DEV
+      default n
+      help
+        Turn on debug output for partitioning
 
 config DEBUG_FILESYSTEM
         bool "Debug Base Filesystem Interface"
@@ -1167,6 +1213,70 @@ config DEBUG_PMC
 
 endmenu
 
+menu "Address Spaces"
+        config ASPACES
+	  bool "Enable Address Spaces"
+	  default n
+	  depends on X86_64_HOST
+	  select ASPACE_BASE
+	  help
+	     Enable address space abstractions plus address space
+	     switching on thread context switches
+	     
+	config DEBUG_ASPACES
+	  bool "Debug address space core"
+	  depends on ASPACES
+	  default n
+	  help
+	     Turn on debugging prints for the address space core
+	     
+	config ASPACE_BASE
+	  bool "Base abstraction"
+	  depends on ASPACES
+	  default y
+	  help
+	     This is the base address space abstraction
+	     which is the single, identity-mapped address space
+	     but now it has a name.   This must always be available
+
+	config DEBUG_ASPACE_BASE
+	  bool "Debug the base address space abstraction"
+	  depends on ASPACE_BASE
+	  default n
+	  help
+	     Turn on debugging prints for the paging address space abstraction
+
+        config ASPACE_PAGING
+	  bool "Paging abstraction"
+	  depends on ASPACES
+	  default y
+	  help
+	     This is the paging address space abstraction.
+	     It does lazy build of identity-mapped page tables, plus
+	     it allows creation of non-identity-mapped addresses
+
+	config DEBUG_ASPACE_PAGING
+	  bool "Debug the paging address space abstraction"
+	  depends on ASPACE_PAGING
+	  default n
+	  help
+	     Turn on debugging prints for the paging address space abstraction
+
+        config ASPACE_CARAT
+	  bool "CARAT  abstraction"
+	  depends on ASPACES
+	  default y
+	  help
+	     This is the CARAT address space abstraction.
+	     
+	config DEBUG_ASPACE_CARAT
+	  bool "Debug the CARAT address space abstraction"
+	  depends on ASPACE_CARAT
+	  default n
+	  help
+	     Turn on debugging prints for the CARAT address space abstraction
+
+endmenu
 
 menu "Runtimes"
 

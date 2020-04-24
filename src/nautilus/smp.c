@@ -40,6 +40,10 @@
 #include <dev/ioapic.h>
 #include <dev/apic.h>
 
+#ifdef NAUT_CONFIG_ASPACES
+#include <nautilus/aspace.h>
+#endif
+
 #ifdef NAUT_CONFIG_FIBER_ENABLE
 #include <nautilus/fiber.h>
 #endif
@@ -327,6 +331,11 @@ smp_ap_setup (struct cpu * core)
     }
 #endif
 
+#ifdef NAUT_CONFIG_ASPACES
+    if (nk_aspace_init_ap()) {
+        ERROR_PRINT("Could not set up aspaces for core %u\n",core->id);
+    }
+#endif
     
     apic_init(core);
 
@@ -334,7 +343,7 @@ smp_ap_setup (struct cpu * core)
         ERROR_PRINT("Could not setup xcall for core %u\n", core->id);
         return -1;
     }
-
+    
     extern struct nk_sched_config sched_cfg;
 
     if (nk_sched_init_ap(&sched_cfg) != 0) {

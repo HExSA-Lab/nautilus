@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
@@ -75,6 +75,13 @@ GLOBAL(early_irq_common)
 
     SAVE_GPRS()
 
+#ifdef NAUT_CONFIG_WATCHDOG
+    // this call can nuke registers, but we don't
+    // care because it is first, and we don't depend on
+    // the register contents yet	 
+    call nk_watchdog_pet
+#endif
+	
 #ifdef NAUT_CONFIG_CACHEPART
     // note that we have already saved all GPRs
     // we will also use callee-save registers to maintain state
@@ -249,13 +256,9 @@ skip_per_cpu_update1:
     movabs $idt_handler_table, %rdx
     movq (%rdx, %rsi, 8), %r8   # pointer to handler
     movabs $idt_state_table, %rdx
-    movq (%rdx, %rsi, 8), %rcx   # pointer to state
-    cmpq $14, %rsi
-    jnz no_pf
-    movq %cr2, %rdx
+    movq (%rdx, %rsi, 8), %rdx   # pointer to state
 
-no_pf:
-    callq *%r8   # rdi = exp struct, rsi = irq num, rdx = error, rcx = state
+    callq *%r8   # rdi = exp struct, rsi = irq num, rdx = state
     testq %rax, %rax
     jnz excp_err
 

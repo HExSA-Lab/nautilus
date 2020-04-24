@@ -338,6 +338,9 @@ apic_bcast_ipi (struct apic_dev * apic, uint_t vector)
 		   APIC_IPI_OTHERS | APIC_DEL_MODE_FIXED | vector);
 }
 
+#define apic_nmi(apic, target) apic_write_icr(apic,target,APIC_DEL_MODE_NMI | NMI_INT)
+#define apic_bcast_nmi(apic) apic_write_icr(apic,0,APIC_IPI_OTHERS| APIC_DEL_MODE_NMI | NMI_INT)
+    
 
 void apic_self_ipi (struct apic_dev * apic, uint_t vector);
 void apic_send_iipi(struct apic_dev * apic, uint32_t remote_id);

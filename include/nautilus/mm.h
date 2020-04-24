@@ -138,9 +138,9 @@ int  kmem_sanity_check();
 void * GC_memalign(size_t, size_t);
 void * GC_malloc(size_t);
 #ifdef NAUT_CONFIG_ALIGN_BDWGC
-#define malloc(s) ({ NK_MALLOC_PROF_ENTRY(); void *p; size_t __a = 1ULL<<(sizeof(size_t)*8UL - __builtin_clzl(s) - 1); __a <<= !!((s)&(~__a));  p = GC_memalign(__a,s); NK_MALLOC_PROF_EXIT(); p; })
+#define malloc(s) ({ NK_MALLOC_PROF_ENTRY(); void *____magic_ptr; size_t __a = 1ULL<<(sizeof(size_t)*8UL - __builtin_clzl(s) - 1); __a <<= !!((s)&(~__a));  ____magic_ptr = GC_memalign(__a,s); NK_MALLOC_PROF_EXIT(); ____magic_ptr; })
 #else
-#define malloc(s) ({ NK_MALLOC_PROF_ENTRY(); void *p = GC_malloc(s); NK_MALLOC_PROF_EXIT(); p; })
+#define malloc(s) ({ NK_MALLOC_PROF_ENTRY(); void *____magic_ptr = GC_malloc(s); NK_MALLOC_PROF_EXIT(); ____magic_ptr; })
 #endif
 #define malloc_specific(s,c) malloc(s)
 #define free(a) 
@@ -148,7 +148,7 @@ void * GC_malloc(size_t);
 #ifdef NAUT_CONFIG_ENABLE_PDSGC
 void *nk_gc_pdsgc_malloc(uint64_t);
 void *nk_gc_pdsgc_malloc_specific(uint64_t, int cpu);
-#define malloc(s) ({  NK_MALLOC_PROF_ENTRY(); void *p = nk_gc_pdsgc_malloc(s); NK_MALLOC_PROF_EXIT(); p; })
+#define malloc(s) ({  NK_MALLOC_PROF_ENTRY(); void *____magic_ptr = nk_gc_pdsgc_malloc(s); NK_MALLOC_PROF_EXIT(); ____magic_ptr; })
 #ifdef NAUT_CONFIG_EXPLICIT_ONLY_PDSGC
 #define free(s) NK_FREE_PROF_ENTRY(); kmem_free(s); NK_FREE_PROF_EXIT();
 #else
@@ -156,8 +156,8 @@ void *nk_gc_pdsgc_malloc_specific(uint64_t, int cpu);
 #endif
 #define malloc_specific(s,c) nk_gc_pdsgc_malloc_specific(s,c)
 #else
-#define malloc(s) ({ NK_MALLOC_PROF_ENTRY(); void *p = kmem_malloc(s); NK_MALLOC_PROF_EXIT(); p; })
-#define malloc_specific(s,c) ({ NK_MALLOC_PROF_ENTRY(); void *p = kmem_malloc_specific(s,c,0); NK_MALLOC_PROF_EXIT(); p; })
+#define malloc(s) ({ NK_MALLOC_PROF_ENTRY(); void *____magic_ptr = kmem_malloc(s); NK_MALLOC_PROF_EXIT(); ____magic_ptr; })
+#define malloc_specific(s,c) ({ NK_MALLOC_PROF_ENTRY(); void *____magic_ptr = kmem_malloc_specific(s,c,0); NK_MALLOC_PROF_EXIT(); ____magic_ptr; })
 #define free(a) NK_FREE_PROF_ENTRY(); kmem_free(a); NK_FREE_PROF_EXIT();
 #endif
 #endif

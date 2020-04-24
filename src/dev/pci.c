@@ -619,7 +619,7 @@ static inline int
 get_membar_size (uint32_t baddr)
 {
     // only applies to memory BARs
-    if (baddr == 0 || !(baddr & 0x1)) {
+    if (baddr & 0x1) {
         return 0;
     }
 
@@ -634,7 +634,7 @@ get_membar_size (uint32_t baddr)
 
 
 uint64_t
-pci_get_bar_addr (struct pci_dev * d, uint8_t barnum)
+pci_dev_get_bar_addr (struct pci_dev * d, uint8_t barnum)
 {
     uint32_t offset = PCI_BAR_OFFSET + (barnum * 4);
     uint64_t bar    = pci_dev_cfg_readl(d, offset);
@@ -643,18 +643,53 @@ pci_get_bar_addr (struct pci_dev * d, uint8_t barnum)
         return 0;
     }
 
+    //PCI_DEBUG("Read bar as 0x%x\n",bar);
+
     // we need to get the upper 32 bits of the address if this is a 64-bit BAR
     if (get_membar_size(bar) == 64) {
         bar |= ((uint64_t)pci_dev_cfg_readl(d, offset + 4)) << 32;
+	//PCI_DEBUG("long bar addr = %lx\n",bar&PCI_BAR_MEM_MASK64);
         return bar & PCI_BAR_MEM_MASK64;
-    }
+    } 
+    
+    uint64_t addr = pci_dev_get_bar_type(d, barnum) == PCI_BAR_IO ? (bar & PCI_BAR_IO_MASK) : (bar & PCI_BAR_MEM_MASK);
+    
+    //PCI_DEBUG("short bar addr = %lx (%s)\n",addr, pci_dev_get_bar_type(d,barnum)==PCI_BAR_IO ? "io" : "memory");
 
-    return (pci_get_bar_type(d, barnum) == PCI_BAR_IO) ? (bar & PCI_BAR_IO_MASK) : (bar & PCI_BAR_MEM_MASK);
+    return addr;
 }
 
+uint8_t
+pci_dev_get_bar_next (struct pci_dev * d, uint8_t barnum)
+{
+    uint32_t offset = PCI_BAR_OFFSET + (barnum * 4);
+    uint64_t bar    = pci_dev_cfg_readl(d, offset);
+
+    if (barnum==5 || !bar) {
+	return barnum;
+    }
+
+    switch (pci_dev_get_bar_type(d,barnum)) {
+    case PCI_BAR_NONE:
+	return barnum;
+	break;
+    case PCI_BAR_IO:
+	return barnum+1;
+	break;
+    case PCI_BAR_MEM:
+	if (get_membar_size(bar)==64) {
+	    return barnum+2;
+	} else {
+	    return barnum+1;
+	}
+	break;
+    default:
+	return barnum;
+    }
+}
 
 static uint32_t
-__get_mmio_size_32 (struct pci_dev * d, uint32_t offset)
+__get_bar_size_32 (struct pci_dev * d, uint32_t offset)
 {
     uint32_t baddr = pci_dev_cfg_readl(d, offset);
     uint32_t size  = 0;
@@ -672,12 +707,14 @@ __get_mmio_size_32 (struct pci_dev * d, uint32_t offset)
     // restore original
     pci_dev_cfg_writel(d, offset, baddr);
 
+    //PCI_DEBUG("short bar size = %lx\n",~size+1);
+
     return ~size + 1;
 }
 
 
 static uint32_t
-__get_mmio_size_64 (struct pci_dev * d, uint32_t offset)
+__get_bar_size_64 (struct pci_dev * d, uint32_t offset)
 {
     uint32_t baddr0 = pci_dev_cfg_readl(d, offset);
     uint32_t baddr1 = pci_dev_cfg_readl(d, offset + 4);
@@ -702,20 +739,22 @@ __get_mmio_size_64 (struct pci_dev * d, uint32_t offset)
     pci_dev_cfg_writel(d, offset, baddr0);
     pci_dev_cfg_writel(d, offset + 4, baddr1);
 
+    //PCI_DEBUG("long bar size = %lx\n",~size+1);
+    
     return ~size + 1;
 }
 
 
 uint64_t
-pci_get_mmio_size (struct pci_dev * d, uint8_t barnum)
+pci_dev_get_bar_size (struct pci_dev * d, uint8_t barnum)
 {
     uint32_t offset = PCI_BAR_OFFSET + (barnum * 4);
     uint32_t bar    = pci_dev_cfg_readl(d, offset);
 
     if (get_membar_size(bar) == 64) {
-        return __get_mmio_size_64(d, offset);
+        return __get_bar_size_64(d, offset);
     } else {
-        return (uint64_t)__get_mmio_size_32(d, offset);
+        return (uint64_t)__get_bar_size_32(d, offset);
     }
 
     return 0;
@@ -723,7 +762,7 @@ pci_get_mmio_size (struct pci_dev * d, uint8_t barnum)
 
 
 pci_bar_type_t 
-pci_get_bar_type (struct pci_dev * d, uint8_t barnum)
+pci_dev_get_bar_type (struct pci_dev * d, uint8_t barnum)
 {
     uint32_t offset = PCI_BAR_OFFSET + (barnum * 4);
     uint32_t baddr  = pci_dev_cfg_readl(d, offset);
@@ -968,6 +1007,7 @@ struct pci_dev *pci_find_device(uint8_t bus, uint8_t num, uint8_t fun)
   }
 }
 
+
 int pci_dump_device(struct pci_dev *d)
 {
   int i;
@@ -1210,6 +1250,28 @@ void     pci_dev_cfg_writel(struct pci_dev *dev, uint8_t off, uint32_t val)
   pci_cfg_writel(dev->bus->num,dev->num,dev->fun,off,val);
 }
 
+int      pci_dev_scan_capabilities(struct pci_dev *d,
+				   void (*func)(void *state, void *indata),
+				   void *state)
+{
+    if (!(d->cfg.status & (1<<4))) { 
+	return -1;
+    }
+
+    uint8_t *data = (uint8_t*)&d->cfg;
+    uint8_t co = d->cfg.dev_cfg.cap_ptr & ~0x3;
+    
+    // scan the cfg space snapshot
+    while (co) {
+	uint8_t cap = data[co];
+	func(state,&data[co]);
+	co = data[co+1];
+    }
+    
+    return 0;
+}
+
+ 
 uint8_t  pci_dev_get_capability(struct pci_dev *d, uint8_t cap_id)
 {
   if (!(d->cfg.status & (1<<4))) { 

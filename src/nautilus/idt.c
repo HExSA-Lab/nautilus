@@ -30,6 +30,12 @@
 #include <nautilus/thread.h>
 #include <nautilus/irq.h>
 #include <nautilus/backtrace.h>
+#ifdef NAUT_CONFIG_WATCHDOG
+#include <nautilus/watchdog.h>
+#endif
+#ifdef NAUT_CONFIG_ENABLE_MONITOR
+#include <nautilus/monitor.h>
+#endif
 
 extern ulong_t idt_handler_table[NUM_IDT_ENTRIES];
 extern ulong_t idt_state_table[NUM_IDT_ENTRIES]; 
@@ -81,42 +87,49 @@ struct idt_desc idt_descriptor =
     .base_addr = (uint64_t)&idt64,
     .size      = (NUM_IDT_ENTRIES*16)-1,
 };
-        
+
+
+
 
 int 
 null_excp_handler (excp_entry_t * excp,
                    excp_vec_t vector,
-                   addr_t fault_addr,
 		   void *state)
 {
+#ifdef NAUT_CONFIG_ENABLE_MONITOR
+    return nk_monitor_excp_entry(excp, vector, state);
+#else
+    
     cpu_id_t cpu_id = cpu_info_ready ? my_cpu_id() : 0xffffffff;
     /* TODO: this should be based on scheduler initialization, not CPU */
     unsigned tid = cpu_info_ready ? get_cur_thread()->tid : 0xffffffff;
-
+    
     printk("\n+++ UNHANDLED EXCEPTION +++\n");
-
+    
     if (vector < 32) {
         printk("[%s] (0x%x) error=0x%x <%s>\n    RIP=%p      (core=%u, thread=%u)\n", 
-                excp_codes[vector][EXCP_NAME],
+	       excp_codes[vector][EXCP_NAME],
                 vector,
-                excp->error_code,
-                excp_codes[vector][EXCP_MNEMONIC],
-                (void*)excp->rip, 
-                cpu_id, tid);
+	       excp->error_code,
+	       excp_codes[vector][EXCP_MNEMONIC],
+	       (void*)excp->rip, 
+	       cpu_id, tid);
     } else {
         printk("[Unknown Exception] (vector=0x%x)\n    RIP=(%p)     (core=%u)\n", 
-                vector,
-                (void*)excp->rip,
-                cpu_id);
+	       vector,
+	       (void*)excp->rip,
+	       cpu_id);
     }
-
+    
     struct nk_regs * r = (struct nk_regs*)((char*)excp - 128);
     nk_print_regs(r);
     backtrace(r->rbp);
 
     panic("+++ HALTING +++\n");
-
+    
     return 0;
+#endif
+    
 }
 
 
@@ -125,6 +138,12 @@ null_irq_handler (excp_entry_t * excp,
                   excp_vec_t vector,
 		  void       *state)
 {
+#ifdef NAUT_CONFIG_ENABLE_MONITOR
+    return nk_monitor_irq_entry (excp,
+				 vector,
+				 state);
+#else
+    
     printk("[Unhandled IRQ] (vector=0x%x)\n    RIP=(%p)     (core=%u)\n", 
             vector,
             (void*)excp->rip,
@@ -137,7 +156,44 @@ null_irq_handler (excp_entry_t * excp,
     panic("+++ HALTING +++\n");
     
     return 0;
+#endif
 }
+
+int 
+debug_excp_handler (excp_entry_t * excp,
+                   excp_vec_t vector,
+		   void *state)
+{
+#ifdef NAUT_CONFIG_ENABLE_MONITOR
+    return nk_monitor_debug_entry (excp,
+				   vector,
+				   state);
+#else 
+    cpu_id_t cpu_id = cpu_info_ready ? my_cpu_id() : 0xffffffff;
+    /* TODO: this should be based on scheduler initialization, not CPU */
+    unsigned tid = cpu_info_ready ? get_cur_thread()->tid : 0xffffffff;
+
+    printk("\n+++ UNHANDLED DEBUG EXCEPTION +++\n");
+
+    printk("[%s] (0x%x) error=0x%x <%s>\n    RIP=%p      (core=%u, thread=%u)\n", 
+	   excp_codes[vector][EXCP_NAME],
+	   vector,
+	   excp->error_code,
+	   excp_codes[vector][EXCP_MNEMONIC],
+	   (void*)excp->rip, 
+	   cpu_id, tid);
+    
+    struct nk_regs * r = (struct nk_regs*)((char*)excp - 128);
+    nk_print_regs(r);
+    backtrace(r->rbp);
+    
+    panic("+++ HALTING +++\n");
+    
+    return 0;
+#endif
+}
+
+
 
 int
 reserved_irq_handler (excp_entry_t * excp,
@@ -172,6 +228,127 @@ pic_spur_int_handler (excp_entry_t * excp,
 {
     WARN_PRINT("Received Spurious interrupt from PIC\n");
     // No EOI should be done for a spurious interrupt
+    return 0;
+}
+
+
+
+
+/*
+
+  NMIs are currently used for two purposes, the watchdog
+  timer and the monitor.   
+
+  When the monitor is entered on any CPU, the monitor
+  NMIs all other CPUs to force them into the monitor as well,
+  regardless of their current state.
+
+  When the underlying watchdog timer fires, it NMIs all CPUs.
+
+  As a consequence, NMIs can come from three possible places: monitor,
+  watchdog timer and other NMI-triggering event on the machine.
+  Disambiguating these cases is a challenge.
+
+*/
+
+int nmi_handler (excp_entry_t * excp,
+		 excp_vec_t vector,
+		 addr_t fault_addr,
+		 void *state)
+{
+
+#if defined(NAUT_CONFIG_WATCHDOG) && !defined(NAUT_CONFIG_ENABLE_MONITOR)
+    int barking = 0;
+    
+    nk_watchdog_nmi();
+    
+    if (!nk_watchdog_check_any_cpu()) {
+	return 0;
+    } else {
+	barking = 1;
+	goto bad;
+    }
+    
+#endif
+    
+#if defined(NAUT_CONFIG_WATCHDOG) && defined(NAUT_CONFIG_ENABLE_MONITOR)
+
+
+    int cpu;
+    
+    if (nk_monitor_check(&cpu)) {
+	// we are in the monitor on some cpu
+	// so this NMI could be coming from the monitor
+	// or it could be coming from the watchdog
+	//   with us either in, or out of, the monitor
+	if (my_cpu_id()!=cpu) { 
+	    int rc = nk_monitor_sync_entry();
+	    nk_watchdog_reset();
+	    nk_watchdog_pet();
+	    return rc;
+	} else {
+	    // we caused the entry and we are now seeing
+	    // a spurious NMI because the timer is racing with
+	    // the monitor
+	    return 0;
+	}
+    } else {
+	// it must be coming from the timer or
+	// from some unknown external force
+	nk_watchdog_nmi();
+	if (nk_watchdog_check_this_cpu()) {
+	    // we are hanging on this cpu...
+	    int rc = nk_monitor_hang_entry(excp,vector,state);
+	    nk_watchdog_reset();
+	    nk_watchdog_pet();
+	    return rc;
+	} else {
+	    return 0;
+	}
+    }
+
+    
+#endif
+    
+#if !defined(NAUT_CONFIG_WATCHDOG) && defined(NAUT_CONFIG_ENABLE_MONITOR)
+
+    int cpu;
+    
+    if (nk_monitor_check(&cpu)) {
+	// we are in the monitor on some cpu
+	// so this NMI must be coming from the monitor
+	return nk_monitor_sync_entry();
+    } else {
+	// surprise NMI... 
+	return nk_monitor_excp_entry(excp, vector, state);
+    }
+
+#endif
+
+    printk("\n+++ NON MASKABLE INTERRUPT +++\n");
+
+#if defined(NAUT_CONFIG_WATCHDOG) && !defined(NAUT_CONFIG_ENABLE_MONITOR)
+ bad:
+    printk("\n+++ WATCHDOG BARKING (NMI) +++\n");
+#endif
+
+    cpu_id_t cpu_id = cpu_info_ready ? my_cpu_id() : 0xffffffff;
+    unsigned tid = cpu_info_ready ? get_cur_thread()->tid : 0xffffffff;
+
+    printk("[%s] (0x%x) error=0x%x <%s>\n    RIP=%p      (core=%u, thread=%u)\n", 
+	   excp_codes[vector][EXCP_NAME],
+	   vector,
+	   excp->error_code,
+	   excp_codes[vector][EXCP_MNEMONIC],
+	   (void*)excp->rip, 
+	   cpu_id, tid);
+
+    struct nk_regs * r = (struct nk_regs*)((char*)excp - 128);
+    nk_print_regs(r);
+    backtrace(r->rbp);
+
+    panic("+++ HALTING +++\n");
+
     return 0;
 }
 
@@ -283,6 +460,11 @@ setup_idt (void)
         return -1;
     }
 
+    if (idt_assign_entry(GP_EXCP, (ulong_t)nk_gpf_handler, 0) < 0) {
+        ERROR_PRINT("Couldn't assign general protection fault handler\n");
+        return -1;
+    }
+
     if (idt_assign_entry(DF_EXCP, (ulong_t)df_handler, 0) < 0) {
         ERROR_PRINT("Couldn't assign double fault handler\n");
         return -1;
@@ -292,6 +474,22 @@ setup_idt (void)
         ERROR_PRINT("Couldn't assign PIC spur int handler\n");
         return -1;
     }
+
+#ifdef NAUT_CONFIG_ENABLE_MONITOR
+    if (idt_assign_entry(DB_EXCP, (ulong_t)debug_excp_handler, 0) < 0) {
+        ERROR_PRINT("Couldn't assign debug excp handler\n");
+        return -1;
+    }
+#endif
+
+#if defined(NAUT_CONFIG_ENABLE_MONITOR) || defined(NAUT_CONFIG_WATCHDOG)
+    if (idt_assign_entry(NMI_INT, (ulong_t)nmi_handler, 0) < 0) {
+        ERROR_PRINT("Couldn't assign NMI handler\n");
+        return -1;
+    }
+#endif
+    
+
 
     lidt(&idt_descriptor);
 

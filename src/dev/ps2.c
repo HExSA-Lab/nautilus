@@ -35,6 +35,10 @@
 #include <nautilus/gdb-stub.h>
 #endif
 
+#ifdef NAUT_CONFIG_ENABLE_MONITOR
+#include <nautilus/monitor.h>
+#endif
+
 #ifndef NAUT_CONFIG_DEBUG_PS2
 #undef DEBUG_PRINT
 #define DEBUG_PRINT(fmt, args...) 
@@ -289,21 +293,25 @@ nk_keycode_t kbd_translate(nk_scancode_t scan)
   case KEY_RALT:
     flag = KEY_ALT_FLAG;
     break;
-  case KEY_CAPS_FLAG:
+  case KEY_CAPSLOCK:
     flag = KEY_CAPS_FLAG;
     break;
   default:
     goto do_noflags;
     break;
   }
-  
+
   // do_flags:
   if (flag==KEY_CAPS_FLAG) { 
-    if ((!release) && (flags & KEY_CAPS_FLAG)) { 
-      // turn off caps lock on second press
-      flags &= ~KEY_CAPS_FLAG;
-      flag = 0;
-    } 
+    if(!release) {
+      if ((flags & KEY_CAPS_FLAG)) {
+        // turn off caps lock on second press
+        flags &= ~KEY_CAPS_FLAG;
+      } else {
+        flags |= flag;
+      }
+    }
+    return NO_KEY;
   }
 
   if (release) {
@@ -486,8 +494,22 @@ kbd_handler (excp_entry_t * excp, excp_vec_t vec, void *state)
       // F8 up - ignore the key
       goto out;
     }
+
 #endif
-    
+
+#ifdef NAUT_CONFIG_ENABLE_MONITOR
+    if (scan == 0xc3) {
+      // F9 up - stop
+      nk_monitor_entry();
+
+      // now ignore the key
+      goto out;
+    }
+    if (scan == 0x43) {
+      // F9 down - ignore the key
+      goto out;
+    }
+#endif
     
     switcher(scan);
 

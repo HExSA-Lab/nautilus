@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
@@ -85,8 +85,15 @@ struct cpu {
     uint64_t interrupt_count;                  /* +16 PAD: DO NOT MOVE */
     uint64_t exception_count;                  /* +24 PAD: DO NOT MOVE */
 
+    // this field is only used if aspace are enabled
+    struct nk_aspace    *cur_aspace;            /* +32 PAD: DO NOT MOVE */
+
     #if NAUT_CONFIG_FIBER_ENABLE
     struct nk_fiber_percpu_state *f_state; /* Fiber state for each CPU */
+    #endif
+
+    #ifdef NAUT_CONFIG_WATCHDOG
+    uint64_t watchdog_count; /* Number of times the watchdog timer has been triggered */
     #endif
 
     cpu_id_t id;

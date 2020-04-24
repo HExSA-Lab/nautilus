@@ -68,6 +68,15 @@ obj-$(NAUT_CONFIG_ISOCORE) += isocore.o
 
 obj-$(NAUT_CONFIG_ENABLE_REMOTE_DEBUGGING) += gdb-stub.o
 
+obj-$(NAUT_CONFIG_ENABLE_MONITOR) += monitor.o
+
+obj-$(NAUT_CONFIG_WATCHDOG) +=  watchdog.o
+
 obj-$(NAUT_CONFIG_CACHEPART) +=	cachepart.o
 
 obj-$(NAUT_CONFIG_FIBER_ENABLE) += fiber.o
+
+obj-$(NAUT_CONFIG_ASPACES) +=  aspace.o 
+
+obj-$(NAUT_CONFIG_PARTITION_SUPPORT) += partition.o
+
