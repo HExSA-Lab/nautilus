@@ -1,0 +1,1 @@
+int some_glue_thing_for_omp;

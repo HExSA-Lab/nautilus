@@ -1361,7 +1361,7 @@ menu "Runtimes"
           bool  "OpenMP RT"
 	  default n
 	  help
-	      Include the GOMP-compatible OpenMP run-time
+	      Include the an OpenMP run-time
 
         choice
 	    depends on OPENMP_RT
@@ -1371,6 +1371,12 @@ menu "Runtimes"
           config OPENMP_RT_OMP
               bool "CLANG-compatible (OMP)"
 
+          config OPENMP_RT_INSTALL_DIR
+	      string "Installation Directory"
+	      depends on OPENMP_RT_OMP
+	      help
+	         Where to find your libomp.a and omp.h
+	      
           config OPENMP_RT_GOMP
               bool "GNU-compatible (GOMP) [going away]"
 
