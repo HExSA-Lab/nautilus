@@ -92,8 +92,19 @@ struct mem_region * nk_get_base_region_by_num (unsigned num);
 
 
 struct nk_topo_params {
-    uint32_t smt_bits;
-    uint32_t core_bits;
+
+    // amd
+    uint32_t max_ncores;
+    uint32_t max_nthreads;
+
+    // intel
+	uint32_t core_plus_mask_width;
+	uint32_t core_only_select_mask;
+	uint32_t core_plus_select_mask;
+    uint32_t smt_mask_width;
+    uint32_t smt_select_mask;
+    uint32_t pkg_select_mask_width;
+    uint32_t pkg_select_mask;
 };
 
 struct nk_cpu_coords {
