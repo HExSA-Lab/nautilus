@@ -764,6 +764,142 @@ void nk_sched_map_threads(int cpu, void (func)(struct nk_thread *t, void *state)
     GLOBAL_UNLOCK();
 }
 
+/* KCH NOTE: The following helper functions *currently* assume that they will
+ * be called only from the map_sibling* functions below, thus locking is left out.
+ * DO NOT use them individually, otherwise you'll see race conditions.
+ */
+uint8_t nk_threads_share_hwthread (struct nk_thread * a, struct nk_thread * b)
+{
+    uint8_t res;
+    res = a->current_cpu == b->current_cpu;
+    return res;
+}
+
+uint8_t nk_thread_shares_hwthread_with_me (struct nk_thread * other)
+{
+    return nk_threads_share_hwthread(get_cur_thread(), other);
+}
+
+uint8_t nk_threads_share_core (struct nk_thread * a, struct nk_thread * b)
+{
+    uint8_t res;
+    struct sys_info *sys = per_cpu_get(system);
+    res = nk_cpus_share_phys_core(sys->cpus[a->current_cpu], sys->cpus[b->current_cpu]);
+    return res;
+}
+
+uint8_t nk_thread_shares_core_with_me (struct nk_thread * other)
+{
+    return nk_threads_share_core(get_cur_thread(), other);
+}
+
+uint8_t 
+nk_threads_share_socket (struct nk_thread * a, struct nk_thread * b)
+{
+    uint8_t res;
+    struct sys_info *sys = per_cpu_get(system);
+    res = nk_cpus_share_socket(sys->cpus[a->current_cpu], sys->cpus[b->current_cpu]);
+    return res;
+}
+
+uint8_t 
+nk_thread_shares_socket_with_me (struct nk_thread * other)
+{
+    return nk_threads_share_socket(get_cur_thread(), other);
+}
+
+
+static uint8_t (*const thread_filter_funcs[])(struct nk_thread*, struct nk_thread*) =
+{ 
+    [NK_HW_THREAD_FILT] = nk_threads_share_hwthread,
+    [NK_PHYS_CORE_FILT] = nk_threads_share_core,
+    [NK_SOCKET_FILT]    = nk_threads_share_socket,
+};
+
+// Map a function to all other threads on the same X, where X can be hwthread, physical core, or socket
+void nk_sched_map_sibling_threads(void (func)(struct nk_thread *t, void *state), nk_topo_filt_t filter, void *state)
+{
+    GLOBAL_LOCK_CONF;
+    GLOBAL_LOCK();
+
+    rt_node *n = global_sched_state.thread_list->head;
+
+    while (n != NULL) {
+        if (n->thread->thread != get_cur_thread()) { // skip myself
+            if (filter == NK_ALL_FILT ||
+                    thread_filter_funcs[filter](get_cur_thread(), n->thread->thread)) {
+                func(n->thread->thread, state);
+            }
+        }
+
+        n = n->next;
+    }
+
+    GLOBAL_UNLOCK();
+}
+
+void nk_sched_map_hwthread_sibling_threads(void (func)(struct nk_thread *t, void *state), void *state)
+{
+    nk_sched_map_sibling_threads(func, NK_HW_THREAD_FILT, state);
+}
+
+void nk_sched_map_core_sibling_threads(void (func)(struct nk_thread *t, void *state), void *state)
+{
+    nk_sched_map_sibling_threads(func, NK_PHYS_CORE_FILT, state);
+}
+
+void nk_sched_map_socket_sibling_threads(void (func)(struct nk_thread *t, void *state), void *state)
+{
+    nk_sched_map_sibling_threads(func, NK_SOCKET_FILT, state);
+}
+
+static void
+topo_test (struct nk_thread * t, void * state)
+{
+    nk_vc_printf("THREADMAPPER: Applying func to thread %x\n", t->tid);
+}
+
+static int
+handle_threadtopotest (char * buf, void * priv)
+{
+    char aps;
+    if (((aps='a', strcmp(buf,"threadtopotest a"))==0) ||
+			((aps='l', strcmp(buf,"threadtopotest l"))==0) ||
+			((aps='p', strcmp(buf,"threadtopotest p"))==0) ||
+			((aps='s', strcmp(buf,"threadtopotest s"))==0)) {
+        switch (aps) { 
+            case 'a': 
+				nk_vc_printf("Mapping func to all siblings\n");
+                nk_sched_map_sibling_threads(topo_test,  NK_ALL_FILT, NULL);
+                break;
+            case 'l': 
+				nk_vc_printf("Mapping func to logical core siblings\n");
+                nk_sched_map_hwthread_sibling_threads(topo_test,  NULL);
+                break;
+            case 'p': 
+				nk_vc_printf("Mapping func to core siblings\n");
+                nk_sched_map_core_sibling_threads(topo_test, NULL);
+                break;
+            case 's': 
+				nk_vc_printf("Mapping func to socket siblings\n");
+                nk_sched_map_socket_sibling_threads(topo_test, NULL);
+                break;
+            default:
+                nk_vc_printf("Unknown threadtopotest command requested\n");
+                return -1;
+        }
+    }
+
+    return 0;
+}
+
+static struct shell_cmd_impl threadtopo_impl = {
+    .cmd      = "threadtopotest",
+    .help_str = "threadtopotest <a|s|p|l>",
+    .handler  = handle_threadtopotest,
+};
+nk_register_shell_cmd(threadtopo_impl);
+
 
 void nk_sched_stop_world()
 {
