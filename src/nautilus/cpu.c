@@ -28,6 +28,7 @@
 #include <nautilus/naut_string.h>
 #include <nautilus/backtrace.h>
 #include <nautilus/shell.h>
+#include <nautilus/topo.h>
 #include <nautilus/irq.h>
 #include <dev/i8254.h>
 
@@ -63,79 +64,79 @@ nk_is_intel (void)
 
 
 uint32_t
-nk_get_smt_id (struct cpu * cpu)
+nk_topo_get_smt_id (struct cpu * cpu)
 {
     return cpu->coord->smt_id;
 }
 
 
 uint32_t
-nk_get_my_smt_id (void)
+nk_topo_get_my_smt_id (void)
 {
-    return nk_get_smt_id(get_cpu());
+    return nk_topo_get_smt_id(get_cpu());
 }
 
 
 uint32_t
-nk_get_socket_id (struct cpu * cpu)
+nk_topo_get_socket_id (struct cpu * cpu)
 {
     return cpu->coord->pkg_id;
 }
 
 
 uint32_t
-nk_get_my_socket_id (void)
+nk_topo_get_my_socket_id (void)
 {
-    return nk_get_socket_id(get_cpu());
+    return nk_topo_get_socket_id(get_cpu());
 }
 
 uint32_t
-nk_get_phys_core_id (struct cpu * cpu)
+nk_topo_get_phys_core_id (struct cpu * cpu)
 {
     return cpu->coord->core_id;
 }
 
 uint32_t
-nk_get_my_phys_core_id (void)
+nk_topo_get_my_phys_core_id (void)
 {
-    return nk_get_phys_core_id(get_cpu());
+    return nk_topo_get_phys_core_id(get_cpu());
 }
 
 uint8_t
-nk_cpus_share_phys_core (struct cpu * a, struct cpu * b)
+nk_topo_cpus_share_phys_core (struct cpu * a, struct cpu * b)
 {
-    return nk_cpus_share_socket(a, b) && (a->coord->core_id == b->coord->core_id);
+    return nk_topo_cpus_share_socket(a, b) && (a->coord->core_id == b->coord->core_id);
 }
 
 uint8_t
-nk_same_phys_core_as_me (struct cpu * other)
+nk_topo_same_phys_core_as_me (struct cpu * other)
 {
-    return nk_cpus_share_phys_core(get_cpu(), other);
+    return nk_topo_cpus_share_phys_core(get_cpu(), other);
 }
 
 
 uint8_t
-nk_cpus_share_socket (struct cpu * a, struct cpu * b)
+nk_topo_cpus_share_socket (struct cpu * a, struct cpu * b)
 {
     return a->coord->pkg_id == b->coord->pkg_id;
 }
 
 uint8_t
-nk_same_socket_as_me (struct cpu * other)
+nk_topo_same_socket_as_me (struct cpu * other)
 {
-    return nk_cpus_share_socket(get_cpu(), other);
+    return nk_topo_cpus_share_socket(get_cpu(), other);
 }
 
 static uint8_t (*const cpu_filter_funcs[])(struct cpu*, struct cpu*) = 
 {
-    [NK_PHYS_CORE_FILT] = nk_cpus_share_phys_core,
-    [NK_SOCKET_FILT]    = nk_cpus_share_socket,
+    [NK_PHYS_CORE_FILT] = nk_topo_cpus_share_phys_core,
+    [NK_SOCKET_FILT]    = nk_topo_cpus_share_socket,
 };
 
 
 // We assume CPUs are not changing at this point, so no locks necessary
 void
-nk_map_sibling_cpus (void (func)(struct cpu * cpu, void * state), nk_topo_filt_t filter, void * state)
+nk_topo_map_sibling_cpus (void (func)(struct cpu * cpu, void * state), nk_topo_filt_t filter, void * state)
 {
     struct sys_info * sys = per_cpu_get(system);
     int i;
@@ -155,15 +156,15 @@ nk_map_sibling_cpus (void (func)(struct cpu * cpu, void * state), nk_topo_filt_t
 }
 
 void 
-nk_map_core_sibling_cpus (void (func)(struct cpu * cpu, void * state), void * state)
+nk_topo_map_core_sibling_cpus (void (func)(struct cpu * cpu, void * state), void * state)
 {
-    nk_map_sibling_cpus(func, NK_PHYS_CORE_FILT, state);
+    nk_topo_map_sibling_cpus(func, NK_PHYS_CORE_FILT, state);
 }
 
 void 
-nk_map_socket_sibling_cpus (void (func)(struct cpu * cpu, void * state), void * state)
+nk_topo_map_socket_sibling_cpus (void (func)(struct cpu * cpu, void * state), void * state)
 {
-    nk_map_sibling_cpus(func, NK_SOCKET_FILT, state);
+    nk_topo_map_sibling_cpus(func, NK_SOCKET_FILT, state);
 }
 
 static void
@@ -182,15 +183,15 @@ handle_cputopotest (char * buf, void * priv)
         switch (aps) { 
             case 'a': 
 				nk_vc_printf("Mapping func to all siblings\n");
-                nk_map_sibling_cpus(topo_test, NK_ALL_FILT, NULL);
+                nk_topo_map_sibling_cpus(topo_test, NK_ALL_FILT, NULL);
                 break;
             case 'p': 
 				nk_vc_printf("Mapping func to core siblings\n");
-                nk_map_core_sibling_cpus(topo_test, NULL);
+                nk_topo_map_core_sibling_cpus(topo_test, NULL);
                 break;
             case 's': 
 				nk_vc_printf("Mapping func to socket siblings\n");
-                nk_map_socket_sibling_cpus(topo_test, NULL);
+                nk_topo_map_socket_sibling_cpus(topo_test, NULL);
                 break;
             default:
                 nk_vc_printf("Unknown cputopotest command requested\n");
