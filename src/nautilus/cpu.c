@@ -129,8 +129,8 @@ nk_topo_same_socket_as_me (struct cpu * other)
 
 static uint8_t (*const cpu_filter_funcs[])(struct cpu*, struct cpu*) = 
 {
-    [NK_PHYS_CORE_FILT] = nk_topo_cpus_share_phys_core,
-    [NK_SOCKET_FILT]    = nk_topo_cpus_share_socket,
+    [NK_TOPO_PHYS_CORE_FILT] = nk_topo_cpus_share_phys_core,
+    [NK_TOPO_SOCKET_FILT]    = nk_topo_cpus_share_socket,
 };
 
 
@@ -141,7 +141,7 @@ nk_topo_map_sibling_cpus (void (func)(struct cpu * cpu, void * state), nk_topo_f
     struct sys_info * sys = per_cpu_get(system);
     int i;
 
-    if (filter != NK_PHYS_CORE_FILT && filter != NK_SOCKET_FILT && filter != NK_ALL_FILT) {
+    if (filter != NK_TOPO_PHYS_CORE_FILT && filter != NK_TOPO_SOCKET_FILT && filter != NK_TOPO_ALL_FILT) {
         ERROR_PRINT("Sibling CPU mapping only supports socket-level and physcore-level mapping\n");
         return;
     }
@@ -150,7 +150,7 @@ nk_topo_map_sibling_cpus (void (func)(struct cpu * cpu, void * state), nk_topo_f
 		if (i == my_cpu_id())
 			continue;
 
-        if (filter == NK_ALL_FILT || cpu_filter_funcs[filter](get_cpu(), sys->cpus[i])) 
+        if (filter == NK_TOPO_ALL_FILT || cpu_filter_funcs[filter](get_cpu(), sys->cpus[i])) 
             func(sys->cpus[i], state);
     }
 }
@@ -158,13 +158,13 @@ nk_topo_map_sibling_cpus (void (func)(struct cpu * cpu, void * state), nk_topo_f
 void 
 nk_topo_map_core_sibling_cpus (void (func)(struct cpu * cpu, void * state), void * state)
 {
-    nk_topo_map_sibling_cpus(func, NK_PHYS_CORE_FILT, state);
+    nk_topo_map_sibling_cpus(func, NK_TOPO_PHYS_CORE_FILT, state);
 }
 
 void 
 nk_topo_map_socket_sibling_cpus (void (func)(struct cpu * cpu, void * state), void * state)
 {
-    nk_topo_map_sibling_cpus(func, NK_SOCKET_FILT, state);
+    nk_topo_map_sibling_cpus(func, NK_TOPO_SOCKET_FILT, state);
 }
 
 static void
@@ -183,7 +183,7 @@ handle_cputopotest (char * buf, void * priv)
         switch (aps) { 
             case 'a': 
 				nk_vc_printf("Mapping func to all siblings\n");
-                nk_topo_map_sibling_cpus(topo_test, NK_ALL_FILT, NULL);
+                nk_topo_map_sibling_cpus(topo_test, NK_TOPO_ALL_FILT, NULL);
                 break;
             case 'p': 
 				nk_vc_printf("Mapping func to core siblings\n");

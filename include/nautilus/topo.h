@@ -24,10 +24,10 @@
 #define __TOPO_H__
 
 typedef enum {
-	NK_ALL_FILT,       // all sibling threads/cpus 
-    NK_HW_THREAD_FILT, // thread on same hw thread (hyperthread)
-    NK_PHYS_CORE_FILT, // threads/CPUs on same physical core
-    NK_SOCKET_FILT,    // threads/CPUs on same socket
+	NK_TOPO_ALL_FILT,       // all sibling threads/cpus 
+    NK_TOPO_HW_THREAD_FILT, // thread on same hw thread (hyperthread)
+    NK_TOPO_PHYS_CORE_FILT, // threads/CPUs on same physical core
+    NK_TOPO_SOCKET_FILT,    // threads/CPUs on same socket
 } nk_topo_filt_t;
 
 /******* Convenience API for CPU topology ************/

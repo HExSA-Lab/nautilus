@@ -812,9 +812,9 @@ nk_topo_thread_shares_socket_with_me (struct nk_thread * other)
 
 static uint8_t (*const thread_filter_funcs[])(struct nk_thread*, struct nk_thread*) =
 { 
-    [NK_HW_THREAD_FILT] = nk_topo_threads_share_hwthread,
-    [NK_PHYS_CORE_FILT] = nk_topo_threads_share_core,
-    [NK_SOCKET_FILT]    = nk_topo_threads_share_socket,
+    [NK_TOPO_HW_THREAD_FILT] = nk_topo_threads_share_hwthread,
+    [NK_TOPO_PHYS_CORE_FILT] = nk_topo_threads_share_core,
+    [NK_TOPO_SOCKET_FILT]    = nk_topo_threads_share_socket,
 };
 
 // Map a function to all other threads on the same X, where X can be hwthread, physical core, or socket
@@ -827,7 +827,7 @@ void nk_topo_map_sibling_threads(void (func)(struct nk_thread *t, void *state), 
 
     while (n != NULL) {
         if (n->thread->thread != get_cur_thread()) { // skip myself
-            if (filter == NK_ALL_FILT ||
+            if (filter == NK_TOPO_ALL_FILT ||
                     thread_filter_funcs[filter](get_cur_thread(), n->thread->thread)) {
                 func(n->thread->thread, state);
             }
@@ -841,17 +841,17 @@ void nk_topo_map_sibling_threads(void (func)(struct nk_thread *t, void *state), 
 
 void nk_topo_map_hwthread_sibling_threads(void (func)(struct nk_thread *t, void *state), void *state)
 {
-    nk_topo_map_sibling_threads(func, NK_HW_THREAD_FILT, state);
+    nk_topo_map_sibling_threads(func, NK_TOPO_HW_THREAD_FILT, state);
 }
 
 void nk_topo_map_core_sibling_threads(void (func)(struct nk_thread *t, void *state), void *state)
 {
-    nk_topo_map_sibling_threads(func, NK_PHYS_CORE_FILT, state);
+    nk_topo_map_sibling_threads(func, NK_TOPO_PHYS_CORE_FILT, state);
 }
 
 void nk_topo_map_socket_sibling_threads(void (func)(struct nk_thread *t, void *state), void *state)
 {
-    nk_topo_map_sibling_threads(func, NK_SOCKET_FILT, state);
+    nk_topo_map_sibling_threads(func, NK_TOPO_SOCKET_FILT, state);
 }
 
 static void
@@ -871,7 +871,7 @@ handle_threadtopotest (char * buf, void * priv)
         switch (aps) { 
             case 'a': 
 				nk_vc_printf("Mapping func to all siblings\n");
-                nk_topo_map_sibling_threads(topo_test,  NK_ALL_FILT, NULL);
+                nk_topo_map_sibling_threads(topo_test,  NK_TOPO_ALL_FILT, NULL);
                 break;
             case 'l': 
 				nk_vc_printf("Mapping func to logical core siblings\n");
