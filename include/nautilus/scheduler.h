@@ -192,6 +192,18 @@ void nk_sched_dump_time(int cpu);
 // cpu==-means all cpus
 void nk_sched_map_threads(int cpu, void (func)(struct nk_thread *t, void *state), void *state);
 
+uint8_t nk_threads_share_hwthread (struct nk_thread * a, struct nk_thread * b);
+uint8_t nk_thread_shares_hwthread_with_me (struct nk_thread * other);
+uint8_t nk_threads_share_core (struct nk_thread * a, struct nk_thread * b);
+uint8_t nk_thread_shares_core_with_me (struct nk_thread * other);
+uint8_t nk_threads_share_socket (struct nk_thread * a, struct nk_thread * b);
+uint8_t nk_thread_shares_socket_with_me (struct nk_thread * other);
+
+void nk_sched_map_sibling_threads(void (func)(struct nk_thread *t, void *state), nk_topo_filt_t filter, void *state);
+void nk_sched_map_hwthread_sibling_threads(void (func)(struct nk_thread *t, void *state), void *state);
+void nk_sched_map_core_sibling_threads(void (func)(struct nk_thread *t, void *state), void *state);
+void nk_sched_map_socket_sibling_threads(void (func)(struct nk_thread *t, void *state), void *state);
+
 
 // Provide ability to stop and start the world from the caller
 // This forces all cores, except the caller out into an interrupt
