@@ -8,14 +8,14 @@
  * led by Sandia National Laboratories that includes several national 
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
- * Copyright (c) 2015, Kyle C. Hale <kh@u.northwestern.edu>
+ * Copyright (c) 2015, Kyle C. Hale <khale@cs.iit.edu>
  * Copyright (c) 2015, The V3VEE Project  <http://www.v3vee.org> 
  *                     The Hobbes Project <http://xstack.sandia.gov/hobbes>
  * All rights reserved.
  *
- * Author: Kyle C. Hale <kh@u.northwestern.edu>
+ * Author: Kyle C. Hale <khale@cs.iit.edu>
  *
  * This is free software.  You are permitted to use,
  * redistribute, and modify it as specified in the file "LICENSE.txt".
@@ -32,34 +32,6 @@ extern "C" {
 ulong_t nk_detect_cpu_freq(uint32_t);
 uint8_t nk_is_amd(void);
 uint8_t nk_is_intel(void);
-
-/******* Convenience API for CPU topology ************/
-
-typedef enum {
-	NK_ALL_FILT,       // all sibling threads/cpus 
-    NK_HW_THREAD_FILT, // thread on same hw thread (hyperthread)
-    NK_PHYS_CORE_FILT, // threads/CPUs on same physical core
-    NK_SOCKET_FILT,    // threads/CPUs on same socket
-} nk_topo_filt_t;
-
-struct cpu;
-
-uint32_t nk_get_smt_id (struct cpu * cpu); // get a core's hyperthread ID (within physical core)
-uint32_t nk_get_my_smt_id (void);
-uint32_t nk_get_socket_id (struct cpu * cpu); // get this CPU's socket ID
-uint32_t nk_get_my_socket_id (void);
-uint32_t nk_get_phys_core_id (struct cpu * cpu); // get this CPU's *physical* core ID
-uint32_t nk_get_my_phys_core_id (void);
-uint8_t  nk_cpus_share_phys_core (struct cpu * a, struct cpu * b); // do these two CPU's share a physical core? (distinct hyperthreads)
-uint8_t  nk_same_phys_core_as_me (struct cpu * other);
-uint8_t  nk_cpus_share_socket (struct cpu * a, struct cpu * b); // do these two CPU's share a socket?
-uint8_t  nk_same_socket_as_me (struct cpu * other);
-
-void nk_map_sibling_cpus (void (func)(struct cpu * cpu, void * state), nk_topo_filt_t filter, void * state);
-void nk_map_core_sibling_cpus (void (func)(struct cpu * cpu, void * state), void * state);
-void nk_map_socket_sibling_cpus (void (func)(struct cpu * cpu, void * state), void * state);
-
-/************** End CPU topology API **********************/
 
 
 #define RFLAGS_CF   (1 << 0)
