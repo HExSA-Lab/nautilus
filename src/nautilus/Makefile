@@ -38,6 +38,7 @@ obj-y += \
 	acpi.o \
 	numa.o \
 	libccompat.o \
+	libccompat_nomacro.o \
 	nemo.o \
 	pmc.o \
 	setjmp.o \
