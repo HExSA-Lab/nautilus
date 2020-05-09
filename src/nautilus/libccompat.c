@@ -878,3 +878,16 @@ GEN_DEF(strxfrm)
 GEN_DEF(wcsxfrm)
 GEN_DEF(__kernel_standard);
 GEN_DEF(__get_cpu_features);
+
+
+// KMP
+
+// SOFT FLOAT - NOT SURE WHY IT IS USING THESE
+GEN_DEF(__mulxc3)
+GEN_DEF(__muldc3)
+GEN_DEF(__mulsc3)
+GEN_DEF(__divxc3)
+GEN_DEF(__divdc3)
+GEN_DEF(__divsc3)
+
+
