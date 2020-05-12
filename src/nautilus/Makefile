@@ -39,6 +39,7 @@ obj-y += \
 	numa.o \
 	libccompat.o \
 	libccompat_nomacro.o \
+	env.o \
 	nemo.o \
 	pmc.o \
 	setjmp.o \
