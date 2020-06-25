@@ -1067,18 +1067,106 @@ monitor_print_regs (struct nk_regs * r)
   PRINT2CR(cr4, "   ", cr8, "   ");
 }
 
+typedef struct symentry{
+	uint64_t value;
+	uint64_t offset;
+}Symentry;
+
+typedef struct {
+	char* symbol;
+	uint64_t start_addr;
+	uint64_t end_addr;
+} SymTabEntry;
+
+
+SymTabEntry* symtab_lookup(SymTabEntry** symtab, int count, uint64_t addr) {
+	for(int i=0; i<count; i++) {
+		if((symtab[i]->start_addr <= addr) && (addr <= symtab[i]->end_addr))
+			return symtab[i];
+	}
+	return NULL;
+}
+
+void symtab_sort(SymTabEntry** symtab, int count) {
+	for(int i=0; i<count-1; i++) {
+		for(int j=i+1; j<count; j++) {
+			if(symtab[i]->start_addr > symtab[j]->start_addr) {
+				SymTabEntry* temp = symtab[i];
+				symtab[i] = symtab[j];
+				symtab[j] = temp;
+			}
+		}
+	}
+}
+
+void symtab_resolve_addr_ranges(SymTabEntry** symtab, int count) {
+	for(int i=0; i<count-1; i++) {
+		if(symtab[i+1]->start_addr == -1)
+			break;
+		symtab[i]->end_addr = symtab[i+1]->start_addr - 1;
+	}
+}
+
+extern uint64_t __mod_start;
+
+char* get_symbol(SymTabEntry** symtab, int count, uint64_t addr) {
+	SymTabEntry* entry = symtab_lookup(symtab, count, addr);
+	return (entry != NULL) ? entry->symbol : "???";
+}
 
 static void dump_call(void)
 {
   print_drinfo();
   DS("[------------------ Backtrace ------------------]\n");
 
+  uint32_t* syms_base_addr = (uint32_t*) __mod_start;
+  uint32_t magic = *syms_base_addr;
+  uint32_t offset = *(syms_base_addr+1);
+  uint32_t noe = *(syms_base_addr+2);
+/*
+  DS("Base Address: "); DHL((uint64_t) syms_base_addr); DS("\n");
+  DS("Magic: "); DHL((uint64_t) magic); DS("\n");
+  DS("Offset: "); DHL((uint64_t) offset); DS("\n");
+  DS("Noe: "); DHL((uint64_t) noe); DS("\n");
+*/
+  SymTabEntry** symtab = (SymTabEntry**) malloc(sizeof(SymTabEntry*) * noe); 
+  for(int i=0; i<noe; i++) {
+  	Symentry* entry = (Symentry*) (((char*)(syms_base_addr)) + offset + (sizeof(Symentry)*i));
+	char* symbol = (char*) ((char*)(syms_base_addr+3) + entry->offset);
+	uint64_t addr = entry->value;
+	/*
+	DS("entry: "); DHL((uint64_t) entry); DS("\n");
+	DS("Address: "); DHL((uint64_t)(entry->value)); DS("\n");
+	DS("Symbol: "); DS((char*) ((char*)(syms_base_addr+3) + entry->offset)); DS("\n");
+	*/
+	symtab[i] = (SymTabEntry*) malloc(sizeof(SymTabEntry));
+	symtab[i]->symbol = symbol;
+	symtab[i]->start_addr = addr;
+	symtab[i]->end_addr = -1;
+  }
+  symtab_sort(symtab, noe);
+  symtab_resolve_addr_ranges(symtab, noe);
+/* 
+  int k = 0;
+  uint64_t addr;
+  while((addr = (uint64_t)__builtin_return_address(k++))) {
+	DHQ((uint64_t) addr); DS(": ");
+  	SymTabEntry* entry = symtab_lookup(symtab, noe, addr);
+	char* symbol = (entry != NULL) ? entry->symbol : "???";
+	DS((char*) symbol); DS("\n");
+  }
+
+
+  goto done;
+*/
+
 // avoid reliance on backtrace.h
 #define BT(k) \
   if (!__builtin_return_address(k)) { \
       goto done; \
   } \
-  DHQ(((uint64_t)__builtin_return_address(k))); DS("\n");	\
+  DHQ(((uint64_t)__builtin_return_address(k))); DS(": ");	\
+  DS((char*) get_symbol(symtab, noe, (uint64_t) __builtin_return_address(k))); DS("\n"); \
 
   BT(0);
   BT(1);
