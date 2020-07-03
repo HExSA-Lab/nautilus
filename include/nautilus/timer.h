@@ -40,7 +40,7 @@ typedef struct nk_timer {
     volatile enum { NK_TIMER_INACTIVE = 0,
 		    NK_TIMER_ACTIVE,
 		    NK_TIMER_SIGNALLED} state;
-    uint64_t          flags;    
+    uint64_t          flags;
     uint64_t          time_ns;  // time relative to CPU reset
     nk_wait_queue_t   *waitq;   // used for non-spin waits
     uint32_t          cpu;      // cpu to use for callback
@@ -58,7 +58,8 @@ void        nk_timer_destroy(nk_timer_t *t);
 nk_timer_t *nk_timer_get_thread_default();
 
 // configures the timer
-// Currently, flags can only be used in isolation (only one flag)
+// Currently, flags can only be used in isolation, with
+// the exception of NK_TIMER_CALLBACK
 //
 int nk_timer_set(nk_timer_t *t, 
 		 uint64_t ns, // from the present time
@@ -70,9 +71,14 @@ int nk_timer_set(nk_timer_t *t,
 #define NK_TIMER_SPIN      0x2  // thread busy-waits until timer expires
 #define NK_TIMER_CALLBACK  0x4  // thread continue immediately,
 		                //   callback is invoked on expiration
+#define NK_TIMER_CALLBACK_WAIT 0x8 // wait until callback completes
+#define NK_TIMER_CALLBACK_LOCAL_SYNC 0x10 // avoid xcall on cpu-local callback
 		 void (*callback)(void *p), 
 		 void *p,
 		 uint32_t cpu);
+// For callbacks, cpu is target CPU or one of the following:
+#define NK_TIMER_CALLBACK_ALL_CPUS -1
+#define NK_TIMER_CALLBACK_THIS_CPU -2
 
 int nk_timer_reset(nk_timer_t *t,
 		   uint64_t ns);  // from the present time

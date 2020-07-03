@@ -36,6 +36,7 @@
 
 #include <stddef.h>
 
+
 #ifndef NAUT_CONFIG_DEBUG_TIMERS
 #undef DEBUG_PRINT
 #define DEBUG_PRINT(fmt, args...) 
@@ -142,18 +143,24 @@ int nk_timer_set(nk_timer_t *t,
     t->time_ns = nk_sched_get_realtime() + ns;
     t->callback = callback;
     t->priv = p;
-    t->cpu = cpu;
+    if (cpu==NK_TIMER_CALLBACK_THIS_CPU) { 
+	t->cpu = my_cpu_id();
+    } else {
+	t->cpu = cpu;
+    }
 
-    DEBUG("set %s : state=%s flags=0x%llx (%s), time=%lluns, callback=%p priv=%p cpu=%lu\n",
+    DEBUG("set %s : state=%s flags=0x%llx (%s%s%s), time=%lluns, callback=%p priv=%p cpu=%lu\n",
 	  t->name,
 	  t->state==NK_TIMER_INACTIVE ? "inactive" :
 	  t->state==NK_TIMER_ACTIVE ? "ACTIVE" :
 	  t->state==NK_TIMER_SIGNALLED ? "SIGNALLED" : "UNKNOWN",
 	  t->flags,
-	  t->flags==NK_TIMER_WAIT_ALL ? "wait-all" :
-	  t->flags==NK_TIMER_WAIT_ONE ? "wait-one" :
-	  t->flags==NK_TIMER_SPIN ? "spin" :
-	  t->flags==NK_TIMER_CALLBACK ? "callback" : "UNKNOWN",
+	  t->flags & NK_TIMER_WAIT_ALL ? "wait-all" :
+	  t->flags & NK_TIMER_WAIT_ONE ? "wait-one" :
+	  t->flags & NK_TIMER_SPIN ? "spin" :
+	  t->flags & NK_TIMER_CALLBACK ? "callback" : "UNKNOWN",
+	  t->flags & NK_TIMER_CALLBACK_WAIT ? " wait" : "",
+	  t->flags & NK_TIMER_CALLBACK_LOCAL_SYNC ? " local-sync" : "",
 	  t->time_ns, t->callback, t->priv, t->cpu);
 
     return 0;
@@ -173,16 +180,18 @@ int nk_timer_reset(nk_timer_t *t,
     
     t->time_ns = nk_sched_get_realtime() + ns;
 
-    DEBUG("reset %s : state=%s flags=0x%llx (%s), time=%lluns, callback=%p priv=%p cpu=%lu\n",
+    DEBUG("reset %s : state=%s flags=0x%llx (%s%s%s), time=%lluns, callback=%p priv=%p cpu=%lu\n",
 	  t->name,
 	  t->state==NK_TIMER_INACTIVE ? "inactive" :
 	  t->state==NK_TIMER_ACTIVE ? "ACTIVE" :
 	  t->state==NK_TIMER_SIGNALLED ? "SIGNALLED" : "UNKNOWN",
 	  t->flags,
-	  t->flags==NK_TIMER_WAIT_ALL ? "wait-all" :
-	  t->flags==NK_TIMER_WAIT_ONE ? "wait-one" :
-	  t->flags==NK_TIMER_SPIN ? "spin" :
-	  t->flags==NK_TIMER_CALLBACK ? "callback" : "UNKNOWN",
+	  t->flags & NK_TIMER_WAIT_ALL ? "wait-all" :
+	  t->flags & NK_TIMER_WAIT_ONE ? "wait-one" :
+	  t->flags & NK_TIMER_SPIN ? "spin" :
+	  t->flags & NK_TIMER_CALLBACK ? "callback" : "UNKNOWN",
+	  t->flags & NK_TIMER_CALLBACK_WAIT ? " wait" : "",
+	  t->flags & NK_TIMER_CALLBACK_LOCAL_SYNC ? " local-sync" : "",
 	  t->time_ns, t->callback, t->priv, t->cpu);
 
     return 0;
@@ -229,17 +238,21 @@ int nk_timer_cancel(nk_timer_t *t)
     // now do handling that does not require the lock
     if (was_active) { 
 	DEBUG("canceling %s\n",t->name);
-	if (t->flags == NK_TIMER_WAIT_ALL) {
+	if (t->flags & NK_TIMER_WAIT_ALL) {
 	    DEBUG("waking all thread timer %p %s waitqueue %p %s \n", t, t->name, t->waitq, t->waitq->name);
 	    nk_wait_queue_wake_all(t->waitq);
+	    return 0;
 	}
-	if (t->flags == NK_TIMER_WAIT_ONE) {
+	if (t->flags & NK_TIMER_WAIT_ONE) {
 	    nk_wait_queue_wake_one(t->waitq);
+	    return 0;
 	}
+	// nothing to do for other modes
+	return 0;
     } else {
 	DEBUG("not canceling %s as not in active list\n",t->name);
+	return -1;
     }
-    return 0;
 }
 
 static int check(void *state)
@@ -251,10 +264,10 @@ static int check(void *state)
 int nk_timer_wait(nk_timer_t *t)
 {
     DEBUG("wait %s with mode %s \n",t->name,
-	  t->flags==NK_TIMER_WAIT_ALL ? "wait-all" :
-	  t->flags==NK_TIMER_WAIT_ONE ? "wait-one" :
-	  t->flags==NK_TIMER_SPIN ? "spin" :
-	  t->flags==NK_TIMER_CALLBACK ? "callback (uh...)" : "UNKNOWN");
+	  t->flags & NK_TIMER_WAIT_ALL ? "wait-all" :
+	  t->flags & NK_TIMER_WAIT_ONE ? "wait-one" :
+	  t->flags & NK_TIMER_SPIN ? "spin" :
+	  t->flags & NK_TIMER_CALLBACK ? "callback (uh...)" : "UNKNOWN");
 
     // must be either active or signalled...
     if (t->state == NK_TIMER_INACTIVE) {
@@ -262,13 +275,13 @@ int nk_timer_wait(nk_timer_t *t)
 	return -1;
     }
     
-    if (t->flags==NK_TIMER_CALLBACK) {
+    if (t->flags & NK_TIMER_CALLBACK) {
 	ERROR("trying to wait on a callback timer\n");
 	return -1;
     }
     
     while (!check(t)) {
-	if (t->flags != NK_TIMER_SPIN) { 
+	if (!(t->flags & NK_TIMER_SPIN)) {
            DEBUG("going to sleep on wait queue timer %p %s waitqueue %p %s \n", t, t->name, t->waitq, t->waitq->name);
 	    nk_wait_queue_sleep_extended(t->waitq, check, t);
 	} else {
@@ -339,8 +352,10 @@ int nk_delay(uint64_t ns) { return _sleep(ns,1); }
 // debug output if you know what you are doing
 uint64_t nk_timer_handler (void)
 {
-    if (my_cpu_id()!=0) {
-	//DEBUG("update: cpu %d - ignored/infinity\n",my_cpu_id());
+    uint32_t my_cpu = my_cpu_id();
+    
+    if (my_cpu!=0) {
+	//DEBUG("update: cpu %d - ignored/infinity\n",my_cpu);
 	return -1;  // infinitely far in the future
     }
 
@@ -371,26 +386,43 @@ uint64_t nk_timer_handler (void)
     list_for_each_entry_safe(cur, temp, &expired_list, active_node) {
 	//DEBUG("handle expired timer %s\n",cur->name);
 	list_del_init(&cur->active_node);
-	switch (cur->flags) {
-	case NK_TIMER_WAIT_ONE:
+	
+	if (cur->flags & NK_TIMER_WAIT_ONE) {
+	    
 	    //DEBUG("waking one thread\n");
 	    nk_wait_queue_wake_one(cur->waitq);
-	    break;
-	case NK_TIMER_WAIT_ALL:
+	    
+	} else if (cur->flags & NK_TIMER_WAIT_ALL) {
+	    
 	    //DEBUG("waking all threads\n");
 	    nk_wait_queue_wake_all(cur->waitq);
-	    break;
-	case NK_TIMER_CALLBACK: 
-	    // launch callback, but do not wait for it
-	    //DEBUG("launching callback for %s\n", cur->name);
-	    smp_xcall(cur->cpu,
-		      cur->callback,
-		      cur->priv,
-		      0);
-	    break;
-	default:
+	    
+	} else if (cur->flags & NK_TIMER_CALLBACK) {
+	    
+	    uint32_t cur_cpu, min_cpu, max_cpu;
+	    int wait = !!(cur->flags & NK_TIMER_CALLBACK_WAIT);
+	    
+	    if (cur->cpu == NK_TIMER_CALLBACK_ALL_CPUS) {
+		min_cpu = 0;
+		max_cpu = nk_get_num_cpus() - 1;
+	    } else {
+		min_cpu = cur->cpu;
+		max_cpu = cur->cpu;
+	    }
+	    
+	    for (cur_cpu=min_cpu; cur_cpu<= max_cpu; cur_cpu++) {
+		
+		if ((cur_cpu == my_cpu) && (cur->flags & NK_TIMER_CALLBACK_LOCAL_SYNC)) {
+		    cur->callback(cur->priv);
+		} else {
+		    smp_xcall(cur_cpu,
+			      cur->callback,
+			      cur->priv,
+			      wait);
+		}
+	    }
+	} else {
 	    //ERROR("unsupported 0x%lx\n", cur->flags);
-	    break;
 	}
     }
 
@@ -404,10 +436,12 @@ uint64_t nk_timer_handler (void)
 	}
     }
     ACTIVE_UNLOCK();
-    
+
     //DEBUG("update: earliest is %llu\n",earliest);
 
-    return earliest;
+    now = nk_sched_get_realtime();
+    
+    return earliest > now ? earliest-now : 0;
 }
 
 
@@ -439,15 +473,17 @@ void nk_timer_dump_timers()
     STATE_LOCK();
     list_for_each(cur,&timer_list) {
 	t = list_entry(cur,nk_timer_t, node);
-	nk_vc_printf("%-32s %s %s %luw %luns 0x%lx %u %p \n",
+	nk_vc_printf("%-32s %s %s%s%s %luw %luns 0x%lx %u %p \n",
 		     t->name,
 		     t->state==NK_TIMER_INACTIVE ? "inactive" :
 		     t->state==NK_TIMER_ACTIVE ? "ACTIVE" :
 		     t->state==NK_TIMER_SIGNALLED ? "SIGNALLED" : "UNKNOWN",
-		     t->flags==NK_TIMER_WAIT_ALL ? "wait-all" :
-		     t->flags==NK_TIMER_WAIT_ONE ? "wait-one" :
-		     t->flags==NK_TIMER_SPIN ? "spin" :
-		     t->flags==NK_TIMER_CALLBACK ? "callback" : "UNKNOWN",
+		     t->flags & NK_TIMER_WAIT_ALL ? "wait-all" :
+		     t->flags & NK_TIMER_WAIT_ONE ? "wait-one" :
+		     t->flags & NK_TIMER_SPIN ? "spin" :
+		     t->flags & NK_TIMER_CALLBACK ? "callback" : "UNKNOWN",
+		     t->flags & NK_TIMER_CALLBACK_WAIT ? " wait" : "",
+		     t->flags & NK_TIMER_CALLBACK_LOCAL_SYNC ? " local-sync" : "",
 		     t->waitq->num_wait,
 		     t->time_ns, t->flags, t->cpu, t->callback);
     }
