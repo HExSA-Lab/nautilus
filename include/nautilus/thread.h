@@ -104,6 +104,9 @@ void nk_set_thread_output(void * result);
 // Give a thread a name
 int nk_thread_name(nk_thread_id_t tid, char *name);
 
+// Give a thread a HW TLS space
+int nk_thread_change_hw_tls(nk_thread_id_t tid, void *hwtls);
+
 // explicit yield (hides details of the scheduler)
 void nk_yield();
 
@@ -181,6 +184,9 @@ struct nk_thread {
              cache_part_state;   /* Always included to reserve this "slot" for asm code */
     nk_aspace_t      *aspace;    /* +24 SHOULD NOT CHANGE POSITION */
                                  /* Always included to reserve this "slot" for asm code */
+    void             *hwtls;     /* +32 SHOULD NOT CHANGE POSITION */
+                                 /* Always included to reserve this "slot" for asm code */
+                                 /* even if TLS is off; this is the FSBASE for the thread */
 
     nk_stack_size_t stack_size;
     unsigned long tid;

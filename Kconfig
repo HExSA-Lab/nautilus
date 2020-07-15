@@ -662,6 +662,15 @@ config DEBUG_ISOCORE
       Adds debugging output for isolated core execution
       The low-level code does not have debugging output
 
+config HARDWARE_TLS
+   bool "Enable hardware thread-local storage (FSBASE)"
+   default n
+   depends on X86_64_HOST
+   help
+      Enables use of FSBASE to do faster TLS
+      When enabled, a thread context switch includes an
+      FSBASE context switch
+
 config CACHEPART
    bool "Enable cache partitioning"
    default n
