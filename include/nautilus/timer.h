@@ -64,15 +64,15 @@ nk_timer_t *nk_timer_get_thread_default();
 int nk_timer_set(nk_timer_t *t, 
 		 uint64_t ns, // from the present time
 		 uint64_t flags,
-#define NK_TIMER_WAIT_ALL  0x0  // thread waits on wait queue for timer expiration
+#define NK_TIMER_WAIT_ALL  0x1  // thread waits on wait queue for timer expiration
 		                //   all threads wake on expiration
-#define NK_TIMER_WAIT_ONE  0x1  // thread waits on wait queue for timer expiration
+#define NK_TIMER_WAIT_ONE  0x2  // thread waits on wait queue for timer expiration
 		                //   one thread wakes on expiration
-#define NK_TIMER_SPIN      0x2  // thread busy-waits until timer expires
-#define NK_TIMER_CALLBACK  0x4  // thread continue immediately,
+#define NK_TIMER_SPIN      0x4  // thread busy-waits until timer expires
+#define NK_TIMER_CALLBACK  0x8  // thread continue immediately,
 		                //   callback is invoked on expiration
-#define NK_TIMER_CALLBACK_WAIT 0x8 // wait until callback completes
-#define NK_TIMER_CALLBACK_LOCAL_SYNC 0x10 // avoid xcall on cpu-local callback
+#define NK_TIMER_CALLBACK_WAIT 0x10 // wait until callback completes
+#define NK_TIMER_CALLBACK_LOCAL_SYNC 0x20 // avoid xcall on cpu-local callback
 		 void (*callback)(void *p), 
 		 void *p,
 		 uint32_t cpu);
