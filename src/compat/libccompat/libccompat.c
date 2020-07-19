@@ -36,7 +36,18 @@
 #include <nautilus/thread.h>
 #include <nautilus/errno.h>
 #include <nautilus/random.h>
+#include <nautilus/env.h>
 #include <dev/hpet.h>
+
+
+#ifdef NAUT_CONFIG_DEBUG_BASE_LIBC_COMPAT
+#define DEBUG(fmt, args...) DEBUG_PRINT("libc: " fmt, ##args)
+#else
+#define DEBUG(fmt, args...)
+#endif
+#define INFO(fmt, args...) INFO_PRINT("libc: " fmt, ##args)
+#define ERROR(fmt, args...) ERROR_PRINT("libc: " fmt, ##args)
+#define WARN(fmt, args...)  WARN_PRINT("libc: " fmt, ##args)
 
 
 int errno=0;
@@ -202,8 +213,12 @@ __assert_fail (const char * assertion, const char * file, unsigned line, const c
 int 
 vfprintf (FILE * stream, const char * format, va_list arg)
 {
+#if 0
     UNDEF_FUN_ERR();
     return -1;
+#else
+    return vprintk(format,arg);
+#endif
 }
 
 
@@ -303,12 +318,20 @@ drand48(void)
 }
 
 
-char *
-strerror (int errnum)
+char* strerror_r(int errnum, char* buf, size_t buflen)
 {
-    UNDEF_FUN_ERR();
-    return NULL;
+    snprintf(buf,buflen,"error %d (dunno?)",errnum);
+    return buf;
 }
+
+
+char *strerror (int errnum)
+{
+    static char strerr_buf[128];
+    return strerror_r(errnum,strerr_buf,128);
+}
+
+
 FILE *tmpfile(void)
 {
 
@@ -359,12 +382,35 @@ fdopen (int fd, const char * mode)
     return NULL;
 }
 
-char *getenv(const char *name)
-{
 
-    UNDEF_FUN_ERR();
-    return NULL;
+int setenv(const char *key, const char *value, int overwrite)
+{
+    char *curval;
+    struct nk_env * env = nk_env_find(NK_ENV_GLOBAL_NAME);
+    if (nk_env_search(env,(char*)key,&curval)) {
+	if (overwrite) {
+	    return nk_env_update(env,(char*)key,(char*)value);
+	} else {
+	    return -1;
+	}
+    } else {
+	return nk_env_insert(env, (char*)key, (char*)value);
+    }
 }
+
+
+char *getenv(const char *key)
+{
+    struct nk_env *env = nk_env_find(NK_ENV_GLOBAL_NAME);
+    if (!env) {
+	return 0;
+    }
+    char *value =NULL;
+    nk_env_search(env,(char*)key,&value);
+    return value;
+}
+
+
 //For LUA Support
 clock_t clock()
 {
@@ -811,6 +857,57 @@ double exp(double x)
 return x;
 }
 
+unsigned long getpid(void)
+{
+    return ((nk_thread_t*)get_cur_thread())->tid;
+}
+
+unsigned long getppid(void)
+{
+    if (((nk_thread_t*)get_cur_thread())->parent) {
+	return ((nk_thread_t*)get_cur_thread())->parent->tid;
+    } else {
+	return 0;
+    }
+}
+
+
+
+#define suseconds_t uint64_t
+struct timeval {
+    time_t      tv_sec;     /* seconds */
+    suseconds_t tv_usec;    /* microseconds */
+};
+
+struct timezone;
+
+int gettimeofday(struct timeval *tv, struct timezone *tz_ignored)
+{
+    uint64_t ns = nk_sched_get_realtime();
+
+    tv->tv_sec =  ns / 1000000000ULL;
+    tv->tv_usec = (ns % 1000000000ULL)/1000ULL;
+
+    return 0;
+}
+
+#define rlim_t uint32_t
+
+struct rlimit {
+    rlim_t rlim_cur;  /* Soft limit */
+    rlim_t rlim_max;  /* Hard limit (ceiling for rlim_cur) */
+};
+
+int getrlimit(int resource, struct rlimit *rlim)
+{
+    DEBUG("getrlimit %d\n", resource); 
+    rlim->rlim_cur = 0xF0000000;
+    rlim->rlim_max = 0xF0000000;
+    return 0;
+}
+
+
+
 /* became lazy... */
 GEN_DEF(writev)
 GEN_DEF(ungetwc)
@@ -857,9 +954,6 @@ GEN_DEF(__towupper_l)
 GEN_DEF(__uselocale)
 GEN_DEF(__strftime_l)
 GEN_DEF(mbsnrtowcs)
-GEN_DEF(pthread_mutex_init)
-GEN_DEF(pthread_mutex_lock)
-GEN_DEF(pthread_mutex_unlock)
 GEN_DEF(wcscoll)
 //GEN_DEF(strcoll)
 GEN_DEF(towupper)
@@ -879,35 +973,12 @@ GEN_DEF(wcsxfrm)
 GEN_DEF(__kernel_standard);
 GEN_DEF(__get_cpu_features);
 
-
-// KMP
-
-// SOFT FLOAT - NOT SURE WHY IT IS USING THESE
-GEN_DEF(__mulxc3)
-GEN_DEF(__muldc3)
-GEN_DEF(__mulsc3)
-GEN_DEF(__divxc3)
-GEN_DEF(__divdc3)
-GEN_DEF(__divsc3)
-
-
-// Other stuff KMP needs, for a start
-GEN_DEF(atexit)
-GEN_DEF(catclose)
-GEN_DEF(catgets)
-GEN_DEF(catopen)
-GEN_DEF(close)
-GEN_DEF(closedir)
-GEN_DEF(dlsym)
-GEN_DEF(environ)
-GEN_DEF(fgetc)
-GEN_DEF(gethostname)
-GEN_DEF(getpid)
-GEN_DEF(getrlimit)
-GEN_DEF(getrusage)
-GEN_DEF(gettimeofday)
-GEN_DEF(open)
-GEN_DEF(opendir)
+// pthread functionality is in the pthread compatability
+// directory, if it is included
+#ifndef NAUT_CONFIG_BASE_PTHREAD_COMPAT
+GEN_DEF(pthread_mutex_init)
+GEN_DEF(pthread_mutex_lock)
+GEN_DEF(pthread_mutex_unlock)
 GEN_DEF(pthread_atfork)
 GEN_DEF(pthread_attr_destroy)
 GEN_DEF(pthread_attr_getstack)
@@ -934,9 +1005,36 @@ GEN_DEF(pthread_self)
 GEN_DEF(pthread_setcancelstate)
 GEN_DEF(pthread_setcanceltype)
 GEN_DEF(pthread_setspecific)
-GEN_DEF(readdir)
 GEN_DEF(sched_yield)
-GEN_DEF(setenv)
+#endif
+
+
+// KMP
+
+// SOFT FLOAT - NOT SURE WHY IT IS USING THESE
+GEN_DEF(__mulxc3)
+GEN_DEF(__muldc3)
+GEN_DEF(__mulsc3)
+GEN_DEF(__divxc3)
+GEN_DEF(__divdc3)
+GEN_DEF(__divsc3)
+
+
+// Other stuff KMP needs, for a start
+GEN_DEF(atexit)
+GEN_DEF(catclose)
+GEN_DEF(catgets)
+GEN_DEF(catopen)
+GEN_DEF(close)
+GEN_DEF(closedir)
+GEN_DEF(dlsym)
+GEN_DEF(environ)
+GEN_DEF(fgetc)
+GEN_DEF(gethostname)
+GEN_DEF(getrusage)
+GEN_DEF(open)
+GEN_DEF(opendir)
+GEN_DEF(readdir)
 GEN_DEF(sigaction)
 GEN_DEF(sigaddset)
 GEN_DEF(sigdelset)
@@ -944,9 +1042,7 @@ GEN_DEF(sigemptyset)
 GEN_DEF(sigfillset)
 GEN_DEF(sigismember)
 GEN_DEF(sleep)
-GEN_DEF(strerror_r)
 GEN_DEF(strtok_r)
-GEN_DEF(sysconf)
 GEN_DEF(times)
 GEN_DEF(unsetenv)
 GEN_DEF(vfscanf)

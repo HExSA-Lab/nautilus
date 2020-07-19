@@ -1052,3 +1052,10 @@ __sysconf (int name)
 /*   return ret; */
 /* } */
 /* #endif */
+
+
+long sysconf(int name){
+  //DEBUG("sysconf, %d",name);
+  long conf = __sysconf(name);
+  return conf;
+}

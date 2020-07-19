@@ -833,24 +833,58 @@ endmenu
 
 menu "Compatability"
      config BASE_LIBC_COMPAT
-       bool "Basic libc compatability";
+       bool "Basic libc compatability"
        default y	
        help 
          Basic libc compatability layer
 
+     config DEBUG_BASE_LIBC_COMPAT
+       bool "Debug basic libc compatability"
+       depends on BASE_LIBC_COMPAT
+       default n	
+       help 
+         Enable debugging output from the basic libc compatability layer
+
+     config BASE_LIBM_COMPAT
+       bool "Basic libm compatability"
+       default y	
+       help 
+         Basic libm compatability layer
+
+     config DEBUG_BASE_LIBM_COMPAT
+       bool "Debug basic libm compatability"
+       depends on BASE_LIBM_COMPAT
+       default n	
+       help 
+         Enable debugging output from the basic libm compatability layer
+
      config BASE_LINUX_COMPAT
-       bool "Basic Linux user-level compatability layer";
+       bool "Basic Linux user-level compatability layer"
        depends on BASE_LIBC_COMPAT
        default y
      help 
          Basic Linux user-level compatability layer
-	 
+
+     config DEBUG_BASE_LINUX_COMPAT
+       bool "Debug basic Linux compatability"
+       depends on BASE_LINUX_COMPAT
+       default n	
+       help 
+         Enable debugging output from the basic Linux compatability layer
+
      config BASE_PTHREAD_COMPAT
-     bool "POSIX threads compatability later";
+     bool "POSIX threads compatability layer"
      default y
      depends on BASE_LIBC_COMPAT && BASE_LINUX_COMPAT
      help 
          POSIX threads
+
+     config DEBUG_BASE_PTHREAD_COMPAT
+       bool "Debug basic POSIX threads compatability layer"
+       depends on BASE_PTHREAD_COMPAT
+       default n	
+       help 
+         Enable debugging output from the basic POSIX threads compatability layer
 
 endmenu
 
@@ -1084,6 +1118,13 @@ menu Debugging
       default n
       help
         Turn on debug prints for C++ initialization/support code
+
+    config DEBUG_ENVS
+      bool "Debug Environments"
+      depends on DEBUG_PRINTS
+      default n
+      help
+        Turn on debug prints for environment variable support
 
     config DEBUG_THREADS
       bool "Debug Threads"

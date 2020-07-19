@@ -28,7 +28,7 @@
 
 
 
-#if 0
+#if NAUT_CONFIG_DEBUG_ENVS
 #define DEBUG(fmt, args...) DEBUG_PRINT("env: " fmt, ##args)
 #else
 #define DEBUG(fmt, args...)
