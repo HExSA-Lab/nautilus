@@ -822,6 +822,29 @@ menu "Garbage Collection Options"
   endmenu 
 endmenu
 
+menu "Compatability"
+     config BASE_LIBC_COMPAT
+       bool "Basic libc compatability";
+       default y	
+       help 
+         Basic libc compatability layer
+
+     config BASE_LINUX_COMPAT
+       bool "Basic Linux user-level compatability layer";
+       depends on BASE_LIBC_COMPAT
+       default y
+     help 
+         Basic Linux user-level compatability layer
+	 
+     config BASE_PTHREAD_COMPAT
+     bool "POSIX threads compatability later";
+     default y
+     depends on BASE_LIBC_COMPAT && BASE_LINUX_COMPAT
+     help 
+         POSIX threads
+
+endmenu
+
 menu "Optimizations"
 
     config FPU_SAVE
@@ -1297,6 +1320,7 @@ menu "Address Spaces"
 	     Turn on debugging prints for the CARAT address space abstraction
 
 endmenu
+
 
 menu "Runtimes"
 
