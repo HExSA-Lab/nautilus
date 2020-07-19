@@ -730,4 +730,18 @@ str_toupper (char * s)
 }
 
 
+void *memchr(const void *str, int c, size_t n)
+{
+    while (n) {
+	if (*((const char *)str)==c) {
+	    return (void*)str;
+	}
+	str++;
+	n--;
+    }
+
+    return 0;
+}
+
+
 

@@ -35,6 +35,8 @@ extern "C" {
 #define UNDEF_FUN_ERR() 
 #endif
 
+#define BOGUS_FUN_ERR() ERROR_PRINT("Function (%s) is BOGUS\n", __func__)
+    
 #define RAND_MAX    2147483647
 
 typedef int clockid_t;
@@ -242,6 +244,9 @@ size_t strftime(char *str, size_t maxsize, const char *format, const struct tm *
 
 void (*signal(int sig, void (*func)(int)))(int);
 
+int abs(int x);
+
+    
 double pow(double x, double y);
 char *tmpnam(char *s);
 clock_t clock(void);
@@ -260,7 +265,6 @@ double fmod(double y, double x);
 double frexp(double x, int *e);
 double ldexp(double x, int exp);
 double strtod(const char *str, char **endptr);
-double abs(double x);
 double sin(double x);
 double sinh(double x);
 double cos(double x);
