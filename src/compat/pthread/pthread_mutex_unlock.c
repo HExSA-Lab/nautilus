@@ -40,11 +40,11 @@
  *      59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  */
 
-#include <pte_osal.h>
+#include "nk/pte_osal.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-
+/* #include <stdio.h> */
+/* #include <stdlib.h> */
+#include <nautilus/nautilus.h>
 #include "pthread.h"
 #include "implement.h"
 
@@ -60,8 +60,11 @@ pthread_mutex_unlock (pthread_mutex_t * mutex)
   /*
    * Let the system deal with invalid pointers.
    */
-
+  //orig
   mx = *mutex;
+  //mjc
+  //pthread_mutex_t *mx;
+  //mx = mutex;
 
   /*
    * If the thread calling us holds the mutex then there is no

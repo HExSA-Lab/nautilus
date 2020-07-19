@@ -41,8 +41,8 @@
  *      59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  */
 
-#include <stdlib.h>
-
+/* #include <stdlib.h> */
+#include <nautilus/nautilus.h>
 #include "pthread.h"
 #include "implement.h"
 
@@ -212,8 +212,8 @@ pthread_cond_destroy (pthread_cond_t * cond)
             {
               cv->next->prev = cv->prev;
             }
-
-          (void) free (cv);
+          free(cv);
+          //(void) free (cv);
         }
 
       pte_osMutexUnlock(pte_cond_list_lock);

@@ -1,3 +1,4 @@
+
 /*
  * pte_tkAssocCreate.c
  *
@@ -41,8 +42,8 @@
  *      59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  */
 
-#include <stdlib.h>
-
+/* #include <stdlib.h> */
+#include <nautilus/nautilus.h>
 #include "pthread.h"
 #include "implement.h"
 
@@ -90,7 +91,7 @@ pte_tkAssocCreate (pte_thread_t * sp, pthread_key_t key)
    * entry to this routine.
    */
   assoc = (ThreadKeyAssoc *) calloc (1, sizeof (*assoc));
-
+  memset(assoc, 0, 1*sizeof(*assoc));
   if (assoc == NULL)
     {
       return ENOMEM;

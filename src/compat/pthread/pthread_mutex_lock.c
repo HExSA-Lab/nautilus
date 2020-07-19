@@ -40,12 +40,12 @@
  *      59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-
+/* #include <stdio.h> */
+/* #include <stdlib.h> */
+#include <nautilus/nautilus.h>
 #include "pthread.h"
 #include "implement.h"
-
+#include "debug.h"
 
 int
 pthread_mutex_lock (pthread_mutex_t * mutex)
@@ -74,8 +74,10 @@ pthread_mutex_lock (pthread_mutex_t * mutex)
           return (result);
         }
     }
-
+  
+  //orig
   mx = *mutex;
+  //mjc
 
   if (mx->kind == PTHREAD_MUTEX_NORMAL)
     {
@@ -135,6 +137,7 @@ pthread_mutex_lock (pthread_mutex_t * mutex)
         }
 
     }
+  DEBUG("mx :%d, mutex:%d \n", mx->lock_idx, (*mutex)->lock_idx);
 
   return (result);
 }

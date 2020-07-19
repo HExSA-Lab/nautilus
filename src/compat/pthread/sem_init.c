@@ -39,9 +39,9 @@
  *      59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-
+/* #include <stdio.h> */
+/* #include <stdlib.h> */
+#include <nautilus/nautilus.h>
 #include "pthread.h"
 #include "semaphore.h"
 #include "implement.h"
@@ -105,7 +105,7 @@ sem_init (sem_t * sem, int pshared, unsigned int value)
   else
     {
       s = (sem_t) calloc (1, sizeof (*s));
-
+     memset(s, 0, sizeof(*s));
       if (NULL == s)
         {
           result = ENOMEM;

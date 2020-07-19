@@ -1,3 +1,4 @@
+
 /*
  * pthread_barrier_init.c
  *
@@ -40,8 +41,8 @@
  *      59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  */
 
-#include <stdlib.h>
-
+/* #include <stdlib.h> */
+#include <nautilus/nautilus.h>
 #include "pthread.h"
 #include "implement.h"
 
@@ -59,6 +60,7 @@ pthread_barrier_init (pthread_barrier_t * barrier,
 
   if (NULL != (b = (pthread_barrier_t) calloc (1, sizeof (*b))))
     {
+      memset(b,0, 1*sizeof(*b));	    
       b->pshared = (attr != NULL && *attr != NULL
                     ? (*attr)->pshared : PTHREAD_PROCESS_PRIVATE);
 
@@ -82,7 +84,9 @@ pthread_barrier_init (pthread_barrier_t * barrier,
             }
           (void) sem_destroy (&(b->semBarrierBreeched[0]));
         }
-      (void) free (b);
+       //mjc
+       // (void) free (b);
+       free(b);
     }
 
   return ENOMEM;

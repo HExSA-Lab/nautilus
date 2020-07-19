@@ -40,8 +40,8 @@
  *      59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  */
 
-#include <stdlib.h>
-
+/* #include <stdlib.h> */
+#include <nautilus/nautilus.h>
 #include "pthread.h"
 #include "implement.h"
 
@@ -77,7 +77,7 @@ pthread_mutexattr_init (pthread_mutexattr_t * attr)
   pthread_mutexattr_t ma;
 
   ma = (pthread_mutexattr_t) calloc (1, sizeof (*ma));
-
+  memset(ma,0,1*sizeof(*ma));
   if (ma == NULL)
     {
       result = ENOMEM;

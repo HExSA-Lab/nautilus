@@ -1,3 +1,4 @@
+
 /*
  * pte_new.c
  *
@@ -40,9 +41,9 @@
  *      59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-
+/* #include <stdio.h> */
+/* #include <stdlib.h> */
+#include <nautilus/nautilus.h>
 
 #include "pthread.h"
 #include "implement.h"
@@ -68,7 +69,7 @@ pte_new (void)
     {
       /* No reuse threads available */
       tp = (pte_thread_t *) calloc (1, sizeof(pte_thread_t));
-
+      memset(tp, 0, sizeof(pte_thread_t)*1);
       if (tp == NULL)
         {
           return nil;

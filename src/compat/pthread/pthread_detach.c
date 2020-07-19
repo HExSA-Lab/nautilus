@@ -41,7 +41,7 @@
  *      59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  */
 
-#include <pte_osal.h>
+#include "nk/pte_osal.h"
 
 #include "pthread.h"
 #include "implement.h"
@@ -131,7 +131,7 @@ pthread_detach (pthread_t thread)
           /* The thread has exited or is exiting but has not been joined or
            * detached. Need to wait in case it's still exiting.
            */
-          pte_osThreadWaitForEnd(tp->threadId);
+	  pte_osThreadWaitForEnd(tp->threadId);
 
           pte_threadDestroy (thread);
         }

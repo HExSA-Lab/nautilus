@@ -41,8 +41,8 @@
  *      59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  */
 
-#include <stdlib.h>
-
+/* #include <stdlib.h> */
+#include <nautilus/nautilus.h>
 #include "pthread.h"
 #include "implement.h"
 
@@ -96,7 +96,7 @@ pthread_cond_init (pthread_cond_t * cond, const pthread_condattr_t * attr)
     }
 
   cv = (pthread_cond_t) calloc (1, sizeof (*cv));
-
+  memset(cv,0,1*sizeof(*cv));
   if (cv == NULL)
     {
       result = ENOMEM;
@@ -140,7 +140,8 @@ FAIL1:
   (void) sem_destroy (&(cv->semBlockLock));
 
 FAIL0:
-  (void) free (cv);
+  free(cv);
+  //(void) free (cv);
   cv = NULL;
 
 DONE:

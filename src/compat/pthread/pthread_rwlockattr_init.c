@@ -40,10 +40,10 @@
  *      59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  */
 
-#include <stdlib.h>
-#include <errno.h>
-#include <limits.h>
-
+/* #include <stdlib.h> */
+/* #include <errno.h> */
+/* #include <limits.h> */
+#include <nautilus/nautilus.h>
 #include "pthread.h"
 #include "implement.h"
 
@@ -75,7 +75,7 @@ pthread_rwlockattr_init (pthread_rwlockattr_t * attr)
   pthread_rwlockattr_t rwa;
 
   rwa = (pthread_rwlockattr_t) calloc (1, sizeof (*rwa));
-
+  memset(rwa, 0, sizeof(*rwa));
   if (rwa == NULL)
     {
       result = ENOMEM;

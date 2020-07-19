@@ -40,12 +40,12 @@
  *      59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-
+/* #include <stdio.h> */
+/* #include <stdlib.h> */
+#include <nautilus/nautilus.h>
 #include "pthread.h"
 #include "implement.h"
-
+#include "debug.h"
 
 int
 pthread_mutex_init (pthread_mutex_t * mutex, const pthread_mutexattr_t * attr)
@@ -60,7 +60,7 @@ pthread_mutex_init (pthread_mutex_t * mutex, const pthread_mutexattr_t * attr)
     }
 
   mx = (pthread_mutex_t) calloc (1, sizeof (*mx));
-
+  memset(mx, 0, 1*sizeof(*mx));
   if (mx == NULL)
     {
       result = ENOMEM;
@@ -69,8 +69,14 @@ pthread_mutex_init (pthread_mutex_t * mutex, const pthread_mutexattr_t * attr)
     {
       mx->lock_idx = 0;
       mx->recursive_count = 0;
-      mx->kind = (attr == NULL || *attr == NULL
+      DEBUG("attr addr %08x\n", attr);
+      DEBUG("attr kind %08x\n", *attr);
+
+      mx->kind = PTHREAD_MUTEX_DEFAULT;
+      //mjc
+      //mx->kind = (attr == NULL || *attr == NULL \
                   ? PTHREAD_MUTEX_DEFAULT : (*attr)->kind);
+      DEBUG("pass mxkind\n");
       mx->ownerThread.p = NULL;
 
       pte_osSemaphoreCreate(0,&mx->handle);

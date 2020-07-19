@@ -40,9 +40,9 @@
  *      59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  */
 
-#include <stdlib.h>
-
-#include "pte_osal.h"
+/* #include <stdlib.h> */
+#include <nautilus/nautilus.h>
+#include "nk/pte_osal.h"
 
 #include "pthread.h"
 #include "implement.h"
@@ -89,6 +89,7 @@ pthread_key_create (pthread_key_t * key, void (*destructor) (void *))
     }
   else
     {
+      memset(newkey,0,1*sizeof(*newkey));
       pte_osResult osResult = pte_osTlsAlloc(&(newkey->key));
 
       if (osResult != PTE_OS_OK)

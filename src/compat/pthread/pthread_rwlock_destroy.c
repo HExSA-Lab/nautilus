@@ -40,10 +40,10 @@
  *      59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  */
 
-#include <stdlib.h>
-#include <errno.h>
-#include <limits.h>
-
+/* #include <stdlib.h> */
+/* #include <errno.h> */
+/* #include <limits.h> */
+#include <nautilus/nautilus.h>
 #include "pthread.h"
 #include "implement.h"
 
@@ -111,7 +111,7 @@ pthread_rwlock_destroy (pthread_rwlock_t * rwlock)
           result = pthread_cond_destroy (&(rwl->cndSharedAccessCompleted));
           result1 = pthread_mutex_destroy (&(rwl->mtxSharedAccessCompleted));
           result2 = pthread_mutex_destroy (&(rwl->mtxExclusiveAccess));
-          (void) free (rwl);
+          free (rwl);
         }
     }
   else

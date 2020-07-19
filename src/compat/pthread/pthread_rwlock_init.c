@@ -40,10 +40,10 @@
  *      59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  */
 
-#include <stdlib.h>
-#include <errno.h>
-#include <limits.h>
-
+/* #include <stdlib.h> */
+/* #include <errno.h> */
+/* #include <limits.h> */
+#include <nautilus/nautilus.h>
 #include "pthread.h"
 #include "implement.h"
 
@@ -66,7 +66,7 @@ pthread_rwlock_init (pthread_rwlock_t * rwlock,
     }
 
   rwl = (pthread_rwlock_t) calloc (1, sizeof (*rwl));
-
+  memset(rwl, 0, 1*sizeof(*rwl));
   if (rwl == NULL)
     {
       result = ENOMEM;
@@ -107,7 +107,8 @@ FAIL1:
   (void) pthread_mutex_destroy (&(rwl->mtxExclusiveAccess));
 
 FAIL0:
-  (void) free (rwl);
+  free(rwl)
+ // (void) free (rwl);
   rwl = NULL;
 
 DONE:

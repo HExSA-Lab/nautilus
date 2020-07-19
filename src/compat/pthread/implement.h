@@ -51,7 +51,7 @@
 #ifndef _IMPLEMENT_H
 #define _IMPLEMENT_H
 
-#include "pte_osal.h"
+#include "nk/pte_osal.h"
 
 /* use local include files during development */
 #include "semaphore.h"
@@ -476,8 +476,9 @@ extern "C"
     int pte_setthreadpriority (pthread_t thread, int policy, int priority);
 
     void pte_rwlock_cancelwrwait (void *arg);
-
-    int pte_threadStart (void *vthreadParms);
+    
+    //mjc add out
+    int pte_threadStart (void *vthreadParms, void ** out);
 
     void pte_callUserDestroyRoutines (pthread_t thread);
 

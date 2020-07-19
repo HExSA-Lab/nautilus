@@ -1,3 +1,4 @@
+
 /*
  * pthread_cancel.c
  *
@@ -42,8 +43,8 @@
 
 #include "pthread.h"
 #include "implement.h"
-#include <stdio.h>
-
+/* #include <stdio.h> */
+#include <nautilus/nautilus.h>
 int
 pthread_cancel (pthread_t thread)
 /*

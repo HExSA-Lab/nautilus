@@ -41,12 +41,12 @@
  *      59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  */
 
-#include <pte_osal.h>
-
+#include "nk/pte_osal.h"
+#include <nautilus/nautilus.h>
 #include "pthread.h"
 #include "implement.h"
 
-#include <stdio.h>
+//#include <stdio.h>
 
 int
 pthread_join (pthread_t thread, void **value_ptr)
@@ -145,7 +145,9 @@ pthread_join (pthread_t thread, void **value_ptr)
                * pthread_join() or pthread_detach() specifying the same
                * target is undefined.
                */
-              result = pthread_detach (thread);
+
+	      //mjc detached already
+              //result = pthread_detach (thread);
             }
 	  else if (result == PTE_OS_INTERRUPTED)
 	    {

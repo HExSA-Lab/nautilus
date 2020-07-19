@@ -1,3 +1,4 @@
+
 /*
  * pte_threadStart.c
  *
@@ -41,9 +42,9 @@
  *      59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-
+/* #include <stdio.h> */
+/* #include <stdlib.h> */
+#include <nautilus/nautilus.h>
 #include "pthread.h"
 #include "implement.h"
 
@@ -75,7 +76,7 @@ pte_terminate ()
 
 #endif
 
-int pte_threadStart (void *vthreadParms)
+int pte_threadStart (void *vthreadParms, void ** out)
 {
   ThreadParms * threadParms = (ThreadParms *) vthreadParms;
   pthread_t self;
@@ -84,8 +85,7 @@ int pte_threadStart (void *vthreadParms)
   void * arg;
 
 #ifdef PTE_CLEANUP_C
-#include <setjmp.h>
-
+#include <nautilus/setjmp.h>
   int setjmp_rc;
 #endif
 

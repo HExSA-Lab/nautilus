@@ -40,8 +40,8 @@
  *      59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  */
 
-#include <stdlib.h>
-
+/* #include <stdlib.h> */
+#include <nautilus/nautilus.h>
 #include "pthread.h"
 #include "implement.h"
 
@@ -79,7 +79,8 @@ pthread_spin_destroy (pthread_spinlock_t * lock)
            * have finished with the spinlock before destroying it.
            */
           *lock = NULL;
-          (void) free (s);
+          free(s);
+	  //(void) free (s);
         }
     }
   else

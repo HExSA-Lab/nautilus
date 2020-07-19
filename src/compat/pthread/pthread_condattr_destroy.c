@@ -1,3 +1,4 @@
+
 /*
  * condvar_attr_destroy.c
  *
@@ -41,8 +42,8 @@
  *      59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  */
 
-#include <stdlib.h>
-
+/* #include <stdlib.h> */
+#include <nautilus/nautilus.h>
 #include "pthread.h"
 #include "implement.h"
 
@@ -83,7 +84,8 @@ pthread_condattr_destroy (pthread_condattr_t * attr)
     }
   else
     {
-      (void) free (*attr);
+      free(*attr);
+      //(void) free (*attr);
 
       *attr = NULL;
       result = 0;

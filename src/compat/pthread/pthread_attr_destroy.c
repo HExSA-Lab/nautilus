@@ -1,3 +1,4 @@
+
 /*
  * pthread_attr_destroy.c
  *
@@ -40,8 +41,8 @@
  *      59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  */
 
-#include <stdlib.h>
-
+/* #include <stdlib.h> */
+#include <nautilus/nautilus.h>
 #include "pthread.h"
 #include "implement.h"
 

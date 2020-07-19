@@ -44,9 +44,9 @@
 #if !defined( PTHREAD_H )
 #define PTHREAD_H
 
-#include <pte_types.h>
+#include "nk/pte_types.h"
 
-#include <sched.h>
+#include "sched.h"
 
 #define PTE_VERSION 2,8,0,0
 #define PTE_VERSION_STRING "2, 8, 0, 0\0"
@@ -176,9 +176,9 @@
  * -------------------------------------------------------------
  */
 
-#include <time.h>
+//#include <time.h>
 
-#include <setjmp.h>
+#include <nautilus/setjmp.h>
 #include <limits.h>
 
 /*
@@ -367,7 +367,7 @@ enum
 #define PTHREAD_STACK_MIN                       0
 
 #undef _POSIX_THREAD_THREADS_MAX
-#define _POSIX_THREAD_THREADS_MAX               64
+#define _POSIX_THREAD_THREADS_MAX               256
 
     /* Arbitrary value */
 #undef PTHREAD_THREADS_MAX
@@ -396,6 +396,8 @@ enum
       {
         void * p;                   /* Pointer to actual object */
         unsigned int x;             /* Extra information - reuse count etc */
+        //mjc add attr into pthread_t
+	//struct pthread_attr_t_* attr;
       } pte_handle_t;
 
     typedef pte_handle_t pthread_t;
@@ -654,10 +656,6 @@ enum
 
 #endif /* PTE_CLEANUP_C */
 
-#ifdef __cplusplus
-extern "C" {
-#endif /* __cplusplus */
-
     /*
      * ===============
      * ===============
@@ -684,7 +682,9 @@ extern "C" {
 
     int  pthread_attr_getstacksize (const pthread_attr_t * attr,
                                     size_t * stacksize);
-
+     int  pthread_attr_getstack (const pthread_attr_t * attr,
+		               void **stackaddr, 
+			       size_t *stacksize);
     int  pthread_attr_setdetachstate (pthread_attr_t * attr,
                                       int detachstate);
 
@@ -737,6 +737,9 @@ extern "C" {
                        void **value_ptr);
 
     pthread_t  pthread_self (void);
+
+    //mjc
+    int pthread_getattr_np(pthread_t thread, pthread_attr_t * attr);
 
     int  pthread_cancel (pthread_t thread);
 
@@ -964,10 +967,6 @@ extern "C" {
 
 #endif /*PTE_LEVEL >= PTE_LEVEL_MAX - 1 */
 
-#ifdef __cplusplus
-}
-#endif /* cplusplus */
-
 #if PTE_LEVEL >= PTE_LEVEL_MAX
 
 
@@ -1006,5 +1005,6 @@ extern "C" {
 
 #undef PTE_LEVEL
 #undef PTE_LEVEL_MAX
+
 
 #endif /* PTHREAD_H */

@@ -41,12 +41,10 @@
  *      59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  */
 
-#include "pte_osal.h"
-#include <stdio.h>
-#include <stdlib.h>
-
+#include "nk/pte_osal.h"
 #include "pthread.h"
 #include "implement.h"
+#include <nautilus/nautilus.h>
 
 int
 pthread_create (pthread_t * tid,
@@ -139,6 +137,9 @@ pthread_create (pthread_t * tid,
   parms->start = start;
   parms->arg = arg;
 
+  //mjc add thread attr
+  //thread.attr = *attr;
+
   if (a != NULL)
     {
       stackSize = a->stacksize;
@@ -206,7 +207,8 @@ pthread_create (pthread_t * tid,
       (void) pthread_mutex_unlock (&tp->threadLock);
     }
 
-  osResult = pte_osThreadCreate(pte_threadStart,
+  //mjc change pte_threadstart to function pointer
+  osResult = pte_osThreadCreate((void *)&pte_threadStart,
                                 stackSize,
                                 priority,
                                 parms,

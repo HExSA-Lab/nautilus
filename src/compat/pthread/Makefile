@@ -1,3 +1,10 @@
+CFLAGS += -w
+NK_LIB =\
+	nk/
+
+PTHREAD_TEST =\
+	 pthreadtest/
+
 MUTEX_OBJS = \
   pthread_mutex_unlock.o \
   pthread_mutex_init.o \
@@ -58,8 +65,9 @@ THREAD_OBJS = \
   pthread_getschedparam.o \
   pthread_setschedparam.o \
   sched_get_priority_max.o \
-  sched_get_priority_min.o
-
+  sched_get_priority_min.o \
+  pthread_attr_getstack.o \
+  pthread_getattr_np.o
 
 TLS_OBJS = \
   pthread_key_create.o \
@@ -146,13 +154,11 @@ CANCEL_OBJS = \
   pthread_setcanceltype.o \
   pthread_setcancelstate.o
 
-OS_OBJS = \
-  nautilus_osal.o \
-  tls-helper.o
 
-OBJS = $(MUTEX_OBJS) $(MUTEXATTR_OBJS) $(THREAD_OBJS) $(SUPPORT_OBJS) $(TLS_OBJS) $(MISC_OBJS) $(SEM_OBJS) $(BARRIER_OBJS) $(SPIN_OBJS) $(CONDVAR_OBJS) $(RWLOCK_OBJS) $(CANCEL_OBJS) $(OS_OBJS)
 
-CFLAGS += -I/home/pdinda/class/nautilus-pdinda/src/pthread
+OBJS = $(MUTEX_OBJS) $(MUTEXATTR_OBJS) $(THREAD_OBJS) $(SUPPORT_OBJS) $(TLS_OBJS) $(MISC_OBJS) $(SEM_OBJS) $(BARRIER_OBJS) $(SPIN_OBJS) $(CONDVAR_OBJS) $(RWLOCK_OBJS) $(CANCEL_OBJS)
+obj-y +=$(OBJS) \
+	$(NK_LIB) \
+	$(PTHREAD_TEST)
 
-obj-y := $(OBJS)
 

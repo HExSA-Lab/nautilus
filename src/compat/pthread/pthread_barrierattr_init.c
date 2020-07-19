@@ -1,3 +1,4 @@
+
 /*
  * pthread_barrier_attr_init.c
  *
@@ -40,8 +41,8 @@
  *      59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  */
 
-#include <stdlib.h>
-
+/* #include <stdlib.h> */
+#include <nautilus/nautilus.h>
 #include "pthread.h"
 #include "implement.h"
 
@@ -77,7 +78,7 @@ pthread_barrierattr_init (pthread_barrierattr_t * attr)
   int result = 0;
 
   ba = (pthread_barrierattr_t) calloc (1, sizeof (*ba));
-
+  memset(ba, 0, 1*sizeof(*ba));
   if (ba == NULL)
     {
       result = ENOMEM;

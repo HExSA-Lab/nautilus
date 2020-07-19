@@ -40,7 +40,7 @@
  *      59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  */
 
-#include "pte_osal.h"
+#include "nk/pte_osal.h"
 #include "pthread.h"
 #include "implement.h"
 
@@ -168,7 +168,7 @@ pthread_once (pthread_once_t * once_control, void (*init_routine) (void))
             {
               /* we were last */
               if ((sema =
-                     (pte_osSemaphoreHandle) PTE_ATOMIC_EXCHANGE((int *) &once_control->semaphore,0)))
+                     (pte_osSemaphoreHandle)PTE_ATOMIC_EXCHANGE((int *) &once_control->semaphore,0)))
                 {
                   pte_osSemaphoreDelete(sema);
                 }

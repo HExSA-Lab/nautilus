@@ -120,7 +120,8 @@ pte_osResult pte_osMutexUnlock(pte_osMutexHandle handle);
 
 /** @name Threads */
 //@{
-typedef int (*pte_osThreadEntryPoint)(void *params);
+  
+/* typedef int (*pte_osThreadEntryPoint)(void *params); */
 
 
 /**

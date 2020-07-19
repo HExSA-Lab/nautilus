@@ -40,8 +40,8 @@
  *      59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  */
 
-#include <stdlib.h>
-
+/* #include <stdlib.h> */
+#include <nautilus/nautilus.h>
 #include "pthread.h"
 #include "implement.h"
 
@@ -89,7 +89,7 @@ pthread_spin_init (pthread_spinlock_t * lock, int pshared)
     }
 
   s = (pthread_spinlock_t) calloc (1, sizeof (*s));
-
+  memset(s, 0, sizeof(*s));
   if (s == NULL)
     {
       return ENOMEM;
@@ -123,7 +123,8 @@ pthread_spin_init (pthread_spinlock_t * lock, int pshared)
     }
   else
     {
-      (void) free (s);
+      free(s);
+     // (void) free (s);
       *lock = NULL;
     }
 

@@ -1,3 +1,4 @@
+
 /*
  * pthread_barrier_destroy.c
  *
@@ -40,8 +41,8 @@
  *      59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  */
 
-#include <stdlib.h>
-
+/* #include <stdlib.h> */
+#include <nautilus/nautilus.h>
 #include "pthread.h"
 #include "implement.h"
 
@@ -64,7 +65,8 @@ pthread_barrier_destroy (pthread_barrier_t * barrier)
     {
       if (0 == (result = sem_destroy (&(b->semBarrierBreeched[1]))))
         {
-          (void) free (b);
+          free(b);
+          //(void) free (b);
           return 0;
         }
       (void) sem_init (&(b->semBarrierBreeched[0]), b->pshared, 0);
