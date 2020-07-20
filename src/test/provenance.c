@@ -27,9 +27,12 @@
 #include <nautilus/scheduler.h>
 #include <nautilus/shell.h>
 #include <nautilus/vc.h>
+#include <nautilus/backtrace.h>
 #include <nautilus/provenance.h>
 
 #define PRINT(...) nk_vc_printf(__VA_ARGS__)
+
+#define USAGE "provenance [ panic | info addr | bt ]"
 
 struct nk_virtual_console *vc;
 
@@ -45,11 +48,15 @@ static int handle_provenance(char* buf, void* priv) {
 	uint64_t addr;
 	char opt;
 	if( ((opt = 'p', strcmp(buf, "provenance panic"))==0) ||
+		((opt = 'b', strcmp(buf, "provenance bt"))==0) ||
 	    ((opt = 'i', sscanf(buf, "provenance info %lx", &addr)) == 1) || 
 		((opt = 'q')) ) {
 		switch(opt) {
 			case 'p':
 				panic("Provenance: panic invoked!\n");
+				break;
+			case 'b':
+				backtrace_here();
 				break;
 			case 'i':
 				prov_info = prov_get_info(addr);	
@@ -61,7 +68,7 @@ static int handle_provenance(char* buf, void* priv) {
 			case 'q':
 			default:
 				PRINT("Invalid argument(s)!\n");
-				PRINT("Usage: provenance [panic | info addr]\n");
+				PRINT("Usage: %s\n", USAGE);
 				break;
 		}
 	}
@@ -70,7 +77,7 @@ static int handle_provenance(char* buf, void* priv) {
 
 static struct shell_cmd_impl provenance = {
 	.cmd      = "provenance",
-	.help_str = "provenance [panic | info addr]",
+	.help_str = USAGE,
 	.handler  = handle_provenance,
 };
 
