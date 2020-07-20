@@ -41,32 +41,19 @@ typedef struct {
 	uint64_t offset;
 } secentry;
 
-/* Structure of each entry in the Section Table */
+/* Structure of each entry in the Section/Symbol Table */
 typedef struct {
 	char* name;
 	uint64_t start_addr;
 	uint64_t end_addr;
 	uint32_t size;
-} prov_sectab_entry;
+} prov_entry;
 
-/* Structure of each entry in the Symbol Table */
+/* Section/Symbol Table */
 typedef struct {
-	char* symbol;
-	uint64_t start_addr;
-	uint64_t end_addr;
-} prov_symtab_entry;
-
-/* Symbol Table */
-typedef struct {
-	prov_sectab_entry** entries;
+	prov_entry** entries;
 	int count;
-} prov_sectab;
-
-/* Symbol Table */
-typedef struct {
-	prov_symtab_entry** entries;
-	int count;
-} prov_symtab;
+} prov_table;
 
 typedef struct {
 	char* file_name;
