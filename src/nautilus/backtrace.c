@@ -30,7 +30,7 @@ extern int printk (const char * fmt, ...);
 
 static void print_prov_info(uint64_t addr) {
 	provenance_info prov_info = prov_get_info(addr);
-	printk("Symbol: %s\t", (prov_info.symbol != NULL) ? (char*) prov_info.symbol : "???");
+	printk("Symbol: %s   ", (prov_info.symbol != NULL) ? (char*) prov_info.symbol : "???");
 	printk("Section: %s\n", (prov_info.section != NULL) ? (char*) prov_info.section : "???");
 	if(prov_info.line_info != NULL) {
 		// TODO: print line info
@@ -48,7 +48,7 @@ __do_backtrace (void ** fp, unsigned depth)
     }
     
     printk("[%2u] RIP: %p RBP: %p\n", depth, *(fp+1), *fp);
-	print_prov_info((uint64_t) fp);
+	print_prov_info((uint64_t) *(fp+1));
     __do_backtrace(*fp, depth+1);
 }
 
