@@ -148,6 +148,10 @@
 #include <gc/bdwgc/bdwgc.h>
 #endif
 
+#ifdef NAUT_CONFIG_PROVENANCE
+#include <nautilus/provenance.h>
+#endif
+
 #ifdef NAUT_CONFIG_ENABLE_PDSGC
 #include <gc/pdsgc/pdsgc.h>
 #endif
@@ -409,6 +413,10 @@ init (unsigned long mbd,
     pci_init(naut);
 
     nk_sched_init(&sched_cfg);
+
+#ifdef NAUT_CONFIG_PROVENANCE
+	prov_init();
+#endif
 
 #ifdef NAUT_CONFIG_CACHEPART
 #ifdef NAUT_CONFIG_CACHEPART_INTERRUPT

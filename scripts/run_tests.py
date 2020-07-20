@@ -29,6 +29,7 @@ def gen_grub(name, flags):
 
     copyfile("nautilus.bin", str(bootdir + "/nautilus.bin"))
     copyfile("nautilus.syms", str(bootdir + "/nautilus.syms"))
+	copyfile("nautilus.secs", str(bootdir + "/nautilus.secs"))
 
     cmd = ["scripts/gen_grub.py"]
     cmd.extend(flags)

@@ -14,6 +14,7 @@ hostprogs-$(CONFIG_PROM_CONSOLE) += conmakehash
 hostprogs-$(CONFIG_IKCONFIG)     += bin2c
 
 hostprogs-y += format_syms
+hostprogs-y += format_secs
 
 always		:= $(hostprogs-y)
 

@@ -6,24 +6,24 @@
 #include <unistd.h>
 
 
-#define DEFAULT_INPUT_NAME "sym.tmp"
-#define DEFAULT_OUTPUT_NAME "nautilus.syms"
+#define DEFAULT_INPUT_NAME "sec.tmp"
+#define DEFAULT_OUTPUT_NAME "nautilus.secs"
 #define MAX_SYM_SIZE 1024
 
-#define ST_MAGIC    0x00952700
+#define ST_MAGIC    0x00952800
 
-typedef struct symlist{
+typedef struct seclist{
     uint64_t value;
+	uint32_t sec_size;
     uint64_t offset;
-	char* sym;
-	int sym_len;
-    struct symlist* next;
-}Symlist;
+    struct seclist* next;
+}Seclist;
 
-typedef struct symentry{
+typedef struct secentry{
     uint64_t value;
+	uint32_t sec_size;
     uint64_t offset;
-}Symentry;
+}Secentry;
 
 //this function receives a pointer to the ascii reperesentation of 64bit addr 
 //as parameter, and converts it to the binary representation of that addr
@@ -45,71 +45,23 @@ uint64_t atob(uint8_t* p){
     return opt;
 }
 
-void FrontBackSplit(Symlist* source, 
-		Symlist** frontRef, Symlist** backRef) 
-{ 
-	Symlist* fast; 
-	Symlist* slow; 
-	slow = source; 
-	fast = source->next; 
 
-	/* Advance 'fast' two nodes, and advance 'slow' one node */
-	while (fast != NULL) { 
-		fast = fast->next; 
-		if (fast != NULL) { 
-			slow = slow->next; 
-			fast = fast->next; 
-		} 
-	} 
-
-	/* 'slow' is before the midpoint in the list, so split it in two 
-	   at that point. */
-	*frontRef = source; 
-	*backRef = slow->next; 
-	slow->next = NULL; 
-} 
-
-Symlist* SortedMerge(Symlist* a, Symlist* b) 
-{ 
-	Symlist* result = NULL; 
-
-	/* Base cases */
-	if (a == NULL) 
-		return (b); 
-	else if (b == NULL) 
-		return (a); 
-
-	/* Pick either a or b, and recur */
-	if (a->value <= b->value) { 
-		result = a; 
-		result->next = SortedMerge(a->next, b); 
-	} 
-	else { 
-		result = b; 
-		result->next = SortedMerge(a, b->next); 
-	} 
-	return (result); 
-} 
-
-void mergesort_symlist(Symlist** headRef) {
-	Symlist* head = *headRef; 
-	Symlist* a; 
-	Symlist* b; 
-
-	/* Base case -- length 0 or 1 */
-	if ((head == NULL) || (head->next == NULL)) { 
-		return; 
-	} 
-
-	/* Split head into 'a' and 'b' sublists */
-	FrontBackSplit(head, &a, &b); 
-
-	/* Recursively sort the sublists */
-	mergesort_symlist(&a); 
-	mergesort_symlist(&b); 
-
-	/* answer = merge the two sorted lists together */
-	*headRef = SortedMerge(a, b); 
+uint32_t atob_size(uint8_t* p){
+    uint32_t opt = 0;   //output
+    uint32_t buf = 0;   //buffer
+    int i;
+    for(i = 0;i < 6;i++){
+        buf = p[i];
+        if(buf <= 0x39){
+            buf -= 0x30;
+        }
+        if(0x30 < buf && buf <= 0x66){
+            buf -= 0x57;
+        }
+        buf <<= (5 - i) * 4;
+        opt |= buf;
+    }
+    return opt;
 }
 
 int 
@@ -147,9 +99,10 @@ main (int argc,char** argv) {
     bzero(buf, MAX_SYM_SIZE);
     
     uint32_t offset = 0;    //symbol name offset
+	uint32_t sec_size = 0;
     uint64_t value = 0;     //actual addr of the symbol
-    Symlist* head = (Symlist*) malloc(sizeof(Symlist));
-    Symlist* pre = head;
+    Seclist* head = (Seclist*) malloc(sizeof(Seclist));
+    Seclist* pre = head;
     uint32_t noe = 0;       //number of entries in the symbol table
     char* strp = NULL;      
     size_t length = 0;
@@ -161,32 +114,35 @@ main (int argc,char** argv) {
 
 
     while(fgets(buf,MAX_SYM_SIZE,fp)){
+	/*
         if((value = atob((uint8_t*) buf)) == 0){   //discard entry whose value = 0
            continue;
         }
-        strp = (char*)buf + 0x11;
-        length = strlen(strp);
-        strp[length - 1] = 0x0;
+	*/
+		value = atob((uint8_t*) buf);
+		sec_size = atob_size((uint8_t*) buf+0x11);
 
-        Symlist* tmp = (Symlist*) malloc(sizeof(Symlist));
+        Seclist* tmp = (Seclist*) malloc(sizeof(Seclist));
         tmp->next = NULL;
         tmp->value = value;
+		tmp->sec_size = sec_size;
         tmp->offset = offset;
-		tmp->sym = (char*) malloc(sizeof(char)*length);
-		strcpy(tmp->sym, strp);
-		tmp->sym_len = length;
         
 		pre->next = tmp;
         pre = tmp;
 
-        //fwrite(strp,1,length,nsfp);
-        //offset += length;
+        strp = (char*)buf + 0x18;
+        length = strlen(strp);
+        strp[length - 1] = 0x0;
+        fwrite(strp,1,length,nsfp);
+        offset += length;
         noe++;
         //printf("%s\n",buf);
     }
     fclose(fp);
 
-    Symlist* sp = head->next;
+    Seclist* sp = head->next;
+/*
 	mergesort_symlist(&sp);
 	Symlist* tmp_sp = sp;
 	while(tmp_sp) {
@@ -195,7 +151,7 @@ main (int argc,char** argv) {
         offset += tmp_sp->sym_len;
 		tmp_sp = tmp_sp->next;
 	}
-
+*/
     //updates offset and noe records
     fseek(nsfp,4,SEEK_SET);
     offset += 12;
@@ -204,11 +160,12 @@ main (int argc,char** argv) {
     fwrite(&noe,4,1,nsfp);
     fseek(nsfp,0,SEEK_END);
 
-	Symentry entry = {0,0};
+	Secentry entry = {0,0,0};
     while(sp){
         entry.value = sp->value;
+		entry.sec_size = sp->sec_size;
         entry.offset = sp->offset;
-        fwrite(&entry,sizeof(Symentry),1,nsfp);
+        fwrite(&entry,sizeof(Secentry),1,nsfp);
         sp = sp->next;
     }
     fclose(nsfp);
