@@ -10,16 +10,12 @@
  * http://www.v3vee.org  and
  * http://xstack.sandia.gov/hobbes
  *
- * Copyright (c) 2019, Michael A. Cuevas <cuevas@u.northwestern.edu>
- * Copyright (c) 2019, Enrico Deiana <ead@u.northwestern.edu>
- * Copyright (c) 2019, Peter Dinda <pdinda@northwestern.edu>
- * Copyright (c) 2019, The V3VEE Project  <http://www.v3vee.org>
+ * Copyright (c) 2020, Nanda Velugoti <nvelugoti@hawk.iit.edu>
+ * Copyright (c) 2020, The V3VEE Project  <http://www.v3vee.org>
  *                     The Hobbes Project <http://xstack.sandia.gov/hobbes>
  * All rights reserved.
  *
- * Author:  Michael A. Cuevas <cuevas@u.northwestern.edu>
- *          Enrico Deiana <ead@u.northwestern.edu>
- *          Peter Dinda <pdinda@northwestern.edu>
+ * Authors: Nanda Velugoti <nvelugoti@hawk.iit.edu>
  *
  * This is free software.  You are permitted to use,
  * redistribute, and modify it as specified in the file "LICENSE.txt".
@@ -31,31 +27,51 @@
 #include <nautilus/scheduler.h>
 #include <nautilus/shell.h>
 #include <nautilus/vc.h>
+#include <nautilus/provenance.h>
 
-#define DO_PRINT       0
-
-#if DO_PRINT
 #define PRINT(...) nk_vc_printf(__VA_ARGS__)
-#else
-#define PRINT(...)
-#endif
 
 struct nk_virtual_console *vc;
 
 /******************* Test Routines *******************/
 
-
+/*
+ * This function is to test the provenance feature functionality.
+ * Invokes panic
+ */
 __attribute__((section (".prov")))
 static int handle_provenance(char* buf, void* priv) {
-  nk_vc_printf("Provenance command handler invoked!\n");
-  panic("provenance panic");
-  return 0;
+	provenance_info prov_info;
+	uint64_t addr;
+	char opt;
+	if( ((opt = 'p', strcmp(buf, "provenance panic"))==0) ||
+	    ((opt = 'i', sscanf(buf, "provenance info %lx", &addr)) == 1) || 
+		((opt = 'q')) ) {
+		switch(opt) {
+			case 'p':
+				panic("Provenance: panic invoked!\n");
+				break;
+			case 'i':
+				prov_info = prov_get_info(addr);	
+				PRINT("Symbol: %s\n", 
+					(prov_info.symbol != NULL) ? (char*) prov_info.symbol : "???");
+				PRINT("Section: %s\n", 
+					(prov_info.section != NULL) ? (char*) prov_info.section : "???");
+				break;
+			case 'q':
+			default:
+				PRINT("Invalid argument(s)!\n");
+				PRINT("Usage: provenance [panic | info addr]\n");
+				break;
+		}
+	}
+	return 0;
 }
 
 static struct shell_cmd_impl provenance = {
-  .cmd      = "provenance",
-  .help_str = "provenance debugger",
-  .handler  = handle_provenance,
+	.cmd      = "provenance",
+	.help_str = "provenance [panic | info addr]",
+	.handler  = handle_provenance,
 };
 
 /******************* Shell Commands *******************/
