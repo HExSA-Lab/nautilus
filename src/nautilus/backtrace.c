@@ -24,9 +24,20 @@
 #include <nautilus/nautilus.h>
 #include <nautilus/cpu.h>
 #include <nautilus/thread.h>
+#include <nautilus/provenance.h>
 
 extern int printk (const char * fmt, ...);
 
+static void print_prov_info(uint64_t addr) {
+	provenance_info prov_info = prov_get_info(addr);
+	printk((prov_info.symbol != NULL) ? (char*) prov_info.symbol : "???");
+	if(prov_info.line_info != NULL) {
+		// print line info
+	}
+	if(prov_info.file_info != NULL) {
+		// print file info
+	}
+}
 
 void __attribute__((noinline))
 __do_backtrace (void ** fp, unsigned depth)
@@ -36,7 +47,7 @@ __do_backtrace (void ** fp, unsigned depth)
     }
     
     printk("[%2u] RIP: %p RBP: %p\n", depth, *(fp+1), *fp);
-
+	print_prov_info((uint64_t) fp);
     __do_backtrace(*fp, depth+1);
 }
 

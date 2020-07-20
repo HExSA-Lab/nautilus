@@ -29,14 +29,7 @@ SECTIONS
         *(.gnu.linkonce.t*)
     }
 
-	.prov ALIGN(0x1000) : AT(ADDR(.text) + SIZEOF(.text))
-    {
-		_prov_start = .;
-        *(.prov)
-        *(.gnu.linkonce.prov)
-    }
-
-    .init ALIGN(0x1000) : AT(ADDR(.prov) + SIZEOF(.prov))
+	.init ALIGN(0x1000) : AT(ADDR(.text) + SIZEOF(.text))
     {
         *(.init)
         *(.gnu.linkonce.init)

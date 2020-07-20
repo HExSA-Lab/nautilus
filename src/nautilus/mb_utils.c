@@ -204,8 +204,7 @@ mb_get_first_hrt_addr (ulong_t mbd)
     struct multiboot_tag_hrt * hrt = (struct multiboot_tag_hrt*)tag;
     return (void*)hrt->first_hrt_gpa;
 }
-uint64_t __mod_start;
-struct multiboot_tag_elf_sections* elf_info;
+
 struct multiboot_info * 
 multiboot_parse (ulong_t mbd, ulong_t magic)
 {
@@ -246,16 +245,6 @@ multiboot_parse (ulong_t mbd, ulong_t magic)
                                                       }
             case MULTIBOOT_TAG_TYPE_ELF_SECTIONS: {
                 struct multiboot_tag_elf_sections * elf = (struct multiboot_tag_elf_sections*)tag;
-				elf_info = elf;
-/*
-				elf_info = malloc(sizeof(struct multiboot_tag_elf_sections));
-				elf_info->type = elf->type;
-				elf_info->size = elf->size;
-				elf_info->num = elf->num;
-				elf_info->entsize = elf->entsize;
-				elf_info->shndx = elf->shndx;
-				elf_info->sections = elf->sections;
-*/
                 DEBUG_PRINT("ELF size=%u, num=%u, entsize=%u, shndx=%u, sechdr=%p\n", 
                         elf->size,
                         elf->num,
@@ -318,7 +307,6 @@ multiboot_parse (ulong_t mbd, ulong_t magic)
                 DEBUG_PRINT("  mod_start 0x%08x\n", mod->mod_start);
                 DEBUG_PRINT("  mod_end   0x%08x\n", mod->mod_end);
                 DEBUG_PRINT("  args:     %s\n",     mod->cmdline);
-				__mod_start = mod->mod_start;
                 if (nk_register_mod(mb_info, mod) != 0) {
                     ERROR_PRINT("Could not register multiboot module\n");
                     return NULL;

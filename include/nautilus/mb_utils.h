@@ -59,7 +59,4 @@ struct multiboot_info {
     struct list_head mod_list;
 };
 
-extern struct multiboot_tag_elf_sections *elf_info;
-extern uint64_t __mod_start;
-
 #endif
