@@ -2,11 +2,6 @@
 #include <nautilus/shell.h>
 #include <nautilus/libccompat.h>
 #include <nautilus/random.h>
-//#include <nautilus/scheduler.h>
-#ifndef NAUT_CONFIG_DEBUG_GPUDEV
-#undef DEBUG_PRINT
-#define DEBUG_PRINT(fmt, args...) 
-#endif
 
 #define ERROR(fmt, args...) ERROR_PRINT("omptest: " fmt, ##args)
 #define DEBUG(fmt, args...) DEBUG_PRINT("omptest: " fmt, ##args)
@@ -20,23 +15,24 @@ static inline uint16_t random()
 }
 
 #define MAXN 5100  /* Max value of N */
-int N;  /* Matrix size */
-int procs;  /* Number of processors to use */
+
+static int N;  /* Matrix size */
+static int procs;  /* Number of processors to use */
 
 /* Matrices and vectors */
-volatile float A[MAXN][MAXN], B[MAXN], X[MAXN];
-volatile float ORA[MAXN][MAXN], ORB[MAXN], ORX[MAXN];
+static volatile float A[MAXN][MAXN], B[MAXN], X[MAXN];
+static volatile float ORA[MAXN][MAXN], ORB[MAXN], ORX[MAXN];
 /* A * X = B, solve for X */
 
-int seed;
+static int seed;
 /* Prototype */
-void gauss();  /* The function you will provide.
+static void gauss();  /* The function you will provide.
 		* It is this routine that is timed.
 		* It is called only on the parent.
 		*/
 
 /* Initialize A and B (and X to 0.0s) */
-void initialize_inputs() {
+static void initialize_inputs() {
   int row, col;
  
   printf("\nInitializing...\n");
@@ -224,7 +220,7 @@ static int handle_omptest (char * buf, void * priv)
 
 static struct shell_cmd_impl omptest_impl = {
     .cmd      = "omptest",
-    .help_str = "openmp test",
+    .help_str = "omptest seed size np (openmp Gaussian elimination test)",
     .handler  = handle_omptest,
 };
 nk_register_shell_cmd(omptest_impl);

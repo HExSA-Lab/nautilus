@@ -1,17 +1,12 @@
 #include <nautilus/nautilus.h>
 #include <nautilus/shell.h>
 #include <nautilus/libccompat.h>
-#ifndef NAUT_CONFIG_DEBUG_GPUDEV
-#undef DEBUG_PRINT
-#define DEBUG_PRINT(fmt, args...) 
-#endif
 
-#define ERROR(fmt, args...) ERROR_PRINT("gpudev: " fmt, ##args)
-#define DEBUG(fmt, args...) DEBUG_PRINT("gpudev: " fmt, ##args)
-#define INFO(fmt, args...) INFO_PRINT("gpudev: " fmt, ##args)
-extern int pthread_init(void);
+#define ERROR(fmt, args...) ERROR_PRINT("ompstest: " fmt, ##args)
+#define DEBUG(fmt, args...) DEBUG_PRINT("ompstest: " fmt, ##args)
+#define INFO(fmt, args...) INFO_PRINT("ompstest: " fmt, ##args)
 
-static int handle_gputest (char * buf, void * priv)
+static int handle_test (char * buf, void * priv)
 {
     int i;
     #pragma omp parallel
@@ -33,8 +28,8 @@ static int handle_gputest (char * buf, void * priv)
 
 static struct shell_cmd_impl omptest_impl = {
     .cmd      = "ompstest",
-    .help_str = "openmp simple test",
-    .handler  = handle_gputest,
+    .help_str = "ompstest (openmp simple test)",
+    .handler  = handle_test,
 };
 nk_register_shell_cmd(omptest_impl);
 

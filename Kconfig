@@ -879,6 +879,13 @@ menu "Compatability"
      help 
          POSIX threads
 
+     config BASE_PTHREAD_COMPAT_TESTS
+       bool "Add POSIX threads compatability layer tests"
+       depends on BASE_PTHREAD_COMPAT
+       default n	
+       help 
+         Enable tests for this layer
+	 
      config DEBUG_BASE_PTHREAD_COMPAT
        bool "Debug basic POSIX threads compatability layer"
        depends on BASE_PTHREAD_COMPAT
