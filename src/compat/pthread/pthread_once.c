@@ -148,7 +148,7 @@ pthread_once (pthread_once_t * once_control, void (*init_routine) (void))
               pte_osSemaphoreCreate(0, (pte_osSemaphoreHandle*) &sema);
 
               if (PTE_ATOMIC_COMPARE_EXCHANGE((int *) &once_control->semaphore,
-                                              (int) sema,
+                                              (unsigned long  int) sema,
                                               0))
                 {
                   pte_osSemaphoreDelete((pte_osSemaphoreHandle)sema);
@@ -168,7 +168,7 @@ pthread_once (pthread_once_t * once_control, void (*init_routine) (void))
             {
               /* we were last */
               if ((sema =
-                     (pte_osSemaphoreHandle)PTE_ATOMIC_EXCHANGE((int *) &once_control->semaphore,0)))
+                     (pte_osSemaphoreHandle)(unsigned long int)PTE_ATOMIC_EXCHANGE((int *) &once_control->semaphore,0)))
                 {
                   pte_osSemaphoreDelete(sema);
                 }

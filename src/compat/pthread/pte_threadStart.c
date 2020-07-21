@@ -242,7 +242,9 @@ int pte_threadStart (void *vthreadParms, void ** out)
    * Never reached.
    */
 
-  return (unsigned) status;
+  //mjc from unsigned to unsigned *
+ // return (unsigned) status;
+ return (unsigned long int)status;
 
 }				/* pte_threadStart */
 

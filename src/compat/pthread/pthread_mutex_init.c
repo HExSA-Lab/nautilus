@@ -69,14 +69,11 @@ pthread_mutex_init (pthread_mutex_t * mutex, const pthread_mutexattr_t * attr)
     {
       mx->lock_idx = 0;
       mx->recursive_count = 0;
-      DEBUG("attr addr %08x\n", attr);
-      DEBUG("attr kind %08x\n", *attr);
-
-      mx->kind = PTHREAD_MUTEX_DEFAULT;
-      //mjc
-      //mx->kind = (attr == NULL || *attr == NULL \
-                  ? PTHREAD_MUTEX_DEFAULT : (*attr)->kind);
-      DEBUG("pass mxkind\n");
+      //DEBUG("attr addr %08x\n", attr);
+      //DEBUG("attr kind %08x\n", *attr);
+      //mx->kind = PTHREAD_MUTEX_DEFAULT;
+      mx->kind = (attr == NULL || *attr == NULL ? PTHREAD_MUTEX_DEFAULT : (*attr)->kind);
+      //DEBUG("pass mxkind\n");
       mx->ownerThread.p = NULL;
 
       pte_osSemaphoreCreate(0,&mx->handle);

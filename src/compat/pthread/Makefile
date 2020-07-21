@@ -1,9 +1,5 @@
-CFLAGS += -w
 NK_LIB =\
 	nk/
-
-PTHREAD_TEST =\
-	 pthreadtest/
 
 MUTEX_OBJS = \
   pthread_mutex_unlock.o \

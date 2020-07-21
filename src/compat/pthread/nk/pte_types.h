@@ -3,7 +3,6 @@
 #define PTE_TYPES_H
 #include <nautilus/list.h>
 #include <nautilus/semaphore.h>
-#include <nautilus/thread.h>
 #include <nautilus/spinlock.h>
 #include <nautilus/libccompat.h>
 #include <nautilus/waitqueue.h>

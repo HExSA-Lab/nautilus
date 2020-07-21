@@ -3,7 +3,6 @@
 #include "pte_types.h"
 #include "pte_osal.h"
 #include <nautilus/libccompat.h>
-#include <nautilus/thread.h>
 #include <nautilus/scheduler.h>
 #include <nautilus/semaphore.h>
 #include <nautilus/waitqueue.h>
@@ -22,7 +21,7 @@
 //retrive osHandle from thread
 #define poffsetof(TYPE, MEMBER) ((size_t) &((TYPE *)0)->MEMBER)
 #define pcontainer_of(ptr, type, member) ({                      \
-        const typeof( ((type *)0)->member ) *__mptr = (ptr);    \
+        const typeof( ((type *)0)->member ) *__mptr = (typeof(((type *)0)->member)) (ptr);    \
         (type *)( (char *)__mptr - offsetof(type,member) );})
 
 #define  TIME() (unsigned int)nk_sched_get_realtime();
