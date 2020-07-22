@@ -415,7 +415,7 @@ init (unsigned long mbd,
     nk_sched_init(&sched_cfg);
 
 #ifdef NAUT_CONFIG_PROVENANCE
-	prov_init();
+	nk_prov_init();
 #endif
 
 #ifdef NAUT_CONFIG_CACHEPART

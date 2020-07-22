@@ -66,12 +66,29 @@ static void sectab_resolve_addr_ranges() {
 	}
 }
 
+static void symtab_resolve_last_entry() {
+	/* 
+		Upate the end address of the last entry of symbol table table with the last
+		entry of section table.
+
+		This is done because we don't have size or end address information for symbol table entries.
+		All we have are start addresses of symbols. So symtab_resolve_addr_ranges() takes care of 
+		the end addresses of all symbol table entries except for the last one. So we use section table
+		information, which has the size of each entry, to determine the end address of the last entry
+		of section table.
+	*/
+	prov_entry* last_entry = symtab->entries[symtab->count-1];
+	last_entry->end_addr = sectab->entries[sectab->count-1]->end_addr;
+	last_entry->size = last_entry->end_addr - last_entry->start_addr;
+}
+
 static void symtab_resolve_addr_ranges() {
 	for(int i=0; i<(symtab->count-1); i++) {
-		symtab->entries[i]->end_addr = symtab->entries[i+1]->start_addr - 1;
+		int offset = ((symtab->entries[i]->start_addr) < (symtab->entries[i+1]->start_addr)) ? -1 : 0;
+		symtab->entries[i]->end_addr = symtab->entries[i+1]->start_addr + offset;
 		symtab->entries[i]->size = symtab->entries[i]->end_addr - symtab->entries[i]->start_addr;
 	}
-	prov_entry* last_entry = symtab->entries[symtab->count-1];
+	prov_entry* last_entry = symtab->entries[(symtab->count)-1];
 	last_entry->size = last_entry->end_addr - last_entry->start_addr;
 }
 
@@ -81,7 +98,7 @@ static void sectab_init(uint64_t mod_start) {
 	uint32_t magic = *secs_base_addr;
 	uint32_t offset = *(secs_base_addr+1);
 	uint32_t noe = *(secs_base_addr+2);
-	PROV_DEBUG("Module: Section Table\tMagic: %x\tOffset: %x\tNo. of Entries: %d\n", magic, offset, noe);
+	PROV_DEBUG("Section Table Magic: %x\tOffset: %x\tNo. of Entries: %d\n", magic, offset, noe);
 	sectab = (prov_table*) malloc(sizeof(prov_table));
 	sectab->entries = (prov_entry**) malloc(sizeof(prov_entry*) * noe);
 	sectab->count = noe;
@@ -111,6 +128,7 @@ static void symtab_init(uint64_t mod_start) {
 	uint32_t magic = *syms_base_addr;
 	uint32_t offset = *(syms_base_addr+1);
 	uint32_t noe = *(syms_base_addr+2);
+	PROV_DEBUG("Symbol Table Magic: %x\tOffset: %x\tNo. of Entries: %d\n", magic, offset, noe);
 	symtab = (prov_table*) malloc(sizeof(prov_table));
 	symtab->entries = (prov_entry**) malloc(sizeof(prov_entry*) * noe);
 	symtab->count = noe;
@@ -132,18 +150,19 @@ static void symtab_init(uint64_t mod_start) {
 	}
 }
 
-provenance_info prov_get_info(uint64_t addr) {
-	provenance_info prov_info;
-	prov_info.symbol = prov_get_name(symtab, addr);
-	prov_info.section = prov_get_name(sectab, addr);
+provenance_info* nk_prov_get_info(uint64_t addr) {
+	if(!prov_initialized)
+		return NULL;
 
-	prov_info.line_info = NULL; // Placeholder.
-	prov_info.file_info = NULL;	// Placeholder.
-
+	provenance_info* prov_info = (provenance_info*) malloc(sizeof(provenance_info));
+	prov_info->symbol = prov_get_name(symtab, addr);
+	prov_info->section = prov_get_name(sectab, addr);
+	prov_info->line_info = NULL; // Placeholder.
+	prov_info->file_info = NULL;	// Placeholder.
 	return prov_info;
 }
 
-void prov_init() {
+void nk_prov_init() {
 	if(!prov_initialized) {
 		struct list_head *curr = NULL;
 		struct multiboot_info* mb_info = nautilus_info.sys.mb_info;
@@ -160,6 +179,9 @@ void prov_init() {
 			}
 
 		}
+
+		symtab_resolve_last_entry();
+		
 		prov_initialized = true;
 	}
 }

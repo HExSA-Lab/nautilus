@@ -72,7 +72,7 @@ typedef struct {
 	prov_file_info* file_info;
 } provenance_info;
 
-void prov_init();
-provenance_info prov_get_info(uint64_t addr);
+void nk_prov_init();
+provenance_info* nk_prov_get_info(uint64_t addr);
 
 #endif
