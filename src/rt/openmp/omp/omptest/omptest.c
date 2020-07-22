@@ -182,14 +182,14 @@ static int handle_omptest (char * buf, void * priv)
     reset_inputs();
     // print_inputs();
 
-    unsigned mxcsr;
-    __asm__ volatile("ldmxcsr %0"::"m"(*&mxcsr):"memory");
-    printf("ld %04x \n", mxcsr);
-    mxcsr = mxcsr ^ 0x0200;
-    printf("st %08x \n", mxcsr);
-    __asm__ volatile("stmxcsr %0"::"m"(*&mxcsr):"memory");
-     __asm__ volatile("ldmxcsr %0"::"m"(*&mxcsr):"memory");
-    printf("ld %08x \n", mxcsr);
+    //unsigned mxcsr;
+    //__asm__ volatile("ldmxcsr %0"::"m"(*&mxcsr):"memory");
+    //printf("ld %04x \n", mxcsr);
+    //mxcsr = mxcsr ^ 0x0200;
+    //printf("st %08x \n", mxcsr);
+    //__asm__ volatile("stmxcsr %0"::"m"(*&mxcsr):"memory");
+    // __asm__ volatile("ldmxcsr %0"::"m"(*&mxcsr):"memory");
+    //printf("ld %08x \n", mxcsr);
  
     double start = TIME();
     ompgauss();

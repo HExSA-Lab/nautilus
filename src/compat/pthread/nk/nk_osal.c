@@ -374,7 +374,7 @@ pte_osResult pte_osSemaphorePend(pte_osSemaphoreHandle handle, unsigned int *pTi
  
    if(pTimeout == NULL){
      while(1){
-       //DEBUG("osSemaphoreBusyWaitPend\n");
+       DEBUG("osSemaphoreBusyWaitPend\n");
        handle->flags = STATE_LOCK(&(handle->lock));
        if(handle->count > 0){
 	 handle->count--;
@@ -394,7 +394,7 @@ pte_osResult pte_osSemaphorePend(pte_osSemaphoreHandle handle, unsigned int *pTi
      }
      // We are ZOMBIE NOW! GO to sleep!
      while(1){
-       ERROR("osSemaphoreSleepPend\n");
+       DEBUG("osSemaphoreSleepPend\n");
        handle->flags = STATE_LOCK(&(handle->lock));
        if(handle->count > 0){
 	 handle->count--;
@@ -415,7 +415,7 @@ pte_osResult pte_osSemaphorePend(pte_osSemaphoreHandle handle, unsigned int *pTi
 	// and go to sleep - this will also release the lock
         // and reenable preemption
         nk_sched_sleep(&(handle->lock));
-	DEBUG("*********wake up******\n");
+	DEBUG("thread wake up from sleep\n");
 	irq_enable_restore(handle->flags);
 	
        }
@@ -673,5 +673,8 @@ int ftime(struct timeb *tb){
 int pthread_atfork(void (*prepare)(void), void (*parent)(void), void (*child)(void))
 {
     DEBUG("no support for pthrad_atfork()\n");
-    return -1;
+    
+    //kmp fail at __kmp_register_atfork() with return -1
+    return 0;
+   // return -1;
 }

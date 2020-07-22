@@ -71,8 +71,11 @@ pthread_mutex_init (pthread_mutex_t * mutex, const pthread_mutexattr_t * attr)
       mx->recursive_count = 0;
       //DEBUG("attr addr %08x\n", attr);
       //DEBUG("attr kind %08x\n", *attr);
-      //mx->kind = PTHREAD_MUTEX_DEFAULT;
-      mx->kind = (attr == NULL || *attr == NULL ? PTHREAD_MUTEX_DEFAULT : (*attr)->kind);
+
+      //this is mx->kind assignment is new
+      mx->kind = PTHREAD_MUTEX_DEFAULT;
+      // below is original assignment, it fails
+      // mx->kind = (attr == NULL || *attr == NULL ? PTHREAD_MUTEX_DEFAULT : (*attr)->kind);
       //DEBUG("pass mxkind\n");
       mx->ownerThread.p = NULL;
 

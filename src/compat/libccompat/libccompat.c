@@ -396,11 +396,13 @@ int setenv(const char *key, const char *value, int overwrite)
 {
     char *curval;
     struct nk_env * env = nk_env_find(NK_ENV_GLOBAL_NAME);
-    if (nk_env_search(env,(char*)key,&curval)) {
+    if (nk_env_search(env,(char*)key,&curval)==0) {
 	if (overwrite) {
 	    return nk_env_update(env,(char*)key,(char*)value);
 	} else {
-	    return -1;
+	    //no action 
+	   return 0; 
+	   // return -1;
 	}
     } else {
 	return nk_env_insert(env, (char*)key, (char*)value);
