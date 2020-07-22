@@ -35,7 +35,7 @@ static void gauss();  /* The function you will provide.
 static void initialize_inputs() {
   int row, col;
  
-  printf("\nInitializing...\n");
+  nk_vc_printf("\nInitializing...\n");
   //   #pragma omp parallel num_threads(8)
   {
   //  #pragma omp for private(row,col) schedule(static,1) nowait
@@ -49,9 +49,9 @@ static void initialize_inputs() {
   }
 }
 
-void reset_inputs(){
+static void reset_inputs(){
   int row, col;
-  printf("\n reseting...\n");
+  nk_vc_printf("\n reseting...\n");
   for (col = 0; col < N; col++) {
     for (row = 0; row < N; row++) {
       A[row][col] = ORA[row][col];
@@ -62,30 +62,35 @@ void reset_inputs(){
 
 }
 
-/* Print input matrices */
-void print_inputs() {
+static void print_state() {
   int row, col;
 
+  nk_vc_printf("A=%p, B=%p, X=%p\n", A, B, X);
+  
   if (N < 1000) {
-    printf("\nA =\n\t");
+    nk_vc_printf("\nA =\n\t");
     for (row = 0; row < N; row++) {
       for (col = 0; col < N; col++) {
-	printf("%5.2f%s", A[row][col], (col < N-1) ? ", " : ";\n\t");
+	nk_vc_printf("%f%s  ", A[row][col], (col < N-1) ? ", " : ";\n\t");
       }
     }
-    printf("\nB = [");
+    nk_vc_printf("\nB = [");
     for (col = 0; col < N; col++) {
-      printf("%5.2f%s", B[col], (col < N-1) ? "; " : "]\n");
+      nk_vc_printf("%5.2f%s", B[col], (col < N-1) ? "; " : "]\n");
+    }
+    nk_vc_printf("\nX = [");
+    for (col = 0; col < N; col++) {
+      nk_vc_printf("%f%s  ", X[col], (col < N-1) ? "; " : "]\n");
     }
   }
 }
 
-void  serialgauss(){
+static void  serialgauss(){
   int norm, row, col;  /* Normalization row, and zeroing
 			* element row and col */
   float multiplier;
   
-  printf("Computing serially.\n");
+  nk_vc_printf("Computing serially.\n");
 
   /* Gaussian elimination */
   
@@ -96,7 +101,7 @@ void  serialgauss(){
 
     {
 
-      //printf("%f ", A[norm][norm]);
+      //nk_vc_printf("%f ", A[norm][norm]);
 
       for (row = norm + 1; row < N; row++) {
 
@@ -119,18 +124,18 @@ void  serialgauss(){
       X[row] -= A[row][col] * X[col];
     }
     X[row] /= A[row][row];
-    //printf("%5.2f ", X[row]);
+    //nk_vc_printf("%5.2f ", X[row]);
   }
 
 }
 
-void ompgauss() {
+static void ompgauss() {
   int norm, row, col;  /* Normalization row, and zeroing
 			* element row and col */
   float multiplier;
   //doneflag[0] = 1;
   
-  printf("Computing using omp.\n");
+  nk_vc_printf("Computing using omp.\n");
 
   /* Gaussian elimination */
   
@@ -166,9 +171,10 @@ void ompgauss() {
 #define TIME() (double)nk_sched_get_realtime();
 static int handle_omptest (char * buf, void * priv)
 {
-    
+    setenv("OMP_WHATEVER","53");
     int seed, size, np;
 
+    
     if ((sscanf(buf,"omptest %d %d %d",&seed,&size,&np)!=3))     { 
         nk_vc_printf("Don't understand %s please input seed, matrix size and nprocs\n",buf);
         return -1;
@@ -180,20 +186,23 @@ static int handle_omptest (char * buf, void * priv)
     
     initialize_inputs();
     reset_inputs();
-    // print_inputs();
+    nk_vc_printf("state before openmp run\n");
+    print_state();
 
     //unsigned mxcsr;
     //__asm__ volatile("ldmxcsr %0"::"m"(*&mxcsr):"memory");
-    //printf("ld %04x \n", mxcsr);
+    //nk_vc_printf("ld %04x \n", mxcsr);
     //mxcsr = mxcsr ^ 0x0200;
-    //printf("st %08x \n", mxcsr);
+    //nk_vc_printf("st %08x \n", mxcsr);
     //__asm__ volatile("stmxcsr %0"::"m"(*&mxcsr):"memory");
     // __asm__ volatile("ldmxcsr %0"::"m"(*&mxcsr):"memory");
-    //printf("ld %08x \n", mxcsr);
+    //nk_vc_printf("ld %08x \n", mxcsr);
  
     double start = TIME();
     ompgauss();
     double  end = TIME();
+    nk_vc_printf("state after openmp run\n");
+    print_state();
     double  omp = end-start;
     nk_vc_printf("openmp done %lf\n", omp);
     float OMP[N];
@@ -202,9 +211,13 @@ static int handle_omptest (char * buf, void * priv)
     }
 
     reset_inputs();
+    nk_vc_printf("state before serial run\n");
+    print_state();
     start = TIME();
     serialgauss();
     end = TIME();
+    nk_vc_printf("state after serial run\n");
+    print_state();
     double serial = end-start; 
     nk_vc_printf("serial done %lf\n", serial);
     float difference = 0.0;

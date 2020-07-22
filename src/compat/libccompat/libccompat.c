@@ -223,7 +223,7 @@ vfprintf (FILE * stream, const char * format, va_list arg)
     UNDEF_FUN_ERR();
     return -1;
 #else
-    if (stream!=stdout && stream!=stderr) { BOGUS(); }
+    if (stream!=stdout && stream!=stderr) { return 0; BOGUS(); }
     return vprintk(format,arg);
 #endif
 }
