@@ -29,6 +29,7 @@
 #include <nautilus/vc.h>
 #include <nautilus/backtrace.h>
 #include <nautilus/provenance.h>
+#include <test/test.h>
 
 #define PRINT(...) nk_vc_printf(__VA_ARGS__)
 
@@ -44,7 +45,7 @@ struct nk_virtual_console *vc;
  */
 __attribute__((section (".prov")))
 static int handle_provenance(char* buf, void* priv) {
-	provenance_info prov_info;
+	provenance_info* prov_info;
 	uint64_t addr;
 	char opt;
 	if( ((opt = 'p', strcmp(buf, "provenance panic"))==0) ||
@@ -59,11 +60,14 @@ static int handle_provenance(char* buf, void* priv) {
 				backtrace_here();
 				break;
 			case 'i':
-				prov_info = prov_get_info(addr);	
-				PRINT("Symbol: %s\n", 
-					(prov_info.symbol != NULL) ? (char*) prov_info.symbol : "???");
-				PRINT("Section: %s\n", 
-					(prov_info.section != NULL) ? (char*) prov_info.section : "???");
+				prov_info = nk_prov_get_info(addr);
+				if(prov_info != NULL) {
+					PRINT("Symbol: %s\n", 
+						(prov_info->symbol != NULL) ? (char*) prov_info->symbol : "???");
+					PRINT("Section: %s\n", 
+						(prov_info->section != NULL) ? (char*) prov_info->section : "???");
+					free(prov_info);
+				}
 				break;
 			case 'q':
 			default:

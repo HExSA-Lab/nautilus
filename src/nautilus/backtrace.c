@@ -29,14 +29,17 @@
 extern int printk (const char * fmt, ...);
 
 static void print_prov_info(uint64_t addr) {
-	provenance_info prov_info = prov_get_info(addr);
-	printk("Symbol: %s   ", (prov_info.symbol != NULL) ? (char*) prov_info.symbol : "???");
-	printk("Section: %s\n", (prov_info.section != NULL) ? (char*) prov_info.section : "???");
-	if(prov_info.line_info != NULL) {
-		// TODO: print line info
-	}
-	if(prov_info.file_info != NULL) {
-		// TODO: print file info
+	provenance_info* prov_info = nk_prov_get_info(addr);
+	if(prov_info != NULL) {
+		printk("Symbol: %s   ", (prov_info->symbol != NULL) ? (char*) prov_info->symbol : "???");
+		printk("Section: %s\n", (prov_info->section != NULL) ? (char*) prov_info->section : "???");
+		if(prov_info->line_info != NULL) {
+			// TODO: print line info
+		}
+		if(prov_info->file_info != NULL) {
+			// TODO: print file info
+		}
+		free(prov_info);
 	}
 }
 
