@@ -24,10 +24,13 @@
 #include <nautilus/nautilus.h>
 #include <nautilus/cpu.h>
 #include <nautilus/thread.h>
+#ifdef NAUT_CONFIG_PROVENANCE
 #include <nautilus/provenance.h>
+#endif
 
 extern int printk (const char * fmt, ...);
 
+#ifdef NAUT_CONFIG_PROVENANCE
 static void print_prov_info(uint64_t addr) {
 	provenance_info* prov_info = nk_prov_get_info(addr);
 	if(prov_info != NULL) {
@@ -42,6 +45,7 @@ static void print_prov_info(uint64_t addr) {
 		free(prov_info);
 	}
 }
+#endif
 
 void __attribute__((noinline))
 __do_backtrace (void ** fp, unsigned depth)
@@ -51,7 +55,9 @@ __do_backtrace (void ** fp, unsigned depth)
     }
     
     printk("[%2u] RIP: %p RBP: %p\n", depth, *(fp+1), *fp);
+#ifdef NAUT_CONFIG_PROVENANCE
 	print_prov_info((uint64_t) *(fp+1));
+#endif
     __do_backtrace(*fp, depth+1);
 }
 

@@ -29,7 +29,9 @@
 #include <nautilus/monitor.h>
 #include <nautilus/dr.h>
 #include <nautilus/smp.h>
+#ifdef NAUT_CONFIG_PROVENANCE
 #include <nautilus/provenance.h>
+#endif
 #include <dev/apic.h>
 
 
@@ -1069,6 +1071,7 @@ monitor_print_regs (struct nk_regs * r)
   PRINT2CR(cr4, "   ", cr8, "   ");
 }
 
+#ifdef NAUT_CONFIG_PROVENANCE
 static void print_prov_info(uint64_t addr) {
 	provenance_info* prov_info = nk_prov_get_info(addr);
 	if(prov_info != NULL) {
@@ -1085,6 +1088,7 @@ static void print_prov_info(uint64_t addr) {
 	}
 	DS("\n");
 }
+#endif
 
 static void dump_call(void)
 {
