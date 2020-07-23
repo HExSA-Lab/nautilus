@@ -45,7 +45,7 @@ uint64_t atob(uint8_t* p){
     return opt;
 }
 
-void FrontBackSplit(Symlist* source, 
+void front_back_split(Symlist* source, 
 		Symlist** frontRef, Symlist** backRef) 
 { 
 	Symlist* fast; 
@@ -69,7 +69,7 @@ void FrontBackSplit(Symlist* source,
 	slow->next = NULL; 
 } 
 
-Symlist* SortedMerge(Symlist* a, Symlist* b) 
+Symlist* sorted_merge(Symlist* a, Symlist* b) 
 { 
 	Symlist* result = NULL; 
 
@@ -82,11 +82,11 @@ Symlist* SortedMerge(Symlist* a, Symlist* b)
 	/* Pick either a or b, and recur */
 	if (a->value <= b->value) { 
 		result = a; 
-		result->next = SortedMerge(a->next, b); 
+		result->next = sorted_merge(a->next, b); 
 	} 
 	else { 
 		result = b; 
-		result->next = SortedMerge(a, b->next); 
+		result->next = sorted_merge(a, b->next); 
 	} 
 	return (result); 
 } 
@@ -102,14 +102,14 @@ void mergesort_symlist(Symlist** headRef) {
 	} 
 
 	/* Split head into 'a' and 'b' sublists */
-	FrontBackSplit(head, &a, &b); 
+	front_back_split(head, &a, &b); 
 
 	/* Recursively sort the sublists */
 	mergesort_symlist(&a); 
 	mergesort_symlist(&b); 
 
 	/* answer = merge the two sorted lists together */
-	*headRef = SortedMerge(a, b); 
+	*headRef = sorted_merge(a, b); 
 }
 
 int 
@@ -187,7 +187,10 @@ main (int argc,char** argv) {
     fclose(fp);
 
     Symlist* sp = head->next;
+	
+	// Sort the linked list by address value
 	mergesort_symlist(&sp);
+	
 	Symlist* tmp_sp = sp;
 	while(tmp_sp) {
         fwrite(tmp_sp->sym,1,tmp_sp->sym_len,nsfp);

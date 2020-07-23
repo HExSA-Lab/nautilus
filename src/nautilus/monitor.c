@@ -16,8 +16,7 @@
  *                     The Hobbes Project <http://xstack.sandia.gov/hobbes>
  * All rights reserved.
  *
- * Authors: Nanda Velugoti <nveluogti@hawk.iit.edu>
- *			Drew Kersnar <drewkersnar2021@u.northwestern.edu>
+ * Authors: Drew Kersnar <drewkersnar2021@u.northwestern.edu>
  *          
  * This is free software.  You are permitted to use,
  * redistribute, and modify it as specified in the file "LICENSE.txt".

@@ -29,7 +29,7 @@ SECTIONS
         *(.gnu.linkonce.t*)
     }
 
-	.init ALIGN(0x1000) : AT(ADDR(.text) + SIZEOF(.text))
+    .init ALIGN(0x1000) : AT(ADDR(.text) + SIZEOF(.text))
     {
         *(.init)
         *(.gnu.linkonce.init)
@@ -49,6 +49,7 @@ SECTIONS
         *(.gnu.linkonce.init_array*)
 
     }
+
 
     .gcc_except_table ALIGN(0x1000) : AT(ADDR(.init_array) + SIZEOF(.init_array))
     {
