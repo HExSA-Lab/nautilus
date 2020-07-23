@@ -250,7 +250,7 @@ multiboot_parse (ulong_t mbd, ulong_t magic)
                         elf->num,
                         elf->entsize,
                         elf->shndx,
-						elf->sections);
+                        elf->sections);
                 break;
                                                   }
             case MULTIBOOT_TAG_TYPE_MMAP: {
