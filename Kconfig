@@ -1190,6 +1190,12 @@ config DEBUG_GROUP
       default n
       help
         Turn on debug output for network device interface
+    config DEBUG_GPUDEV
+      bool "Debug GPU (Graphics) Device Interface"
+      depends on DEBUG_DEV
+      default n
+      help
+        Turn on debug output for GPU (graphics) device interface
     config DEBUG_PARTITION
       bool "Debug Partitioning"
       depends on PARTITION_SUPPORT && DEBUG_DEV

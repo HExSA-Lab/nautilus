@@ -35,7 +35,9 @@ typedef enum {
     NK_DEV_BUS,
     NK_DEV_CHAR, 
     NK_DEV_BLK, 
-    NK_DEV_NET
+    NK_DEV_NET,
+    NK_DEV_GRAPHICS,
+    NK_DEV_SOUND,
 } nk_dev_type_t ; 
 
 
