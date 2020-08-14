@@ -16,3 +16,13 @@
     test_flags:
         - "-test sampletest \"foo bar baz\""
         - "-test sampletest \"three more args\""
+
+
+- provenance_test:
+    configs:
+        - prov_test
+    prep: echo "Proveance test" 
+    run: qemu-system-x86_64 -cdrom nautilus.iso -m 1G -serial stdio -device isa-debug-exit -monitor /dev/null -nographic
+    test_flags:
+        - "-test provtest \"bt foo\""
+        - "-test provtest \"info 413064\""

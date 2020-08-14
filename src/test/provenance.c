@@ -37,7 +37,18 @@
 
 struct nk_virtual_console *vc;
 
-/******************* Test Routines *******************/
+int handle_prov_info(uint64_t addr) {
+	provenance_info* prov_info = nk_prov_get_info(addr);
+	if(prov_info != NULL) {
+		PRINT("Symbol: %s\n", 
+				(prov_info->symbol != NULL) ? (char*) prov_info->symbol : "???");
+		PRINT("Section: %s\n", 
+				(prov_info->section != NULL) ? (char*) prov_info->section : "???");
+		free(prov_info);
+		return 0;
+	}
+	return -1;
+}
 
 /*
  * This function is to test the provenance feature functionality.
@@ -45,14 +56,13 @@ struct nk_virtual_console *vc;
  */
 __attribute__((section (".prov")))
 static int handle_provenance(char* buf, void* priv) {
-	provenance_info* prov_info;
 	uint64_t addr;
 	char opt;
-	if( ((opt = 'p', strcmp(buf, "provenance panic"))==0) ||
+	if (((opt = 'p', strcmp(buf, "provenance panic"))==0) ||
 		((opt = 'b', strcmp(buf, "provenance bt"))==0) ||
 	    ((opt = 'i', sscanf(buf, "provenance info %lx", &addr)) == 1) || 
-		((opt = 'q')) ) {
-		switch(opt) {
+		((opt = 'q'))) {
+		switch (opt) {
 			case 'p':
 				panic("Provenance: panic invoked!\n");
 				break;
@@ -60,14 +70,7 @@ static int handle_provenance(char* buf, void* priv) {
 				backtrace_here();
 				break;
 			case 'i':
-				prov_info = nk_prov_get_info(addr);
-				if(prov_info != NULL) {
-					PRINT("Symbol: %s\n", 
-						(prov_info->symbol != NULL) ? (char*) prov_info->symbol : "???");
-					PRINT("Section: %s\n", 
-						(prov_info->section != NULL) ? (char*) prov_info->section : "???");
-					free(prov_info);
-				}
+				handle_prov_info(addr);
 				break;
 			case 'q':
 			default:
@@ -79,12 +82,61 @@ static int handle_provenance(char* buf, void* priv) {
 	return 0;
 }
 
+/******************* Shell Commands *******************/
+
 static struct shell_cmd_impl provenance = {
 	.cmd      = "provenance",
 	.help_str = USAGE,
 	.handler  = handle_provenance,
 };
 
-/******************* Shell Commands *******************/
-
 nk_register_shell_cmd(provenance);
+
+/******************* Test Commands *******************/
+
+static int handle_provtest(int argc, char** argv) {
+	PRINT("In provenance test\n");
+	PRINT("Argc: %d\n", argc);
+	
+	int result = 0;
+	uint64_t addr;
+	char opt;
+	char* first_arg = argv[1];
+
+	if (((opt = 'b', strcmp(first_arg, "bt"))==0) ||
+		((opt = 'i', strcmp(first_arg, "info"))==0) ||
+		((opt = 'q'))) {
+		
+		switch (opt) {
+			case 'b':
+				PRINT("Testing backtrace\n");
+				backtrace_here();
+				break;
+			case 'i':
+				PRINT("Testing info addr\n");
+				if(argc != 3) {
+					PRINT("Not enough arguments!\n");
+					result = -1;
+				} else {
+					addr = atol(argv[2]);
+					result = handle_prov_info(addr);
+				}
+				break;
+			case 'q':
+			default:
+				PRINT("Invalid arguments passed!\n");
+				result = -1;
+				break;
+		}
+	}
+
+	return result;
+}
+
+static struct nk_test_impl my_test_impl = {
+	.name = "provtest",
+	.handler = handle_provtest,
+	.default_args = "bt",
+};
+
+nk_register_test(my_test_impl);

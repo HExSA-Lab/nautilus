@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/bin/python2
 import os
 import sys
 
@@ -6,7 +6,7 @@ import sys
 def gen_line_str(entry_type, img_path, cmdline=""):
     print "\t" + entry_type + " " + img_path + " " + cmdline
 
-def gen_menuentry(timeout, img_path, sym_path, cmdline):
+def gen_menuentry(timeout, img_path, mod_paths, cmdline):
 
     print "set timeout=" + timeout
     print "set default=0"
@@ -14,19 +14,16 @@ def gen_menuentry(timeout, img_path, sym_path, cmdline):
     print "menuentry \"Nautilus\" {"
 
     gen_line_str("multiboot2", img_path, cmdline)
-    gen_line_str("module2", sym_path)
+
+    for mod_path in mod_paths:
+        gen_line_str("module2", mod_path)
 
     print "\tboot"
     print "}"
 
 
 cmdline = ' '.join(sys.argv[1:])
-gen_menuentry("0", "/boot/nautilus.bin", "/boot/nautilus.syms", cmdline)
+image = "/boot/nautilus.bin"
+modules = ["/boot/nautilus.syms", "/boot/nautilus.secs"]
 
-    
-    
-
-
-
-    
-
+gen_menuentry("0", image, modules, cmdline)
