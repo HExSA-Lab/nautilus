@@ -30,8 +30,17 @@
 #undef DEBUG_PRINT
 #define DEBUG_PRINT(fmt, args...)
 #endif
+
 #define PROV_PRINT(fmt, args...) printk("PROVENANCE: " fmt, ##args)
-#define PROV_DEBUG(fmt, args...) DEBUG_PRINT("PROVENANCE: " fmt, ##args)
+#define PROV_DEBUG(fmt, args...) DEBUG_PRINT("PROVENANCE DEBUG: " fmt, ##args)
+#define PROV_ERROR(fmt, args...) ERROR_PRINT("PROVENANCE ERROR: " fmt, ##args)
+
+#define PROV_MALLOC_CHECKED(ptr, type, size)				\
+	ptr = (type*) malloc(sizeof(type)*size); 				\
+	if (!ptr) {												\
+		PROV_ERROR("Failed to allocate memory\n");			\
+		return;												\
+	}														\
 
 static bool_t prov_sectab_initialized = false;
 static bool_t prov_symtab_initialized = false;
@@ -102,27 +111,20 @@ static void sectab_init(uint64_t mod_start) {
 	uint32_t offset = *(secs_base_addr+1);
 	uint32_t noe = *(secs_base_addr+2);
 	PROV_DEBUG("Section Table Magic: %x\tOffset: %x\tNo. of Entries: %d\n", magic, offset, noe);
-	sectab = (prov_table*) malloc(sizeof(prov_table));
-	if(!sectab) {
-		PROV_DEBUG("Failed to create section table!\n");
-		return;
-	}
-	sectab->entries = (prov_entry**) malloc(sizeof(prov_entry*) * noe);
-	sectab->count = noe;
+	PROV_MALLOC_CHECKED(sectab, prov_table, 1);
+	PROV_MALLOC_CHECKED(sectab->entries, prov_entry*, noe);
+	sectab->count = 0;
 	for (int i=0; i<noe; i++) {
 		secentry* entry = (secentry*) (((char*)(secs_base_addr)) + offset + (sizeof(secentry)*i));
 		char* name = (char*) ((char*)(secs_base_addr+3) + entry->offset);
 		uint64_t addr = entry->value;
 		uint32_t size = entry->sec_size;
-		sectab->entries[i] = (prov_entry*) malloc(sizeof(prov_entry));
-		if(!sectab->entries[i]) {
-			PROV_DEBUG("Failed to create section table entry!\n");
-			return;
-		}
+		PROV_MALLOC_CHECKED(sectab->entries[i], prov_entry, 1);
 		sectab->entries[i]->name = name;
 		sectab->entries[i]->start_addr = addr;
 		sectab->entries[i]->end_addr = -1;
 		sectab->entries[i]->size = size;
+		sectab->count++;
 	}
 	sectab_resolve_addr_ranges();
 
@@ -141,25 +143,18 @@ static void symtab_init(uint64_t mod_start) {
 	uint32_t offset = *(syms_base_addr+1);
 	uint32_t noe = *(syms_base_addr+2);
 	PROV_DEBUG("Symbol Table Magic: %x\tOffset: %x\tNo. of Entries: %d\n", magic, offset, noe);
-	symtab = (prov_table*) malloc(sizeof(prov_table));
-	if(!symtab) {
-		PROV_DEBUG("Failed to create symbol table!\n");
-		return;
-	}
-	symtab->entries = (prov_entry**) malloc(sizeof(prov_entry*) * noe);
-	symtab->count = noe;
+	PROV_MALLOC_CHECKED(symtab, prov_table, 1);
+	PROV_MALLOC_CHECKED(symtab->entries, prov_entry*, noe);
+	symtab->count = 0;
 	for (int i=0; i<noe; i++) {
 		symentry* entry = (symentry*) (((char*)(syms_base_addr)) + offset + (sizeof(symentry)*i));
 		char* symbol = (char*) ((char*)(syms_base_addr+3) + entry->offset);
 		uint64_t addr = entry->value;
-		symtab->entries[i] = (prov_entry*) malloc(sizeof(prov_entry));
-		if(!symtab->entries[i]) {
-			PROV_DEBUG("Failed to create symbol table entry!\n");
-			return;
-		}
+		PROV_MALLOC_CHECKED(symtab->entries[i], prov_entry, 1);
 		symtab->entries[i]->name = symbol;
 		symtab->entries[i]->start_addr = addr;
 		symtab->entries[i]->end_addr = -1;
+		symtab->count++;
 	}
 	symtab_resolve_addr_ranges();
 
@@ -169,6 +164,26 @@ static void symtab_init(uint64_t mod_start) {
 		PROV_DEBUG("[%08d]\t%08x\t%08x\t%s\n", i+1, entry->start_addr, entry->end_addr, entry->name);
 	}
 	prov_symtab_initialized = true;
+}
+
+static void deinit_prov_table(prov_table* table) {
+	if (table && table->entries) {
+		for (int i=0; i<table->count; i++) {
+			free(table->entries[i]);
+		}
+		free(table->entries);
+	}
+	free(table);
+}
+
+static void nk_prov_deinit() {
+	deinit_prov_table(sectab);
+	prov_sectab_initialized = false;
+
+	deinit_prov_table(symtab);
+	prov_symtab_initialized = false;
+
+	prov_initialized = false;
 }
 
 provenance_info* nk_prov_get_info(uint64_t addr) {
@@ -202,17 +217,18 @@ void nk_prov_init() {
 		}
 
 		if (!prov_sectab_initialized)
-			ERROR_PRINT("PROVENANCE ERROR: Failed to load Nautilus section table information!\n");
+			PROV_ERROR("Failed to load Nautilus section table information!\n");
 		
 		if (!prov_symtab_initialized)
-			ERROR_PRINT("PROVENANCE ERROR: Failed to load Nautilus symbol table information!\n");
+			PROV_ERROR("Failed to load Nautilus symbol table information!\n");
 
 		if (prov_sectab_initialized && prov_symtab_initialized) {
 			symtab_resolve_last_entry();
 			prov_initialized = true;
 			PROV_DEBUG("Initialization successful\n");
 		} else {
-			PROV_DEBUG("Initialization failed\t");
+			PROV_ERROR("Initialization failed\t");
+			nk_prov_deinit();
 		}
 	}
 }
