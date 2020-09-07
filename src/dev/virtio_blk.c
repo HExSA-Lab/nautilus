@@ -543,7 +543,7 @@ int virtio_blk_init(struct virtio_pci_dev *dev)
 {
     char buf[DEV_NAME_LEN];
 
-    if (!dev->model==VIRTIO_PCI_LEGACY_MODEL) {
+    if (!(dev->model==VIRTIO_PCI_LEGACY_MODEL)) {
 	ERROR("currently only supported with legacy model\n");
 	return -1;
     }

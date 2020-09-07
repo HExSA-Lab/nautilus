@@ -219,7 +219,7 @@ void     virtio_pci_write_regb(struct virtio_pci_dev *dev, uint32_t offset, uint
   structures.  Then access the fields in the structure using atomics.
  *****************************************************************/
 
-#if __GNUC__ < 5
+#if !defined(__clang__) && __GNUC__ < 5 
 #define __ATOMIC_SEQ_CST 0
 #define __atomic_load_n(srcptr,   cmodel)         __sync_fetch_and_or(srcptr,0)
 #define __atomic_store_n(destptr, value, cmodel)  ({ *(destptr) = value; __sync_synchronize(); })
