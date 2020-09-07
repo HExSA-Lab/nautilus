@@ -102,8 +102,9 @@ typedef union nk_gpu_dev_char {
 typedef union nk_gpu_dev_pixel {
     uint32_t raw;
     // the channel offsets are given in a mode
-    uint8_t  channels[4];
+    uint8_t  channel[4];
 } nk_gpu_dev_pixel_t;
+
 
 // 32 bit full color bitmap, same as screen
 typedef struct nk_gpu_dev_bitmap {
@@ -260,6 +261,16 @@ int nk_gpu_dev_graphics_set_cursor(nk_gpu_dev_t *dev, nk_gpu_dev_coordinate_t *l
 
 // helper tools for drawing
 
+// pixels
+#define NK_GPU_DEV_PIXEL_SET_RGBA(m,p,r,g,b,a)				\
+    (p)->channel[(m)->channel_offset[NK_GPU_DEV_CHANNEL_OFFSET_RED]]=(r); \
+    (p)->channel[(m)->channel_offset[NK_GPU_DEV_CHANNEL_OFFSET_GREEN]]=(g); \
+    (p)->channel[(m)->channel_offset[NK_GPU_DEV_CHANNEL_OFFSET_BLUE]]=(b); \
+    (p)->channel[(m)->channel_offset[NK_GPU_DEV_CHANNEL_OFFSET_ALPHA]]=(a);
+
+// chars
+#define NK_GPU_DEV_CHAR_SET_SYM_ATTR(d,c,s,a) c->symbol = s; c->attribute = a
+    
 // bitmaps
 nk_gpu_dev_bitmap_t *nk_gpu_dev_bitmap_create(uint32_t width, uint32_t height);
 // for reading/writing pixels in the bitmap
