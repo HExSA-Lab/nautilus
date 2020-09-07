@@ -25,6 +25,9 @@
 #include <nautilus/nautilus.h>
 #include <nautilus/dev.h>
 #include <nautilus/gpudev.h>
+#include <nautilus/timer.h>
+#include <nautilus/shell.h>
+#include <nautilus/libccompat.h>
 
 #ifndef NAUT_CONFIG_DEBUG_GPUDEV
 #undef DEBUG_PRINT
@@ -242,5 +245,178 @@ void                 nk_gpu_dev_font_destroy(nk_gpu_dev_font_t *font)
     free(font);
 }
     
+
+#define MAX_MODES 64
+
+#define PRINT_MODE(spec, count, m)					\
+    nk_vc_printf(spec "mode %d: %s %u by %u, offsets %u %u %u %u, flags %016lx %s %s %s, mouse %u by %u\n", \
+		 (count),						\
+		 (m)->type==NK_GPU_DEV_MODE_TYPE_TEXT ? "text" :		\
+		 (m)->type==NK_GPU_DEV_MODE_TYPE_GRAPHICS_2D ? "graphics (2d)" : "UNKNOWN", \
+		 (m)->width, (m)->height,					\
+		 (m)->channel_offset[0], (m)->channel_offset[1], (m)->channel_offset[2], (m)->channel_offset[3], \
+		 (m)->flags,						\
+		 (m)->flags & NK_GPU_DEV_HAS_CLIPPING ? "clipping" : "",	\
+		 (m)->flags & NK_GPU_DEV_HAS_CLIPPING_REGION ? "clipping_region" : "", \
+		 (m)->flags & NK_GPU_DEV_HAS_MOUSE_CURSOR ? "mouse_cursor" : "", \
+		 (m)->mouse_cursor_width, (m)->mouse_cursor_height)
+
+
+static int handle_gputest (char * buf, void * priv)
+{
+    char name[32];
+    struct nk_gpu_dev *d;
+    nk_gpu_dev_video_mode_t modes[MAX_MODES], prevmode, *curmode;
+    uint32_t nummodes=MAX_MODES;
+
+    if ((sscanf(buf,"gputest %s",name)!=1)) { 
+	nk_vc_printf("gputest devname\n",buf);
+	return -1;
+    }
+    
+    if (!(d=nk_gpu_dev_find(name))) { 
+        nk_vc_printf("Can't find %s\n",name);
+        return -1;
+    }
+
+    if (nk_gpu_dev_get_mode(d,&prevmode)) {
+	nk_vc_printf("Can't get mode\n");
+	return -1;
+    }
+
+    PRINT_MODE("current ",0,&prevmode);
+    
+    if (nk_gpu_dev_get_available_modes(d,modes,&nummodes)) {
+        nk_vc_printf("Can't get available modes from %s\n",name);
+        return -1;
+    }
+
+    uint32_t i, sel=-1;
+    
+    nk_vc_printf("Available modes are\n");
+    for (i=0;i<nummodes;i++) {
+	PRINT_MODE("",i,&modes[i]);
+	if (modes[i].type==NK_GPU_DEV_MODE_TYPE_GRAPHICS_2D) {
+	    sel = i;
+	}
+    }
+    if (sel==-1) {
+	nk_vc_printf("No graphics mode available (huh?) !!!!\n");
+	return -1;
+    } else {
+	nk_vc_printf("Using first graphics mode (%u)\n",sel);
+    }
+
+    if (nk_gpu_dev_set_mode(d,&modes[sel])) {
+	nk_vc_printf("Failed to set graphics mode....\n");
+	return -1;
+    }
+
+    curmode = &modes[sel];
+
+    // assume that clipping (if available) is set to whole screen
+
+#define CHECK(x) if (x) { nk_vc_printf("failed to do " #x "\n"); return -1; }
+
+    nk_gpu_dev_box_t box;
+    nk_gpu_dev_pixel_t pixel;
+
+    // clear screen black
+    
+    box.x = box.y = 0;
+    box.width = curmode->width;
+    box.height = curmode->height;
+    
+    NK_GPU_DEV_PIXEL_SET_RGBA(curmode,&pixel,0,0,0,0);
+    
+    CHECK(nk_gpu_dev_graphics_fill_box_with_pixel(d,
+						  &box,
+						  &pixel,
+						  NK_GPU_DEV_BIT_BLIT_OP_COPY));
+
+    CHECK(nk_gpu_dev_flush(d));
+
+    nk_vc_printf("cleared screen to black\n");
+    
+    // draw some random colored boxes with xor blits
+    for (i=0;i<100;i++) {
+	box.x = rand() % curmode->width;
+	box.y = rand() % curmode->height;
+	box.width = rand() % curmode->width;
+	box.height = rand() % curmode->height;
+	
+	NK_GPU_DEV_PIXEL_SET_RGBA(curmode,&pixel,rand()%256,rand()%256,rand()%256,0);
+	
+	CHECK(nk_gpu_dev_graphics_fill_box_with_pixel(d,
+						      &box,
+						      &pixel,
+						      NK_GPU_DEV_BIT_BLIT_OP_XOR));
+
+    }
+    
+    CHECK(nk_gpu_dev_flush(d));
+    
+    nk_vc_printf("drew boxes\n");
+
+    nk_sleep(5000000000UL); // five seconds
+    
+
+    // clear screen purple
+    
+    box.x = box.y = 0;
+    box.width = curmode->width;
+    box.height = curmode->height;
+    
+    NK_GPU_DEV_PIXEL_SET_RGBA(curmode,&pixel,0x6a,0x0d,0xad,0);
+    
+    CHECK(nk_gpu_dev_graphics_fill_box_with_pixel(d,
+						  &box,
+						  &pixel,
+						  NK_GPU_DEV_BIT_BLIT_OP_COPY));
+
+    CHECK(nk_gpu_dev_flush(d));
+
+    nk_vc_printf("cleared screen to purple\n");
+
+    nk_gpu_dev_coordinate_t start, end;
+    
+    // draw some random colored lines
+    for (i=0;i<100;i++) {
+	start.x = rand() % curmode->width;
+	start.y = rand() % curmode->height;
+	end.x = rand() % curmode->width;
+	end.y = rand() % curmode->height;
+	
+	NK_GPU_DEV_PIXEL_SET_RGBA(curmode,&pixel,rand()%256,rand()%256,rand()%256,0);
+	
+	CHECK(nk_gpu_dev_graphics_draw_line(d,&start,&end,&pixel));
+
+    }
+    
+    CHECK(nk_gpu_dev_flush(d));
+    
+    nk_vc_printf("drew lines\n");
+
+    nk_sleep(5000000000UL); // five seconds
+
+    nk_vc_printf("reseting to original mode\n");
+
+    if (nk_gpu_dev_set_mode(d,&prevmode)) {
+	nk_vc_printf("Cannot switch back to previous mode\n");
+	return -1;
+    }
+
+    nk_vc_printf("Basic gputest complete\n");
+
+    return 0;
+}
+
+
+static struct shell_cmd_impl gputest_impl = {
+    .cmd      = "gputest",
+    .help_str = "gputest dev",
+    .handler  = handle_gputest,
+};
+nk_register_shell_cmd(gputest_impl);
 
 
