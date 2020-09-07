@@ -197,7 +197,11 @@ struct nk_gpu_dev_int {
 };
 
 
-struct nk_gpu_dev;
+struct nk_gpu_dev {
+    // must be first member 
+    struct nk_dev dev;
+};
+
 
 typedef struct nk_gpu_dev nk_gpu_dev_t;
 
