@@ -39,11 +39,6 @@
 #define INFO(fmt, args...) INFO_PRINT("gpudev: " fmt, ##args)
 
 
-struct nk_gpu_dev {
-    // must be first member 
-    struct nk_dev dev;
-};
-
 
 
 #if 0
