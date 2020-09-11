@@ -244,16 +244,13 @@ void                 nk_gpu_dev_font_destroy(nk_gpu_dev_font_t *font)
 #define MAX_MODES 64
 
 #define PRINT_MODE(spec, count, m)					\
-    nk_vc_printf(spec "mode %d: %s %u by %u, offsets %u %u %u %u, flags %016lx %s %s %s, mouse %u by %u\n", \
+    nk_vc_printf(spec "mode %d: %s %u by %u, offsets %u %u %u %u, flags 0x%lx, mouse %u by %u\n", \
 		 (count),						\
 		 (m)->type==NK_GPU_DEV_MODE_TYPE_TEXT ? "text" :		\
 		 (m)->type==NK_GPU_DEV_MODE_TYPE_GRAPHICS_2D ? "graphics (2d)" : "UNKNOWN", \
 		 (m)->width, (m)->height,					\
 		 (m)->channel_offset[0], (m)->channel_offset[1], (m)->channel_offset[2], (m)->channel_offset[3], \
 		 (m)->flags,						\
-		 (m)->flags & NK_GPU_DEV_HAS_CLIPPING ? "clipping" : "",	\
-		 (m)->flags & NK_GPU_DEV_HAS_CLIPPING_REGION ? "clipping_region" : "", \
-		 (m)->flags & NK_GPU_DEV_HAS_MOUSE_CURSOR ? "mouse_cursor" : "", \
 		 (m)->mouse_cursor_width, (m)->mouse_cursor_height)
 
 
@@ -288,7 +285,7 @@ static int handle_gputest (char * buf, void * priv)
 
     uint32_t i, sel=-1;
     
-    nk_vc_printf("Available modes are\n");
+    nk_vc_printf("Available modes are:\n");
     for (i=0;i<nummodes;i++) {
 	PRINT_MODE("",i,&modes[i]);
 	if (modes[i].type==NK_GPU_DEV_MODE_TYPE_GRAPHICS_2D) {
@@ -311,7 +308,7 @@ static int handle_gputest (char * buf, void * priv)
 
     // assume that clipping (if available) is set to whole screen
 
-#define CHECK(x) if (x) { nk_vc_printf("failed to do " #x "\n"); return -1; }
+#define CHECK(x) if (x) { nk_gpu_dev_set_mode(d,&prevmode); nk_vc_printf("failed to do " #x "\n"); return -1; }
 
     nk_gpu_dev_box_t box;
     nk_gpu_dev_pixel_t pixel;
