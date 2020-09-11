@@ -115,7 +115,7 @@ typedef struct nk_gpu_dev_bitmap {
 
 
 typedef enum nk_gpu_dev_bit_blit_op {
-				     NK_GPU_DEV_BIT_BLIT_OP_COPY,
+				     NK_GPU_DEV_BIT_BLIT_OP_COPY=0,
 				     NK_GPU_DEV_BIT_BLIT_OP_NOT,
 				     NK_GPU_DEV_BIT_BLIT_OP_AND,
  				     NK_GPU_DEV_BIT_BLIT_OP_OR,

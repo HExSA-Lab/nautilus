@@ -334,19 +334,19 @@ static int handle_gputest (char * buf, void * priv)
     nk_vc_printf("cleared screen to black\n");
     
     // draw some random colored boxes with xor blits
-    for (i=0;i<100;i++) {
+    for (i=0;i<1024;i++) {
 	box.x = rand() % curmode->width;
 	box.y = rand() % curmode->height;
-	box.width = rand() % curmode->width;
-	box.height = rand() % curmode->height;
+	box.width = rand() % (curmode->width - box.x);
+	box.height = rand() % (curmode->height - box.y);
 	
 	NK_GPU_DEV_PIXEL_SET_RGBA(curmode,&pixel,rand()%256,rand()%256,rand()%256,0);
 	
 	CHECK(nk_gpu_dev_graphics_fill_box_with_pixel(d,
 						      &box,
 						      &pixel,
-						      NK_GPU_DEV_BIT_BLIT_OP_XOR));
-
+						      rand() % (NK_GPU_DEV_BIT_BLIT_OP_DIVIDE+1)));
+       	CHECK(nk_gpu_dev_flush(d));
     }
     
     CHECK(nk_gpu_dev_flush(d));
@@ -376,7 +376,7 @@ static int handle_gputest (char * buf, void * priv)
     nk_gpu_dev_coordinate_t start, end;
     
     // draw some random colored lines
-    for (i=0;i<100;i++) {
+    for (i=0;i<1024;i++) {
 	start.x = rand() % curmode->width;
 	start.y = rand() % curmode->height;
 	end.x = rand() % curmode->width;
@@ -386,6 +386,7 @@ static int handle_gputest (char * buf, void * priv)
 	
 	CHECK(nk_gpu_dev_graphics_draw_line(d,&start,&end,&pixel));
 
+	CHECK(nk_gpu_dev_flush(d));
     }
     
     CHECK(nk_gpu_dev_flush(d));
@@ -394,7 +395,38 @@ static int handle_gputest (char * buf, void * priv)
 
     nk_sleep(5000000000UL); // five seconds
 
+
+    nk_gpu_dev_box_t src, dst;
+    
+    // move box of pixels around the screen
+    for (i=0;i<1024;i++) {
+	src.x = rand() % curmode->width;
+	src.y = rand() % curmode->height;
+	src.width = rand() % (curmode->width - box.x);
+	src.height = rand() % (curmode->height - box.y);
+	dst.x = rand() % curmode->width;
+	dst.y = rand() % curmode->height;
+	dst.width = src.width;
+	dst.height = src.height;
+	
+	CHECK(nk_gpu_dev_graphics_copy_box(d,
+					   &src,
+					   &dst,
+					   rand() % (NK_GPU_DEV_BIT_BLIT_OP_DIVIDE+1)));
+       	CHECK(nk_gpu_dev_flush(d));
+    }
+    
+    CHECK(nk_gpu_dev_flush(d));
+    
+    nk_vc_printf("drew boxes\n");
+
+    nk_sleep(5000000000UL); // five seconds
+
+
     nk_vc_printf("reseting to original mode\n");
+
+    
+    
 
     if (nk_gpu_dev_set_mode(d,&prevmode)) {
 	nk_vc_printf("Cannot switch back to previous mode\n");
