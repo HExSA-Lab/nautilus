@@ -418,7 +418,7 @@ static int handle_gputest (char * buf, void * priv)
     
     CHECK(nk_gpu_dev_flush(d));
     
-    nk_vc_printf("drew boxes\n");
+    nk_vc_printf("moved boxes\n");
 
     nk_sleep(5000000000UL); // five seconds
 
