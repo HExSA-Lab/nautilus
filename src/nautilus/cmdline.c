@@ -122,7 +122,7 @@ nk_cmdline_dispatch (struct naut_info * naut)
     int len          = 0;
     int i            = 0;
 
-    printk("parsing kernel cmdline arguments %s\n", cline);
+    INFO("parsing kernel cmdline arguments %s\n", cline);
 
     cmdline_state_t state_id = FLAG_SCANNING;
 
