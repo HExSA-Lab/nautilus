@@ -40,6 +40,7 @@ void* mb_get_first_hrt_addr (ulong_t mbd);
 typedef enum {
     MOD_SYMTAB,
     MOD_PROGRAM,
+    MOD_SECTAB,
 } mod_type_t;
 
 struct multiboot_mod {

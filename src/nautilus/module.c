@@ -69,6 +69,10 @@ nk_register_mod (struct multiboot_info * mb_info, struct multiboot_tag_module * 
             DEBUG_PRINT("Found ELF program module\n");
             mod->type = MOD_PROGRAM;
             break;
+        case SECTAB_MAGIC:
+            DEBUG_PRINT("Found section table module\n");
+            mod->type = MOD_SECTAB;
+            break;
         default:
             ERROR_PRINT("Found unknown module (magic=0x%08x)\n", *cursor);
     }

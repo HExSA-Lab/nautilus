@@ -8,7 +8,7 @@
  * led by Sandia National Laboratories that includes several national
  * laboratories and universities. You can find out more at:
  * http://www.v3vee.org  and
- * http://xtack.sandia.gov/hobbes
+ * http://xstack.sandia.gov/hobbes
  *
  * Copyright (c) 2020, Nanda Velugoti <nvelugoti@hawk.iit.edu>
  * Copyright (c) 2020, The V3VEE Project  <http://www.v3vee.org>

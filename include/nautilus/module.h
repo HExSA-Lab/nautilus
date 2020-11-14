@@ -25,6 +25,7 @@
 
 #define ST_MAGIC    0x00952700  // magic number of symbol table file
 #define ELF_MAGIC   0x464c457f
+#define SECTAB_MAGIC 0x00952800
 
 
 int nk_register_mod(struct multiboot_info * mb_info, struct multiboot_tag_module * m);
