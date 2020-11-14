@@ -489,7 +489,7 @@ acpi_tb_parse_root_table(acpi_physical_address rsdp_address)
 
 	ACPI_FUNCTION_TRACE(tb_parse_root_table);
 
-	printk("ACPI: Parsing ACPI root table (at %p)\n", (void*)rsdp_address);
+	DEBUG_PRINT("ACPI: Parsing ACPI root table (at %p)\n", (void*)rsdp_address);
 
 	/*
 	 * Map the entire RSDP and extract the address of the RSDT or XSDT
@@ -575,7 +575,7 @@ acpi_tb_parse_root_table(acpi_physical_address rsdp_address)
 		acpi_os_unmap_memory(table, length);
 		return_ACPI_STATUS(status);
 	}
-	printk("ACPI: root table checksum pass\n");
+	DEBUG_PRINT("ACPI: root table checksum pass\n");
 
 	/* Calculate the number of tables described in the root table */
 
@@ -639,7 +639,7 @@ acpi_tb_parse_root_table(acpi_physical_address rsdp_address)
 
 	}
 
-	printk("ACPI: Done parsing ACPI root table\n");
+	DEBUG_PRINT("ACPI: Done parsing ACPI root table\n");
 
 	return_ACPI_STATUS(AE_OK);
 }

@@ -52,15 +52,15 @@ has_mwait (void)
 static void
 dump_mwait_info (void)
 {
-    printk("MONITOR/MWAIT Feature Set:\n");
-    printk("\tSmallest monitor-line size: %uB\n", mwait.min_line_size);
-    printk("\tLargest monitor-line size: %uB\n", mwait.max_line_size);
-    printk("\tSupports interrupts as break events: %s\n", mwait.ints_as_breaks ? "yes" : "no");
-    printk("\tNumber of C0 sub C-states supported: %u\n", mwait.c0_substates);
-    printk("\tNumber of C1 sub C-states supported: %u\n", mwait.c1_substates);
-    printk("\tNumber of C2 sub C-states supported: %u\n", mwait.c2_substates);
-    printk("\tNumber of C3 sub C-states supported: %u\n", mwait.c3_substates);
-    printk("\tNumber of C4 sub C-states supported: %u\n", mwait.c4_substates);
+    DEBUG_PRINT("MONITOR/MWAIT Feature Set:\n");
+    DEBUG_PRINT("\tSmallest monitor-line size: %uB\n", mwait.min_line_size);
+    DEBUG_PRINT("\tLargest monitor-line size: %uB\n", mwait.max_line_size);
+    DEBUG_PRINT("\tSupports interrupts as break events: %s\n", mwait.ints_as_breaks ? "yes" : "no");
+    DEBUG_PRINT("\tNumber of C0 sub C-states supported: %u\n", mwait.c0_substates);
+    DEBUG_PRINT("\tNumber of C1 sub C-states supported: %u\n", mwait.c1_substates);
+    DEBUG_PRINT("\tNumber of C2 sub C-states supported: %u\n", mwait.c2_substates);
+    DEBUG_PRINT("\tNumber of C3 sub C-states supported: %u\n", mwait.c3_substates);
+    DEBUG_PRINT("\tNumber of C4 sub C-states supported: %u\n", mwait.c4_substates);
 }
 
 

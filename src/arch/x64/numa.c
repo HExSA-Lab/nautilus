@@ -410,7 +410,5 @@ arch_numa_init (struct sys_info * sys)
 
     }
 
-    NUMA_PRINT("DONE.\n");
-
     return 0;
 }
