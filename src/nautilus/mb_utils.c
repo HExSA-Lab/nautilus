@@ -283,6 +283,20 @@ multiboot_parse (ulong_t mbd, ulong_t magic)
 				DEBUG_PRINT("Boot device: (biosdev=0x%x,slice=%u,part=%u)\n", bd->biosdev, bd->slice, bd->part);
 				break;
 											 }
+            case MULTIBOOT_TAG_TYPE_APM: {
+                struct multiboot_tag_apm * apm = (struct multiboot_tag_apm*)tag;
+                DEBUG_PRINT("APM Information: \n");
+                DEBUG_PRINT("  version:     0x%08x\n", apm->version);
+                DEBUG_PRINT("  cseg:        0x%08x\n", apm->version);
+                DEBUG_PRINT("  offset       0x%08x\n", apm->offset);
+                DEBUG_PRINT("  cseg_16      0x%08x\n", apm->cseg_16);
+                DEBUG_PRINT("  dseg         0x%08x\n", apm->dseg);
+                DEBUG_PRINT("  flags:       0x%08x\n", apm->flags);
+                DEBUG_PRINT("  cseg_len:    0x%08x\n", apm->cseg_len);
+                DEBUG_PRINT("  cseg_16_len: 0x%08x\n", apm->cseg_16_len);
+                DEBUG_PRINT("  dseg_len:    0x%08x\n", apm->dseg_len);
+                break;
+                                         }
 			case MULTIBOOT_TAG_TYPE_ACPI_OLD: {
 				struct multiboot_tag_old_acpi * oacpi = (struct multiboot_tag_old_acpi*)tag;
 				DEBUG_PRINT("Old ACPI: rsdp=%p\n", oacpi->rsdp);
