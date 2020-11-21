@@ -10,8 +10,8 @@
  * http://www.v3vee.org  and
  * http://xstack.sandia.gov/hobbes
  *
- * Copyright (c) 2018, Kyle C. Hale <khale@cs.iit.edu>
- * Copyright (c) 2018, The V3VEE Project  <http://www.v3vee.org> 
+ * Copyright (c) 2020, Kyle C. Hale <khale@cs.iit.edu>
+ * Copyright (c) 2020, The V3VEE Project  <http://www.v3vee.org> 
  *                     The Hobbes Project <http://xstack.sandia.gov/hobbes>
  * All rights reserved.
  * Author: Kyle C. Hale <khale@cs.iit.edu>
@@ -23,6 +23,7 @@
 #include <nautilus/shutdown.h>
 #include <nautilus/cmdline.h>
 #include <nautilus/hashtable.h>
+#include <nautilus/idle.h>
 #include <test/test.h>
 
 #ifndef NAUT_CONFIG_DEBUG_TESTS
@@ -143,6 +144,18 @@ __run_tests (struct naut_info * naut, int shutdown)
 int
 nk_run_tests (struct naut_info * naut)
 {
+    // if we're running tests at boot,
+    // we need an idle thread on the BSP so tests
+    // can block, otherwise the scheduler
+    // will panic.
+    nk_thread_start(idle,
+                    NULL,
+                    0,
+                    0,
+                    TSTACK_DEFAULT,
+                    NULL,
+                    0);
+                
     int ret = __run_tests(naut, 1);
     if (ret != 0) {
         shutdown_with_code(0xff);
