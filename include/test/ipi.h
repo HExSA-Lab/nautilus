@@ -43,20 +43,16 @@ typedef enum {
 } ipi_exp_type_t;
 
 typedef enum {
-		SRC_ONE,
-		SRC_ALL
-} ipi_src_type_t;
-
-typedef enum {
-		DST_ONE,
-		DST_ALL
-} ipi_dst_type_t;
+		TYPE_ONE,
+		TYPE_ALL,
+        TYPE_NUM_TYPES,
+} ipi_endpoint_t;
 
 
 typedef struct ipi_exp_data {
 	ipi_exp_type_t type;     // which type of experiment
-	ipi_src_type_t src_type; // is this one src core or all?
-	ipi_dst_type_t dst_type; // target one or all cores? (oneway & roundtrip only)
+	ipi_endpoint_t src_type; // is this one src core or all?
+	ipi_endpoint_t dst_type; // target one or all cores? (oneway & roundtrip only)
 	cpu_id_t       src_core; // which core is the src
 	cpu_id_t       dst_core; // destination 
 	uint32_t       trials;   // how many experimental trials
