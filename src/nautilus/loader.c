@@ -193,10 +193,11 @@ find_mb_header (uint8_t *data, uint64_t size)
 
 
 static int 
-checksum4_ok (uint32_t *data, uint64_t size)
+checksum4_ok (void *ptr, uint64_t size)
 {
     int i;
     uint32_t sum=0;
+    uint32_t *data=(uint32_t*)ptr;
 
     for (i=0;i<size;i++) {
         sum+=data[i];
@@ -235,7 +236,7 @@ parse_multiboot_header (void *data, uint64_t size, mb_data_t *mb)
 
     // Checksum applies only to the header itself, not to 
     // the subsequent tags... 
-    if (!checksum4_ok((uint32_t*)mb_header,4)) { 
+    if (!checksum4_ok(mb_header, 4)) { 
         ERROR("Multiboot header has bad checksum\n");
         return -1;
     }

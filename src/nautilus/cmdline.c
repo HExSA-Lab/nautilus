@@ -122,7 +122,7 @@ nk_cmdline_dispatch (struct naut_info * naut)
     int len          = 0;
     int i            = 0;
 
-    printk("parsing cmdline %s\n", cline);
+    INFO("parsing kernel cmdline arguments %s\n", cline);
 
     cmdline_state_t state_id = FLAG_SCANNING;
 
@@ -178,7 +178,7 @@ nk_cmdline_dispatch (struct naut_info * naut)
                     len++;
                     DEBUG("Entering FLAG_ARGS_END state\n");
                     break;
-                } else if (cline[i] == '[') {
+                } else if (cline[i] == '\"') {
                     state_id = FLAG_SUBARGS_CONSUME;
                     DEBUG("Entering FLAG_SUBARGS_CONSUME state\n");
                 }
@@ -189,7 +189,7 @@ nk_cmdline_dispatch (struct naut_info * naut)
                 len++;
                 break;
             case FLAG_SUBARGS_CONSUME:
-                if (cline[i] == ']') {
+                if (cline[i] == '\"') {
                     state_id = FLAG_ARGS_CONSUME;
                     DEBUG("Entering FLAG_ARGS_CONSUME state\n");
                 } 
