@@ -30,7 +30,9 @@
 #include <nautilus/fs.h>
 #include <nautilus/fprintk.h>
 #include <nautilus/shell.h>
+#include <nautilus/getopt.h>
 #include <dev/apic.h>
+#include <test/test.h>
 #include <test/ipi.h>
 #include <asm/bitops.h>
 
@@ -56,6 +58,8 @@
     val = tsc;                  \
     } while (0)
 
+
+#define ERROR(fmt, args...) ERROR_PRINT("IPI: " fmt "\n", ##args)
 
 
 static const char* exp_types[3] = {"ONEWAY", "ROUNDTRIP", "BROADCAST"};
@@ -155,25 +159,24 @@ ipi_exp_setup (ipi_exp_data_t * data)
     nk_fs_fd_t fd;
 
     if (register_int_handler(PING_VEC, ping, NULL) != 0) {
-        ERROR_PRINT("Could not register int handler\n");
+        ERROR("Could not register int handler");
         return -1;
     }
 
     if (register_int_handler(PONG_VEC, pong, NULL) != 0) {
-        ERROR_PRINT("Could not register int handler\n");
+        ERROR("Could not register int handler");
         return -1;
     }
 
     if (register_int_handler(PONG_BCAST_VEC, pong_bcast, NULL) != 0) {
-        ERROR_PRINT("Could not register int handler\n");
+        ERROR("Could not register int handler");
         return -1;
     }
 
     // should we output to a file?
     if (data->use_file) {
 
-        char fbuf[512];
-        memset(fbuf, 0, 512);
+        char fbuf[512] = {0};
         strncpy(fbuf, "rootfs:/", 8);
         strncpy((char*)(fbuf+8), data->fname, strnlen(data->fname, IPI_MAX_FNAME_LEN)+1);
         fd = nk_fs_open(fbuf, O_CREAT|O_RDWR, 0);
@@ -407,8 +410,8 @@ ipi_measure_pairwise_ata (ipi_exp_data_t * data)
 static void
 ipi_pairwise (ipi_exp_data_t * data) 
 {
-	if (data->src_type == SRC_ONE) {
-		if (data->dst_type == DST_ONE) {
+	if (data->src_type == TYPE_ONE) {
+		if (data->dst_type == TYPE_ONE) {
 			// one-to-one
 			ipi_measure_pairwise_oto(data);
 		} else {
@@ -416,7 +419,7 @@ ipi_pairwise (ipi_exp_data_t * data)
 			ipi_measure_pairwise_ota(data);
 		}
 	} else {
-		if (data->dst_type == DST_ONE) {
+		if (data->dst_type == TYPE_ONE) {
 			// all-to-one
 			ipi_measure_pairwise_ato(data);
 		} else {
@@ -606,7 +609,7 @@ ipi_measure_broadcast_ata (ipi_exp_data_t * data)
 static void
 ipi_broadcast (ipi_exp_data_t * data)
 {
-	if (data->src_type == SRC_ONE) {
+	if (data->src_type == TYPE_ONE) {
 		ipi_measure_broadcast_ota(data);
 	} else {
 		ipi_measure_broadcast_ata(data);
@@ -620,10 +623,10 @@ ipi_print_parms (ipi_exp_data_t * data)
     IPI_PRINT("# IPI experiment:\n");
     IPI_PRINT("#    TYPE: %s\n", type2str(data->type));
     IPI_PRINT("#    TRIALS: %u\n", data->trials);
-    IPI_PRINT("#    SRC_TYPE: %s\n", (data->src_type == SRC_ONE) ? "ONE" : "ALL");
-    IPI_PRINT("#    SRC_CORE: %d\n", (data->src_type == SRC_ONE) ? data->src_core : -1);
-    IPI_PRINT("#    DST_TYPE: %s\n", (data->dst_type == DST_ONE) ? "ONE" : "ALL");
-    IPI_PRINT("#    DST_CORE: %d\n", (data->dst_type == DST_ONE) ? data->dst_core : -1);
+    IPI_PRINT("#    SRC_TYPE: %s\n", (data->src_type == TYPE_ONE) ? "ONE" : "ALL");
+    IPI_PRINT("#    SRC_CORE: %d\n", (data->src_type == TYPE_ONE) ? data->src_core : -1);
+    IPI_PRINT("#    DST_TYPE: %s\n", (data->dst_type == TYPE_ONE) ? "ONE" : "ALL");
+    IPI_PRINT("#    DST_CORE: %d\n", (data->dst_type == TYPE_ONE) ? data->dst_core : -1);
     if (data->use_file) {
         IPI_PRINT("#    OUT_FILE: %s\n", data->fname);
     }
@@ -748,7 +751,7 @@ handle_ipitest (char * buf, void * priv)
 
     // which source type is it 
 	if (sscanf(buf, "-s %u", &sid)==1) {
-        data->src_type = SRC_ONE;
+        data->src_type = TYPE_ONE;
         data->src_core = sid; 
         buf += 3;
 
@@ -759,15 +762,15 @@ handle_ipitest (char * buf, void * priv)
         while (*buf && *buf==' ') { buf++;}
 
 	} else { 
-        data->src_type = SRC_ALL;
+        data->src_type = TYPE_ALL;
     }
 
         
     if (sscanf(buf, "-d %u", &did)==1) {
-        data->dst_type = DST_ONE;
+        data->dst_type = TYPE_ONE;
         data->dst_core = did;
     } else {
-        data->dst_type = DST_ALL;
+        data->dst_type = TYPE_ALL;
     }
 		
 	if (ipi_run_exps(data) != 0) {
@@ -787,3 +790,97 @@ static struct shell_cmd_impl ipitest_impl = {
     .handler  = handle_ipitest,
 };
 nk_register_shell_cmd(ipitest_impl);
+
+
+static int
+handle_ipi_test_cmd (int argc, char ** argv)
+{
+    int c;
+	ipi_exp_data_t * data = malloc(sizeof(ipi_exp_data_t));
+	if (!data) {
+		nk_vc_printf("ERROR: could not allocate IPI experiment data\n");
+		return -1;
+	}
+	memset(data, 0, sizeof(ipi_exp_data_t));
+
+    // defaults
+    data->type     = EXP_ONEWAY;
+    data->src_type = TYPE_ALL;
+    data->src_core = 0;
+    data->dst_type = TYPE_ALL;
+    data->dst_core = 1;
+    data->trials   = 10;
+
+    INFO_PRINT("ARGC: %d\n", argc);
+
+    while ((c = getopt(argc, argv, "t:n:s:d:")) != -1) {
+        switch (c) {
+            case 't': {
+                if (strcmp(optarg, "oneway") == 0) {
+                    data->type = EXP_ONEWAY;
+                } else if (strcmp(optarg, "roundtrip") == 0) {
+                    data->type = EXP_ROUNDTRIP;
+                } else if (strcmp(optarg, "broadcast") == 0) {
+                    data->type = EXP_BROADCAST;
+                } else {
+                    ERROR("Unknown test type");
+                    return -1;
+                }
+                break;
+                      }
+            case 'n': {
+                data->trials = atoi(optarg);
+                if (data->trials <= 0) {
+                    ERROR("Must have >0 trials");
+                    return -1;
+                }
+                break;
+                      }
+            case 's': 
+            case 'd':
+                      {
+                if (strcmp(optarg, "all") == 0) {
+                    if (c == 's') {
+                        data->src_type = TYPE_ALL;
+                        data->src_core = -1;
+                    } else {
+                        data->dst_type = TYPE_ALL;
+                        data->dst_core = -1;
+                    }
+                } else {
+                    int core = atoi(optarg);
+                    if (core >= nk_get_num_cpus()) {
+                        ERROR("CPU ID (%d) too large, max is %d\n", core, nk_get_num_cpus()-1);
+                        return -1;
+                    }
+
+                    if (c == 's') {
+                        data->src_type = TYPE_ONE;
+                        data->src_core = core;
+                    } else {
+                        data->dst_type = TYPE_ONE;
+                        data->dst_core = core;
+                    }
+                }
+                break;
+                      }
+            default: {
+                ERROR("Unknown IPI test option");
+                return -1;
+            }
+        }
+    }
+
+    ipi_run_exps(data);
+    
+    free(data);
+    return 0;
+}
+
+static struct nk_test_impl ipitest_test_impl = {
+    .name         = "ipitest",
+    .handler      = handle_ipi_test_cmd,
+    .default_args = "-t oneway -n 10 -s all -d all",
+};
+
+nk_register_test(ipitest_test_impl);
