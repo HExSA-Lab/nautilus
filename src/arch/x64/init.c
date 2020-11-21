@@ -565,6 +565,9 @@ init (unsigned long mbd,
 
     nk_cmdline_dispatch(naut);
 
+#ifdef NAUT_CONFIG_RUN_TESTS_AT_BOOT
+    nk_run_tests(naut);
+#endif
 
 #ifdef NAUT_CONFIG_WATCHDOG
     nk_watchdog_init(NAUT_CONFIG_WATCHDOG_DEFAULT_TIME_MS * 1000000UL);
@@ -574,9 +577,6 @@ init (unsigned long mbd,
 
     runtime_init();
 
-#ifdef NAUT_CONFIG_RUN_TESTS_AT_BOOT
-    nk_run_tests(naut);
-#endif
 
     printk("Nautilus boot thread yielding (indefinitely)\n");
 
