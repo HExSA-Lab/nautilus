@@ -717,7 +717,7 @@ shell (void * in, void ** out)
 
     if (op->script) {
         int i;
-        for (i = 0; *op->script[i]; i++) {
+        for (i = 0; op->script[i]; i++) {
             nk_vc_printf("***exec: %s\n", op->script[i]);
             shell_handle_cmd(state, op->script[i], SHELL_MAX_CMD);
         }
