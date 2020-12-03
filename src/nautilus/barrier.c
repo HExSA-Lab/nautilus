@@ -164,6 +164,7 @@ nk_barrier_wait (nk_barrier_t * barrier)
     register unsigned init_count = barrier->init_count;
 
     if (atomic_inc_val(barrier->remaining) == init_count) {
+        atomic_cmpswap(barrier->notify, 1, 0); 
         bspin_unlock(&barrier->lock);
     }
     
