@@ -75,6 +75,14 @@ cpuid_get_step (void)
 }
 
 
+uint32_t 
+cpuid_ext_leaf_max (void)
+{
+    cpuid_ret_t ret;
+    cpuid(0x80000000, &ret);
+    return ret.a & 0xff;
+}
+
 uint32_t
 cpuid_leaf_max (void)
 {
