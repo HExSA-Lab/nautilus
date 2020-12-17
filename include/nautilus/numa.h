@@ -96,6 +96,7 @@ struct nk_topo_params {
     // amd
     uint32_t max_ncores;
     uint32_t max_nthreads;
+    uint8_t has_topoext;
 
     // intel
 	uint32_t core_plus_mask_width;
