@@ -10,8 +10,8 @@
  * http://www.v3vee.org  and
  * http://xstack.sandia.gov/hobbes
  *
- * Copyright (c) 2018, Kyle C. Hale <khale@cs.iit.edu>
- * Copyright (c) 2018, The V3VEE Project  <http://www.v3vee.org> 
+ * Copyright (c) 2020, Kyle C. Hale <khale@cs.iit.edu>
+ * Copyright (c) 2020, The V3VEE Project  <http://www.v3vee.org> 
  *                     The Hobbes Project <http://xstack.sandia.gov/hobbes>
  * All rights reserved.
  *
@@ -182,13 +182,6 @@ amd_get_topo_legacy (struct nk_topo_params * tp)
     tp->max_nthreads = 1;
 }
 
-// KCH TODO: TOPOEXT NOT YET SUPPORTED. We'll likely need this for Ryzen/EPYC systems
-// We'll also need to rework this a bit due to the differing terminologies:
-// node, unit, core, thread
-static void
-amd_get_topo_topoext (struct nk_topo_params * tp)
-{
-}
 
 static void
 amd_get_topo_secondary (struct nk_topo_params * tp)
@@ -196,7 +189,6 @@ amd_get_topo_secondary (struct nk_topo_params * tp)
     cpuid_ret_t ret;
     uint32_t largest_extid;
     uint8_t has_x2;
-    uint8_t has_topo_ext;
 
     NUMA_DEBUG("Attempting AMD topo probe\n");
 
@@ -208,13 +200,11 @@ amd_get_topo_secondary (struct nk_topo_params * tp)
 
 
     cpuid(0x80000001, &ret);
-    has_topo_ext = (ret.c >> 22) & 1;
+    tp->has_topoext = (ret.c >> 22) & 1;
 
     if (largest_extid >= 0x80000008 && !has_x2) 
         amd_get_topo_legacy(tp);
 
-    if (has_topo_ext)
-        amd_get_topo_topoext(tp);
 }
 
 
@@ -304,11 +294,29 @@ static void
 assign_core_coords_amd (struct cpu * me, struct nk_cpu_coords * coord, struct nk_topo_params *tp)
 {
     uint32_t my_apic_id = apic_get_id(per_cpu_get(apic));
-    uint32_t logprocid = my_apic_id % tp->max_ncores;
 
-    coord->smt_id  = my_apic_id % tp->max_nthreads;
-    coord->core_id = logprocid / tp->max_nthreads;
-    coord->pkg_id  = my_apic_id / tp->max_ncores;
+    if (tp->has_topoext) {
+        cpuid_ret_t ret;
+        cpuid(0x8000001e, &ret);
+
+        // compute unit is a physical processor (or a CMT core)
+        // A "Compute Unit Core" is our equivalent of an SMT thread.
+        int cores_per_cu = ((ret.b >> 8) & 0x3) + 1;
+        int cu_id = ret.b & 0xff;
+
+        coord->smt_id  = my_apic_id % cores_per_cu;
+        coord->core_id = cu_id;
+        // "Node" is a package (die). On MCM systems we can
+        // have more than one die (package) in a processor (socket).
+        // TODO: we are not guaranteed to get linear numbering here
+        // for package IDs
+        coord->pkg_id  = (uint32_t)(ret.c & 0xff);
+    } else {
+        uint32_t logprocid = my_apic_id % tp->max_ncores;
+        coord->smt_id  = (tp->max_nthreads != 0) ? (my_apic_id % tp->max_nthreads) : 0;
+        coord->core_id = (tp->max_nthreads != 0) ? (logprocid / tp->max_nthreads) : 0;
+        coord->pkg_id  = (tp->max_ncores != 0) ? (my_apic_id / tp->max_ncores) : 0;
+    }
 }
 
 static void 
@@ -327,7 +335,7 @@ assign_core_coords (struct cpu * me, struct nk_cpu_coords * coord, struct nk_top
     NUMA_DEBUG("Core OS ID: %u:\n", me->id);
     NUMA_DEBUG("\tLogical Core ID:  %u\n", coord->smt_id);
     NUMA_DEBUG("\tPhysical Core ID: %u\n", coord->core_id);
-    NUMA_DEBUG("\tPhysical Chip ID: %u\n", coord->pkg_id);
+    NUMA_DEBUG("\tPhysical Package ID: %u\n", coord->pkg_id);
 }
 
 
