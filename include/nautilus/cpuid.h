@@ -27,6 +27,7 @@
 #include <nautilus/naut_types.h>
 
 uint32_t cpuid_leaf_max(void);
+uint32_t cpuid_ext_leaf_max(void);
 uint8_t cpuid_get_family(void);
 uint8_t cpuid_get_model(void);
 uint8_t cpuid_get_step(void);

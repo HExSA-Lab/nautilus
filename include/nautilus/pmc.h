@@ -10,8 +10,8 @@
  * http://www.v3vee.org  and
  * http://xstack.sandia.gov/hobbes
  *
- * Copyright (c) 2018, Kyle C. Hale <khale@cs.iit.edu>
- * Copyright (c) 2018, The V3VEE Project  <http://www.v3vee.org> 
+ * Copyright (c) 2020, Kyle C. Hale <khale@cs.iit.edu>
+ * Copyright (c) 2020, The V3VEE Project  <http://www.v3vee.org> 
  *                     The Hobbes Project <http://xstack.sandia.gov/hobbes>
  * All rights reserved.
  *
@@ -27,13 +27,25 @@
 
 
 #define AMD_PMC_LEAF      0x80000001
-#define AMD_PERF_SLOTS    6
+#define AMD_PERF_SLOTS_LEGACY 4
+#define AMD_PERF_SLOTS_EXT    6
+
+#define AMD_PERF_CTL0_MSR_LEGACY 0xc0010000
+#define AMD_PERF_CTL1_MSR_LEGACY 0xc0010001
+#define AMD_PERF_CTL2_MSR_LEGACY 0xc0010002
+#define AMD_PERF_CTL3_MSR_LEGACY 0xc0010003
+
 #define AMD_PERF_CTL0_MSR 0xc0010200
 #define AMD_PERF_CTL1_MSR 0xc0010202
 #define AMD_PERF_CTL2_MSR 0xc0010204
 #define AMD_PERF_CTL3_MSR 0xc0010206
 #define AMD_PERF_CTL4_MSR 0xc0010208
 #define AMD_PERF_CTL5_MSR 0xc001020a
+
+#define AMD_PERF_CTR0_MSR_LEGACY 0xc0010004
+#define AMD_PERF_CTR1_MSR_LEGACY 0xc0010005
+#define AMD_PERF_CTR2_MSR_LEGACY 0xc0010006
+#define AMD_PERF_CTR3_MSR_LEGACY 0xc0010007
 
 #define AMD_PERF_CTR0_MSR 0xc0010201
 #define AMD_PERF_CTR1_MSR 0xc0010203
@@ -42,8 +54,44 @@
 #define AMD_PERF_CTR4_MSR 0xc0010209
 #define AMD_PERF_CTR5_MSR 0xc001020b
 
+#define AMD_PERF_CTL_MSR_N_LEGACY(n) (AMD_PERF_CTL0_MSR_LEGACY + (n))
+#define AMD_PERF_CTR_MSR_N_LEGACY(n) (AMD_PERF_CTR0_MSR_LEGACY + (n))
+
 #define AMD_PERF_CTL_MSR_N(n) (AMD_PERF_CTL0_MSR + 2*(n))
 #define AMD_PERF_CTR_MSR_N(n) (AMD_PERF_CTR0_MSR + 2*(n))
+
+/**** L2I ****/
+#define AMD_PERF_L2I_CTL0_MSR 0xc0010230
+#define AMD_PERF_L2I_CTL1_MSR 0xc0010232
+#define AMD_PERF_L2I_CTL2_MSR 0xc0010234
+#define AMD_PERF_L2I_CTL3_MSR 0xc0010236
+
+#define AMD_PERF_L2I_CTR0_MSR 0xc0010231
+#define AMD_PERF_L2I_CTR1_MSR 0xc0010233
+#define AMD_PERF_L2I_CTR2_MSR 0xc0010235
+#define AMD_PERF_L2I_CTR3_MSR 0xc0010237
+
+#define AMD_PERF_L2I_CTL_MSR_N(n) (AMD_PERF_L2I_CTL0_MSR + 2*(n))
+#define AMD_PERF_L2I_CTR_MSR_N(n) (AMD_PERF_L2I_CTR0_MSR + 2*(n))
+
+/**** Northbridge ****/
+#define AMD_PERF_NB_CTL0_MSR 0xc0010240
+#define AMD_PERF_NB_CTL1_MSR 0xc0010242
+#define AMD_PERF_NB_CTL2_MSR 0xc0010244
+#define AMD_PERF_NB_CTL3_MSR 0xc0010246
+
+#define AMD_PERF_NB_CTR0_MSR 0xc0010241
+#define AMD_PERF_NB_CTR1_MSR 0xc0010243
+#define AMD_PERF_NB_CTR2_MSR 0xc0010245
+#define AMD_PERF_NB_CTR3_MSR 0xc0010247
+
+#define AMD_PERF_NB_CTL_MSR_N(n) (AMD_PERF_NB_CTL0_MSR + 2*(n))
+#define AMD_PERF_NB_CTR_MSR_N(n) (AMD_PERF_NB_CTR0_MSR + 2*(n))
+
+
+/**** INTEL ****/
+
+
 
 #define IA32_PMC_LEAF 0xa
 
@@ -81,21 +129,22 @@
 #define AMD_INSTR_CACHE_INVALS   0x07
 
 
-#define AMD_EXT_CNT_FLAG 0x1
-#define AMD_NB_CNT_FLAG  0x2
-#define AMD_L3_CNT_FLAG  0x4
+// Cached versions of AMD-specific PMC feature flags
+#define AMD_EXT_CNT_FLAG 0x1 // we have 6 slots (not the legacy 4), so we use different MSRs
+#define AMD_NB_CNT_FLAG  0x2 // we have Northbridge counters
+#define AMD_L2I_CNT_FLAG 0x4 // We can count events on the L2 core complex
 
 
 typedef struct amd_event_attr {
     const char * name;
-    uint8_t id;
+    uint16_t id;
     uint8_t umask;
     uint8_t slot_mask;
 } amd_event_attr_t;
 
 typedef struct intel_event_attr {
     const char * name;
-    uint8_t id;
+    uint16_t id;
     uint8_t umask;
     uint8_t bit_pos;
 } intel_event_attr_t;
@@ -184,18 +233,18 @@ typedef struct pmc_ctl_amd {
 
 
 struct pmc_ops {
-    uint64_t (*read_ctr)(uint8_t idx);
-    void     (*write_ctr)(uint8_t idx, uint64_t val);
-    void     (*enable_ctr)(perf_event_t * event);
-    void     (*disable_ctr)(perf_event_t * event);
-    int      (*bind_ctr)(perf_event_t * event, int slot);
-    void     (*unbind_ctr)(int slot);
+    uint64_t (*read_ctr)(struct pmc_info * pmc, uint8_t idx);
+    void     (*write_ctr)(struct pmc_info * pmc, uint8_t idx, uint64_t val);
+    void     (*enable_ctr)(struct pmc_info * pmc, perf_event_t * event);
+    void     (*disable_ctr)(struct pmc_info * pmc, perf_event_t * event);
+    int      (*bind_ctr)(struct pmc_info * pmc, perf_event_t * event, int slot);
+    void     (*unbind_ctr)(struct pmc_info * pmc, int slot);
     int      (*init)(struct pmc_info * pmc);
-    void     (*event_init)(perf_event_t * event);
+    void     (*event_init)(struct pmc_info * pmc, perf_event_t * event);
 
-    int      (*version)();
-    int      (*msr_cnt)();
-    int      (*msr_width)();
+    int      (*version)(struct pmc_info * pmc);
+    int      (*msr_cnt)(struct pmc_info * pmc);
+    int      (*msr_width)(struct pmc_info * pmc);
 
 };
 

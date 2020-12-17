@@ -10,8 +10,8 @@
  * http://www.v3vee.org  and
  * http://xstack.sandia.gov/hobbes
  *
- * Copyright (c) 2018, Kyle C. Hale <khale@cs.iit.edu>
- * Copyright (c) 2018, The V3VEE Project  <http://www.v3vee.org> 
+ * Copyright (c) 2020, Kyle C. Hale <khale@cs.iit.edu>
+ * Copyright (c) 2020, The V3VEE Project  <http://www.v3vee.org> 
  *                     The Hobbes Project <http://xstack.sandia.gov/hobbes>
  * All rights reserved.
  *
@@ -98,17 +98,36 @@
  * the slot mask is AMD-specific, and it determines which of the HW PMC regs the
  * specific counter can be installed in.
  *
+ * Note that these can vary by uarch. These were taken from AMD's BIOS/Kern
+ * Dev Guide (Rev 3.14) for Family 15h model 00h-0fh processors. Check the
+ * BIOS kern guide for specific type if in doubt. 
+ * TODO: we should automate this discovery with a CPU fam/model to event ID
+ * mapping table...
+ *
  */
 static amd_event_attr_t amd_event_attrs[256] = 
 { 
-    {"Data Cache Misses",              0x41, 0x00, 0x3f},
-    {"Instruction Cache Misses",       0x81, 0x00, 0x07},
-    {"L2 Cache Misses",                0x7e, 0x00, 0x07},
-    {"Unified TLB Misses",             0x46, 0x33, 0x07},
-    {"SMI Interrupts",                 0x2b, 0x00, 0x3f},
-    {"Instruction Fetch Stalls",       0x87, 0x00, 0x07},
-    {"Mispredicted Branches Retired",  0xc3, 0x00, 0x3f},
-    {"Instr. Cache Lines Invalidated", 0x8c, 0x00, 0x07},
+    {"Data Cache Accesses",              0x040, 0x00, 0x3f}, // includes speculative accessses
+    {"Data Cache Misses",                0x041, 0x03, 0x3f}, // includes speculative accesses. accesses during pending refills don't count
+    {"dCache Refills from L2 or System", 0x042, 0x01, 0x3f}, // includes only "fill with good data" in unit mask
+    {"L1 Refills from System",           0x043, 0x00, 0x07}, 
+    {"Instruction Cache Misses",         0x081, 0x00, 0x07}, // # of ifetches and prefetch reqs that miss in i$
+    {"iCache Refills from L2",           0x082, 0x00, 0x07}, // # of i$ refills satisfied from L2
+    {"iCache Refills from System",       0x083, 0x00, 0x07}, // # of i$ refills from system memory (or another $)
+    {"Requests to L2 Cache",             0x07d, 0x5f, 0x07}, // Reqs. to L2 for i$ fills, d$ fills, pt lookups for tlb
+    {"L2 Cache Misses",                  0x07e, 0x27, 0x07}, // reqs that miss in L2. (L2$ prefetch reqs, TLB pt walks, dc fill, ic fill)
+    {"Unified TLB Hits",                 0x045, 0x33, 0x07}, // includes all page sizes (1G, 2M, 4K). Includes spec.
+    {"Unified TLB Misses",               0x046, 0x33, 0x07}, // all page sizes. includes spec.
+    {"L1 ITLB Miss, L2 ITLB Hit",        0x084, 0x00, 0x07}, // # ifetches that miss in L1 iTLB but hit in L2 TLB
+    {"L1 ITLB Miss, L2 ITLB Miss",       0x085, 0x07, 0x07}, // # ifetches that miss in both L1 and L2 TLBs (all page sizes)
+    {"Page Splinters",                   0x165, 0x03, 0x07}, //  "# of TLB reloads where a large page is installed into TLB as a smaller page size"
+    {"SMI Interrupts Received",          0x02b, 0x00, 0x3f}, 
+    {"Instruction Fetch Stalls",         0x087, 0x00, 0x07},
+    {"Mispredicted Branches Retired",    0x0c3, 0x00, 0x3f},
+    {"Instr. Cache Lines Invalidated",   0x08c, 0x00, 0x07},
+    {"Load/Store Dispatch (Just loads)", 0x029, 0x01, 0x3f},
+    {"Load/Store Dispatch (Just stores)",0x029, 0x02, 0x3f},
+    {"Load/Store Dispatch (Everything)", 0x029, 0x07, 0x3f},
 };
 
 
@@ -165,15 +184,19 @@ amd_has_nb_counters (void)
 }
 
 
+// KCH TODO: I can't tell if it's a documentaiton bug or not,
+// but AMD's BIOS Kern guide says bit 28 *value 0* indicates support
+// for the L2I MSRs. That seems bizarre since all the rest are 1s...
+// Might be an issue on newer AMDs
 static inline uint8_t
-amd_has_l3_counters (void)
+amd_has_l2i_counters (void)
 {
     return !!(amd_get_pmc_leaf() & (1 << 28));
 }
 
 
 static int
-intel_get_pmc_version (void)
+intel_get_pmc_version (struct pmc_info * pmc)
 {
     if (cpuid_leaf_max() >= IA32_PMC_LEAF) {
         return intel_get_pmc_leaf() & 0xff;
@@ -184,14 +207,14 @@ intel_get_pmc_version (void)
 
 
 static int
-intel_get_pmc_msr_count (void)
+intel_get_pmc_msr_count (struct pmc_info * pmc)
 {
     return (intel_get_pmc_leaf() >> 8) & 0xff;
 }
 
 
 static int
-intel_get_pmc_msr_bitwidth (void)
+intel_get_pmc_msr_bitwidth (struct pmc_info * pmc)
 {
     return (intel_get_pmc_leaf() >> 16) & 0xff;
 }
@@ -204,7 +227,7 @@ pmc_assign_slot (pmc_info_t * pmc,
 {
     PMC_DEBUG("Assigning event (%s) to slot %d\n", event->name, slot);
 
-    if (pmc->ops->bind_ctr(event, slot) != 0) {
+    if (pmc->ops->bind_ctr(pmc, event, slot) != 0) {
         PMC_DEBUG("Could not bind counter to slot\n");
         return -1;
     }
@@ -247,7 +270,7 @@ pmc_bind (perf_event_t * event, int slot)
         for (i = 0; i < pmc->sw_num_slots; i++) {
 
             /* assign slot can fail, particulary if 
-             * binding thhe event to the register doesn't work
+             * binding the event to the register doesn't work
              * (e.g. due to register constraints that AMD has)
              */
             if (pmc->slots[i].status == PMC_SLOT_FREE && 
@@ -303,7 +326,7 @@ pmc_unbind (perf_event_t * event)
     pmc->slots[event->assigned_idx].status = PMC_SLOT_FREE;
     pmc->slots[event->assigned_idx].event  = NULL;
 
-    pmc->ops->unbind_ctr(event->assigned_idx);
+    pmc->ops->unbind_ctr(pmc, event->assigned_idx);
 
     event->assigned_idx = 0;
     event->bound        = 0;
@@ -356,7 +379,7 @@ intel_flags_init (pmc_info_t * pmc)
 	cpuid_ret_t ret;
 	int i;
 
-    if (intel_get_pmc_version() <  1) {
+    if (intel_get_pmc_version(pmc) <  1) {
         pmc->valid = 0;
         PMC_WARN("Insufficient Intel PMC version to support perf counter subsystem\n");
         return;
@@ -382,40 +405,40 @@ intel_flags_init (pmc_info_t * pmc)
 static void
 amd_flags_init (pmc_info_t * pmc)
 {
-    // TODO: extended register caps here
-    if (cpuid_leaf_max() >= AMD_PMC_LEAF && amd_has_ext_counters()) {
+    // We have 4 perf ctr. slots on all implementations (AMD Arch Programmers Ref Man. 13.2.1)
+    // Extended support (2 new regs, six total) depends on CPUID 0x8000_0001[ecx].23
+    if (cpuid_ext_leaf_max() >= 1 && amd_has_ext_counters()) {
         pmc->amd_fl |= AMD_EXT_CNT_FLAG;
-        PMC_DEBUG("  AMD Extended PMC counter regs available\n");
-        pmc->valid = 1;
+        PMC_DEBUG("Using AMD Extended performance counters (6 slots)\n");
     } else {
-        PMC_WARN("Insufficient AMD PMC support for perf counter subsystem\n");
-        return;
+        PMC_DEBUG("Using AMD Legacy performance counters (4 sltos)\n");
     }
 
     if (amd_has_nb_counters()) {
         pmc->amd_fl |= AMD_NB_CNT_FLAG;
-        PMC_DEBUG("  AMD North Bridge PMC counter regs available\n");
+        PMC_DEBUG("AMD Northbridge PMC counter regs available\n");
     }
 
-    if (amd_has_l3_counters()) {
-        pmc->amd_fl |= AMD_L3_CNT_FLAG;
-        PMC_DEBUG("  AMD L3 PMC counter regs available\n");
+    if (amd_has_l2i_counters()) {
+        pmc->amd_fl |= AMD_L2I_CNT_FLAG;
+        PMC_DEBUG("AMD L2I PMC counter regs available\n");
     }
 
     PMC_DEBUG("AMD attribute flags set to 0x%08x\n", pmc->amd_fl);
 
+    pmc->valid = 1;
 }
 
 
 static uint64_t
-intel_read_ctl (uint8_t idx)
+intel_read_ctl (struct pmc_info * pmc, uint8_t idx)
 {
     return msr_read(INTEL_PERF_CTL_MSR_N(idx));
 }
 
 
 static void
-intel_write_ctl (uint8_t idx, uint64_t val)
+intel_write_ctl (struct pmc_info * pmc, uint8_t idx, uint64_t val)
 {
     PMC_DEBUG("Writing 0x%016x to Intel PMC Ctrl reg %d\n", val, idx);
     msr_write(INTEL_PERF_CTL_MSR_N(idx), val);
@@ -423,14 +446,14 @@ intel_write_ctl (uint8_t idx, uint64_t val)
 
 
 static uint64_t
-intel_read_ctr (uint8_t idx)
+intel_read_ctr (struct pmc_info * pmc, uint8_t idx)
 {
     return msr_read(INTEL_PERF_CTR_MSR_N(idx));
 }
 
 
 static void
-intel_write_ctr (uint8_t idx, uint64_t val)
+intel_write_ctr (struct pmc_info * pmc, uint8_t idx, uint64_t val)
 {
     PMC_DEBUG("Writing 0x%016x to Intel HW slot %d\n");
     msr_write(INTEL_PERF_CTR_MSR_N(idx), val);
@@ -438,7 +461,7 @@ intel_write_ctr (uint8_t idx, uint64_t val)
 
 
 static void
-intel_event_init (perf_event_t * event)
+intel_event_init (struct pmc_info * pmc, perf_event_t * event)
 {
     PMC_DEBUG("Initiliazing Intel event state (sw_id=0x%02x)\n", event->sw_id);
     // TODO: check to make sure this is a valid event!
@@ -448,7 +471,7 @@ intel_event_init (perf_event_t * event)
 
 
 static int
-intel_bind_ctr (perf_event_t * event, int slot)
+intel_bind_ctr (struct pmc_info * pmc, perf_event_t * event, int slot)
 {
     pmc_ctl_intel_t ctl;
 
@@ -463,47 +486,47 @@ intel_bind_ctr (perf_event_t * event, int slot)
     ctl.event_select = event->attrs.intel_attrs->id;
     ctl.unit_mask    = event->attrs.intel_attrs->umask;
     
-    intel_write_ctl(slot, ctl.val);
+    intel_write_ctl(pmc, slot, ctl.val);
 
     return 0;
 }
 
 
 static void
-intel_unbind_ctr (int slot)
+intel_unbind_ctr (struct pmc_info * pmc, int slot)
 {
     PMC_DEBUG("Unbinding Intel HW slot %d\n", slot);
-    intel_write_ctl(slot, 0);
+    intel_write_ctl(pmc, slot, 0);
 }
 
 
 static void
-intel_enable_ctr (perf_event_t * event)
+intel_enable_ctr (struct pmc_info * pmc, perf_event_t * event)
 {
     pmc_ctl_intel_t ctl;
 
     PMC_DEBUG("Enabling Intel HW counter %d\n", event->assigned_idx);
 
-    ctl.val = intel_read_ctl(event->assigned_idx);
+    ctl.val = intel_read_ctl(pmc, event->assigned_idx);
 
     ctl.en = 1;
 
-    intel_write_ctl(event->assigned_idx, ctl.val);
+    intel_write_ctl(pmc, event->assigned_idx, ctl.val);
 }
 
 
 static void
-intel_disable_ctr (perf_event_t * event)
+intel_disable_ctr (struct pmc_info * pmc, perf_event_t * event)
 {
     pmc_ctl_intel_t ctl;
 
     PMC_DEBUG("Disabling Intel HW counter %d\n", event->assigned_idx);
 
-    ctl.val = intel_read_ctl(event->assigned_idx);
+    ctl.val = intel_read_ctl(pmc, event->assigned_idx);
 
     ctl.en = 0;
 
-    intel_write_ctl(event->assigned_idx, ctl.val);
+    intel_write_ctl(pmc, event->assigned_idx, ctl.val);
 }
 
 
@@ -519,25 +542,30 @@ intel_pmc_init (pmc_info_t * pmc)
 
 
 static int
-amd_get_pmc_version (void)
+amd_get_pmc_version (struct pmc_info *pmc)
 {
+    // AMD does not appear to have version numbering
     return 0;
 }
 
 
-static int
-amd_get_pmc_msr_count (void)
+static inline int
+amd_get_pmc_msr_count (struct pmc_info * pmc)
 {
-    // TODO: this actually depends on 
-    // the extended core counter feature in CPUID,
-    // but we should be safe on newish hardware
-    return 6;
+    if (pmc->amd_fl & AMD_EXT_CNT_FLAG)
+        return AMD_PERF_SLOTS_EXT;
+
+    return AMD_PERF_SLOTS_LEGACY;
 }
 
 
 static int
-amd_get_pmc_msr_bitwidth (void)
+amd_get_pmc_msr_bitwidth (struct pmc_info * pmc)
 {
+    // KCH: here we actually report the maximum supported width. 
+    // actual width is implementation-dependent, but it's
+    // not clear from the AMD mans how to query the *actual*
+    // bit-width...
     return 64;
 }
 
@@ -553,38 +581,57 @@ amd_pmc_init (pmc_info_t * pmc)
 }
 
 
-static inline uint64_t
-amd_read_ctr (uint8_t idx)
+static inline uint8_t
+amd_has_ext (struct pmc_info * pmc)
 {
-    return msr_read(AMD_PERF_CTR_MSR_N(idx));
+    return pmc->amd_fl & AMD_EXT_CNT_FLAG;
+}
+
+
+static inline uint64_t
+amd_read_ctr (struct pmc_info * pmc, uint8_t idx)
+{
+    uint64_t ret = amd_has_ext(pmc) ? 
+                   msr_read(AMD_PERF_CTR_MSR_N(idx)) :
+                   msr_read(AMD_PERF_CTR_MSR_N_LEGACY(idx));
+    return ret;
 }
 
 
 static inline void
-amd_write_ctr (uint8_t idx, uint64_t val)
+amd_write_ctr (struct pmc_info * pmc, uint8_t idx, uint64_t val)
 {
     PMC_DEBUG("Writing 0x%016x to AMD HW slot %d\n");
-    msr_write(AMD_PERF_CTR_MSR_N(idx), val);
+    if (amd_has_ext(pmc))
+        msr_write(AMD_PERF_CTR_MSR_N(idx), val);
+    else 
+        msr_write(AMD_PERF_CTR_MSR_N_LEGACY(idx), val);
 }
 
 
 static inline uint64_t
-amd_read_ctl (uint8_t idx)
+amd_read_ctl (struct pmc_info * pmc, uint8_t idx)
 {
-    return msr_read(AMD_PERF_CTL_MSR_N(idx));
+    uint64_t ret = amd_has_ext(pmc) ? 
+                   msr_read(AMD_PERF_CTL_MSR_N(idx)) :
+                   msr_read(AMD_PERF_CTL_MSR_N_LEGACY(idx));
+    return ret;
 }
 
 
 static inline void
-amd_write_ctl (uint8_t idx, uint64_t val)
+amd_write_ctl (struct pmc_info * pmc, uint8_t idx, uint64_t val)
 {
     PMC_DEBUG("Writing 0x%016x to AMD  PMC Ctrl reg %d\n", val, idx);
-    msr_write(AMD_PERF_CTL_MSR_N(idx), val);
+    if (amd_has_ext(pmc))
+        msr_write(AMD_PERF_CTL_MSR_N(idx), val);
+    else 
+        msr_write(AMD_PERF_CTL_MSR_N_LEGACY(idx), val);
 }
 
 
 static void
-amd_event_init (perf_event_t * event)
+amd_event_init (struct pmc_info * pmc, perf_event_t * event)
 {
     PMC_DEBUG("Initiliazing AMD event state (sw_id=0x%02x)\n", event->sw_id);
     event->attrs.amd_attrs = &amd_event_attrs[event->sw_id];
@@ -593,13 +640,21 @@ amd_event_init (perf_event_t * event)
 
 
 static int
-amd_bind_ctr (perf_event_t * event, int slot)
+amd_bind_ctr (struct pmc_info * pmc, perf_event_t * event, int slot)
 {
     pmc_ctl_amd_t ctl;
 
     PMC_DEBUG("Binding AMD HW slot %d to [%s]\n", 
             slot,
             event->name);
+
+    // If we don't have extended counter support, we only have 4 slots, so
+    // slot #s > 3 are not supported
+    if (!(pmc->amd_fl & AMD_EXT_CNT_FLAG) && slot >= AMD_PERF_SLOTS_LEGACY) {
+        PMC_WARN("Attempt to bind to slot %d when there are only %d available slots\n",
+                slot, AMD_PERF_SLOTS_LEGACY);
+        return -1;
+    }
 
     if (!(event->attrs.amd_attrs->slot_mask & (1 << slot))) {
             PMC_DEBUG("This event type cannot bind to slot %d (constraint=0x%02x)\n", 
@@ -614,22 +669,22 @@ amd_bind_ctr (perf_event_t * event, int slot)
     ctl.event_select0 = event->attrs.amd_attrs->id;
     ctl.unit_mask     = event->attrs.amd_attrs->umask;
     
-    amd_write_ctl(slot, ctl.val);
+    amd_write_ctl(pmc, slot, ctl.val);
 
     return 0;
 }
 
 
 static void
-amd_unbind_ctr (int slot)
+amd_unbind_ctr (struct pmc_info * pmc, int slot)
 {
     PMC_DEBUG("Unbinding AMD HW slot %d\n", slot);
-    amd_write_ctl(slot, 0);
+    amd_write_ctl(pmc, slot, 0);
 }
 
 
 static void
-amd_enable_ctr (perf_event_t * event)
+amd_enable_ctr (struct pmc_info * pmc, perf_event_t * event)
 {
     pmc_ctl_amd_t ctl;
 
@@ -637,14 +692,14 @@ amd_enable_ctr (perf_event_t * event)
             event->assigned_idx, 
             event->name);
 
-    ctl.val = amd_read_ctl(event->assigned_idx);
+    ctl.val = amd_read_ctl(pmc, event->assigned_idx);
     ctl.en = 1;
-    amd_write_ctl(event->assigned_idx, ctl.val);
+    amd_write_ctl(pmc, event->assigned_idx, ctl.val);
 }
 
 
 static void
-amd_disable_ctr (perf_event_t * event)
+amd_disable_ctr (struct pmc_info * pmc, perf_event_t * event)
 {
     pmc_ctl_amd_t ctl;
 
@@ -652,9 +707,9 @@ amd_disable_ctr (perf_event_t * event)
             event->assigned_idx,
             event->name);
 
-    ctl.val = amd_read_ctl(event->assigned_idx);
+    ctl.val = amd_read_ctl(pmc, event->assigned_idx);
     ctl.en = 0;
-    amd_write_ctl(event->assigned_idx, ctl.val);
+    amd_write_ctl(pmc, event->assigned_idx, ctl.val);
 }
 
 
@@ -725,7 +780,7 @@ nk_pmc_start (perf_event_t * event)
 
     event->enabled = 1;
 
-    pmc->ops->enable_ctr(event);
+    pmc->ops->enable_ctr(pmc, event);
 }
 
 
@@ -750,7 +805,7 @@ nk_pmc_stop(perf_event_t * event)
     }
 
     event->enabled = 0;
-    pmc->ops->disable_ctr(event);
+    pmc->ops->disable_ctr(pmc, event);
 }
 
 
@@ -760,7 +815,7 @@ nk_pmc_read (perf_event_t * event)
     pmc_info_t * pmc = nk_get_nautilus_info()->sys.pmc_info;
 
     if (event->enabled) {
-        event->val = pmc->ops->read_ctr(event->assigned_idx);
+        event->val = pmc->ops->read_ctr(pmc, event->assigned_idx);
     }
 
     return event->val;
@@ -777,7 +832,7 @@ nk_pmc_write (perf_event_t * event, uint64_t val)
     // if it's not bound to a slot, we only update its shadow val
 
     if (event->bound) {
-        pmc->ops->write_ctr(event->assigned_idx, val);
+        pmc->ops->write_ctr(pmc, event->assigned_idx, val);
     } 
 }
 
@@ -809,11 +864,18 @@ nk_pmc_create (uint32_t event_id)
 
     event->sw_id = event_id;
 
-    pmc->ops->event_init(event);
+    pmc->ops->event_init(pmc, event);
 
-    pmc_bind(event, -1);
+    if (pmc_bind(event, -1) != 0) {
+        PMC_ERR("Could not create event: unsuccessful bind\n");
+        goto out_err;
+    }
 
     return event;
+
+out_err:
+    free(event);
+    return NULL;
 }
 
 
@@ -862,11 +924,11 @@ nk_pmc_init (struct naut_info * naut)
         return 0;
     }
 
-    pmc->version_id = pmc->ops->version();
-    pmc->msr_cnt    = pmc->ops->msr_cnt();
-    pmc->msr_width  = pmc->ops->msr_width();
+    pmc->version_id = pmc->ops->version(pmc);
+    pmc->msr_cnt    = pmc->ops->msr_cnt(pmc);
+    pmc->msr_width  = pmc->ops->msr_width(pmc);
 
-    PMC_DEBUG("platform version: %d\n", pmc->version_id);
+    PMC_DEBUG("platform version (ignore for AMD): %d\n", pmc->version_id);
     PMC_DEBUG("MSR count: %d\n", pmc->msr_cnt);
     PMC_DEBUG("MSR bitwidth: %d\n", pmc->msr_width);
 
@@ -888,38 +950,56 @@ nk_pmc_init (struct naut_info * naut)
 }
 
 
+#define NUM_EVENTS 4
+
 static void
 test_pmc (int pmc_id)
 {
-    uint64_t start, stop;
+    //uint64_t start, stop;
+    uint64_t start[NUM_EVENTS], stop[NUM_EVENTS];
     void * x = NULL;
-    perf_event_t * p = NULL;
+    //perf_event_t * p = NULL;
+    perf_event_t * p[NUM_EVENTS];
+
+    uint16_t ids[NUM_EVENTS] = {3, 2, 1, 0};
 
     PMC_INFO("Testing perf counter subsystem (counter_id=0x%02x)\n", pmc_id);
 
-    p = nk_pmc_create(pmc_id);
+    for (int i = 0; i < NUM_EVENTS; i++) {
+        p[i] = nk_pmc_create(ids[i]);
+        if (!p[i]) {
+            PMC_ERR("Could not create counter for id 0x%02x\n", ids[i]);
+            return;
+        }
+    }
+    //p = nk_pmc_create(pmc_id);
 
+    /*
     if (!p) {
         PMC_ERR("Could not create counter for id 0x%02x\n", pmc_id);
         return;
     }
+    */
 
-    PMC_INFO("  Counter name = [%s]\n", p->name);
 
-    nk_pmc_start(p);
+    for (int i = 0; i < NUM_EVENTS; i++) {
+        PMC_INFO("  Counter name = [%s]\n", p[i]->name);
+        nk_pmc_start(p[i]);
+        start[i] = nk_pmc_read(p[i]);
+    }
 
-    start = nk_pmc_read(p);
+    //start = nk_pmc_read(p);
 
     x = malloc(PAGE_SIZE);
     memset(x, 0, PAGE_SIZE);
     free(x);
 
-    stop = nk_pmc_read(p);
-
-    nk_pmc_stop(p);
-    nk_pmc_destroy(p);
-
-    PMC_INFO("  Count reported: %lld\n", stop-start);
+    for (int i = 0; i < NUM_EVENTS; i++) {
+        stop[i] = nk_pmc_read(p[i]);
+        nk_pmc_stop(p[i]);
+        nk_pmc_destroy(p[i]);
+        PMC_INFO("  Count reported: %lld\n", stop[i]-start[i]);
+    }
 }
 
 
