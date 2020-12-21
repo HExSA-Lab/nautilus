@@ -701,9 +701,9 @@ static int virtqueue_init_modern(struct virtio_pci_dev *dev)
         DEBUG("virtq used at %p\n", dev->virtq[i].vq.used);
 
 	// tell the device where our virtqueue is
-	virtio_pci_atomic_store(&dev->common->queue_desc, dev->virtq[i].vq.desc);
-	virtio_pci_atomic_store(&dev->common->queue_driver, dev->virtq[i].vq.avail);
-	virtio_pci_atomic_store(&dev->common->queue_device, dev->virtq[i].vq.used);
+	virtio_pci_atomic_store(&dev->common->queue_desc, (addr_t)dev->virtq[i].vq.desc);
+	virtio_pci_atomic_store(&dev->common->queue_driver, (addr_t)dev->virtq[i].vq.avail);
+	virtio_pci_atomic_store(&dev->common->queue_device, (addr_t)dev->virtq[i].vq.used);
 				
 
 	if (dev->itype==VIRTIO_PCI_MSI_X_INTERRUPT) {

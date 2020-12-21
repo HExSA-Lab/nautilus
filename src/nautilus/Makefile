@@ -46,6 +46,7 @@ obj-y += \
 	chardev.o \
 	blkdev.o \
 	netdev.o \
+	gpudev.o \
         fs.o \
         loader.o \
         shell.o \

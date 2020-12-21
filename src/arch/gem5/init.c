@@ -58,6 +58,7 @@
 #include <nautilus/chardev.h>
 #include <nautilus/blkdev.h>
 #include <nautilus/netdev.h>
+#include <nautilus/gpudev.h>
 #include <nautilus/fs.h>
 #include <nautilus/loader.h>
 #include <nautilus/shell.h>
@@ -329,6 +330,7 @@ init (unsigned long mbd,
     nk_char_dev_init();
     nk_block_dev_init();
     nk_net_dev_init();
+    nk_gpu_dev_init();
 
 
     nk_vc_print(NAUT_WELCOME);
