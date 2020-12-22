@@ -845,7 +845,9 @@ static int execute_disable(char command[])
 
   disable(dreg_num);
 
-  vga_puts("register 0 disabled");
+  DS("register ");
+  DS(potential_num);
+  DS(" disabled \n");
 
   return 0;
 }
@@ -1045,7 +1047,8 @@ monitor_print_regs (struct nk_regs * r)
   
   PRINT3(rip, "   ",  rflags, "", rbp, "   ");
   PRINT3(rsp, "   ",  rax, "   ", rbx, "   ");
-  PRINT3(rsi, "   ",  r8, "    ", r9, "    ");
+  PRINT3(rcx, "   ",  rdx, "   ", rsi, "   ");
+  PRINT3(rdi, "   ",  r8, "    ", r9, "    ");
   PRINT3(r10, "   ",  r11, "   ", r12, "   ");
   PRINT3(r13, "   ",  r14, "   ", r15, "   ");
 
@@ -1067,7 +1070,7 @@ monitor_print_regs (struct nk_regs * r)
   asm volatile("movq %%cr8, %0": "=r" (cr8));
 
   PRINT3CR(cr0, "   ", cr2, "   ", cr3, "   ");
-  PRINT2CR(cr4, "   ", cr8, "   ");
+  PRINT3CR(cr4, "   ", cr8, "   ", efer, "  ");
 }
 
 #ifdef NAUT_CONFIG_PROVENANCE
@@ -1105,7 +1108,7 @@ static void dump_call(void)
       goto done; \
   } \
   DHQ(((uint64_t)__builtin_return_address(k))); DS(": ");	\
-  PROV((uint64_t)__builtin_return_address(k));	\
+  PROV((uint64_t)__builtin_return_address(k)); DS("\n");	\
 
   BT(0);
   BT(1);
