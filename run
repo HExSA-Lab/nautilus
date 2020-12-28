@@ -1,1 +1,0 @@
-make -j  isoimage && qemu-system-x86_64 -smp 1 -m 2048 -vga std -serial stdio -cdrom nautilus.iso -gdb tcp::1234
