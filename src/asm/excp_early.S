@@ -75,7 +75,7 @@ GLOBAL(early_irq_common)
 
     SAVE_GPRS()
 
-#ifdef NAUT_CONFIG_FPU_SAVE
+#ifdef NAUT_CONFIG_FPU_SAVE_IRQ_EXCP
     /* Save the FPRs */
     movq %gs:0x0, %rax
     movzwq 16(%rax), %rbx
@@ -208,7 +208,7 @@ skip_cat_exit:
 
 #endif
 
-#ifdef NAUT_CONFIG_FPU_SAVE
+#ifdef NAUT_CONFIG_FPU_SAVE_IRQ_EXCP
     /* Restore the FPRs */
     movq %gs:0x0, %rax
     movzwq 16(%rax), %rbx
@@ -241,7 +241,7 @@ GLOBAL(early_excp_common)
 
     SAVE_GPRS()
 
-#ifdef NAUT_CONFIG_FPU_SAVE
+#ifdef NAUT_CONFIG_FPU_SAVE_IRQ_EXCP
     /* Save the FPRs */
     movq %gs:0x0, %rax
     movzwq 16(%rax), %rbx
@@ -298,7 +298,7 @@ skip_per_cpu_update1:
 
 skip_per_cpu_update2:   
 
-#ifdef NAUT_CONFIG_FPU_SAVE
+#ifdef NAUT_CONFIG_FPU_SAVE_IRQ_EXCP
     /* Restore the FPRs */
     movq %gs:0x0, %rax
     movzwq 16(%rax), %rbx

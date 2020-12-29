@@ -904,6 +904,14 @@ menu "Optimizations"
         Compiles the kernel to save FPU state on every context switch. 
         This is not strictly necessary if processors are not virtualized 
         (by the HRT).
+
+    config FPU_SAVE_IRQ_EXCP
+      bool "Save FPU state on all interrupts and exceptions"
+      default y
+      help
+        Compiles the kernel to save FPU state on every exception and interrupt.
+	This is necessary if it is possible for the compiler to use
+	FP/SSE/AVX/etc state during an exception or interrupt handler
     
     config KICK_SCHEDULE
         bool "Kick cores with IPIs on scheduling events"
