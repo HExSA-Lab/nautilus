@@ -367,6 +367,9 @@ nk_thread_create (nk_thread_fun_t fun,
 
     // a thread joins its creator's address space 
     t->aspace = get_cur_thread()->aspace;
+
+    // a thread joins its creator's HW TLS space
+    t->hwtls = get_cur_thread()->hwtls;
     
     t->fun = fun;
     t->input = input;
@@ -513,6 +516,13 @@ int nk_thread_name(nk_thread_id_t tid, char *name)
       snprintf(t->timer->name,NK_TIMER_NAME_LEN,"thread-%s-timer",t->name);
   }
   return 0;
+}
+
+int nk_thread_change_hw_tls(nk_thread_id_t tid, void *hwtls)
+{
+    ((nk_thread_t*)tid)->hwtls = hwtls;
+    msr_write(MSR_FS_BASE,(uint64_t)hwtls);
+    return 0;
 }
 
 

@@ -36,16 +36,29 @@
 #include <nautilus/thread.h>
 #include <nautilus/errno.h>
 #include <nautilus/random.h>
+#include <nautilus/env.h>
 #include <dev/hpet.h>
+
+
+#ifdef NAUT_CONFIG_DEBUG_BASE_LIBC_COMPAT
+#define DEBUG(fmt, args...) DEBUG_PRINT("libc: " fmt, ##args)
+#else
+#define DEBUG(fmt, args...)
+#endif
+#define INFO(fmt, args...) INFO_PRINT("libc: " fmt, ##args)
+#define ERROR(fmt, args...) ERROR_PRINT("libc: " fmt, ##args)
+#define WARN(fmt, args...)  WARN_PRINT("libc: " fmt, ##args)
 
 
 int errno=0;
 
-#define GEN_DEF(x) \
-    int x (void) { \
-        UNDEF_FUN_ERR(); \
-        return 0; \
+#define GEN_UNDEF(t,f,v)			\
+    t f (void) {				\
+        UNDEF_FUN_ERR();			\
+        return v;				\
     } 
+
+#define BOGUS()    BOGUS_FUN_ERR()
 
 
 // Structs needed for LUA 
@@ -111,6 +124,7 @@ static uint64_t dummy_mono_clock = 0;
 time_t 
 time (time_t * timer)
 {
+    BOGUS();
     struct timespec tp;
     clock_gettime(CLOCK_MONOTONIC, &tp);
 
@@ -124,6 +138,7 @@ time (time_t * timer)
 void 
 abort(void) 
 {
+    BOGUS();
     printk("Thread called abort\n");
     nk_thread_exit(NULL);
 }
@@ -151,6 +166,7 @@ __popcountdi2 (long long a)
 void 
 exit(int status)
 {
+    BOGUS();
     printk("Thread called exit (status=%d)\n", status);
     nk_thread_exit((void*)(long)status);
 }
@@ -159,6 +175,7 @@ int
 clock_gettime (clockid_t clk_id, struct timespec * tp)
 {
 
+    BOGUS();
     if (clk_id != CLOCK_MONOTONIC) {
         printk("NAUTILUS WARNING: using invalid clock type\n");
         return -EINVAL;
@@ -202,8 +219,13 @@ __assert_fail (const char * assertion, const char * file, unsigned line, const c
 int 
 vfprintf (FILE * stream, const char * format, va_list arg)
 {
+#if 0
     UNDEF_FUN_ERR();
     return -1;
+#else
+    if (stream!=stdout && stream!=stderr) { return 0; BOGUS(); }
+    return vprintk(format,arg);
+#endif
 }
 
 
@@ -303,12 +325,22 @@ drand48(void)
 }
 
 
-char *
-strerror (int errnum)
+char* strerror_r(int errnum, char* buf, size_t buflen)
 {
-    UNDEF_FUN_ERR();
-    return NULL;
+    BOGUS();
+    snprintf(buf,buflen,"error %d (dunno?)",errnum);
+    return buf;
 }
+
+
+char *strerror (int errnum)
+{
+    BOGUS();
+    static char strerr_buf[128];
+    return strerror_r(errnum,strerr_buf,128);
+}
+
+
 FILE *tmpfile(void)
 {
 
@@ -359,12 +391,37 @@ fdopen (int fd, const char * mode)
     return NULL;
 }
 
-char *getenv(const char *name)
-{
 
-    UNDEF_FUN_ERR();
-    return NULL;
+int setenv(const char *key, const char *value, int overwrite)
+{
+    char *curval;
+    struct nk_env * env = nk_env_find(NK_ENV_GLOBAL_NAME);
+    if (nk_env_search(env,(char*)key,&curval)==0) {
+	if (overwrite) {
+	    return nk_env_update(env,(char*)key,(char*)value);
+	} else {
+	    //no action 
+	   return 0; 
+	   // return -1;
+	}
+    } else {
+	return nk_env_insert(env, (char*)key, (char*)value);
+    }
 }
+
+
+char *getenv(const char *key)
+{
+    struct nk_env *env = nk_env_find(NK_ENV_GLOBAL_NAME);
+    if (!env) {
+	return 0;
+    }
+    char *value =NULL;
+    nk_env_search(env,(char*)key,&value);
+    return value;
+}
+
+
 //For LUA Support
 clock_t clock()
 {
@@ -408,8 +465,10 @@ int fflush (FILE * f)
     return 0;
 }
 
-void (*signal(int sig, void (*func)(int)))(int ){
+void (*signal(int sig, void (*func)(int)))(int )
+{
     //    printk("\nSIGNAL Function:");
+    BOGUS();
     return 0;
 }
 
@@ -422,6 +481,7 @@ fprintf (FILE * f, const char * s, ...)
     UNDEF_FUN_ERR();
     return -1;
 #else
+    if (f!=stdout && f!=stderr) { BOGUS(); }
     va_list arg;
     va_start(arg,s);
     vprintk(s, arg);
@@ -474,6 +534,7 @@ int printf (const char * s, ...)
 int 
 fputc (int c, FILE * f) 
 {
+    if (f!=stderr && f!=stdout) { BOGUS(); }
     printk("%c");
     return c;
 }
@@ -482,15 +543,17 @@ fputc (int c, FILE * f)
 int 
 fputs (const char * s, FILE * f)
 {
+    if (f!=stderr && f!=stdout) { BOGUS(); }
     printk("%s\n", s);
     return 0;
 }
-size_t fwrite (const void *ptr, size_t size, size_t nmemb, FILE *stream)
+size_t fwrite (const void *ptr, size_t size, size_t nmemb, FILE *f)
 {
-
-   printk("\n %s",ptr); 
-   //UNDEF_FUN_ERR();
-   return (int)size;
+    
+    if (f!=stderr && f!=stdout) { BOGUS(); }
+    printk("\n %s",ptr); 
+    //UNDEF_FUN_ERR();
+    return (int)size;
 }
 
 size_t 
@@ -639,17 +702,19 @@ int getc(FILE* arg)
 
 int fileno(FILE* f)
 {
-    return 0;
+    return f==stdin ? 0 : f==stdout ? 1 : f==stderr ? 2 : -1;
 }
 
 int isatty(int fd)
 {
+    BOGUS();
     return 0;
 }
 
 //LUA SPECIFIC....................
 size_t strftime(char *str, size_t maxsize, const char *format, const struct tm *timeptr)
 {
+    UNDEF_FUN_ERR();
     return 0;
 }
 int feof(FILE * x)
@@ -663,10 +728,8 @@ char *fgets(char *str, int n, FILE *stream)
     UNDEF_FUN_ERR();
     return NULL;
 }
-void *memchr(const void *str, int c, size_t n)
-{
-    return NULL;
-}
+
+
 /*void longjmp(int *x, int __y)
 {
     UNDEF_FUN_ERR();
@@ -676,76 +739,23 @@ int setjmp(int *x)
 {
     return 0;
 } */
-double fabs(double __x){
-    return abs(__x);
-}
-double atan(double __x){
-    return 45.000;
-}
-double atan2(double y, double x){
-    return 135.00;
-}
-double fmod(double y, double x){
-    // this is replacement to actual fmod() (/nautilus/libccompat)
-    // defining own fmod similar to the one defined in (/gcc/libc)
-    printk("\n in fmod y %d,x %d",(int)y,(int)x); 
-//	return y -x*(y/x);
-      return (int)y% (int)x;
-}
- 
-double fmodnew(int y, int x){
-    // this is replacement to actual fmod() (/nautilus/libccompat)
-    // defining own fmod similar to the one defined in (/gcc/libc)
-  //  printk("\n in fmod y %d,x %d",y,x); 
-	return y -x*(y/x);
-}
-double modf(double y, double *x){
-  *x = 0;
-//	printk("\n in modf");
-  return 0.000;
-}
-double frexp(double x, int *e){
-  *e = 0;
-  return 0.5;
-}
-double ldexp(double x, int exp){
-  return x;
-}
-
 
 int ischar(unsigned char *str)
 {
-
-	return 1;
+    BOGUS();
+    // WTF is this???
+    return 1;
 }
 
 // strtod is implemented in dtoa.c
 
 /*----------*/
-double abs(double x)
+int abs(int x)
 {
-//should return absolute value of x
-if (x<0)
-	return -1*x;
-else
-	return x;
-}
-double sin(double x)
-{
-return x;
-}
-double sinh(double x)
-{
-return x;
-}
-double cos(double x)
-{
-return x;
-}
-double cosh(double x)
-{
-return x;
-}
+    return x<0 ? -x : x;
+}    
+
+
 time_t mktime(struct tm *timeptr)
 {
     return 0;
@@ -762,119 +772,189 @@ int strcoll(const char *str1, const char *str2)
 {
     return 0;
 }
-double tan(double x)
-{
-return x;
-}
-double tanh(double x)
-{
-return x;
-}
-double asin(double x)
-{
-return x;
-}
-double acos(double x)
-{
-return x;
-}
-double ceil(double x)
-{
-return x;
-}
-double floor(double x)
-{
-return x;
-}
+
 double difftime(time_t time1, time_t time2)
 {
+    UNDEF_FUN_ERR();
     return 0;
 }
-double sqrt(double x)
+
+unsigned long getpid(void)
 {
-return x;
-}
-double pow(double x, double y)
-{
-return x;
-}
-double log(double x)
-{
-return x;
-}
-double log10(double x)
-{
-return x;
-}
-double exp(double x)
-{
-return x;
+    return ((nk_thread_t*)get_cur_thread())->tid;
 }
 
+unsigned long getppid(void)
+{
+    if (((nk_thread_t*)get_cur_thread())->parent) {
+	return ((nk_thread_t*)get_cur_thread())->parent->tid;
+    } else {
+	return 0;
+    }
+}
+
+
+
+#define suseconds_t uint64_t
+struct timeval {
+    time_t      tv_sec;     /* seconds */
+    suseconds_t tv_usec;    /* microseconds */
+};
+
+struct timezone;
+
+int gettimeofday(struct timeval *tv, struct timezone *tz_ignored)
+{
+    uint64_t ns = nk_sched_get_realtime();
+
+    tv->tv_sec =  ns / 1000000000ULL;
+    tv->tv_usec = (ns % 1000000000ULL)/1000ULL;
+
+    return 0;
+}
+
+#define rlim_t uint32_t
+
+struct rlimit {
+    rlim_t rlim_cur;  /* Soft limit */
+    rlim_t rlim_max;  /* Hard limit (ceiling for rlim_cur) */
+};
+
+int getrlimit(int resource, struct rlimit *rlim)
+{
+    DEBUG("getrlimit %d\n", resource); 
+    rlim->rlim_cur = 0xF0000000;
+    rlim->rlim_max = 0xF0000000;
+    return 0;
+}
+
+
+
 /* became lazy... */
-GEN_DEF(writev)
-GEN_DEF(ungetwc)
-GEN_DEF(__errno_location)
-GEN_DEF(write)
-GEN_DEF(wcrtomb)
-GEN_DEF(mbrtowc)
-//GEN_DEF(getc)
-GEN_DEF(__iswctype_l)
-GEN_DEF(wcslen)
-GEN_DEF(__strtof_l)
-//GEN_DEF(stderr)
-GEN_DEF(wmemset)
-//GEN_DEF(stdin)
-//GEN_DEF(fileno)
-GEN_DEF(__fxstat64)
-GEN_DEF(putc)
-GEN_DEF(__wcscoll_l)
-GEN_DEF(__towlower_l)
-GEN_DEF(wctob)
-GEN_DEF(mbsrtowcs)
-GEN_DEF(read)
-GEN_DEF(wmemmove)
-GEN_DEF(__strxfrm_l)
-GEN_DEF(wmemchr)
-GEN_DEF(__freelocale)
-GEN_DEF(__wcsftime_l)
-GEN_DEF(wmemcpy)
-GEN_DEF(putwc)
-GEN_DEF(__stack_chk_fail)
-GEN_DEF(__wcsxfrm_l)
-GEN_DEF(wcscmp)
-GEN_DEF(wcsnrtombs)
-GEN_DEF(__strcoll_l)
-//GEN_DEF(stdout)
-GEN_DEF(btowc)
-//GEN_DEF(memchr)
-GEN_DEF(strtold_l)
-GEN_DEF(wmemcmp)
-GEN_DEF(__strtod_l)
-//GEN_DEF(setvbuf)
-GEN_DEF(__wctype_l)
-GEN_DEF(__towupper_l)
-GEN_DEF(__uselocale)
-GEN_DEF(__strftime_l)
-GEN_DEF(mbsnrtowcs)
-GEN_DEF(pthread_mutex_init)
-GEN_DEF(pthread_mutex_lock)
-GEN_DEF(pthread_mutex_unlock)
-GEN_DEF(wcscoll)
-//GEN_DEF(strcoll)
-GEN_DEF(towupper)
-GEN_DEF(towlower)
-GEN_DEF(iswctype)
-//GEN_DEF(strftime)
-GEN_DEF(wcsftime)
-GEN_DEF(wctype)
-GEN_DEF(strtold)
-//GEN_DEF(strtod)
-GEN_DEF(strtof)
-GEN_DEF(__ctype_b_loc)
-GEN_DEF(__ctype_toupper_loc)
-GEN_DEF(__ctype_tolower_loc)
-GEN_DEF(strxfrm)
-GEN_DEF(wcsxfrm)
-GEN_DEF(__kernel_standard);
-GEN_DEF(__get_cpu_features);
+GEN_UNDEF(int,writev,0)
+GEN_UNDEF(int,ungetwc,0)
+GEN_UNDEF(int,__errno_location,0)
+GEN_UNDEF(int,write,0)
+GEN_UNDEF(int,wcrtomb,0)
+GEN_UNDEF(int,mbrtowc,0)
+//GEN_UNDEF(int,getc,0)
+GEN_UNDEF(int,__iswctype_l,0)
+GEN_UNDEF(int,wcslen,0)
+GEN_UNDEF(int,__strtof_l,0)
+//GEN_UNDEF(int,stderr,0)
+GEN_UNDEF(int,wmemset,0)
+//GEN_UNDEF(int,stdin,0)
+//GEN_UNDEF(int,fileno,0)
+GEN_UNDEF(int,__fxstat64,0)
+GEN_UNDEF(int,putc,0)
+GEN_UNDEF(int,__wcscoll_l,0)
+GEN_UNDEF(int,__towlower_l,0)
+GEN_UNDEF(int,wctob,0)
+GEN_UNDEF(int,mbsrtowcs,0)
+GEN_UNDEF(int,read,0)
+GEN_UNDEF(int,wmemmove,0)
+GEN_UNDEF(int,__strxfrm_l,0)
+GEN_UNDEF(int,wmemchr,0)
+GEN_UNDEF(int,__freelocale,0)
+GEN_UNDEF(int,__wcsftime_l,0)
+GEN_UNDEF(int,wmemcpy,0)
+GEN_UNDEF(int,putwc,0)
+GEN_UNDEF(int,__stack_chk_fail,0)
+GEN_UNDEF(int,__wcsxfrm_l,0)
+GEN_UNDEF(int,wcscmp,0)
+GEN_UNDEF(int,wcsnrtombs,0)
+GEN_UNDEF(int,__strcoll_l,0)
+//GEN_UNDEF(int,stdout,0)
+GEN_UNDEF(int,btowc,0)
+//GEN_UNDEF(int,memchr,0)
+GEN_UNDEF(int,strtold_l,0)
+GEN_UNDEF(int,wmemcmp,0)
+GEN_UNDEF(int,__strtod_l,0)
+//GEN_UNDEF(int,setvbuf,0)
+GEN_UNDEF(int,__wctype_l,0)
+GEN_UNDEF(int,__towupper_l,0)
+GEN_UNDEF(int,__uselocale,0)
+GEN_UNDEF(int,__strftime_l,0)
+GEN_UNDEF(int,mbsnrtowcs,0)
+GEN_UNDEF(int,wcscoll,0)
+//GEN_UNDEF(int,strcoll,0)
+GEN_UNDEF(int,towupper,0)
+GEN_UNDEF(int,towlower,0)
+GEN_UNDEF(int,iswctype,0)
+//GEN_UNDEF(int,strftime,0)
+GEN_UNDEF(int,wcsftime,0)
+GEN_UNDEF(int,wctype,0)
+GEN_UNDEF(int,strtold,0)
+//GEN_UNDEF(int,strtod,0)
+GEN_UNDEF(int,strtof,0)
+GEN_UNDEF(int,__ctype_b_loc,0)
+GEN_UNDEF(int,__ctype_toupper_loc,0)
+GEN_UNDEF(int,__ctype_tolower_loc,0)
+GEN_UNDEF(int,strxfrm,0)
+GEN_UNDEF(int,wcsxfrm,0)
+GEN_UNDEF(int,__kernel_standard,0);
+GEN_UNDEF(int,__get_cpu_features,0);
+
+// pthread functionality is in the pthread compatability
+// directory, if it is included
+#ifndef NAUT_CONFIG_BASE_PTHREAD_COMPAT
+GEN_UNDEF(int,pthread_mutex_init,0)
+GEN_UNDEF(int,pthread_mutex_lock,0)
+GEN_UNDEF(int,pthread_mutex_unlock,0)
+GEN_UNDEF(int,pthread_atfork,0)
+GEN_UNDEF(int,pthread_attr_destroy,0)
+GEN_UNDEF(int,pthread_attr_getstack,0)
+GEN_UNDEF(int,pthread_attr_init,0)
+GEN_UNDEF(int,pthread_attr_setdetachstate,0)
+GEN_UNDEF(int,pthread_attr_setstacksize,0)
+GEN_UNDEF(int,pthread_cancel,0)
+GEN_UNDEF(int,pthread_cond_destroy,0)
+GEN_UNDEF(int,pthread_cond_init,0)
+GEN_UNDEF(int,pthread_cond_signal,0)
+GEN_UNDEF(int,pthread_cond_wait,0)
+GEN_UNDEF(int,pthread_condattr_init,0)
+GEN_UNDEF(int,pthread_create,0)
+GEN_UNDEF(int,pthread_exit,0)
+GEN_UNDEF(int,pthread_getattr_np,0)
+GEN_UNDEF(int,pthread_getspecific,0)
+GEN_UNDEF(int,pthread_join,0)
+GEN_UNDEF(int,pthread_key_create,0)
+GEN_UNDEF(int,pthread_key_delete,0)
+GEN_UNDEF(int,pthread_mutex_destroy,0)
+GEN_UNDEF(int,pthread_mutex_trylock,0)
+GEN_UNDEF(int,pthread_mutexattr_init,0)
+GEN_UNDEF(int,pthread_self,0)
+GEN_UNDEF(int,pthread_setcancelstate,0)
+GEN_UNDEF(int,pthread_setcanceltype,0)
+GEN_UNDEF(int,pthread_setspecific,0)
+GEN_UNDEF(int,sched_yield,0)
+#endif
+
+
+GEN_UNDEF(int,atexit,0)
+GEN_UNDEF(int,catclose,0)
+GEN_UNDEF(int,catgets,0)
+GEN_UNDEF(int,catopen,0)
+GEN_UNDEF(int,close,0)
+GEN_UNDEF(int,closedir,0)
+GEN_UNDEF(int,dlsym,0)
+GEN_UNDEF(int,environ,0)
+GEN_UNDEF(int,fgetc,0)
+GEN_UNDEF(int,gethostname,0)
+GEN_UNDEF(int,getrusage,0)
+GEN_UNDEF(int,open,0)
+GEN_UNDEF(int,opendir,0)
+GEN_UNDEF(int,readdir,0)
+GEN_UNDEF(int,sigaction,0)
+GEN_UNDEF(int,sigaddset,0)
+GEN_UNDEF(int,sigdelset,0)
+GEN_UNDEF(int,sigemptyset,0)
+GEN_UNDEF(int,sigfillset,0)
+GEN_UNDEF(int,sigismember,0)
+GEN_UNDEF(int,sleep,0)
+GEN_UNDEF(int,strtok_r,0)
+GEN_UNDEF(int,times,0)
+GEN_UNDEF(int,unsetenv,0)
+GEN_UNDEF(int,vfscanf,0)
+
+	  

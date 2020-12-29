@@ -6257,6 +6257,7 @@ int  dtoa_printf_helper(double x, char pf_type, int ndigits, int prec, char *buf
 
     if (s) {
 	*c++ = '-';
+	*c=0;
     }
 
     // handle special cases first

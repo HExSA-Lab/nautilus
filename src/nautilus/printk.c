@@ -1233,6 +1233,8 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list args)
 		    char *c;
 		    int numdigits, prec;
 		    int k;
+
+		    // BOGUS stuff here, precision, etc, not handled to spec
 		    
 		    if (spec.precision != -1) {
 			numdigits = spec.precision;

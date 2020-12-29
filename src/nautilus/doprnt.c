@@ -530,17 +530,30 @@ void _doprnt (register const char * fmt,
 	        case 'F':
 	        case 'G':
 		    {
-			char buf[160];
+			char dbuf[160];
 			char *c;
-			int dec, sign;
-			int pos;
+			int numdigits, myprec;
+
+			// BOGUS stuff here, precision, etc, not handled to spec
 			
+			if (length != 0) {
+			    numdigits = length;
+			} else {
+			    numdigits = 6;
+			}
+
+			if (prec != -1) {
+			    myprec = prec;
+			} else {
+			    myprec = 6;
+			}
+
 			d = (double) va_arg(args, double);
+
 			
-			dtoa_printf_helper(d,*fmt,length,prec,buf,160);
+			dtoa_printf_helper(d,*fmt,numdigits,myprec,dbuf,160);
 			
-			c = buf;
-			(*putc)(putc_arg,'@');
+			c = dbuf;
 			while (*c) {
 			    (*putc)(putc_arg, *c++);
 			}

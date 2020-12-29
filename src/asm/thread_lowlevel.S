@@ -147,6 +147,22 @@ continue_context_switch:
     call nk_aspace_switch
     pop %rax
 #endif
+
+#ifdef NAUT_CONFIG_HARDWARE_TLS
+    push %rax               // save regs we will use
+    push %rdx
+    push %rcx
+
+    movl 36(%rax), %edx     // get big end of fsbase from thread struct
+    movl 32(%rax), %eax     // get little end of fsbase from thread struct
+    movq $0xc0000100, %rcx  // get FSBASE MSR number into RCX for use by wrmsr
+	
+    wrmsr                   // actually change fsbase
+	
+    pop %rcx                // restore regs we have usd
+    pop %rdx
+    pop %rax
+#endif
 	
     movq %rax, %gs:0x0  /* make it the new current thread */
     movq (%rax), %rsp   /* load its stack pointer */

@@ -37,7 +37,7 @@ obj-y += \
 	cpu.o \
 	acpi.o \
 	numa.o \
-	libccompat.o \
+	env.o \
 	nemo.o \
 	pmc.o \
 	setjmp.o \

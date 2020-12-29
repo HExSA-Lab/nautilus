@@ -617,6 +617,10 @@ endif # NAUT_CONFIG_CXX_SUPPORT
 
 			   #/usr/lib64/libc.a \
 
+ifdef NAUT_CONFIG_OPENMP_RT_OMP
+   libs-y += $(NAUT_CONFIG_OPENMP_RT_INSTALL_DIR)/lib/libomp.a
+endif
+
 ifdef NAUT_CONFIG_PALACIOS
   PALACIOS_DIR=$(subst "",,$(NAUT_CONFIG_PALACIOS_DIR))
   CFLAGS += -I$(PALACIOS_DIR)/nautilus -I$(PALACIOS_DIR)/palacios/include

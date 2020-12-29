@@ -687,6 +687,24 @@ strstr (const char * s1, const char * s2)
         return NULL;
 }
 
+char *
+strcasestr (const char * s1, const char * s2)
+{
+        int l1, l2;
+
+        l2 = strlen(s2);
+        if (!l2)
+                return (char *)s1;
+        l1 = strlen(s1);
+        while (l1 >= l2) {
+                l1--;
+                if (!strncasecmp(s1, s2, l2))
+                        return (char *)s1;
+                s1++;
+        }
+        return NULL;
+}
+
 
 void 
 str_tolower (char * s) 
@@ -709,6 +727,20 @@ str_toupper (char * s)
     }
     s++;
     }
+}
+
+
+void *memchr(const void *str, int c, size_t n)
+{
+    while (n) {
+	if (*((const char *)str)==c) {
+	    return (void*)str;
+	}
+	str++;
+	n--;
+    }
+
+    return 0;
 }
 
 
