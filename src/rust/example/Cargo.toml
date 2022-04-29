@@ -12,5 +12,3 @@ panic = "abort"    # no stack unwind on rust panic
 
 [profile.release]
 panic = "abort"    # no stuck unwind on rust panic
-
-[dependencies]
