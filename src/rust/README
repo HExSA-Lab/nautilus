@@ -37,7 +37,7 @@ $ cargo install cargo-xbuild
 
 And we need the rust sources for it to work on:
 
-$ rustup component add rust-src
+$ rustup toolchain install nightly --component rust-src
 
 
 
@@ -57,9 +57,7 @@ $ cd module_name
 
 Make sure that it will be built with the nightly toolchain:
 
-$ cat > rust-toolchain
-nightly
-^D
+$ echo nightly > rust-toolchain
 
 Link the relevant target spec from our configs, for example:
 

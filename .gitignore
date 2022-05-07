@@ -7,3 +7,16 @@ tags
 *.syms
 *.bc
 *.ll
+/include/config/
+/include/autoconf.h
+/rust_bindings/bindings
+/scripts/basic/docproc
+/scripts/basic/fixdep
+/scripts/basic/split-include
+/scripts/kconfig/lxdialog/lxdialog
+/scripts/kconfig/conf
+/scripts/kconfig/mconf
+/scripts/format_secs
+/scripts/format_syms
+/.kconfig.d
+/nautilus.secs

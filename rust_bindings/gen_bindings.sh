@@ -7,4 +7,4 @@
 #     bindgen --ctypes-prefix ::libc --use-core --builtins $filename -o ./bindings/$f"_bindings.rs" -- -I../include/ -I../include/nautilus/ -include stdint.h -include ../include/nautilus/naut_types.h
 # done
 
-bindgen --ctypes-prefix core::ffi --use-core --builtins ../include/nautilus/vc.h -o ./bindings/vc_bindings.rs -- -I../include/ -I../include/nautilus/ -include stdint.h -include ../include/nautilus/naut_types.h
+bindgen --ctypes-prefix core::ffi --use-core --builtins ../include/nautilus/vc.h -- -I../include/ -I../include/nautilus/ -include stdint.h -include ../include/nautilus/naut_types.h > ./bindings/vc_bindings.rs

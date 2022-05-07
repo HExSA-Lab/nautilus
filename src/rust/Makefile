@@ -6,6 +6,6 @@ obj-y := glue.o
 #
 # rust modules
 #
-obj-y += example/
-
+#obj-y += example/
+obj-y += parport/
  
