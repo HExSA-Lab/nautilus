@@ -3,9 +3,8 @@ How to use Rust code in NK, plus an example.
 STRUCTURE
 ---------
 
-Rust code lives under src/rust.   What's immediately under that
-tree is glue code, with an example Rust module (src/rust/example).  
-
+Rust code lives under `src/rust`.   What's immediately under that
+tree is glue code, with an example Rust module.  
 
 SETUP
 -----
@@ -18,14 +17,14 @@ RIGHT FEATURES.
 Yes, this fantastic evidence of stability of this tool for kernel
 development...
 
-Install rustup (http://rustup.rs), currently via:
+Install [rustup](http://rustup.rs), currently via:
 
-$ curl https://sh.rustup.rs -sSf | sh
+`curl https://sh.rustup.rs -sSf | sh`
 
 This will install tools in ~/.cargo/bin, which you will want to
 put on your path.
 
-$ source ~/.cargo/env
+`source ~/.cargo/env`
 
 You will want a file in the top level Rust module's directory called
 "rust-toolchain" whose contents should be "nightly"
@@ -33,13 +32,11 @@ You will want a file in the top level Rust module's directory called
 Also install the cargo xbuild so it can cross-compile Rust-dependent
 libraries for us:
 
-$ cargo install cargo-xbuild
+`cargo install cargo-xbuild`
 
 And we need the rust sources for it to work on:
 
-$ rustup toolchain install nightly --component rust-src
-
-
+`rustup toolchain install nightly --component rust-src`
 
 CREATE A NEW RUST MODULE
 ------------------------
@@ -47,48 +44,23 @@ CREATE A NEW RUST MODULE
 The basic idea here is that we will build a static library in Rust
 and then link that with NK.     Do this under src/rust.
 
-First create a new rust library:
+First create a new module by doing EITHER:
 
-$ cargo new module_name --lib
+- add a `[module name].rs` file to `src` OR
+- add a `[module name]` directory to `src` and create a `mod.rs` file under that directory
 
-Now add the module subdir to src/rust/Makefile as described there.
+Now add the new module to `lib.rs` by inserting `mod [module name];`.
 
-$ cd module_name
-
-Make sure that it will be built with the nightly toolchain:
-
-$ echo nightly > rust-toolchain
-
-Link the relevant target spec from our configs, for example:
-
-$ ln -s ../configs/x86_64-nautilus-core-kernel.json .
-
-The core-kernel config is for core kernel features.  The main thing
-here is that it does not use any floating point (including SSE for
-integer math), and that it does not use red-zone.  The run-time and
-app configs are for run-times and application code that will use
-floating point.
-
-Modify Cargo.toml in line with our examples:
-
-=> make the crate type staticlib
-=> disable unwinding
-
-modify src/lib.rs in line with our examples
-
-=> add features for panic handler, start, etc [this required NIGHTLY]
-=> provide panic handler, invoking nk_panic() if you would like
-=> assert no_std (stdlib?)
-=> possibly assert no_builtins (although it still does some...)
+modify the new module source file in line with our examples
 
 Any functon you want to export has to look like:
 
 #[no_mangle]
 pub extern "C" fn functionaname(...) -> ... { ... }
 
-Copy glue.c and Makefile from the example module:
+Copy `glue/example.c`:
 
-$ cp ../example/glue.c ../example/Makefile .
+`cp glue/example.c glue/[module name].c`
 
 The glue code here (and in the top-level rust directory) force
 the damned linkage to work as you would expect despite Rust's
@@ -105,6 +77,7 @@ want the linker to lose anything, and we cannot use --whole-archive
 here because Rust itself exports unmangled conflicting symbols like
 memmove that will break the build at the parent directory. 
 
+Finally, insert `#include "glue/[module name].c"` to `glue.c`
 
 CALLING INTO THE RUST MODULE
 ----------------------------
@@ -122,12 +95,9 @@ We do not yet know how to do:
 4. Threads ?!
 5. All other things
 
-
 BUILDING
 --------
 
 Enable Rust support in make menuconfig -> Build -> Enable Rust support
 
-Build NK as usual.   Run "test rust" to see if the example works.
-
-
+Build NK as usual. Run `rust` to see if the example works.

@@ -1,0 +1,17 @@
+[package]
+name = "nautilus-rust" # this is for core-kernel
+version = "0.0.0"
+authors = [
+    "Hanming Wang <hanmingwang2022@u.northwestern.edu>",
+    "Peter Dinda <pdinda@northwestern.edu>",
+    "Qingwei Lan <qingweilan2022@u.northwestern.edu>"
+]
+
+[lib]
+crate-type = ["staticlib"]
+
+[profile.dev]
+panic = "abort" # no stack unwind on rust panic
+
+[profile.release]
+panic = "abort" # no stuck unwind on rust panic
